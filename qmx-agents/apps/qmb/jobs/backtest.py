@@ -10,9 +10,11 @@ under `motion_off`, its journal under `journal/motion_off/`.
 The report lists the run's cash events (swap, financing, funding, dividends, commission) and the
 holes it ran over with `allow_gaps`; `net_money` holds the trades' money and the cash. The labels
 say `costs_uncalibrated` until a market's costs come from enough real fills, and
-`holes_unchecked` while a market's calendar is not one QMB reads (B10), and `fixture_records` lists
-each market with no Library record that ran on a test fixture. A hole past the request's
-`gap_bars_refuse` lands a `failed` result naming it.
+`holes_unchecked` while a market's calendar is not one QMB reads (B10), `fixture_records` lists
+each market with no Library record that ran on a test fixture, and `data_short` lists each market
+whose bars stop short of the window, with the open bars missing at each end. A hole past the
+request's `gap_bars_refuse` lands a `failed` result naming it, and so does a short end on a calendar
+that holds closures from before the window.
 """
 
 from __future__ import annotations
@@ -194,7 +196,10 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
     loaded = load_unit_folder(folder / "in")
     if is_refusal(loaded):
         return tester.failed(run_id, tester.reason(loaded))
-    body = tester.unit_body(asked, run_id) | {"trace": asked.get("trace", "events")}
+    body = tester.unit_body(asked, run_id) | {
+        "trace": asked.get("trace", "events"),
+        "window": asked.get("window"),
+    }
     both = body["motion"] == "both"
     main = _run(folder, loaded.value, body | {"motion": "on"} if both else body, "journal")
     if isinstance(main, str):
@@ -217,6 +222,14 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             "costs_uncalibrated": COSTS_UNCALIBRATED in main.result.labels,
             "holes_unchecked": HOLES_UNCHECKED in main.result.labels,
             "fixture_records": asked.get("fixture_records", []),
+            "data_short": [
+                {
+                    "market_id": ends.market_id,
+                    "before_first": ends.before_first,
+                    "after_last": ends.after_last,
+                }
+                for ends in main.result.short
+            ],
             "fidelity": "quotes",
             "motion": asked.get("motion", "on"),
         },

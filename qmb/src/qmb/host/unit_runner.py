@@ -30,7 +30,10 @@ Every market rule reads the instrument record (B10): fills, gaps and liquidation
 ``CarrySchedule``, commission and slippage through the cost profile. Before the first bar a
 preflight counts each market's holes in open time; one longer than the request's
 ``gap_bars_refuse`` fails the run unless the request sets ``allow_gaps``, and then the result
-lists it. A run whose costs come from no calibrated profile says ``costs_uncalibrated``.
+lists it. A request that names its window also has the open bars missing at each end counted, and
+the result says ``data_short``. They fail the run past the same limit, where the market's calendar
+holds closures from before the window, so a shut day there would not read as missing. A run whose
+costs come from no calibrated profile says ``costs_uncalibrated``.
 """
 
 from __future__ import annotations
@@ -53,7 +56,16 @@ from qml.numbers import InstrumentRecord, parse_record
 from qml.protocol.unit import MotionSwitch, OwnPosition, QuoteBar, TraceLevel, construct_unit
 
 from qmb._refuse import invalid, policy
-from qmb.data.gap_check import GAP_BARS_REFUSE, HOLES_UNCHECKED, Hole, find_holes, open_time
+from qmb.data.gap_check import (
+    DATA_SHORT,
+    GAP_BARS_REFUSE,
+    HOLES_UNCHECKED,
+    Hole,
+    ShortEnds,
+    find_holes,
+    open_time,
+    short_ends,
+)
 from qmb.execution.cost import (
     CALIBRATED_MIN_FILLS,
     COSTS_UNCALIBRATED,
@@ -128,6 +140,8 @@ class UnitRunRequest:
     """The study runs over holes in its data; the unit sees each one as a gap row."""
     gap_bars_refuse: int = GAP_BARS_REFUSE
     calibrated_min_fills: int = CALIBRATED_MIN_FILLS
+    window_ns: tuple[int, int] | None = None
+    """The half-open window the bars should fill, when the caller names one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +192,19 @@ class UnitRunResult:
     """Holes in open time the run went over because the request allowed gaps."""
     unchecked: tuple[str, ...] = ()
     """Markets whose calendar QMB cannot read yet, so their holes were not counted."""
+    short: tuple[ShortEnds, ...] = ()
+    """Markets whose bars stop short of the window, with the open bars missing at each end."""
+
+
+def _window_ns(given: object) -> Result[tuple[int, int] | None]:
+    """A request's ``{start, end}`` dates as a half-open window in ns, or None for no window."""
+    if given is None:
+        return Ok(None)
+    named = cast("Mapping[str, object]", given) if isinstance(given, Mapping) else {}
+    start, end = _day_ms(named.get("start")), _day_ms(named.get("end"))
+    if start is None or end is None:
+        return invalid("window", "a run's window is {start, end} as dates", given=repr(given))
+    return Ok((start * _NS_PER_MS, end * _NS_PER_MS))
 
 
 def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
@@ -234,6 +261,9 @@ def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
         if type(value) is not int or value < 0:
             return invalid(name, f"{name} is a whole number of zero or more", given=repr(value))
         counts[name] = value
+    window = _window_ns(fields.get("window"))
+    if is_refusal(window):
+        return window
     return Ok(
         UnitRunRequest(
             run_id,
@@ -245,6 +275,7 @@ def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
             allow_gaps,
             counts["gap_bars_refuse"],
             counts["calibrated_min_fills"],
+            window.value,
         )
     )
 
@@ -519,7 +550,7 @@ def run_loaded(
     checked = _preflight(loaded, request)
     if is_refusal(checked):
         return checked
-    holes, unchecked = checked.value
+    holes, unchecked, short = checked.value
     windows = {market: BarWindow(window_size(compiled)) for market in loaded.feeds}
     handler = UnitSliceHandler.start(
         lambda surfaces: construct_unit(
@@ -562,6 +593,7 @@ def run_loaded(
         *(() if trades else (ZERO_TRADES,)),
         *((COSTS_UNCALIBRATED,) if uncalibrated else ()),
         *((HOLES_UNCHECKED,) if unchecked else ()),
+        *((DATA_SHORT,) if short else ()),
     )
     return Ok(
         UnitRunResult(
@@ -577,16 +609,21 @@ def run_loaded(
             cash_events=cash,
             holes=holes,
             unchecked=unchecked,
+            short=short,
         )
     )
 
 
 def _preflight(
     loaded: LoadedUnit, request: UnitRunRequest
-) -> Result[tuple[tuple[Hole, ...], tuple[str, ...]]]:
-    """Each market's holes in open time, refused past the request's limit unless it allows gaps."""
+) -> Result[tuple[tuple[Hole, ...], tuple[str, ...], tuple[ShortEnds, ...]]]:
+    """Each market's holes in open time and its short ends, refused past the request's limit unless
+    it allows gaps. A short end refuses only on a calendar holding closures from before the window,
+    because elsewhere a shut day would read as missing."""
     holes: list[Hole] = []
     unchecked: list[str] = []
+    short: list[ShortEnds] = []
+    too_short: list[ShortEnds] = []
     for market, feed in loaded.feeds.items():
         hours = open_time(loaded.records[market].calendar_ref)
         if hours is None:
@@ -600,6 +637,18 @@ def _preflight(
         holes += find_holes(
             market, opens, bar_ns=loaded.bar_ns, hours=hours, refuse_bars=request.gap_bars_refuse
         )
+        if request.window_ns is None:
+            continue
+        start_ns, end_ns = request.window_ns
+        ends = short_ends(
+            market, opens, bar_ns=loaded.bar_ns, hours=hours, start_ns=start_ns, end_ns=end_ns
+        )
+        if ends.before_first or ends.after_last:
+            short.append(ends)
+            if max(
+                ends.before_first, ends.after_last
+            ) > request.gap_bars_refuse and hours.closures_before(start_ns):
+                too_short.append(ends)
     if holes and not request.allow_gaps:
         first = holes[0]
         after = _EPOCH + timedelta(microseconds=first.after_ns // 1_000)
@@ -610,7 +659,16 @@ def _preflight(
             "run allows unless its study allows gaps",
             holes=[(h.market_id, h.after_ns, h.before_ns, h.bars_missing) for h in holes],
         )
-    return Ok((tuple(holes), tuple(unchecked)))
+    if too_short and not request.allow_gaps:
+        first = too_short[0]
+        return policy(
+            "data",
+            f"{first.market_id} stops short of its window: {first.before_first} bars in open time "
+            f"are missing before its first bar and {first.after_last} after its last, more than "
+            f"the {request.gap_bars_refuse} a run allows unless its study allows gaps",
+            short=[(s.market_id, s.before_first, s.after_last) for s in too_short],
+        )
+    return Ok((tuple(holes), tuple(unchecked), tuple(short)))
 
 
 class _Unkept:

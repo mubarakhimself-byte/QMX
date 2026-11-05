@@ -3,9 +3,9 @@
   "calendar_ref": "metals-24x5@1",
   "name": "Spot gold and silver CFDs, which follow COMEX's Globex week",
   "zone": "America/New_York",
-  "issued": "2026-11-03",
-  "max_age_days": 423,
-  "source": "COMEX Globex hours in New York time: Sunday to Friday 18:00 to 17:00 with a daily break from 17:00 to 18:00; shut with Globex on Christmas Day and New Year's Day; on Martin Luther King Jr. Day and Presidents' Day metals halt at 13:30 Chicago (14:30 New York) and reopen at 18:00 New York, as Dukascopy's XAUUSD bars show on 2025-01-20 and 2025-02-17; other early closes are not modelled in version 1; in 2027 Christmas Day and New Year's Day both fall on a Saturday, and the observed-day hours are left out until CME publishes them",
+  "issued": "2026-11-06",
+  "max_age_days": 420,
+  "source": "COMEX Globex hours in New York time: Sunday to Friday 18:00 to 17:00 with a daily break from 17:00 to 18:00; shut with Globex on Christmas Day and New Year's Day, from 1 January 2020 on; on Martin Luther King Jr. Day and Presidents' Day metals halt at 13:30 Chicago (14:30 New York) and reopen at 18:00 New York, as Dukascopy's XAUUSD bars show on 2025-01-20 and 2025-02-17; Dukascopy's real XAUUSD ticks stop at 13:45 New York on 24 December 2020, 2024 and 2025, stop for the whole of Friday 24 December 2021 with Christmas on the Saturday, and reopen at 19:00 on the Sundays 25 December 2022 and 1 January 2023; other early closes are not modelled in version 1; in 2027 Christmas Day and New Year's Day both fall on a Saturday, and the observed-day hours are left out until CME publishes them",
   "sessions": [
     {
       "open": "sun 18:00",
@@ -30,6 +30,66 @@
   ],
   "closures": [
     {
+      "from": "2019-12-31T17:00",
+      "to": "2020-01-01T18:00",
+      "why": "New Year's Day"
+    },
+    {
+      "from": "2020-12-24T13:45",
+      "to": "2020-12-24T17:00",
+      "why": "Christmas Eve early close"
+    },
+    {
+      "from": "2020-12-24T17:00",
+      "to": "2020-12-27T18:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2020-12-31T17:00",
+      "to": "2021-01-03T18:00",
+      "why": "New Year's Day"
+    },
+    {
+      "from": "2021-12-23T17:00",
+      "to": "2021-12-26T18:00",
+      "why": "Christmas Day, observed on the Friday"
+    },
+    {
+      "from": "2022-12-25T18:00",
+      "to": "2022-12-25T19:00",
+      "why": "Christmas Day late open"
+    },
+    {
+      "from": "2023-01-01T18:00",
+      "to": "2023-01-01T19:00",
+      "why": "New Year's Day late open"
+    },
+    {
+      "from": "2023-12-24T17:00",
+      "to": "2023-12-25T18:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2023-12-31T17:00",
+      "to": "2024-01-01T18:00",
+      "why": "New Year's Day"
+    },
+    {
+      "from": "2024-12-24T13:45",
+      "to": "2024-12-24T17:00",
+      "why": "Christmas Eve early close"
+    },
+    {
+      "from": "2024-12-24T17:00",
+      "to": "2024-12-25T18:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2024-12-31T17:00",
+      "to": "2025-01-01T18:00",
+      "why": "New Year's Day"
+    },
+    {
       "from": "2025-01-20T14:30",
       "to": "2025-01-20T18:00",
       "why": "Martin Luther King Jr. Day early close"
@@ -38,6 +98,21 @@
       "from": "2025-02-17T14:30",
       "to": "2025-02-17T18:00",
       "why": "Presidents' Day early close"
+    },
+    {
+      "from": "2025-12-24T13:45",
+      "to": "2025-12-24T17:00",
+      "why": "Christmas Eve early close"
+    },
+    {
+      "from": "2025-12-24T17:00",
+      "to": "2025-12-25T18:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2025-12-31T17:00",
+      "to": "2026-01-01T18:00",
+      "why": "New Year's Day"
     },
     {
       "from": "2026-01-19T14:30",

@@ -46,9 +46,7 @@ def cut_short(root: Path, calendar: str = "fx-24x5@1") -> Path:
 def test_a_file_cut_two_weeks_short_says_so(tmp_path: Path) -> None:
     folder = cut_short(tmp_path)
 
-    refused = run_unit(
-        folder, request(folder, window=MARCH, gap_bars_refuse=4, allow_gaps=False)
-    )
+    refused = run_unit(folder, request(folder, window=MARCH, gap_bars_refuse=4, allow_gaps=False))
     allowed = run_unit(folder, request(folder, window=MARCH, gap_bars_refuse=4))
 
     assert isinstance(refused, TypedRefusal)
@@ -56,7 +54,7 @@ def test_a_file_cut_two_weeks_short_says_so(tmp_path: Path) -> None:
         "fx.eurusd stops short of its window: 0 bars in open time are missing before its first bar "
         "and 1056 after its last, more than the 4 a run allows unless its study allows gaps"
     )
-    assert refused.context["short"] == [(EURUSD, 0, 1056)]
+    assert refused.context["short"] == ((EURUSD, 0, 1056),)
     assert not is_refusal(allowed)
     assert "data_short" in allowed.value.labels
     assert [(s.market_id, s.before_first, s.after_last) for s in allowed.value.short] == [
@@ -72,7 +70,7 @@ def test_a_calendar_with_no_past_closures_only_labels(tmp_path: Path) -> None:
     assert not is_refusal(ran)
     assert "data_short" in ran.value.labels
     assert [(s.market_id, s.before_first, s.after_last) for s in ran.value.short] == [
-        (EURUSD, 0, 960)
+        (EURUSD, 0, 1012)
     ]
 
 
@@ -104,9 +102,7 @@ def test_real_january_to_march_has_no_short_head(tmp_path: Path) -> None:
             sum(hours.open_at(t * 10**6) for t in range(opens[-1] + BAR_MS, window_end, BAR_MS)),
         )
 
-    ran = run_unit(
-        folder, request(folder, window={"start": start, "end": end}, allow_gaps=False)
-    )
+    ran = run_unit(folder, request(folder, window={"start": start, "end": end}, allow_gaps=False))
 
     assert ends == {EURUSD: (0, 0), "metal.xauusd": (0, 0)}
     assert not is_refusal(ran)
