@@ -809,20 +809,17 @@ def read_bar_pair_csv(bid: Path, ask: Path, seconds: int) -> Iterator[BarPair | 
     return _paired(_csv_bars(bid), _csv_bars(ask), seconds)
 
 
-def _parquet_rows(
-    paths: Sequence[Path], columns: Sequence[str], start_ms: int, end_ms: int
-) -> Iterator[tuple[int, ...] | TypedRefusal]:
-    """One side's copied months in order, these whole-number columns, ``t`` inside the window."""
+def _parquet_batches(
+    paths: Sequence[Path], columns: Sequence[str]
+) -> Iterator[list[list[int]] | TypedRefusal]:
+    """One side's copied months in order, a batch at a time, these whole-number columns."""
     import pyarrow.parquet as pq  # noqa: PLC0415 (only a read of the store needs the library)
 
     try:
         for path in paths:
             with pq.ParquetFile(path) as months:
                 for batch in months.iter_batches(batch_size=50_000, columns=list(columns)):
-                    picked = (batch.column(name).to_pylist() for name in columns)
-                    for row in zip(*picked, strict=True):
-                        if start_ms <= row[0] < end_ms:
-                            yield row
+                    yield [batch.column(name).to_pylist() for name in columns]
     except (OSError, ValueError, KeyError) as error:
         yield invalid(
             "data",
@@ -835,24 +832,28 @@ def _parquet_rows(
 def read_tick_parquet(
     paths: Sequence[Path], scale: int, start_ms: int, end_ms: int
 ) -> Iterator[Tick | TypedRefusal]:
-    """Stream a market's copied tick months inside the window, as prices at the series' scale."""
-    for row in _parquet_rows(paths, ("t", "bid", "ask"), start_ms, end_ms):
-        if isinstance(row, TypedRefusal):
-            yield row
+    """Stream a market's copied tick months inside the window, as prices at the series' scale.
+
+    This is a month's hottest loop, millions of rows, so it walks whole batches."""
+    for batch in _parquet_batches(paths, ("t", "bid", "ask")):
+        if isinstance(batch, TypedRefusal):
+            yield batch
             return
-        yield Tick(row[0], Decimal(row[1]).scaleb(-scale), Decimal(row[2]).scaleb(-scale))
+        for ms, bid, ask in zip(*batch, strict=True):
+            if start_ms <= ms < end_ms:
+                yield Tick(ms, Decimal(bid).scaleb(-scale), Decimal(ask).scaleb(-scale))
 
 
 def _parquet_bars(
     paths: Sequence[Path], scale: int, start_ms: int, end_ms: int
 ) -> Iterator[tuple[int, OHLC] | TypedRefusal]:
-    columns = ("t", "open", "high", "low", "close")
-    for row in _parquet_rows(paths, columns, start_ms, end_ms):
-        if isinstance(row, TypedRefusal):
-            yield row
+    for batch in _parquet_batches(paths, ("t", "open", "high", "low", "close")):
+        if isinstance(batch, TypedRefusal):
+            yield batch
             return
-        prices = (Decimal(value).scaleb(-scale) for value in row[1:])
-        yield row[0], OHLC(*prices)
+        for ms, *prices in zip(*batch, strict=True):
+            if start_ms <= ms < end_ms:
+                yield ms, OHLC(*(Decimal(price).scaleb(-scale) for price in prices))
 
 
 def read_bar_pair_parquet(
