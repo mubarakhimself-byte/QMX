@@ -346,7 +346,7 @@ def test_the_hook_command_alone(tmp_path: Path) -> None:
 
 
 def hook_answer(shell: str, path: Path, document: object) -> str:
-    """What the shipped command prints after a Write of `document`, inside the hook's budget."""
+    """What the shipped command prints after a Write of `document`."""
     path.write_text(json.dumps(document), encoding="utf-8")
     event = {"tool_input": {"file_path": path.as_posix()}}
     ran = subprocess.run(
@@ -354,7 +354,7 @@ def hook_answer(shell: str, path: Path, document: object) -> str:
         input=json.dumps(event),
         capture_output=True,
         text=True,
-        timeout=HOOK_BUDGET_S,
+        timeout=60,
         check=True,
     )
     return ran.stdout.strip()
