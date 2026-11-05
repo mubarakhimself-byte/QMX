@@ -195,6 +195,10 @@ BLOCK_COPIES = {
         )
     },
     **{
+        f"marked-sources/{name}": (f"u3-dictionary-expansion/marked-sources/{name}",)
+        for name in ("definition.json", "scripts/mark.py")
+    },
+    **{
         f"forecast/{name}": (f"s1-pre-session-shortlist/forecast/{name}",)
         for name in (
             "definition.json",
@@ -1829,8 +1833,8 @@ def test_s4_gives_the_writer_counts_only(home: Path) -> None:
             "series": "dukascopy/EURUSD/bar-m1/-",
             "card": "card:dukascopy/EURUSD/bar-m1/-",
             "months": 2,
-            "unfrozen": ["2025-01", "2025-02"],
-            "gaps": {},
+            "unfrozen": 2,
+            "gaps": 0,
             "rows": 2,
             "sealed": False,
         }

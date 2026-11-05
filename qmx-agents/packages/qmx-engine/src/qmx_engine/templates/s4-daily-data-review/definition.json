@@ -13,7 +13,7 @@
   },
   "outputs": {
     "type": "object",
-    "description": "the price series with their months, gaps and card links, the clock-flagged journal rows and the offset rows of the day, and one data note, every number held by the read step's receipt, landed as a proposal"
+    "description": "the price series with their counts of months, open months and gaps, and their card links, the clock-flagged journal rows and the offset rows of the day, and one data note, every number held by the read step's receipt, landed as a proposal"
   },
   "settings": {
     "timezone": "Europe/London",
