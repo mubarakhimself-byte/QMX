@@ -17,7 +17,7 @@ from typing import cast
 
 import pytest
 from qmf.core.refusal import is_refusal
-from qmf.risk.unit_intent import UnitIntent, parse_unit_intent
+from qmf.risk.unit_intent import UnitExitIntent, UnitIntent, parse_unit_intent
 from qml.blocks.api import (
     PASS_EVERY_ORDER,
     Block,
@@ -33,9 +33,20 @@ from qml.blocks.api import (
     parse_entry,
 )
 from qml.catalogue import Loaded, LockEntry, load
+from qml.compile import compile_unit
 from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import OwnPosition
 from qml.unit.model import Scope
+from test_compile_dummy import (
+    _compiled,
+    _context,
+    _document,
+    _drive,
+    _host,
+    _instants,
+    _slice,
+    _surfaces,
+)
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -166,18 +177,30 @@ def _exit_breaks(output: OutputType, block: Block, params: Mapping[str, Decimal]
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
         for i, bar in enumerate(_bars()):
-            answer = instance.update(
-                {"series": bar, "entry_price": Decimal("1.0850"), "stop_price": Decimal("1.0820")}
-                | dict(params)
-            )
-            level = isinstance(answer, Decimal) and answer.is_finite()
-            signal = isinstance(answer, Signal) and isinstance(cast("object", answer.state), bool)
-            if answer is None or (level and output is OutputType.LEVEL):
-                continue
-            if signal and output is OutputType.EXIT_ACTION:
-                continue
-            breaks.append(f"exit contract, {side.value} bar {i}: {answer!r} is not {wanted}")
+            for evidence in _host_evidence(output, bar, params):
+                answer = instance.update(evidence)
+                level = isinstance(answer, Decimal) and answer.is_finite()
+                state = cast("object", answer.state) if isinstance(answer, Signal) else None
+                if answer is None or (level and output is OutputType.LEVEL):
+                    continue
+                if isinstance(state, bool) and output is OutputType.EXIT_ACTION:
+                    continue
+                breaks.append(f"exit contract, {side.value} bar {i}: {answer!r} is not {wanted}")
     return breaks
+
+
+def _host_evidence(
+    output: OutputType, bar: Mapping[str, Decimal], params: Mapping[str, Decimal]
+) -> list[Mapping[str, object]]:
+    """What the unit host hands an exit: a per-bar exit nothing; a level its bar each bar, nothing
+    when a stop is read at entry, and the entry and the stop when a target is read."""
+    if output is OutputType.EXIT_ACTION:
+        return [{}]
+    return [
+        {"series": bar, **params},
+        {},
+        {"entry_price": Decimal("1.0850"), "stop_price": Decimal("1.0820"), **params},
+    ]
 
 
 def _run(side: Side) -> list[dict[str, Decimal]]:
@@ -420,6 +443,50 @@ def test_a_sizer_above_the_lot_rules_output_breaks_the_sizer_contract() -> None:
 
 def test_a_risk_session_sizer_that_is_not_a_placeholder_meets_the_sizer_contract() -> None:
     assert _sizer_breaks(_Fake(_half_risk), {}) == []
+
+
+def _capped() -> dict[str, object]:
+    document = _document()
+    exits = cast("list[object]", document["exit_set"])
+    exits[2] = {
+        "name": "cap",
+        "scope": "position",
+        "block": "unrealised-profit-cap@1",
+        "params": {"cap": {"value": "0.05"}},
+        "inputs": {"series": "m15"},
+    }
+    return document
+
+
+def test_the_per_bar_exit_closes_at_bar_48_through_the_host_and_a_capped_exit_refuses() -> None:
+    bars = _slice()
+    instants = _instants(bars)[:100]
+    compiled = _compiled()
+    position = OwnPosition(
+        "pos-1",
+        Side.LONG,
+        Decimal("0.10"),
+        Decimal("1.08"),
+        compiled.compiled_fingerprint,
+        instants[0],
+    )
+
+    steps = _drive(
+        _host(
+            compiled,
+            _surfaces(bars, positions=lambda m, _i: position if m == "fx.eurusd" else None),
+        ),
+        instants,
+    )
+
+    closes = [
+        n + 1 for n, s in enumerate(steps) for i in s.intents if isinstance(i, UnitExitIntent)
+    ]
+    capped = compile_unit(_capped(), _context())
+    assert closes == [48]
+    assert isinstance(capped, tuple), "a capped exit compiled, and it would never fire"
+    assert [(p.kind, p.where) for p in capped] == [("exit_not_built", "/exit_set/2")]
+    assert "risk session" in capped[0].message
 
 
 def test_an_exit_must_answer_what_its_entry_declares() -> None:

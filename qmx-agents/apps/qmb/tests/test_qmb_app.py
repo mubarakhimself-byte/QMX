@@ -201,6 +201,27 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     assert sum(Decimal(t["money"]) for t in trades) == Decimal(landed["measures"]["net_money"])
 
 
+def test_a_long_only_unit_makes_no_short_fills(world: World) -> None:
+    document = template(DUMMY)
+    document["direction"] = "long"
+    draft = Draft("unit", "unit-long-only", "long only", fields=cast("Any", document))
+    unit = world.store.put(
+        OPERATOR, draft, on=drafts_ref("unit-long-only"), expected_head=None
+    ).object_id
+
+    long_only = world.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+    both = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
+
+    def trades(answer: dict[str, Any]) -> dict[str, int]:
+        sides = [t["side"] for t in report(world.store, answer["result_id"])["trades"]]
+        return {side: sides.count(side) for side in ("long", "short")}
+
+    assert (long_only["status"], both["status"]) == ("finished", "finished")
+    assert trades(long_only)["short"] == 0
+    assert trades(long_only)["long"] >= 1
+    assert trades(both)["short"] >= 1
+
+
 def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: World) -> None:
     answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
 
