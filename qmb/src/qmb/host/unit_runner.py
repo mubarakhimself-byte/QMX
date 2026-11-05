@@ -7,7 +7,10 @@ A run folder holds what the core gathered for one run:
 - ``records/<market_id>.json``: the instrument record of each of the unit's markets;
 - ``bars/<market_id>/bid.csv`` and ``ask.csv``: the market's closed bars on the unit's stream,
   one row per bar (``timestamp`` is the bar's open in epoch milliseconds, then ``open``,
-  ``high``, ``low``, ``close``), as the Dukascopy download template saves them;
+  ``high``, ``low``, ``close``), the test and hand-saved route;
+- or ``data/<market_id>/``: the market's months copied from the market store, ticks or a pair of
+  ``bar-m1`` series, beside a ``card.json`` naming their files, scale and window, which clip them;
+- ``request.json``, optional: its ``markets`` names the markets a run trades, of the unit's;
 - ``costs/<market_id>.json``, optional: the market's ``qmx.qmb.cost-profile/1``;
 - ``funding/<market_id>.csv``: a market that pays funding, its recorded rates
   (``timestamp,rate``).
@@ -37,8 +40,9 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from pathlib import Path
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from qmf.core.chrono import Instant
 from qmf.core.identity import AccountRole, VenueId
@@ -69,8 +73,11 @@ from qmb.host.replay import (
     BarWindow,
     DataCard,
     Fidelity,
+    Row,
     VenueDay,
     read_bar_pair_csv,
+    read_bar_pair_parquet,
+    read_tick_parquet,
     replay_feed,
     replay_windowed,
     window_size,
@@ -99,6 +106,7 @@ __all__ = [
 
 ZERO_TRADES: Final[str] = "zero_trades"
 _NS_PER_SEC: Final[int] = 1_000_000_000
+_NS_PER_MS: Final[int] = 1_000_000
 _EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
 _QUOTES: Final[DataCard] = DataCard(Fidelity.QUOTES)
 
@@ -270,6 +278,22 @@ class _BarFiles:
         return replay_feed(_QUOTES, rows, BarBuilder(self.day.span, self.seconds))
 
 
+@dataclass(frozen=True, slots=True)
+class _StoreFiles:
+    """One market's months copied from the market store, built into bars in the venue's day.
+
+    Ticks end where they start, so the window's end closes the last bar."""
+
+    rows: Callable[[], Iterator[Row | TypedRefusal]]
+    seconds: int
+    day: VenueDay
+    until_ns: int
+
+    def __call__(self) -> Iterator[QuoteBar | TypedRefusal]:
+        builder = BarBuilder(self.day.span, self.seconds)
+        return replay_feed(_QUOTES, self.rows(), builder, until_ns=self.until_ns)
+
+
 def _bar_files(folder: Path, market: str, day: VenueDay, seconds: int) -> Result[_BarFiles]:
     bid, ask = folder / "bars" / market / "bid.csv", folder / "bars" / market / "ask.csv"
     for path in (bid, ask):
@@ -279,6 +303,64 @@ def _bar_files(folder: Path, market: str, day: VenueDay, seconds: int) -> Result
     if is_refusal(builder):
         return builder
     return Ok(_BarFiles(bid, ask, seconds, day))
+
+
+def _day_ms(text: object) -> int | None:
+    try:
+        moment = datetime.fromisoformat(str(text)).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    return (moment - _EPOCH) // timedelta(milliseconds=1)
+
+
+def _store_files(data: Path, day: VenueDay, seconds: int) -> Result[_StoreFiles]:
+    """The feed a market's ``card.json`` describes: its ticks, or its bid and ask ``bar-m1``."""
+    try:
+        found: object = json.loads((data / "card.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return invalid("data", "a market's store months sit beside their card", error=str(error))
+    card = cast("Mapping[str, Any]", found)
+    series = card.get("series")
+    scale = card.get("scale")
+    if type(scale) is not int:
+        return invalid("data", f"{(series or ['this series'])[0]} states no price scale")
+    window = cast("Mapping[str, object]", card.get("window") or {})
+    start, end = _day_ms(window.get("start")), _day_ms(window.get("end"))
+    if start is None or end is None:
+        return invalid("data", "a market's card names its window as dates", window=str(window))
+    files = {
+        side: [data / name for name in names]
+        for side, names in cast("Mapping[str, list[str]]", card.get("files") or {}).items()
+    }
+    rows: Callable[[], Iterator[Row | TypedRefusal]]
+    match card.get("kind"), files:
+        case "ticks", {"ticks": ticks}:
+            rows = partial(read_tick_parquet, ticks, scale, start, end)
+        case "bar-m1", {"bid": bid, "ask": ask}:
+            rows = partial(read_bar_pair_parquet, bid, ask, scale, start, end)
+        case _:
+            return invalid("data", "a market's card names ticks or a bar-m1 pair", series=series)
+    return Ok(_StoreFiles(rows, seconds, day, end * _NS_PER_MS))
+
+
+def _market_feed(folder: Path, market: str, day: VenueDay, seconds: int) -> Result[BarFeed]:
+    data = folder / "data" / market
+    if data.is_dir():
+        return _store_files(data, day, seconds)
+    return _bar_files(folder, market, day, seconds)
+
+
+def _asked_markets(folder: Path) -> Result[frozenset[str] | None]:
+    """The markets the core's request names, or None for a folder whose request names none."""
+    path = folder / "request.json"
+    if not path.is_file():
+        return Ok(None)
+    try:
+        asked: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return invalid("request", "the run's request is a JSON object", error=str(error))
+    named = cast("Mapping[str, object]", asked).get("markets") if isinstance(asked, dict) else None
+    return Ok(None if named is None else frozenset(cast("list[str]", named)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,13 +440,18 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
         return invalid(
             "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
         )
+    asked = _asked_markets(folder)
+    if is_refusal(asked):
+        return asked
     feeds: dict[str, BarFeed] = {}
     rules: dict[str, _MarketRules] = {}
     for market, record in compiled.plan.markets:
+        if asked.value is not None and market.market_id not in asked.value:
+            continue
         day = VenueDay.try_create(record.zone, record.day_boundary)
         if is_refusal(day):
             return day
-        files = _bar_files(folder, market.market_id, day.value, seconds)
+        files = _market_feed(folder, market.market_id, day.value, seconds)
         if is_refusal(files):
             return files
         feeds[market.market_id] = files.value

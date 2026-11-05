@@ -46,7 +46,7 @@ __all__ = [
 
 EVERY_MARKET: Final = "*"
 """The markets axis of a sweep that runs every cell on all the unit's markets at once."""
-_KEPT: Final = frozenset({"request.json", "unit.json"})
+_KEPT: Final = frozenset({"unit.json"})
 
 
 @dataclass(frozen=True, slots=True)

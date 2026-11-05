@@ -15,7 +15,7 @@ from pathlib import Path
 from qmb.host.unit_runner import load_unit_folder, run_loaded
 from qmf.core.refusal import TypedRefusal, is_refusal
 from qmf.data.series import SeriesKey
-from qmf.data.store.engines.typed import TICK_COLUMNS, TypedWriter
+from qmf.data.store.engines.typed import BAR_COLUMNS, TICK_COLUMNS, TypedWriter
 from test_unit_runner import _SYNTHETIC, make_run_folder, request
 
 EURUSD = "fx.eurusd"
@@ -74,6 +74,49 @@ def in_the_store(folder: Path, market: str, window: dict[str, str], **card: obje
         ),
         "utf-8",
     )
+
+
+def bar_rows(symbol: str, side: str) -> list[tuple[object, ...]]:
+    """Each 15-minute bar of the CSV as the one minute bar that closes it, at scale 5."""
+    path = _SYNTHETIC / f"synthetic-{symbol}-m15-{side}-2025-03-01-2025-04-01.csv"
+    with path.open(encoding="utf-8", newline="") as handle:
+        return [
+            (
+                int(bar["timestamp"]) + 14 * 60_000,
+                *(int(Decimal(bar[n]).scaleb(5)) for n in ("open", "high", "low", "close")),
+                1.0,
+            )
+            for bar in csv.DictReader(handle)
+        ]
+
+
+def test_a_month_of_bar_m1_pairs_builds_the_same_bars_as_the_csv(tmp_path: Path) -> None:
+    folder = make_run_folder(tmp_path)
+    by_csv = load_unit_folder(folder)
+    assert not is_refusal(by_csv)
+    expected = list(by_csv.value.feeds[EURUSD]())
+    in_the_store(
+        folder,
+        EURUSD,
+        {"start": "2025-03-01", "end": "2025-04-01"},
+        scale=5,
+        kind="bar-m1",
+        series=["dukascopy/EURUSD/bar-m1/bid", "dukascopy/EURUSD/bar-m1/ask"],
+        files={"bid": ["bid/month.parquet"], "ask": ["ask/month.parquet"]},
+    )
+    for side in ("bid", "ask"):
+        (folder / "data" / EURUSD / side).mkdir()
+        key = SeriesKey.try_create("dukascopy", "EURUSD", "bar-m1", 2025, 3, side)
+        assert not is_refusal(key)
+        path = folder / "data" / EURUSD / side / "month.parquet"
+        TypedWriter(path, key.value.text, BAR_COLUMNS).add(bar_rows("eurusd", side)).finish()
+
+    loaded = load_unit_folder(folder)
+
+    assert not is_refusal(loaded)
+    bars = list(loaded.value.feeds[EURUSD]())
+    assert len(bars) == 1920
+    assert bars == expected
 
 
 def test_one_market_of_a_two_market_unit_runs(tmp_path: Path) -> None:

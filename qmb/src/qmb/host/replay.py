@@ -83,6 +83,7 @@ __all__ = [
     "RecordedReplaySource",
     "Roll",
     "RollHook",
+    "Row",
     "SliceHook",
     "Tick",
     "TypedPartitionRef",
@@ -90,7 +91,9 @@ __all__ = [
     "futures_feed",
     "read_bar_csv",
     "read_bar_pair_csv",
+    "read_bar_pair_parquet",
     "read_recorded_replay_source",
+    "read_tick_parquet",
     "read_typed_replay_source",
     "replay_feed",
     "replay_windowed",
@@ -968,6 +971,7 @@ stays within 10% of its peak at 10,000 steps."""
 
 _EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
 _NS_PER_US: Final[int] = 1_000
+_BAR_M1_SECONDS: Final[int] = 60
 
 
 def _ns_of(moment: datetime) -> int:
@@ -1202,11 +1206,73 @@ def read_bar_csv(path: Path, seconds: int) -> Iterator[Bar | TypedRefusal]:
 
 
 def read_bar_pair_csv(bid: Path, ask: Path, seconds: int) -> Iterator[BarPair | TypedRefusal]:
-    """Stream a bid file and an ask file of ``seconds`` bars, keeping stretches both sides have.
+    """Stream a bid file and an ask file of ``seconds`` bars, keeping stretches both sides have."""
+    return _paired(_csv_bars(bid), _csv_bars(ask), seconds)
 
-    Half a pair is never a quote, so a minute only one file holds is skipped.
-    """
-    bids, asks = _csv_bars(bid), _csv_bars(ask)
+
+def _parquet_rows(
+    paths: Sequence[Path], columns: Sequence[str], start_ms: int, end_ms: int
+) -> Iterator[tuple[int, ...] | TypedRefusal]:
+    """One side's copied months in order, these whole-number columns, ``t`` inside the window."""
+    import pyarrow.parquet as pq  # noqa: PLC0415 (only a read of the store needs the library)
+
+    try:
+        for path in paths:
+            with pq.ParquetFile(path) as months:
+                for batch in months.iter_batches(batch_size=50_000, columns=list(columns)):
+                    picked = (batch.column(name).to_pylist() for name in columns)
+                    for row in zip(*picked, strict=True):
+                        if start_ms <= row[0] < end_ms:
+                            yield row
+    except (OSError, ValueError, KeyError) as error:
+        yield invalid(
+            "data",
+            "a market's store months are readable typed Parquet files",
+            files=[str(path) for path in paths],
+            error=str(error),
+        )
+
+
+def read_tick_parquet(
+    paths: Sequence[Path], scale: int, start_ms: int, end_ms: int
+) -> Iterator[Tick | TypedRefusal]:
+    """Stream a market's copied tick months inside the window, as prices at the series' scale."""
+    for row in _parquet_rows(paths, ("t", "bid", "ask"), start_ms, end_ms):
+        if isinstance(row, TypedRefusal):
+            yield row
+            return
+        yield Tick(row[0], Decimal(row[1]).scaleb(-scale), Decimal(row[2]).scaleb(-scale))
+
+
+def _parquet_bars(
+    paths: Sequence[Path], scale: int, start_ms: int, end_ms: int
+) -> Iterator[tuple[int, OHLC] | TypedRefusal]:
+    columns = ("t", "open", "high", "low", "close")
+    for row in _parquet_rows(paths, columns, start_ms, end_ms):
+        if isinstance(row, TypedRefusal):
+            yield row
+            return
+        prices = (Decimal(value).scaleb(-scale) for value in row[1:])
+        yield row[0], OHLC(*prices)
+
+
+def read_bar_pair_parquet(
+    bid: Sequence[Path], ask: Sequence[Path], scale: int, start_ms: int, end_ms: int
+) -> Iterator[BarPair | TypedRefusal]:
+    """Stream a market's copied ``bar-m1`` bid and ask months inside the window."""
+    return _paired(
+        _parquet_bars(bid, scale, start_ms, end_ms),
+        _parquet_bars(ask, scale, start_ms, end_ms),
+        _BAR_M1_SECONDS,
+    )
+
+
+def _paired(
+    bids: Iterator[tuple[int, OHLC] | TypedRefusal],
+    asks: Iterator[tuple[int, OHLC] | TypedRefusal],
+    seconds: int,
+) -> Iterator[BarPair | TypedRefusal]:
+    """Half a pair is never a quote, so a stretch only one side holds is skipped."""
     left, right = next(bids, None), next(asks, None)
     while left is not None and right is not None:
         if isinstance(left, TypedRefusal) or isinstance(right, TypedRefusal):
