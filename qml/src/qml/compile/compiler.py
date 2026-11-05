@@ -380,16 +380,13 @@ class _Wiring:
                     f"{where}/role",
                     f"{_FORMAT} runs no slot of role {slot.role.value}",
                 )
-            bound = [
-                one
-                for index, binding in enumerate(slot.bindings)
-                if (
-                    one := self.bind(
-                        binding, f"{side.value}.{binding.name}", f"{where}/bindings/{index}"
-                    )
+            bound: list[BoundBlock] = []
+            for index, binding in enumerate(slot.bindings):
+                one = self.bind(
+                    binding, f"{side.value}.{binding.name}", f"{where}/bindings/{index}"
                 )
-                is not None
-            ]
+                if one is not None:
+                    bound.append(one)
             planned.append(
                 SlotPlan(
                     name=slot_name,
