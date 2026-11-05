@@ -2024,7 +2024,7 @@ class QmbRun:
         """A month the run's holdout seals never reaches a run folder, by either route, because
         `materialise` copies whatever it is given. With no door there is no seal to ask, unless
         a study states one."""
-        if is_refusal(self.door):
+        if isinstance(self.door, TypedRefusal):
             if window.holdout is None:
                 return
             raise BundleRefused([f"this study names a holdout: {shut_line(self.door)}"])
@@ -2039,7 +2039,7 @@ class QmbRun:
     ) -> StoreMonths | NotInStore:
         """The one source whose store holds this market's whole window. Two is a refusal, because
         they can differ only when the request and the study name different sources."""
-        if is_refusal(self.door):
+        if isinstance(self.door, TypedRefusal):
             raise BundleRefused([f"the market-data door did not open: {shut_line(self.door)}"])
         found = [self._held(self.door, source, symbol, window) for source in sources]
         usable = [one for one in found if isinstance(one, StoreMonths)]
@@ -2069,8 +2069,10 @@ class QmbRun:
             for variant in variants:
                 series = f"{source}/{symbol}/{kind}/{variant}"
                 card = door.card(series)
-                whole: Mapping[str, Any] = {} if is_refusal(card) else card.value
-                months = {p["month"]: p["fingerprint"] for p in whole.get("partitions", [])}
+                whole: dict[str, Any] = {} if is_refusal(card) else cast(dict[str, Any], card.value)
+                months = {
+                    str(p["month"]): str(p["fingerprint"]) for p in whole.get("partitions", [])
+                }
                 absent += [month for month in window.months if month not in months]
                 name = kind if variant == "-" else variant
                 in_order = tuple(months[m] for m in window.months if m in months)

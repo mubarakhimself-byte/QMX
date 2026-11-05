@@ -16,8 +16,10 @@ from qmb.host.unit_runner import load_unit_folder, run_loaded
 from qmf.core.refusal import TypedRefusal, is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import BAR_COLUMNS, TICK_COLUMNS, TypedWriter
-from test_unit_runner import _SYNTHETIC, make_run_folder, request
+from qml.protocol.unit import QuoteBar
+from test_unit_runner import make_run_folder, request
 
+SLICES = Path(__file__).resolve().parents[2] / "qml" / "tests" / "fixtures" / "slices"
 EURUSD = "fx.eurusd"
 TICK_OFFSETS_MS = (0, 200_000, 400_000, 880_000)
 """Open, high, low and close, each at its own moment inside a 15-minute bar."""
@@ -25,11 +27,11 @@ LAST_BAR_CLOSES_NS = 1_743_199_200_000_000_000
 """22:00 UTC on Friday 28 March 2025, the end of the bar the CSV's last row opens."""
 
 
-def tick_rows(symbol: str, scale: int) -> list[tuple[object, ...]]:
-    rows: list[tuple[object, ...]] = []
+def tick_rows(symbol: str, scale: int) -> list[tuple[int, int, int, float, float]]:
+    rows: list[tuple[int, int, int, float, float]] = []
     sides = [
         csv.DictReader(
-            (_SYNTHETIC / f"synthetic-{symbol}-m15-{side}-2025-03-01-2025-04-01.csv").open(
+            (SLICES / f"synthetic-{symbol}-m15-{side}-2025-03-01-2025-04-01.csv").open(
                 encoding="utf-8", newline=""
             )
         )
@@ -46,7 +48,7 @@ def tick_rows(symbol: str, scale: int) -> list[tuple[object, ...]]:
                     1.0,
                 )
             )
-    return sorted(rows, key=lambda row: row[0])  # pyright: ignore[reportArgumentType, reportCallIssue, reportUnknownLambdaType]
+    return sorted(rows, key=lambda row: row[0])
 
 
 def in_the_store(folder: Path, market: str, window: dict[str, str], **card: object) -> None:
@@ -78,7 +80,7 @@ def in_the_store(folder: Path, market: str, window: dict[str, str], **card: obje
 
 def bar_rows(symbol: str, side: str) -> list[tuple[object, ...]]:
     """Each 15-minute bar of the CSV as the one minute bar that closes it, at scale 5."""
-    path = _SYNTHETIC / f"synthetic-{symbol}-m15-{side}-2025-03-01-2025-04-01.csv"
+    path = SLICES / f"synthetic-{symbol}-m15-{side}-2025-03-01-2025-04-01.csv"
     with path.open(encoding="utf-8", newline="") as handle:
         return [
             (
@@ -156,7 +158,9 @@ def test_the_window_end_closes_the_last_bar(tmp_path: Path) -> None:
     assert not is_refusal(loaded)
     bars = list(loaded.value.feeds[EURUSD]())
     assert len(bars) == 1920
-    assert bars[-1].knowable_at.value_ns == LAST_BAR_CLOSES_NS  # pyright: ignore[reportAttributeAccessIssue]
+    last = bars[-1]
+    assert isinstance(last, QuoteBar)
+    assert last.knowable_at.value_ns == LAST_BAR_CLOSES_NS
 
 
 def test_the_window_clips_the_months_to_its_own_days(tmp_path: Path) -> None:

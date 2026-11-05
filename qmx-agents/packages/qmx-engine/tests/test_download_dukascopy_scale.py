@@ -25,7 +25,7 @@ import qml
 from qmf.core import is_ok
 from qmf.data.series import SeriesKey, SeriesStore
 from qmx_home import resolve
-from qmx_host.market_data import MarketDoor
+from qmx_host.market_data import MarketDoor  # pyright: ignore[reportMissingTypeStubs]
 
 from qmx_engine.templates.catalog import PACK
 
