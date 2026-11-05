@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -17,7 +18,7 @@ import tomllib
 import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine, Mapping
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,7 +34,7 @@ from qmx_home.versions import open_sqlite
 
 from qmx_apps.artifacts import Artifacts, Ending, Lander, LibrarySink, Run, contract_problems
 from qmx_apps.errors import AppError, Document
-from qmx_apps.manifest import Breaker, Definition, Trust, image_files, image_hash
+from qmx_apps.manifest import Breaker, Definition, Isolation, Trust, image_files, image_hash
 from qmx_apps.road import PackSink, Road
 from qmx_apps.store import open_store
 from qmx_apps.volume import Lease, Volume, VolumeLease, checksum, snapshot
@@ -158,6 +159,14 @@ SNAPSHOT: Final = "snapshot.json"
 one checksum per file. It is left out of its own checksums."""
 BUILT_FROM: Final = "qmx-sources.json"
 """In each app env, a digest of every path source's `src` files as the env last installed them."""
+INSTALL_LIMIT_S: Final = 1800.0
+"""The starting default of `[apps] install_limit_s`: how long one environment build may run before
+it is stopped by name. It stops a hung build, no usage."""
+METRICS_BEAT_SECONDS: Final = 30.0
+"""How often a quiet running app's row is rewritten. `status` reads the live instance, so only the
+live metric rate on a screen follows this."""
+CREATE_SUSPENDED: Final = 0x00000004
+"""The Windows creation flag `subprocess` does not name."""
 
 
 def path_sources(project: Path) -> dict[str, str]:
@@ -167,11 +176,16 @@ def path_sources(project: Path) -> dict[str, str]:
     package's cache keys changes. Those keys see file times and never the file list, so a deleted
     module would stay in the wheel. The digest sees both."""
     digests: dict[str, str] = {}
-    for package in tomllib.loads((project / "uv.lock").read_text(encoding="utf-8"))["package"]:
-        source = package.get("source", {})
-        folder = source.get("editable") or source.get("directory")
-        if folder is not None:
-            digests[package["name"]] = image_hash(project / folder / "src")
+    try:
+        for package in tomllib.loads((project / "uv.lock").read_text(encoding="utf-8"))["package"]:
+            source = package.get("source", {})
+            folder = source.get("editable") or source.get("directory")
+            if folder is not None:
+                digests[package["name"]] = image_hash(project / folder / "src")
+    except (OSError, ValueError, KeyError) as error:
+        raise AppError(
+            "install_failed", "The app's lock or a path source it names is unreadable.", 422
+        ) from error
     return digests
 
 
@@ -328,6 +342,7 @@ class Supervisor:
         placement: str = "pc",
         restart_wait: Wait = wait,
         landers: Landers | None = None,
+        install_limit_s: float = INSTALL_LIMIT_S,
     ) -> None:
         """`call_depth` is the host's bound on a ring of asks (AD-64): the longest chain of app
         operations that may sit behind one ask. There is no default number, and a host that sets
@@ -335,7 +350,8 @@ class Supervisor:
         volume and the index here. `placement` is the machine this store is: the home every app
         instance here runs on, and the machine a move hands a volume to or takes it from.
         `restart_wait` is how an opted-in app's back-off waits before it starts again. `landers`
-        are the core landers an app's provides may name."""
+        are the core landers an app's provides may name. `install_limit_s` is how long one
+        environment build may run."""
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.catalog = self.home / "apps.db"
@@ -345,6 +361,8 @@ class Supervisor:
         self.proof_mode = proof_mode
         self.call_depth = call_depth
         self.placement = placement
+        self.install_limit_s = install_limit_s
+        self._notices: dict[str, str] = {}
         self._proof_images: dict[str, Definition] = {}
         self.environments = Layout.from_home(self.home).cache / "envs"
         """Each definition's uv environment, rebuilt from its lock on demand (design 62 A3)."""
@@ -466,21 +484,22 @@ class Supervisor:
                     shutil.copyfile(source, target)
             if image_hash(image) != definition.hash:
                 raise AppError("definition_corrupt", "The immutable image hash changed.", 409)
-            self._install_environment(definition, image)
-            if image_hash(image) != definition.hash:
-                raise AppError(
-                    "definition_corrupt", "Installation changed the immutable image.", 409
-                )
-            self.road.register(definition, trust, expected_hash)
-            self._log(
-                manifest.id,
-                "installed",
-                {"definition_hash": definition.hash, "version": manifest.version},
-            )
-            self.emit(
-                manifest.id,
-                {"app_id": manifest.id, "status": "installed", "definition_hash": definition.hash},
-            )
+        # uv can run for minutes and another holder can keep the road for a minute, and every call
+        # takes the lock, his kill included. The volume lease `install` holds keeps this app's own
+        # start and any other install of it off.
+        self._install_environment(definition, image)
+        if image_hash(image) != definition.hash:
+            raise AppError("definition_corrupt", "Installation changed the immutable image.", 409)
+        self.road.register(definition, trust, expected_hash)
+        self._log(
+            manifest.id,
+            "installed",
+            {"definition_hash": definition.hash, "version": manifest.version},
+        )
+        self.emit(
+            manifest.id,
+            {"app_id": manifest.id, "status": "installed", "definition_hash": definition.hash},
+        )
         return self.get(manifest.id)
 
     def _install_environment(self, definition: Definition, image: Path) -> None:
@@ -511,21 +530,13 @@ class Supervisor:
         # The image holds this lock byte for byte, but a lock's relative path sources (QMB's QMX
         # libraries) resolve only from the folder the definition was installed from.
         source = definition.root if image_hash(definition.root) == definition.hash else image
-        try:
-            sources = path_sources(source)
-        except (OSError, ValueError, KeyError) as error:
-            raise AppError(
-                "install_failed", "The app's lock or a path source it names is unreadable.", 422
-            ) from error
-        try:
-            recorded: object = json.loads((env / BUILT_FROM).read_text(encoding="utf-8"))
-        except OSError, ValueError:
-            recorded = None
-        built = cast(Document, recorded) if isinstance(recorded, dict) else {}
+        sources = path_sources(source)
+        built = self.built_from(definition.hash)
         # A missing or unreadable record rebuilds every path source. A new env needs that too,
         # because uv's cached wheel may still hold a module deleted since it was built.
         changed = [name for name, digest in sources.items() if built.get(name) != digest]
-        result = subprocess.run(
+        code, log = self._run_uv(
+            definition.manifest.id,
             [
                 uv,
                 "sync",
@@ -539,16 +550,12 @@ class Supervisor:
                 "--compile-bytecode",
                 *(f"--reinstall-package={name}" for name in changed),
             ],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            environment,
         )
-        if result.returncode:
+        if code:
             said = [
                 line.strip()
-                for line in result.stderr.splitlines()
+                for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
                 if line.strip().startswith(("error:", "Caused by:"))
             ]
             why = f" uv said: {' '.join(said[:3])[:400]}" if said else ""
@@ -560,6 +567,88 @@ class Supervisor:
         staged = env / f"{BUILT_FROM}.tmp"
         staged.write_text(json.dumps(sources), encoding="utf-8")
         staged.replace(env / BUILT_FROM)
+
+    def _run_uv(
+        self, app_id: str, command: list[str], environment: dict[str, str]
+    ) -> tuple[int, Path]:
+        """Run uv with its output in a file and its whole process tree killable, and answer its
+        exit code and the file. A pipe cannot do this: a process uv left behind holds the pipe, and
+        on Windows `subprocess.run(timeout=...)` still waits for it after the kill."""
+        log = Layout.from_home(self.home).logs / f"install-{app_id}.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        job = (
+            WindowsJob(f"Local\\qmx-install-{uuid.uuid4().hex}", Isolation())
+            if sys.platform == "win32"
+            else None
+        )
+        try:
+            with log.open("wb") as output:
+                process = subprocess.Popen(
+                    command,
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=output,
+                    stderr=subprocess.STDOUT,
+                    creationflags=subprocess.CREATE_NO_WINDOW | CREATE_SUSPENDED if job else 0,
+                    start_new_session=sys.platform != "win32",
+                )
+            if job:
+                self._resume_in(job, process)
+            try:
+                return process.wait(timeout=self.install_limit_s), log
+            except subprocess.TimeoutExpired:
+                if job:
+                    job.terminate()
+                elif sys.platform != "win32":
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+                raise AppError(
+                    "install_stuck",
+                    f"{app_id}'s install ran past its {self.install_limit_s:g} s limit, "
+                    f"[apps] install_limit_s, and was stopped. uv's output is in {log}.",
+                    504,
+                ) from None
+        finally:
+            if job:
+                job.close()
+
+    @staticmethod
+    def _resume_in(job: WindowsJob, process: subprocess.Popen[bytes]) -> None:
+        """Join a suspended `process` to `job` and let it run, so no child it starts escapes."""
+        if sys.platform != "win32":
+            raise RuntimeError("Windows Job Objects are only available on Windows.")
+        import win32api  # noqa: PLC0415
+        import win32con  # noqa: PLC0415
+
+        try:
+            handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, process.pid)
+            try:
+                job.api.AssignProcessToJobObject(job.handle, handle)
+            finally:
+                win32api.CloseHandle(handle)
+            psutil.Process(process.pid).resume()
+        except BaseException:
+            process.kill()
+            raise
+
+    def built_from(self, definition_hash: str) -> Document:
+        """The path-source digests this definition's env was last built from, or nothing when no
+        readable record says."""
+        path = self.environments / definition_hash / BUILT_FROM
+        try:
+            recorded: object = json.loads(path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            return {}
+        return cast(Document, recorded) if isinstance(recorded, dict) else {}
+
+    def notice(self, app_id: str, text: str | None) -> None:
+        """Say in `status` what he must know about this app, such as a version waiting for his
+        signature, or clear it. A host start works it out again, so it stays off the disk."""
+        with self._lock:
+            if text is None:
+                self._notices.pop(app_id, None)
+            else:
+                self._notices[app_id] = text
 
     def _definition(self, app_id: str) -> Definition:
         if self.proof_mode and app_id in self._proof_images:
@@ -627,8 +716,12 @@ class Supervisor:
         self._definition(app_id)
         with self._lock:
             instance = self._instances.get(app_id)
-            if instance:
-                return instance.document()
+            live = instance.document() if instance else None
+            notice = self._notices.get(app_id)
+        data = live if live is not None else self._persisted(app_id)
+        return {**data, "notice": notice} if notice else data
+
+    def _persisted(self, app_id: str) -> Document:
         with closing(sqlite3.connect(self.catalog)) as db:
             row = db.execute("SELECT data FROM runtime WHERE id=?", (app_id,)).fetchone()
         data: Document = (
@@ -664,22 +757,33 @@ class Supervisor:
         per profile, so two of his setups never read each other's files."""
         with self._lock:
             existing = self._instances.get(app_id)
+        if existing:
+            return existing.document()
+        self.check_profile(self._definition(app_id), profile)
+        home = self.home_of(app_id)
+        if home != self.placement:
+            raise AppError(
+                "not_home",
+                f"{app_id} lives on {home}; this machine is {self.placement}.",
+                409,
+            )
+        pinned = definition_hash is not None
+        if not pinned and not self.proof_mode:
+            from qmx_apps.road.history import history, project  # noqa: PLC0415
+
+            # A backup round or a road step can hold the road for up to ROAD_WAIT_S, and every
+            # call takes the lock, his kill included, so this wait stays off it.
+            with history(self.home, app_id) as state:
+                project(self.home, app_id, state)
+        with self._lock:
+            existing = self._instances.get(app_id)
             if existing:
                 return existing.document()
             definition = self._definition(app_id)
-            self.check_profile(definition, profile)
-            home = self.home_of(app_id)
-            if home != self.placement:
-                raise AppError(
-                    "not_home",
-                    f"{app_id} lives on {home}; this machine is {self.placement}.",
-                    409,
-                )
-            if definition_hash is None and not self.proof_mode:
-                from qmx_apps.road.history import history, project  # noqa: PLC0415
-
-                with history(self.home, app_id) as state:
-                    project(self.home, app_id, state)
+            if pinned:
+                # This is the version he or the road chose, so what waited for it is settled.
+                self._notices.pop(app_id, None)
+            elif not self.proof_mode:
                 with closing(sqlite3.connect(self.catalog)) as db:
                     active = db.execute("SELECT hash FROM active WHERE id=?", (app_id,)).fetchone()
                 definition_hash = active[0] if active else None
@@ -853,6 +957,7 @@ class Supervisor:
                 self._persist(instance)
                 startup.reschedule(None)
                 instance.ready.set_result(None)
+                written, beat = self._row_facts(instance), time.monotonic()
                 while not instance.stop.is_set():
                     await asyncio.sleep(0.25)
                     if instance.stop.is_set():
@@ -862,7 +967,10 @@ class Supervisor:
                     if breach:
                         self._trip(instance, breach)
                     elif instance.state == "running":
-                        self._persist(instance)
+                        facts, now = self._row_facts(instance), time.monotonic()
+                        if facts != written or now - beat >= METRICS_BEAT_SECONDS:
+                            self._persist(instance)
+                            written, beat = facts, now
                 self.kill(instance)
         except Exception as error:
             if instance.state not in {"tripped", "stopping"}:
@@ -903,7 +1011,14 @@ class Supervisor:
                 and instance.ready.done()
                 and instance.ready.exception() is None
             ):
-                self._heal(app_id, manifest.breaker, instance.profile)
+                ran = time.monotonic() - instance.started
+                self._heal(app_id, manifest.breaker, instance.profile, ran)
+
+    @staticmethod
+    def _row_facts(instance: Instance) -> tuple[str, int | None, str]:
+        """What a running app's row must say at once when it changes: status, pid and breaker."""
+        pid = instance.process.pid if instance.process else None
+        return (instance.state, pid, instance.reason)
 
     def transport(
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
@@ -1022,13 +1137,17 @@ class Supervisor:
             if instance.task:
                 instance.task.result(timeout=30)
 
-    def _heal(self, app_id: str, breaker: Breaker, profile: str | None) -> None:
+    def _heal(self, app_id: str, breaker: Breaker, profile: str | None, ran: float) -> None:
         """Count a trip of an opted-in app and start it again after its back-off, on the profile
         it ran. The restart is a plain `start`, so a `money` app gets only its active signed
-        version (MA-05) and any other app what `restart` would start."""
+        version (MA-05) and any other app what `restart` would start. A run of `ran` seconds that
+        outlasted the longest back-off was no crash loop, so the count starts again. A running
+        restart loop keeps its count, because it reads the count to see a trip that landed."""
         with self._lock:
             healing = self._healing.setdefault(app_id, Healing(breaker, profile))
             healing.breaker, healing.profile = breaker, profile
+            if healing.thread is None and ran > breaker.backoff_max_seconds:
+                healing.trips = 0
             healing.trips += 1
             if healing.thread is None:
                 healing.thread = threading.Thread(
@@ -1043,49 +1162,61 @@ class Supervisor:
         """Wait, start, and wait longer after each start that fails, until one runs or he stops
         the app. A refusal (a 4xx, such as a money app with no signed version) ends the loop,
         because waiting does not change it. A trip that lands while this loop is starting the app
-        is caught by the last check, so no trip is left without its restart."""
+        is caught by the last check, so no trip is left without its restart. An error anywhere
+        else in a round counts as a failed start, so it cannot leave the app never restarting."""
         while True:
-            with self._lock:
-                trips = healing.trips
-            seconds = healing.breaker.backoff(trips)
-            self._log(app_id, "restart_scheduled", {"trips": trips, "wait_seconds": seconds})
-            if self.restart_wait(seconds, healing.cancel) or healing.cancel.is_set():
-                return
-            with self._lock:
-                if app_id in self._instances:
-                    healing.thread = None
-                    return
             try:
-                started = self.start(app_id, profile=healing.profile)
-            except Exception as error:
-                if healing.cancel.is_set():
+                with self._lock:
+                    trips = healing.trips
+                seconds = healing.breaker.backoff(trips)
+                self._log(app_id, "restart_scheduled", {"trips": trips, "wait_seconds": seconds})
+                if self.restart_wait(seconds, healing.cancel) or healing.cancel.is_set():
                     return
-                code = error.code if isinstance(error, AppError) else type(error).__name__
-                if isinstance(error, AppError) and error.status < 500:
-                    self._log(app_id, "restart_refused", {"code": code, "trips": trips})
+                with self._lock:
+                    if app_id in self._instances:
+                        healing.thread = None
+                        return
+                try:
+                    started = self.start(app_id, profile=healing.profile)
+                except Exception as error:
+                    if healing.cancel.is_set():
+                        return
+                    code = error.code if isinstance(error, AppError) else type(error).__name__
+                    if isinstance(error, AppError) and error.status < 500:
+                        self._log(app_id, "restart_refused", {"code": code, "trips": trips})
+                        with self._lock:
+                            if self._healing.get(app_id) is healing:
+                                self._healing.pop(app_id)
+                        return
+                    self._log(app_id, "restart_failed", {"code": code, "trips": trips})
                     with self._lock:
-                        if self._healing.get(app_id) is healing:
-                            self._healing.pop(app_id)
+                        healing.trips += 1
+                    continue
+                if healing.cancel.is_set():
+                    self._halt(app_id)
                     return
-                self._log(app_id, "restart_failed", {"code": code, "trips": trips})
+                self._log(
+                    app_id,
+                    "restarted",
+                    {
+                        "trips": trips,
+                        "instance_id": started.get("instance_id"),
+                        "definition_hash": started.get("definition_hash"),
+                    },
+                )
+                with self._lock:
+                    if healing.trips == trips:
+                        healing.thread = None
+                        return
+            except Exception as error:
                 with self._lock:
                     healing.trips += 1
-                continue
-            if healing.cancel.is_set():
-                self._halt(app_id)
-                return
-            self._log(
-                app_id,
-                "restarted",
-                {
-                    "trips": trips,
-                    "instance_id": started.get("instance_id"),
-                    "definition_hash": started.get("definition_hash"),
-                },
-            )
-            with self._lock:
-                if healing.trips == trips:
-                    healing.thread = None
+                    trips = healing.trips
+                with suppress(Exception):
+                    self._log(
+                        app_id, "restart_failed", {"code": type(error).__name__, "trips": trips}
+                    )
+                if self.restart_wait(healing.breaker.backoff(trips), healing.cancel):
                     return
 
     def _cancel_healing(self, app_id: str) -> None:
@@ -1190,7 +1321,10 @@ class Supervisor:
         try:
             return self._submit(self._call(instance, tool, arguments)).result(timeout=30)
         except concurrent.futures.TimeoutError as error:
-            self.stop(app_id)
+            if instance.definition.manifest.breaker.restart != "backoff":
+                self.stop(app_id)
+            elif instance.state == "running":
+                self._trip(instance, "tool_timeout")
             raise AppError(
                 "tool_timeout", "The tool did not complete within its timeout.", 504
             ) from error
@@ -1335,13 +1469,11 @@ class Supervisor:
         staged = queue / f"{name}.tmp"
         staged.write_text(json.dumps(asked), encoding="utf-8")
         staged.replace(request)
-        while not done.exists():
+        while (result := self._answer(done)) is None:
             if instance.state != "running":
                 request.unlink(missing_ok=True)
                 raise self._not_running(app_id)
             time.sleep(JOB_POLL_SECONDS)
-        result = cast(Document, json.loads(done.read_text(encoding="utf-8")))
-        done.unlink()
         logged: Document = {"job": job, "ok": result.get("ok") is True}
         if principal is not None:
             logged["principal"] = principal
@@ -1405,6 +1537,17 @@ class Supervisor:
                 )
             ran["run_id"] = run.ticket.run_id
         return ran
+
+    @staticmethod
+    def _answer(done: Path) -> Document | None:
+        """A job's answer once it can be read and removed. On Windows the bootstrap's replace
+        holds the new file for a moment, and a `PermissionError` then means only "not yet"."""
+        try:
+            answer = cast(Document, json.loads(done.read_text(encoding="utf-8")))
+            done.unlink()
+        except FileNotFoundError, PermissionError:
+            return None
+        return answer
 
     def read_output(self, app_id: str, output: str) -> Document:
         """Read the newest artifact `app_id` landed under `output`, with its freshness: its

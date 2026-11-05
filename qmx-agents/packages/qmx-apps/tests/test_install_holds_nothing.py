@@ -30,6 +30,14 @@ HELD_SECONDS = 4.0
 """How long the other app stays busy, so a call that waits for it shows past the promise."""
 
 
+def this_interpreter(_self: Supervisor, _definition_hash: str) -> Path:
+    return Path(sys.executable)
+
+
+def no_build(_self: Supervisor, _definition: Definition, _image: Path) -> None:
+    pass
+
+
 def source(root: Path, app_id: str, *, job: bool = False) -> Path:
     folder = root / app_id
     shutil.copytree(EXAMPLE, folder, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
@@ -45,8 +53,8 @@ def source(root: Path, app_id: str, *, job: bool = False) -> Path:
 
 @pytest.fixture
 def owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[Supervisor]:
-    monkeypatch.setattr(Supervisor, "python", lambda _self, _hash: Path(sys.executable))
-    monkeypatch.setattr(Supervisor, "_install_environment", lambda _self, _definition, _image: None)
+    monkeypatch.setattr(Supervisor, "python", this_interpreter)
+    monkeypatch.setattr(Supervisor, "_install_environment", no_build)
     supervisor = Supervisor(tmp_path / "QMX" / "data", secret_getter=lambda _s, _u: "fixture")
     try:
         yield supervisor
@@ -188,10 +196,18 @@ def fake_uv(root: Path) -> Path:
     return program
 
 
+def finding_uv_at(program: Path) -> Callable[[str], str | None]:
+    found = shutil.which
+
+    def which(name: str) -> str | None:
+        return str(program) if name == "uv" else found(name)
+
+    return which
+
+
 def test_a_stuck_install_fails_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     program = fake_uv(tmp_path)
-    found = shutil.which
-    monkeypatch.setattr(shutil, "which", lambda name: str(program) if name == "uv" else found(name))
+    monkeypatch.setattr(shutil, "which", finding_uv_at(program))
     home = tmp_path / "QMX" / "data"
     home.mkdir(parents=True)
     (home / "settings.toml").write_text("[apps]\ninstall_limit_s = 3\n")
@@ -212,9 +228,13 @@ def test_a_stuck_install_fails_by_name(tmp_path: Path, monkeypatch: pytest.Monke
     assert str(log) in message
     assert seconds < 6
     assert log.read_text("utf-8").strip() == "uv is resolving"
-    for name in ("child.pid", "grandchild.pid"):
-        pid = int((tmp_path / "marks" / name).read_text())
-        assert not psutil.pid_exists(pid), f"{name} is still alive"
+    pids = [
+        int((tmp_path / "marks" / name).read_text()) for name in ("child.pid", "grandchild.pid")
+    ]
+    deadline = time.monotonic() + 2
+    while any(psutil.pid_exists(pid) for pid in pids) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert [psutil.pid_exists(pid) for pid in pids] == [False, False]
 
 
 def test_a_job_answer_being_replaced_is_read_again(
