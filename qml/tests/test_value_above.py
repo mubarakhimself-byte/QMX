@@ -14,7 +14,6 @@ from qml.blocks.api import Signal
 from qml.catalogue.loader import Loaded, LockEntry, block_fingerprint, load
 from qml.check import check
 from qml.compile import CompiledUnit, compile_unit
-from qml.protocol.unit import TraceLevel, construct_unit
 from test_compile_dummy import (
     _context,
     _document,
@@ -22,14 +21,13 @@ from test_compile_dummy import (
     _entries,
     _host,
     _instants,
-    _ok,
     _slice,
     _surfaces,
-    _target,
     adx_above,
 )
 
 Document = dict[str, Any]
+Edit = Callable[[Document], Document]
 
 _FOLDER = (
     Path(__file__).resolve().parents[1] / "src" / "qml" / "blocks" / "stdlib" / "value-above" / "1"
@@ -132,44 +130,23 @@ def test_a_slot_left_with_no_conditions_holds_under_every_combiner(
     assert len(_entries(steps)) == 25
 
 
-def test_a_trigger_slot_of_only_feeders_writes_no_near_miss_row() -> None:
-    document = _feeder_alone_in("gauge", "all")
-    for slots in _slots(document):
+def _near_misses(document: Document) -> set[str]:
+    bars = _slice()
+    built = compile_unit(document, _context())
+    assert isinstance(built, CompiledUnit), built
+    steps = _drive(_host(built, _surfaces(bars)), _instants(bars))
+    return {row.reason for s in steps for row in s.decisions if row.reason.startswith("near miss")}
+
+
+def test_only_a_trigger_slot_with_a_condition_writes_a_near_miss_row() -> None:
+    only_feeders = _feeder_alone_in("gauge", "all")
+    for slots in _slots(only_feeders):
         slots["gauge"]["role"] = "trigger"
         slots["trigger"]["role"] = "confirmation"
-        numbers = document["numbers"]
-    numbers["adx_level"]["default"] = "99"
-    bars = _slice()
-    built = compile_unit(document, _context())
-    assert isinstance(built, CompiledUnit), built
-    unit = _ok(
-        construct_unit(
-            built,
-            read_surfaces=_surfaces(bars),
-            scope_id="near",
-            execution_target=_target(),
-            trace_level=TraceLevel.EVENTS,
-        )
-    )
+    only_feeders["numbers"]["adx_level"]["default"] = "99"
 
-    rows = [row for s in _drive(unit, _instants(bars)) for row in s.decisions]
-
-    assert [row.reason for row in rows if row.reason.startswith("near miss")] == []
-
-
-def test_a_real_trigger_that_held_on_a_failing_side_still_writes_its_near_miss_row() -> None:
-    document = cast("Document", adx_above("99"))
-    bars = _slice()
-    built = compile_unit(document, _context())
-    assert isinstance(built, CompiledUnit), built
-
-    rows = [
-        row for s in _drive(_host(built, _surfaces(bars)), _instants(bars)) for row in s.decisions
-    ]
-    misses = {row.reason for row in rows if row.reason.startswith("near miss")}
-
-    assert len(rows) > 0
-    assert "near miss, context: does not hold" in misses
+    assert _near_misses(only_feeders) == set()
+    assert "near miss, context: does not hold" in _near_misses(cast("Document", adx_above("99")))
 
 
 def _with_binding(document: Document, slot: str, binding: Document) -> Document:
@@ -193,7 +170,6 @@ def _lone(block: str, params: Document | None = None, inputs: Document | None = 
     return edit
 
 
-Edit = Callable[[Document], Document]
 _NOT_READ = "/logic/long/slots/context/bindings/2"
 
 
@@ -296,8 +272,8 @@ def test_k_above_the_conditions_a_slot_is_left_with_refuses() -> None:
 
 
 def test_a_clock_block_reads_the_bars_time_and_gates_through_value_above() -> None:
-    """Within an hour of the London gold auctions, as a unit that stands aside elsewhere writes it:
-    the block reads seconds from the nearest auction, and `value-above` compares them."""
+    """Only after the nearest London gold auction: the block reads seconds from it, off the bar's
+    time, and `value-above` compares them. Without time, the clock answers nothing."""
     document = cast("Document", _document())
     for slots in _slots(document):
         slots["context"]["bindings"] += [
@@ -319,14 +295,5 @@ def test_a_clock_block_reads_the_bars_time_and_gates_through_value_above() -> No
     assert isinstance(built, CompiledUnit), built
 
     steps = _drive(_host(built, _surfaces(bars)), _instants(bars))
-    entered = _entries(steps)
 
-    assert 0 < len(entered) < 25
-    held = {
-        o.output is not None
-        for s in steps
-        for row in s.decisions
-        for o in row.slot_trail
-        if o.binding == "clock"
-    }
-    assert held == {True}
+    assert len(_entries(steps)) == 10

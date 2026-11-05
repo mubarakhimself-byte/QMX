@@ -204,7 +204,9 @@ def accept_unit_intents(raw: Sequence[Mapping[str, object]]) -> Result[tuple[Uni
 
 
 def _price(value: Decimal, record: InstrumentRecord, rounding: str = ROUND_HALF_EVEN) -> Decimal:
-    return value.quantize(Decimal(1).scaleb(-record.digits), rounding=rounding)
+    """``value`` on the record's tick, written to its digits."""
+    ticks = (value / record.tick_size).quantize(Decimal(1), rounding=rounding)
+    return (ticks * record.tick_size).quantize(Decimal(1).scaleb(-record.digits))
 
 
 def _text(value: object) -> str | None:
@@ -229,7 +231,9 @@ def _value(output: object) -> Decimal | None:
 
 def _price_of(given: object) -> Decimal | None:
     """The price in a binding's input: the value, or a whole bar's close."""
-    value = cast("Mapping[str, object]", given).get("close") if isinstance(given, Mapping) else given
+    value = (
+        cast("Mapping[str, object]", given).get("close") if isinstance(given, Mapping) else given
+    )
     return value if isinstance(value, Decimal) else None
 
 
@@ -858,7 +862,11 @@ class _Run:
                     from_trade_id=move.read_trades.from_trade_id,
                     to_trade_id=move.read_trades.to_trade_id,
                     count=move.read_trades.count,
-                    statistic={"trades_read": str(move.read_trades.count)},
+                    statistic={
+                        "trades_read": str(move.read_trades.count),
+                        "mean_r": str(move.mean_r),
+                        "mean_stamp": str(move.mean_stamp),
+                    },
                     watermark=move.watermark,
                 )
             )
