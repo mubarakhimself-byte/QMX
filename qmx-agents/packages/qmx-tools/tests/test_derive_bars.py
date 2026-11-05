@@ -11,13 +11,14 @@ import json
 import shutil
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from qmb.host.unit_runner import load_unit_folder, parse_unit_run_request, run_loaded
 from qmf.core import is_ok, is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import TICK_COLUMNS, TypedWriter
-from qmx_host.market_data import MarketDoor, Placement
+from qmx_host.market_data import MarketDoor, Placement  # pyright: ignore[reportMissingTypeStubs]
+
 from qmx_tools.derive_bars import derive_month
 from qmx_tools.gather import FIXTURE_RECORDS, _own, template  # pyright: ignore[reportPrivateUsage]
 
@@ -38,21 +39,21 @@ def door_with_ticks(root: Path) -> MarketDoor:
     assert is_ok(opened)
     door = opened.value
     rows: list[tuple[int, int, int, float, float]] = []
-    with slice_csv("bid").open(encoding="utf-8", newline="") as bids:
-        with slice_csv("ask").open(encoding="utf-8", newline="") as asks:
-            for bid, ask in zip(csv.DictReader(bids), csv.DictReader(asks), strict=True):
-                for offset, name in zip(
-                    TICK_OFFSETS_MS, ("open", "high", "low", "close"), strict=True
-                ):
-                    rows.append(
-                        (
-                            int(bid["timestamp"]) + offset,
-                            int(Decimal(bid[name]).scaleb(5)),
-                            int(Decimal(ask[name]).scaleb(5)),
-                            1.0,
-                            2.0,
-                        )
+    with (
+        slice_csv("bid").open(encoding="utf-8", newline="") as bids,
+        slice_csv("ask").open(encoding="utf-8", newline="") as asks,
+    ):
+        for bid, ask in zip(csv.DictReader(bids), csv.DictReader(asks), strict=True):
+            for offset, name in zip(TICK_OFFSETS_MS, ("open", "high", "low", "close"), strict=True):
+                rows.append(
+                    (
+                        int(bid["timestamp"]) + offset,
+                        int(Decimal(bid[name]).scaleb(5)),
+                        int(Decimal(ask[name]).scaleb(5)),
+                        1.0,
+                        2.0,
                     )
+                )
     rows.sort(key=lambda row: row[0])
     key = SeriesKey.try_create("dukascopy", "EURUSD", "ticks", 2025, 3)
     assert is_ok(key)
@@ -70,12 +71,13 @@ def run_folder(root: Path) -> Path:
     (folder / "records").mkdir(parents=True)
     document = template()
     (folder / "unit.json").write_text(json.dumps(document), "utf-8")
-    for pin in document["pins"]:
+    for pin in cast("list[dict[str, object]]", document["pins"]):
         name = f"{pin['entry_id']}@{pin['version']}"
-        face, source = _own(name)
+        own = _own(name)
+        assert own is not None
         (folder / "blocks" / name).mkdir(parents=True)
-        (folder / "blocks" / name / "entry.json").write_bytes(face)
-        (folder / "blocks" / name / "block.py").write_bytes(source)
+        (folder / "blocks" / name / "entry.json").write_bytes(own[0])
+        (folder / "blocks" / name / "block.py").write_bytes(own[1])
     for market, symbol in ((EURUSD, "eurusd"), ("metal.xauusd", "xauusd")):
         shutil.copyfile(FIXTURE_RECORDS / f"{symbol}.json", folder / "records" / f"{market}.json")
     (folder / "request.json").write_text(json.dumps({"markets": [EURUSD]}), "utf-8")
@@ -103,7 +105,15 @@ def by_store(root: Path, door: MarketDoor, kind: str, sides: dict[str, str]) -> 
         assert is_ok(copied)
         files[side] = [path.relative_to(data).as_posix() for path in copied.value]
     (data / "card.json").write_text(
-        json.dumps({"kind": kind, "scale": 5, "series": list(sides.values()), "window": MARCH, "files": files}),
+        json.dumps(
+            {
+                "kind": kind,
+                "scale": 5,
+                "series": list(sides.values()),
+                "window": MARCH,
+                "files": files,
+            }
+        ),
         "utf-8",
     )
     return folder

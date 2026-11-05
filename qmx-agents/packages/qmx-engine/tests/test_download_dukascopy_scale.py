@@ -221,8 +221,26 @@ def test_a_landed_month_lands_its_minute_bars_and_a_rerun_lands_the_same_rows(
     assert (first["derived"], again["derived"]) == (series, series)
     assert first["fingerprint"] == again["fingerprint"]
     assert [stored_bars(tmp_path, side) for side in ("bid", "ask")] == [
-        [{"t": 1740952800000, "open": 104032, "high": 104032, "low": 104032, "close": 104032, "volume": 2.0}],
-        [{"t": 1740952800000, "open": 104033, "high": 104033, "low": 104033, "close": 104033, "volume": 1.0}],
+        [
+            {
+                "t": 1740952800000,
+                "open": 104032,
+                "high": 104032,
+                "low": 104032,
+                "close": 104032,
+                "volume": 2.0,
+            }
+        ],
+        [
+            {
+                "t": 1740952800000,
+                "open": 104033,
+                "high": 104033,
+                "low": 104033,
+                "close": 104033,
+                "volume": 1.0,
+            }
+        ],
     ]
     assert stated_scale(tmp_path, "EURUSD", kind="bar-m1/bid") == 5
 

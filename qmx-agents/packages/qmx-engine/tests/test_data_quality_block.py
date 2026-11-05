@@ -105,11 +105,9 @@ def test_an_empty_open_hour_holds_the_month_unfrozen_and_the_block_names_it(tmp_
     hole = datetime(2025, 1, 7, 10, tzinfo=UTC)
     bucket(base, 2025, 1, micro=True, skip_hour=hole)
 
-    first = download(home, base, "2025-01", calendar="crypto-24x7@1")
-    retry = download(home, base, "2025-01", calendar="crypto-24x7@1")
-    agreed = download(
-        home, base, "2025-01", calendar="crypto-24x7@1", confirmed_empty=["2025-01-07T10"]
-    )
+    first = download(home, base, "2025-01")
+    retry = download(home, base, "2025-01")
+    agreed = download(home, base, "2025-01", confirmed_empty=["2025-01-07T10"])
 
     assert (first["frozen"], retry["frozen"], agreed["frozen"]) == (False, False, True)
     assert retry["held_open"] == (
