@@ -128,8 +128,29 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
         "settings_not_built",
         "/markets/0/settings",
     ),
+    "settings record": (
+        _put("markets/0/settings_record", "eurusd-settings@1"),
+        "settings_not_built",
+        "/markets/0/settings_record",
+    ),
+    "a number on open positions": (
+        _put("numbers/stop_buffer/applies_to_open_positions", True),
+        "open_positions_not_built",
+        "/numbers/stop_buffer/applies_to_open_positions",
+    ),
     "limit": (_put("position_limit", {"per_instrument": 3}), "limit_not_built", "/position_limit"),
     "price": (_put("streams/0/price", "mid"), "price_not_built", "/streams/0/price"),
+    "input quotes": (_put("streams/0/input", "quotes"), "input_not_built", "/streams/0/input"),
+    "bar kind tick": (
+        _put("streams/0/bar", {"kind": "tick", "size": "100"}),
+        "bar_not_built",
+        "/streams/0/bar",
+    ),
+    "bar size against the stream's name": (
+        _put("streams/0/bar/size", "3600"),
+        "bar_not_built",
+        "/streams/0/bar",
+    ),
     "sole cadence at": (
         _put("numbers/min_trend_strength/motion/cadence", {"at": "market_day_close"}),
         "cadence_not_built",
@@ -212,6 +233,19 @@ def test_each_part_format_2_does_not_run_refuses_with_a_pointer(part: str) -> No
     assert {(p.kind, p.where) for p in problems} == {(kind, where)}
     assert checked.verdict.value == "fail"
     assert {pointer for p in checked.errors for pointer in p.where} == {where}
+
+
+def test_an_hourly_bar_needs_the_hourly_name_because_the_name_is_what_replays() -> None:
+    labelled_m15 = new(_document(), {"/streams/0/bar/size": "3600"})
+    named_h1 = cast("Document", json.loads(json.dumps(labelled_m15).replace('"m15', '"h1')))
+
+    problems = compile_unit(labelled_m15, _context())
+
+    assert isinstance(problems, tuple), "it compiled"
+    assert [p.message for p in problems] == [
+        "m15 replays as 900 second bars, and this stream says 3600"
+    ]
+    assert _compiled(named_h1).plan.stream == "h1"
 
 
 def test_a_mirror_of_a_side_neutral_block_says_state_both_sides() -> None:

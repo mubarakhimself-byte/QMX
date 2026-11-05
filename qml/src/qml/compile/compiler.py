@@ -27,6 +27,7 @@ format version and the port quantum, so a recompile of the same bytes gives the 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -49,6 +50,7 @@ from qml.check.layers import TRADED_SIDES, check_layers
 from qml.motion.engine import MIN_TRADES, SHRINK_K, SLOW_CADENCE_TRADES, SlowNumber
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import (
+    BarKind,
     Binding,
     CombinerKind,
     Market,
@@ -61,6 +63,7 @@ from qml.unit.model import (
     Side,
     Slot,
     SlotsSide,
+    StreamInput,
     Unit,
     ValueParam,
 )
@@ -648,6 +651,18 @@ def _markets(unit: Unit, context: CompileContext) -> tuple[tuple[Market, Instrum
     )
 
 
+_NAMED_STREAM: Final = re.compile(r"([mhd])(\d{1,9})")
+_SECONDS_PER: Final[Mapping[str, int]] = {"m": 60, "h": 3600, "d": 86_400}
+
+
+def _named_seconds(stream: str) -> int | None:
+    """The bar length QMB replays for this stream name, by the rule of its ``_bar_seconds``, which
+    QML may not import. A name is free text, so the digits are capped here: ``check`` must not
+    raise on one. QMB refuses a name this cannot read."""
+    named = _NAMED_STREAM.fullmatch(stream)
+    return (_SECONDS_PER[named[1]] * int(named[2]) or None) if named else None
+
+
 def _shape_problems(unit: Unit, problems: _Problems) -> None:
     """The fields of the document this format runs nothing behind."""
     if len(unit.streams) != 1:
@@ -670,6 +685,13 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
                 f"{_FORMAT} runs no setting for one market, so {market.market_id} would read the "
                 "unit's own numbers",
             )
+        if market.settings_record is not None:
+            problems.add(
+                "settings_not_built",
+                f"/markets/{index}/settings_record",
+                f"{_FORMAT} reads no settings record, so {market.market_id} would read the unit's "
+                "own numbers",
+            )
     if unit.position_limit is not None and unit.position_limit.per_instrument != 1:
         problems.add(
             "limit_not_built", "/position_limit", f"{_FORMAT} holds one position per market"
@@ -681,7 +703,32 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
                 f"/streams/{index}/price",
                 f"{_FORMAT} runs bid and ask bars, not {stream.price.value}",
             )
+        if stream.input is not StreamInput.CLOSED_BARS:
+            problems.add(
+                "input_not_built",
+                f"/streams/{index}/input",
+                f"{_FORMAT} runs closed bars, not {stream.input.value}",
+            )
+        if stream.bar.kind is not BarKind.TIME:
+            problems.add(
+                "bar_not_built",
+                f"/streams/{index}/bar",
+                f"{_FORMAT} runs time bars, not {stream.bar.kind.value}",
+            )
+        elif (seconds := _named_seconds(stream.name)) is not None and stream.bar.size != seconds:
+            problems.add(
+                "bar_not_built",
+                f"/streams/{index}/bar",
+                f"{stream.name} replays as {seconds} second bars, and this stream says "
+                f"{stream.bar.size}",
+            )
     for name, spec in unit.numbers.items():
+        if spec.applies_to_open_positions:
+            problems.add(
+                "open_positions_not_built",
+                f"/numbers/{name}/applies_to_open_positions",
+                f"{_FORMAT} moves no open position by a number, so {name} would not reach one",
+            )
         cadence = spec.motion.cadence
         if cadence is not None and cadence.at is not None and cadence.every_closed_trades is None:
             problems.add(
