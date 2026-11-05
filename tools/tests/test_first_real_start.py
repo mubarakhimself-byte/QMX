@@ -372,7 +372,7 @@ def test_a_refused_promote_says_why_and_what_to_do(
 
 
 def test_a_passport_with_a_bad_check_names_it(rig: Rig, capsys: pytest.CaptureFixture[str]) -> None:
-    original = rig.host._job
+    original = rig.host._job  # pyright: ignore[reportPrivateUsage]
 
     def feed_stale(body: Any) -> dict[str, object]:
         job = original(body)
