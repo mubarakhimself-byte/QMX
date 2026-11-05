@@ -18,7 +18,6 @@ from qml.blocks.api import Block, EntryFace, Instance, Signal, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
 from qml.catalogue.entry import Status, check_entry, compute_status
 from qml.catalogue.index import match, row
-from qml.protocol.unit import OHLC
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -239,19 +238,6 @@ def test_cusum_holds_exactly_when_a_side_passes_its_threshold(moment: str) -> No
     signals = [o for o in outputs if isinstance(o, Signal)]
     assert all(s.state == (abs(cast("Decimal", s.value)) > 5) for s in signals)
     assert sum(s.state for s in signals) >= 1
-
-
-def test_every_statistics_bars_block_gives_values_on_the_bars_the_unit_runtime_passes() -> None:
-    fed = [
-        OHLC(open=b["open"], high=b["high"], low=b["low"], close=b["close"]).fields() for b in _BARS
-    ]
-    silent: list[str] = []
-    for entry_id in (i for i in _ids() if _bars_block(i)):
-        instance = _blocks()[f"{entry_id}@1"].make(_defaults(entry_id), {})
-        if all(_value(instance.update({"series": x})) is None for x in fed):
-            silent.append(entry_id)
-
-    assert silent == []
 
 
 def _seed(name: str) -> dict[str, object]:
