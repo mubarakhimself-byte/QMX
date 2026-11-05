@@ -612,10 +612,9 @@ which the host starts at every start."""
 
 
 def enable_first_party(home: Path, runtime: Supervisor) -> list[str]:
-    """Install and start each enabled first-party app, at every host start. An app already
-    installed is only started and one already running is left as it is, so the one click keeps
-    the app up however often the host starts. Installing builds the app's locked environment,
-    which can take minutes the first time."""
+    """Install and start each enabled first-party app, at every host start. One already running
+    is left as it is, so the one click keeps the app up however often the host starts. Installing
+    builds the app's locked environment, which can take minutes the first time."""
     enabled = home / FIRST_PARTY
     if not enabled.is_file():
         return []
