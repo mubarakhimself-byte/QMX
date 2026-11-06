@@ -94,15 +94,11 @@ def test_the_0800_question_reads_the_0800_minute(context: DomainContext) -> None
 
     market, unit = opened(JournalStream.MARKET, "demo-tag"), opened(JournalStream.UNIT, "dummy")
     source = RecordedSource([])
-    feed = FeedKeeper(
-        "ctrader", "demo", source, ("fx.eurusd",), lambda: now[0], Recording(market)
-    )
+    feed = FeedKeeper("ctrader", "demo", source, ("fx.eurusd",), lambda: now[0], Recording(market))
 
     def quote(second: int, ask: str) -> None:
         now[0] = eight + second * 1_000_000_000
-        source.play(
-            [Quote("fx.eurusd", now[0], Decimal("1.08000"), Decimal(ask), "both")]
-        )
+        source.play([Quote("fx.eurusd", now[0], Decimal("1.08000"), Decimal(ask), "both")])
         feed.pump()
 
     quote(10, "1.08020")

@@ -698,7 +698,9 @@ def test_a_second_and_third_round_score_the_same_paper_run(
         )
         first = job.round()
         after_first = paper_scores(store)
-        volume.trade("new", OPEN_MONTH + timedelta(hours=2), OPEN_MONTH + timedelta(hours=3), r="1.0")
+        volume.trade(
+            "new", OPEN_MONTH + timedelta(hours=2), OPEN_MONTH + timedelta(hours=3), r="1.0"
+        )
         now[0] += timedelta(hours=1)
         monkeypatch.setattr(Path, "read_bytes", counted)
         second = job.round()

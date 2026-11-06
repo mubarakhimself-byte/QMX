@@ -63,7 +63,6 @@ from qmf.data.journal_reader import CommittedLine, JournalLine, RotationFile, re
 from qmf.data.journal_writer import key_token
 from qmf.data.series import (
     JOURNAL_SOURCE_PREFIX,
-    STATE_NAME as PARTITION_STATE,
     TICKS_KIND,
     CommitReceipt,
     SeriesKey,
@@ -787,7 +786,7 @@ class Projection:
         lines: list[JournalLine] = []
         for month in months:
             made = series_key(f"{key.series}/{month}")
-            if made is None or not (series.folder(made) / PARTITION_STATE).is_file():
+            if made is None or series.state(made) is None:
                 continue
             read = series.read(made)
             found = _reason(read) if is_refusal(read) else _journal_lines(key.series, read.value)
