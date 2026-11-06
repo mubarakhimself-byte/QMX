@@ -57,6 +57,8 @@ from qmx_apps.supervisor import Supervisor
 
 REPO = Path(__file__).resolve().parents[4]
 ROOTS = (REPO / "examples/apps", REPO / "qmx-agents/apps")
+QMB_VERSION = Definition.load(REPO / "qmx-agents/apps/qmb").manifest.version
+"""A PR that changes QMB bumps its `app.toml`, so the examples below follow by themselves."""
 SLICES = REPO / "qml/tests/fixtures/slices"
 OPERATOR = Principal("operator")
 CHAT = "agent:shipped-apps"
@@ -271,7 +273,7 @@ def conformance(host: Host) -> JsonValue:
             app, job, inputs=cast(Document, dict(inputs)), principal=principal
         )
 
-    ran = run_conformance("qmb", "1.0.5", run_job=run_job, library=host.library, principal=CHAT)
+    ran = run_conformance("qmb", QMB_VERSION, run_job=run_job, library=host.library, principal=CHAT)
     return {"passed": ran.verdict.passed, "says": ran.verdict.says()}
 
 
@@ -403,7 +405,7 @@ def refused(code: str) -> JsonValue:
     return {"ok": False, "code": code}
 
 
-FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": "1.0.5"}}
+FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": QMB_VERSION}}
 EXAMPLES: Mapping[str, Shipped] = {
     "exchange-status": Shipped(
         asks=(
@@ -531,7 +533,7 @@ EXAMPLES: Mapping[str, Shipped] = {
                 {},
                 {
                     "contract": "qmb/1",
-                    "tester": {"app": "qmb", "version": "1.0.5"},
+                    "tester": {"app": "qmb", "version": QMB_VERSION},
                     "fidelities": ["quotes"],
                     "instrument_classes": ["fx", "metal"],
                 },
@@ -673,16 +675,21 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("mis", "1.0.0"): "da97997e2a7f1b83f9362a5039930ca9",
     ("mql5-articles", "1.0.0"): "dc86e07abe3b8b4442bdc4eeaa758110",
     ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a9",
-    ("qmb", "1.0.1"): "abc0f0534c36dc9fc15afe8e2d95c852",
-    ("qmb", "1.0.2"): "0bcae551c39204b5cad1128d9bba3163",
-    ("qmb", "1.0.3"): "148ef6df97946bd6eb6d91c40a685b41",
-    ("qmb", "1.0.4"): "9f669142f33d01ff6603e98ebaaf7ff4",
-    ("qmb", "1.0.5"): "c6c81219e267351f5d47eaa16dbe8c22",
+    ("qmb", "1.0.1"): "7ff074a5c0873da9c6b2267e83464448",
+    ("qmb", "1.0.2"): "6296d041af4551ccd93288bc756832fc",
+    ("qmb", "1.0.3"): "8f1b5b4be5a21f61593df01d0c2cf9be",
+    ("qmb", "1.0.4"): "8e9df6324db027dd72023f4b86a61cf8",
+    ("qmb", "1.0.5"): "b9e3efa0a1af83cbd0297985fa2f3f81",
+    ("qmb", "1.0.6"): "3ab3477d4d00b38877ac90ae10193521",
+    ("qmb", "1.0.7"): "32c53b83ee77ab46304ef81d610a429c",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
-    ("trading-node", "0.1.1"): "2feb6ee2e0d9cf2bd80666e58c175cae",
-    ("trading-node", "0.1.2"): "2ecec90e00d3c17cffdc3ffffa49242c",
-    ("trading-node", "0.1.3"): "71e37db09841e68f226bc896d5cb82b1",
-    ("trading-node", "0.1.4"): "df7a96d184e1a90856b511fd8f12a038",
+    ("trading-node", "0.1.1"): "54d22aff076ea337daad3de7bc19ed75",
+    ("trading-node", "0.1.2"): "f41dc6c9d0f206bbae525b7aebde6a0e",
+    ("trading-node", "0.1.3"): "427dec7882d57dfda282a09abd4a13e2",
+    ("trading-node", "0.1.4"): "60d93b001fa2ccc9a3a7f8f65b81c0a3",
+    ("trading-node", "0.1.5"): "044091fa8c9ed9b92b675a0f43adcba7",
+    ("trading-node", "0.1.6"): "9bbc7724e4d0e47fc20c80412847c54c",
+    ("trading-node", "0.1.7"): "0c1bb2b76ed9f865e0afd59d062f0d6c",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image

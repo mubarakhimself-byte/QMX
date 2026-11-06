@@ -76,5 +76,13 @@
   "golden": {
     "reference": "talib.EMA 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "13"
+    },
+    "bars": 169,
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }
