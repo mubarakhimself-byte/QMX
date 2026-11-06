@@ -2639,6 +2639,8 @@ class Runtime:
                     return f"paused at {scope_key}"
             if hosted.deployment.deployment_id in self._target.withdrawn:
                 return "the deployment is withdrawn, so it takes no new entry"
+            if hosted.unit is not None and hosted.unit.journal.write_failure is not None:
+                return "the node journal could not be written"
             placed = self.board_read(hosted)
             if placed is not None and market in placed.held_back:
                 placement = cast("Placement", hosted.deployment.placement)
@@ -2819,6 +2821,7 @@ class Runtime:
             role=ROLE,
             build=self.build,
             boot_epoch_id=self.boot_epoch_id,
+            account=deployment.account_id,
         )
         if is_refusal(journal):
             hosted.phase, hosted.detail = Phase.REFUSED, "the unit journal would not open"
@@ -3060,6 +3063,7 @@ class Runtime:
         units: list[object] = []
         positions: list[object] = []
         boards: dict[str, object] = {}
+        journal_problem: str | None = None
         for deployment_id, hosted in self.hosted.items():
             deployments[deployment_id] = {"state": hosted.phase.value, "detail": hosted.detail}
             unit = hosted.unit
@@ -3084,6 +3088,12 @@ class Runtime:
             )
             if unit is not None:
                 positions.extend(unit.positions())
+                refused = unit.journal.write_failure
+                if refused is not None:
+                    journal_problem = (
+                        f"a row of deployment {deployment_id} was refused"
+                        f" ({refused.category.value})"
+                    )
         positions.extend(self.reconciler.shown())
         kill = {
             scope: PLACEHOLDER_KILL_EFFECTS[level].document()
@@ -3104,6 +3114,8 @@ class Runtime:
             ("runtime.alarms", list(self.alarms)),
             ("runtime.stand_downs", self.stand_downs.document()),
             ("runtime.safe_to_restart", self.safe_to_restart()),
+            # Only a problem is written, so a clean tick never wipes the one the node's start saw.
+            *(() if journal_problem is None else (("journal_problem", journal_problem),)),
         ):
             text = json.dumps(value, sort_keys=True, default=str)
             if self._shown.get(key) != text:

@@ -455,8 +455,8 @@ class Telemetry:
         return unsent
 
     def _post_batch(self, signal: Signal, items: list[Otlp]) -> Unsent | None:
-        body = json.dumps(self._body(signal, items), allow_nan=False).encode()
         try:
+            body = json.dumps(self._body(signal, items), allow_nan=False).encode()
             self._post(f"{self.endpoint}/v1/{signal}", body)
         except (OSError, urllib.error.HTTPError, ValueError) as error:
             self.counters.failed += 1

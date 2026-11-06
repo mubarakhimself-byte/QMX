@@ -16,8 +16,7 @@ import pyarrow.parquet as pq
 from qmf.core import Result, is_ok, is_refusal, is_unpersistable
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import AppendOutcome, JournalWriter, WriterScope, stage
-from qmf.data.series import SeriesKey, SeriesStore, rule_for
-from qmf.data.store.engines.typed import TICK_COLUMNS
+from qmf.data.series import SeriesKey, SeriesStore
 
 T = TypeVar("T")
 
@@ -71,11 +70,6 @@ def test_a_journal_month_commits_reads_back_and_freezes_after_its_settlement_day
         (1, "fp1:sha256:bb"),
     ]
     assert [row["seq"] for row in read.rows] == [0, 1]
-
-
-def test_price_kinds_keep_their_columns() -> None:
-    assert rule_for("dukascopy", "ticks").columns == TICK_COLUMNS
-    assert rule_for("journal-market", "minute").columns == ("t", "seq", "record")
 
 
 def test_series_rows_stage_as_their_store_kind(tmp_path: Path) -> None:

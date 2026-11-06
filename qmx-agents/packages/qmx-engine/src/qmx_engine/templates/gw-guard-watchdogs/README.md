@@ -7,7 +7,7 @@ Built from cards R1 and R6 in `research/methodology/16-templates-trader-risk.md`
 ## Steps
 
 1. `Read each node's health` (a `monitor` over `scripts/read.py`) reads the node journal's `stand_down`, `kill_level`, `protection` and `node_lifecycle` rows through `journal_query`, each server node's newest rows in This PC's tail file, and the heartbeat log's newest rows. It gives each node a word:
-   - **Alarm** while a stand-down that waits for his resume is held, when the kill switch rose or the venue did not hold a stop inside the lookback, and when the node's heartbeat is late.
+   - **Alarm** while a stand-down that waits for his resume is held, while a kill is held, when the venue did not hold a stop inside the lookback, and when the node's heartbeat is late. The newest `kill_level` row with a level decides its scope, and his resume, a GREEN row, clears its own scope and every scope it names under `cleared`.
    - **Watch** while a stand-down that clears itself is held (a stale feed, the clock band, the disk guard, a venue not ready), and when the runtime healed inside the lookback.
    - **Well** otherwise.
    Every time it prints is a row's own, so the same health prints the same output, and the monitor ends the run there at zero cost.
@@ -19,8 +19,8 @@ Text the node took from outside (a stand-down's cause, a heal's error) is quoted
 ## Settings
 
 - `here`: this machine's place name, `pc` on This PC. A node on this machine is heard by the trading node app's own heartbeat row. A node elsewhere is heard by the Hub's row of its host, when This PC holds the Hub.
-- `lookback_h` (24): how far back kill rises, protection alarms and heals count.
-- `stand_down_days` (30): how far back a stand-down still held is found.
+- `lookback_h` (24): how far back protection alarms and heals count.
+- `stand_down_days` (30): how far back a stand-down or a kill still held is found.
 - `heartbeat_stale_after_s` (120): when a node's heartbeat is late. The host beats every 30 s.
 - `nodes`: the node machines to watch; every node seen by default. A node named here, or one
   whose tail file This PC keeps, is watched even when it wrote nothing in the windows, so its
@@ -32,7 +32,6 @@ The cron runs every 5 minutes in UTC. Missed runs follow the trigger's catch-up 
 ## Left out, and why
 
 - The node's live `status` through the host route (`apps.ask status`). A workflow script cannot reach the host's node link, and `app_op` runs app jobs only, so the watcher reads the rows the node journals on every change that `status` shows. A server node's rows count from the records job's tail file, at most one records round late (`[records] interval_s`, 300 s).
-- The kill level now. The node journals a kill switch rise but not his resume that lowers it, so the gauge names each rise inside the lookback rather than the level held now.
 - The kill-line distance and the tighten-only profile check of cards R1 and R6: equity, the kill line, the daily loss budget and signed risk profiles are the risk session's, and no node row carries them yet.
 - Proposal cards. Every card the Library's `proposal-card` kind can ask (paper, live, admit or drop a market, tighten, bench) changes what trades, and none follows from a node's health alone. The watcher's note is its proposal.
 - A node with no journal rows in either window and no heartbeat read here is not listed.

@@ -247,12 +247,12 @@ _MAX_FAILURES_BYTES: Final[int] = 1 << 20  # 1 MiB
 
 
 def default_failures_path() -> Path:
-    """``qmn/FAILURES.md`` beside the distribution root (not under ``src/``)."""
-    return Path(__file__).resolve().parents[3] / "FAILURES.md"
+    """``FAILURES.md`` beside this module, inside the package, so a wheel carries it."""
+    return Path(__file__).resolve().parent / "FAILURES.md"
 
 
 def _failures_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[1]
 
 
 def _read_failures_path(path: Path) -> Result[str]:

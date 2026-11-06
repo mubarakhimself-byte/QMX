@@ -7,6 +7,7 @@ heartbeat write, with the exporter pointed at a function that records what arriv
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -160,6 +161,24 @@ def test_a_collector_that_is_down_drops_and_counts_and_never_fails_the_write(
     state = json.loads((tmp_path / telemetry.STATE_FILE).read_text(encoding="utf-8"))
     assert state["dropped"] == 1
     assert state["endpoint"] == ENDPOINT
+
+
+def test_a_non_finite_number_is_counted_and_the_sender_lives() -> None:
+    sent: list[str] = []
+    exporter = telemetry.configure(ENDPOINT, post=lambda url, _body: sent.append(url))
+
+    exporter.hand("heartbeat", '{"subject": "host", "id": "pc", "cpu_seconds": NaN}')
+    deadline = time.monotonic() + 5.0
+    while exporter.counters.failed == 0 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    exporter.hand("heartbeat", '{"subject": "host", "id": "pc", "cpu_seconds": 1.5}')
+    while exporter.counters.sent == 0 and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    assert sent == [f"{ENDPOINT}/v1/metrics"]
+    assert exporter.stats()["failed"] == 1
+    assert exporter.stats()["dropped"] == 1
+    assert exporter.stats()["sent"] == 1
 
 
 def test_an_exported_span_carries_no_value_the_redactor_masks(tmp_path: Path) -> None:

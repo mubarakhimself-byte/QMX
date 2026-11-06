@@ -548,11 +548,11 @@ def compiled_fingerprint(
         folder = root / "run"
         (folder / "records").mkdir(parents=True)
         (folder / "unit.json").write_text(json.dumps(document), "utf-8")
-        for block in (p for p in base.STDLIB.iterdir() if (p / "1" / "block.py").is_file()):
-            pin = folder / "blocks" / f"{block.name}@1"
+        for block in base.STDLIB.glob("*/*/block.py"):
+            pin = folder / "blocks" / f"{block.parent.parent.name}@{block.parent.name}"
             pin.mkdir(parents=True)
             for name in ("block.py", "entry.json"):
-                shutil.copyfile(block / "1" / name, pin / name)
+                shutil.copyfile(block.with_name(name), pin / name)
         for market, symbol in base.MARKETS.items():
             shutil.copyfile(base.RECORDS / f"{symbol}.json", folder / "records" / f"{market}.json")
             (folder / "bars" / market).mkdir(parents=True)

@@ -204,7 +204,9 @@ def accept_unit_intents(raw: Sequence[Mapping[str, object]]) -> Result[tuple[Uni
 
 
 def _price(value: Decimal, record: InstrumentRecord, rounding: str = ROUND_HALF_EVEN) -> Decimal:
-    return value.quantize(Decimal(1).scaleb(-record.digits), rounding=rounding)
+    """``value`` on the record's tick, written to its digits."""
+    ticks = (value / record.tick_size).quantize(Decimal(1), rounding=rounding)
+    return (ticks * record.tick_size).quantize(Decimal(1).scaleb(-record.digits))
 
 
 def _text(value: object) -> str | None:
@@ -225,6 +227,14 @@ def _value(output: object) -> Decimal | None:
     if isinstance(output, Signal):
         return output.value
     return output if isinstance(output, Decimal) else None
+
+
+def _price_of(given: object) -> Decimal | None:
+    """The price in a binding's input: the value, or a whole bar's close."""
+    value = (
+        cast("Mapping[str, object]", given).get("close") if isinstance(given, Mapping) else given
+    )
+    return value if isinstance(value, Decimal) else None
 
 
 @dataclass(slots=True)
@@ -370,8 +380,8 @@ class _Core:
             side.side.value: {d.number for d in self.plan.derived if d.side is side.side}
             for side in self.plan.sides
         }
-        per_bar = any(e.use is ExitUse.PER_BAR for e in self.plan.exits)
-        timer = self.timer().export_state() if per_bar else None
+        made = self.timer()
+        timer = made.export_state() if made is not None else None
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
             saved = markets[m.market_id]
@@ -410,8 +420,10 @@ class _Core:
             for key, state in cast("Mapping[str, Mapping[str, object]]", saved["blocks"]).items():
                 m.instances[key].import_state(state)
             for pid, state in cast("Mapping[str, Mapping[str, object]]", saved["timers"]).items():
-                m.timers[pid] = self.timer()
-                m.timers[pid].import_state(state)
+                timer = self.timer()
+                if timer is not None:  # shape_gap sent a snapshot with timers and no exit cold
+                    timer.import_state(state)
+                    m.timers[pid] = timer
             m.exited = set(cast("list[str]", saved["exited"]))
         for name, raw in cast("Mapping[str, Mapping[str, object]]", snapshot["slow"]).items():
             mark = raw["watermark"]
@@ -429,8 +441,12 @@ class _Core:
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
             )
 
-    def timer(self) -> Instance:
-        per_bar = next(e for e in self.plan.exits if e.use is ExitUse.PER_BAR)
+    def timer(self) -> Instance | None:
+        """The per-bar exit for one position, or ``None`` for a unit with no time exit, which
+        layer E warns of (UT-18)."""
+        per_bar = next((e for e in self.plan.exits if e.use is ExitUse.PER_BAR), None)
+        if per_bar is None:
+            return None
         return per_bar.binding.block.make(
             self.params(per_bar.binding, self.plan.defaults), per_bar.binding.inputs
         )
@@ -571,7 +587,9 @@ class _Run:
         def resolve(ref: str) -> object:
             stream, _, part = ref.partition(".")
             if stream == self.plan.stream:
-                return bar.bid.fields() if part == "" else bar.bid.fields()[part]
+                if part == "":
+                    return {**bar.bid.fields(), "time": bar.knowable_at.value_ns}
+                return bar.bid.fields()[part]
             return _value(outputs.get(ref))
 
         for slot in plan.slots:
@@ -597,7 +615,9 @@ class _Run:
                         spec.range.max, max(spec.range.min, fed)
                     )
         failing = [f"{name}: {why}" for name, (ok, why) in held.items() if not ok]
-        trigger = any(held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER)
+        trigger = any(
+            held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER and s.has_conditions
+        )
         return _Side(not failing, trigger, "; ".join(failing), tuple(trail), order)
 
     @staticmethod
@@ -612,10 +632,9 @@ class _Run:
             case Decimal() if (
                 b.face.output.type is OutputType.SERIES and b.face.output.measure == "price"
             ):
-                price = next(
-                    (evidence[p] for p in b.inputs if isinstance(evidence.get(p), Decimal)), None
-                )
-                if not isinstance(price, Decimal):
+                inputs = (_price_of(evidence.get(p)) for p in b.inputs)
+                price = next((p for p in inputs if p is not None), None)
+                if price is None:
                     return None
                 return price > out if side is Side.LONG else price < out
             case _:
@@ -623,17 +642,24 @@ class _Run:
 
     @staticmethod
     def combine(slot: SlotPlan, conditions: Sequence[bool | None]) -> tuple[bool, str]:
-        absent = [b.name for b, c in zip(slot.bindings, conditions, strict=True) if c is None]
+        kept = [
+            (b, c)
+            for b, c in zip(slot.bindings, conditions, strict=True)
+            if b.name not in slot.feeders
+        ]
+        if not kept:
+            return True, ""
+        absent = [b.name for b, c in kept if c is None]
         if absent and not slot.absent_is_false and slot.combiner is CombinerKind.ALL:
             return False, f"absent input {', '.join(absent)}"
-        true = sum(1 for c in conditions if c is True)
+        true = sum(1 for _, c in kept if c is True)
         match slot.combiner:
             case CombinerKind.ALL:
-                ok = true == len(conditions)
+                ok = true == len(kept)
             case CombinerKind.ANY:
                 ok = true >= 1
             case _:
-                ok = true >= (slot.k or len(conditions))
+                ok = true >= (slot.k or len(kept))
         if ok:
             return True, ""
         if absent and not slot.absent_is_false:
@@ -654,6 +680,8 @@ class _Run:
         timer = m.timers.get(position.position_id)
         if timer is None:
             timer = self.unit.timer()
+            if timer is None:
+                return
             m.timers[position.position_id] = timer
         out = timer.update({})
         if not (isinstance(out, Signal) and out.state):
@@ -834,7 +862,11 @@ class _Run:
                     from_trade_id=move.read_trades.from_trade_id,
                     to_trade_id=move.read_trades.to_trade_id,
                     count=move.read_trades.count,
-                    statistic={"trades_read": str(move.read_trades.count)},
+                    statistic={
+                        "trades_read": str(move.read_trades.count),
+                        "mean_r": str(move.mean_r),
+                        "mean_stamp": str(move.mean_stamp),
+                    },
                     watermark=move.watermark,
                 )
             )

@@ -1,0 +1,81 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "value-above",
+  "version": 1,
+  "family": "comparison",
+  "aliases": [
+    "value above a level",
+    "value below a level"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "filter",
+  "definition": "Holds while a value is strictly above a level, or strictly below it when below is 1, so a value such as ADX or RSI can gate a slot.",
+  "boundaries": "It compares one value with one level, the same on both sides of a unit. It holds no value of its own: bind the block that makes the value before it, and name that binding as its series. A missing value answers nothing.",
+  "recognition": "Only enter when ADX is above 25, or when RSI is below 30.",
+  "eligible_roles": [
+    "context",
+    "setup",
+    "trigger",
+    "confirmation",
+    "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/build/repair/REPAIR-PLAN.md#R05",
+      "quote": "You can now tell the copilot a plain rule such as \"only enter when ADX is above 25\", and it builds a unit that does that.",
+      "dated": "2026-11-05"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": null,
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "event",
+    "measure": null
+  },
+  "parameters": {
+    "level": {
+      "measure": "ratio",
+      "default": "25",
+      "origin": "builder_chosen"
+    },
+    "below": {
+      "measure": "category",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "1",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:72073af0ca8135c98dcbffb232dd9905074ee730485f98e77f1d0c50f6dd2537"
+}

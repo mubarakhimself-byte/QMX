@@ -21,7 +21,6 @@ import shutil
 import subprocess
 import tempfile
 import threading
-import tomllib
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from typing import Any, cast
 
 import pytest
 from qmx_apps.errors import Document
+from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import RUNS, Supervisor
 from qmx_apps.volume import Volume
 from qmx_control.models import LibraryInput
@@ -58,8 +58,9 @@ HERE = Path(__file__).resolve().parent
 VARIANT = HERE / "fixtures" / "variant-tester"
 REPO = HERE.parents[3]
 QMB = REPO / "qmx-agents" / "apps" / "qmb"
-QMB_VERSION: str = tomllib.loads((QMB / "app.toml").read_text("utf-8"))["version"]
-"""The shipped QMB's version, which moves with each repair to its folder."""
+QMB_VERSION = Definition.load(QMB).manifest.version
+"""A PR that changes QMB bumps its `app.toml`, so these lines follow by themselves."""
+VARIANT_VERSION = "1.0.0"
 SLICES = REPO / "qml" / "tests" / "fixtures" / "slices"
 PACK_DIR = REPO / "qmx-agents" / "packages" / "qmx-judge" / "src" / "qmx_judge" / "conformance_pack"
 OPERATOR = Principal("operator")
@@ -196,7 +197,7 @@ def test_the_shipped_tester_passes_its_pack(world: World) -> None:
 def test_a_variant_that_rounds_differently_fails_with_its_first_differing_trade(
     world: World,
 ) -> None:
-    ran = world.conformance("qmb-cents-down")
+    ran = world.conformance("qmb-cents-down", VARIANT_VERSION)
 
     report = world.fields(ran.report_id)
     first = report["cases"][0]
@@ -219,7 +220,7 @@ def test_a_variant_that_rounds_differently_fails_with_its_first_differing_trade(
 
 
 def test_the_default_tester_moves_only_to_a_tester_that_passed(world: World) -> None:
-    world.conformance("qmb-cents-down")
+    world.conformance("qmb-cents-down", VARIANT_VERSION)
 
     with pytest.raises(ControlError) as refused:
         world.control.settings_put("qmb", {"default_tester": "qmb-cents-down@1.0.0"})
@@ -272,6 +273,27 @@ def test_two_results_of_one_request_compare_trade_by_trade(world: World) -> None
             "opened_at": 1743092100000000000,
             "order": 0,
             "differs": {"money": ["95.38", "95.37"], "r": ["2.0013", "2.0010"]},
+        },
+    ]
+
+
+def test_a_row_from_before_the_added_fields_compares_on_what_both_rows_hold(world: World) -> None:
+    older = {"market_id": "fx.eurusd", "opened_at": "1740787200000000000", "money": "1.00"}
+    newer = {**older, "mae_r": "0.20", "mfe_r": "0.80", "cash": "-1.00", "net_r": "0.40"}
+    before = world.landed("row-before", [older])
+    after = world.landed("row-after", [newer])
+    charged = world.landed("row-charged", [{**newer, "cash": "-2.00"}])
+
+    across = world.backtest["backtest_compare"](left=before, right=after)
+    within = world.backtest["backtest_compare"](left=after, right=charged)
+
+    assert (across["same_trades"], across["result"]) == (True, [])
+    assert within["result"] == [
+        {
+            "market_id": "fx.eurusd",
+            "opened_at": 1740787200000000000,
+            "order": 0,
+            "differs": {"cash": ["-1.00", "-2.00"]},
         },
     ]
 
@@ -426,8 +448,8 @@ def regenerate() -> None:
             json.loads(report),
             {
                 "made_by": (
-                    "the shipped tester qmb@1.0.0 (qmx-agents/apps/qmb), through the core's "
-                    "conformance job path, by tests/test_conformance.py's regenerate()"
+                    f"the shipped tester qmb@{QMB_VERSION} (qmx-agents/apps/qmb), through the "
+                    "core's conformance job path, by tests/test_conformance.py's regenerate()"
                 ),
                 "made_at_head": head,
                 "versions": {

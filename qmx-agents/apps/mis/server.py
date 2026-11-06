@@ -5,9 +5,10 @@ an answer `ok = false` and never a tool error that counts toward the supervisor'
 tools declare an open input schema for the same reason. `status` and `board` are marked
 read-only, which is what lets the road's shadow stage call them.
 
-The rounds run on a thread of this process once a configuration exists. The supervisor's
-breaker restarts the app by back-off after a crash; the journal tells the new process what was
-already published.
+The rounds run on a thread of this process once a configuration exists. A round that raises
+records why on the MIS and the thread carries on: one month that will not read must not stop
+every later reading. The supervisor's breaker restarts the app by back-off after a crash; the
+journal tells the new process what was already published.
 """
 
 from __future__ import annotations
@@ -61,7 +62,10 @@ def rounds() -> None:
         if stopping.wait(wait):
             return
         if mis.plan is not None:
-            mis.call("round", {})
+            try:
+                mis.call("round", {})
+            except Exception as error:  # a read error must not end the round thread
+                mis.round_failed(error)
 
 
 if __name__ == "__main__":

@@ -21,10 +21,15 @@ counts the same rows committed again as a second fetch (`idempotent = False`), w
 a bar month that is still open. The open month is one `open.parquet` the store replaces on each
 commit (`qmf/data/series.py`), so a growing month never leaves a file per round.
 
+A stream remembers the first rotation file holding a month the store has not frozen and reads from
+there, because the writer only appends to the last file, so a long history costs nothing a round.
+
 The same round projects each closed paper, demo and live round trip into one Library `trade` item,
 named by account, position id and world, so a re-projection lands nothing new, and scores each
-paper lane's trades with the judge's paper scoring into its `paper-run` item. Nothing here writes
-a `bot` or a `strategy`, and nothing here sends, changes or cancels an order.
+paper lane's trades with the judge's paper scoring into its `paper-run` item. It reads the store,
+which holds local and pulled rows alike and every month: each commit of a `trade` or `lifecycle`
+month is told first (`untold.json`), and the projection reads every month of a told series. Nothing
+here writes a `bot` or a `strategy`, and nothing here sends, changes or cancels an order.
 
 The remote half (`Pull`) runs on This PC every `[records] interval_s` (300): per node, by the host
 route, `data.list` after the node's watermark with the frozen fingerprints already home as
@@ -43,7 +48,7 @@ import os
 import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -53,9 +58,17 @@ from typing import TYPE_CHECKING, Final, cast
 import httpx
 from pydantic import JsonValue
 from qmf.core import TypedRefusal, canonical_bytes, fingerprint, fingerprint_bytes, is_refusal
-from qmf.data.journal_reader import CommittedLine, JournalLine, read_committed
+from qmf.data.journal_envelope import JournalStream
+from qmf.data.journal_reader import CommittedLine, JournalLine, RotationFile, read_files
 from qmf.data.journal_writer import key_token
-from qmf.data.series import JOURNAL_SOURCE_PREFIX, TICKS_KIND, CommitReceipt, SeriesKey
+from qmf.data.series import (
+    JOURNAL_SOURCE_PREFIX,
+    TICKS_KIND,
+    CommitReceipt,
+    SeriesKey,
+    SeriesRead,
+    SeriesStore,
+)
 from qmf.data.store.engines import StoreEngineError
 from qmf.data.store.engines.typed import FLOAT_COLUMNS, TypedWriter
 from qmx_engine.service.forward import PASS_HEADER, HostKeys, mint_host_pass
@@ -108,7 +121,9 @@ __all__ = [
 JOB: Final = "records"
 STATE_NAME: Final = "harvest.json"
 LANES_NAME: Final = "lanes.json"
+UNTOLD_NAME: Final = "untold.json"
 TRADE_KIND: Final = "trade"
+LIFECYCLE_KIND: Final = "lifecycle"
 PROJECTED_WORLDS: Final = frozenset({"paper", "demo", "live"})
 OPERATOR: Final = Principal("operator")
 _S_PER_DAY: Final = 86_400
@@ -234,6 +249,8 @@ class _Partition:
 @dataclass(slots=True)
 class _Stream:
     fingerprint: str = ""
+    reads_from: str = ""
+    """The first rotation file holding a month the store has not frozen; "" reads them all."""
     partitions: dict[str, _Partition] = field(default_factory=dict[str, _Partition])
 
     def settled(self, now: int, cadence: Cadence) -> bool:
@@ -334,6 +351,39 @@ def _stream_print(folder: Path) -> str:
     return "" if is_refusal(printed) else printed.value.value
 
 
+def _first_unfrozen(files: Sequence[RotationFile], stream: _Stream) -> str:
+    """Where the stream's next read starts: the first file holding a month that is not frozen, or
+    the last file, the only one that can still grow. A line whose month is not on file reads as
+    not frozen, so a refusal over it is named each round."""
+    for file in files:
+        months = {(line.series, _month_of(line.t)) for line in file.lines}
+        for series, (year, month) in months:
+            part = stream.partitions.get(f"{series}/{year:04d}-{month:02d}")
+            if part is None or not part.frozen:
+                return file.name
+    return files[-1].name if files else ""
+
+
+def _read_untold(folder: Path) -> list[str]:
+    try:
+        raw = json.loads((folder / UNTOLD_NAME).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return []
+    return [str(text) for text in cast("list[object]", raw)] if isinstance(raw, list) else []
+
+
+def _tell(folder: Path, key: SeriesKey) -> None:
+    """Note a key for the projection before its commit. A frozen month is committed once, and a
+    resend already home is never committed again, so a note made after the commit could be lost
+    with the process. Noted and then not committed, it reads what the store holds, and lands
+    nothing."""
+    if key.source != JournalStream.UNIT.source or key.kind not in (TRADE_KIND, LIFECYCLE_KIND):
+        return
+    told = _read_untold(folder)
+    if key.text not in told:
+        _write_json(folder / UNTOLD_NAME, sorted([*told, key.text]))
+
+
 class Harvester:
     """The local half of the records job over one machine's append roots and its own door.
 
@@ -358,17 +408,17 @@ class Harvester:
     def staging(self) -> Path:
         return self._folder / "staging"
 
-    def round(
-        self, now: datetime, cadence: Cadence
-    ) -> tuple[HarvestRound, tuple[JournalLine, ...]]:
-        """One harvest round at ``now``, and the journal lines of every stream it read again.
-        The app's stream files are only read."""
+    @property
+    def store(self) -> SeriesStore:
+        return self._door.series_store()
+
+    def round(self, now: datetime, cadence: Cadence) -> HarvestRound:
+        """One harvest round at ``now``. The app's stream files are only read."""
         at = int(now.timestamp())
         state = self._read_state()
         streams, skipped, waiting, partitions = 0, 0, 0, 0
         refusals: list[Mapping[str, object]] = []
         committed: list[str] = []
-        read_again: list[JournalLine] = []
         for root in self._roots():
             for folder in sorted(entry for entry in root.iterdir() if entry.is_dir()):
                 name = f"{root.as_posix()}|{folder.name}"
@@ -385,23 +435,23 @@ class Harvester:
                 ):
                     skipped += 1
                     continue
-                read = read_committed(folder)
+                stream = known or _Stream()
+                read = read_files(folder, stream.reads_from)
                 if is_refusal(read):
                     refusals.append({"stream": folder.name, "reason": _reason(read)})
                     continue
                 streams += 1
-                stream = known or _Stream()
-                done, waits = self._stream(read.value, stream, at, cadence, refusals, committed)
+                lines = [line for file in read.value for line in file.lines]
+                done, waits = self._stream(lines, stream, at, cadence, refusals, committed)
                 partitions += done
                 waiting += waits
                 stream.fingerprint = printed
+                stream.reads_from = _first_unfrozen(read.value, stream)
                 state[name] = stream
-                read_again.extend(line for line in read.value if isinstance(line, JournalLine))
         self._write_state(state)
-        counts = HarvestRound(
+        return HarvestRound(
             streams, partitions, skipped, waiting, tuple(refusals), tuple(committed)
         )
-        return counts, tuple(read_again)
 
     def _stream(
         self,
@@ -473,6 +523,8 @@ class Harvester:
             refusals.append({"key": key.text, "reason": f"could not stage: {error}"})
             return None
         try:
+            if self._journals_open:  # only This PC projects, so a server's notes would never clear
+                _tell(self._folder, key)
             receipts = self._door.commit([target], staging=self.staging, born_on=Placement.NODE)
         finally:
             target.unlink(missing_ok=True)
@@ -491,6 +543,7 @@ class Harvester:
             parts = cast("dict[str, Mapping[str, object]]", value.get("partitions", {}))
             streams[name] = _Stream(
                 str(value.get("fingerprint", "")),
+                str(value.get("reads_from", "")),
                 {key: _Partition.parse(part) for key, part in parts.items()},
             )
         return streams
@@ -500,6 +553,7 @@ class Harvester:
             "streams": {
                 name: {
                     "fingerprint": stream.fingerprint,
+                    "reads_from": stream.reads_from,
                     "partitions": {
                         key: part.document() for key, part in sorted(stream.partitions.items())
                     },
@@ -671,12 +725,31 @@ def _lane_state(entry: Mapping[str, object]) -> tuple[str, int | None, int | Non
     return ("ended" if to == "live" else "stopped"), started, cast("int", entry["moved_at"])
 
 
+def _journal_lines(series: str, read: SeriesRead) -> list[JournalLine] | str:
+    """One partition's rows as journal lines, or what is wrong with them."""
+    lines: list[JournalLine] = []
+    for row in read.rows:
+        try:
+            record = json.loads(str(row["record"]))
+        except ValueError as error:
+            return f"a row is not JSON: {error}"
+        if not isinstance(record, dict):
+            return "a row is not a journal record"
+        t, seq = cast("int", row["t"]), cast("int", row["seq"])
+        lines.append(JournalLine(series, t, seq, cast("dict[str, object]", record)))
+    return lines
+
+
 class Projection:
     """The records job's Library writes: `trade` items and the paper lanes' `paper-run` items.
 
     ``folder`` holds each market's lane entry, read from its `lifecycle` moves, and the accounts
     and nodes its paper runs were scored on. A lane keeps its start once that stream has been
     filed, and a later move out of paper ends its runs even when their trades are not re-read.
+
+    A told key is cleared only by a round that refused nothing, so a refusal or a crash tells it
+    again. A told key names a series, and `_paper` scores only the rows it is handed and overwrites
+    the score, so a series is read whole, every month, or left out of the round.
     """
 
     def __init__(
@@ -689,10 +762,42 @@ class Projection:
         self._store = store
         self._folder = folder
         self._rule = rule
+        self._refused = False
 
-    def land(self, lines: Sequence[JournalLine], now: datetime) -> tuple[int, int]:
-        """Project the round trips and score the paper lanes in ``lines``; the counts of `trade`
-        and `paper-run` versions that landed."""
+    def land(self, series: SeriesStore, now: datetime) -> tuple[int, int]:
+        """Project the round trips and score the paper lanes of every told series, read from the
+        store; the counts of `trade` and `paper-run` versions that landed."""
+        told = _read_untold(self._folder)
+        if not told:
+            return 0, 0
+        self._refused = False
+        keys = [key for text in told if (key := series_key(text)) is not None]
+        named = sorted({key.series: key for key in keys}.items())
+        lines = [line for _, key in named for line in self._series_lines(series, key)]
+        landed = self._landed(lines, now)
+        _write_json(self._folder / UNTOLD_NAME, told if self._refused else [])
+        return landed
+
+    def _series_lines(self, series: SeriesStore, key: SeriesKey) -> list[JournalLine]:
+        """Every month of ``key``'s series in the store, or nothing when a month will not read. A
+        key told ahead of a commit that never came has no folder and nothing to read."""
+        folder = series.folder(key).parent
+        months = sorted(path.name for path in folder.iterdir()) if folder.is_dir() else []
+        lines: list[JournalLine] = []
+        for month in months:
+            made = series_key(f"{key.series}/{month}")
+            if made is None or series.state(made) is None:
+                continue
+            read = series.read(made)
+            found = _reason(read) if is_refusal(read) else _journal_lines(key.series, read.value)
+            if isinstance(found, str):
+                print(f"records: {made.text} did not read: {found}", file=sys.stderr)
+                self._refused = True
+                return []
+            lines.extend(found)
+        return lines
+
+    def _landed(self, lines: Sequence[JournalLine], now: datetime) -> tuple[int, int]:
         starts = self._read_lanes()
         _fold_moves(lines, starts)
         self._write_lanes(starts)
@@ -807,6 +912,7 @@ class Projection:
             self._store.put(OPERATOR, draft, on=MAIN, expected_head=head)
         except LibraryRefused as refused:
             print(f"records: the {kind} {item} did not land: {refused}", file=sys.stderr)
+            self._refused = True
             return False
         return True
 
@@ -1234,9 +1340,9 @@ class Pull:
                     f"{listed.fingerprint}"
                 )
             os.replace(written, target)
-            receipt = self._commit(target)
+            receipt = self._commit(key, target)
             if not isinstance(receipt, str) and listed.frozen and not receipt.frozen:
-                receipt = self._commit(target)
+                receipt = self._commit(key, target)
             if not isinstance(receipt, str) and receipt.fingerprint != listed.fingerprint:
                 return f"This PC holds {receipt.fingerprint} for it, not {listed.fingerprint}"
             return receipt
@@ -1248,7 +1354,8 @@ class Pull:
             for path in (fetched, written, target):
                 path.unlink(missing_ok=True)
 
-    def _commit(self, target: Path) -> CommitReceipt | str:
+    def _commit(self, key: SeriesKey, target: Path) -> CommitReceipt | str:
+        _tell(self._folder, key)
         receipts = self._door.commit([target], staging=self.staging, born_on=Placement.NODE)
         return _reason(receipts) if is_refusal(receipts) else receipts.value[0]
 
@@ -1370,30 +1477,23 @@ class Records:
         return self.settings().on
 
     def round(self) -> HarvestRound:
-        """One harvest round now, its projection, and the result when its interval came."""
+        """One harvest round now, the pull when its interval came, the projection of both, and
+        the result when its interval came."""
         cadence, now = self.settings(), self.clock()
-        counts, lines = self.harvester.round(now, cadence)
-        if self.projection is not None and lines:
-            trades, papers = self.projection.land(lines, now)
-            counts = HarvestRound(
-                counts.streams,
-                counts.partitions,
-                counts.skipped_unchanged,
-                counts.waiting,
-                counts.refusals,
-                counts.committed,
-                trades,
-                papers,
-            )
+        counts = self.harvester.round(now, cadence)
+        due = self._reported is None or (now - self._reported).total_seconds() >= cadence.interval_s
+        nodes: tuple[NodeRound, ...] = ()
+        failed = None
+        if due and self.pull is not None:
+            try:
+                nodes = self.pull.round(now, cadence)
+            except Exception as error:  # the result names it; the harvest counts still land
+                failed = f"the pull round failed: {type(error).__name__}: {error}"
+        if self.projection is not None:
+            trades, papers = self.projection.land(self.harvester.store, now)
+            counts = replace(counts, trades=trades, paper_runs=papers)
         self._since.append(counts)
-        if self._reported is None or (now - self._reported).total_seconds() >= cadence.interval_s:
-            nodes: tuple[NodeRound, ...] = ()
-            failed = None
-            if self.pull is not None:
-                try:
-                    nodes = self.pull.round(now, cadence)
-                except Exception as error:  # the result names it; the harvest counts still land
-                    failed = f"the pull round failed: {type(error).__name__}: {error}"
+        if due:
             self._report(now, nodes, failed)
         return counts
 

@@ -392,7 +392,14 @@ def test_only_the_ctrader_mcp_ref_leaves_the_keyring_as_a_bearer() -> None:
         with pytest.raises(ValueError, match="only to an HTTPS url"):
             server_config("ctrader", {"url": typed, "credential_ref": "qmx/ctrader-mcp"}, secret)
     assert read == []
-    ctrader = {"url": "https://mcp.ctrader.example/mcp", "credential_ref": "qmx/ctrader-mcp"}
+    ctrader = {
+        "url": "https://mcp.ctrader.example/mcp",
+        "credential_ref": "qmx/ctrader-mcp",
+        "venue": "ctrader",
+    }
+    plain = {"url": "https://mcp.ctrader.example/mcp", "credential_ref": "qmx/ctrader-mcp"}
+    with pytest.raises(ValueError, match="names its venue"):
+        server_config("ctrader", plain, secret)
     assert server_config("ctrader", ctrader, secret) == {
         "type": "http",
         "url": "https://mcp.ctrader.example/mcp",

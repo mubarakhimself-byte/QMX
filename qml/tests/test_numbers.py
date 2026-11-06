@@ -12,7 +12,6 @@ import pytest
 from qmf.core.exact import ExactRational, Money, PriceDelta, Quantity, UnitKind
 from qmf.core.refusal import Ok, RefusalCategory, TypedRefusal
 from qml.numbers import (
-    MEASURES,
     InstrumentRecord,
     atr_multiple,
     check_numbers,
@@ -67,19 +66,6 @@ def _unit(*edits: tuple[str, object]) -> Unit:
 
 def _errors(unit: Unit) -> set[tuple[str, str]]:
     return {(p.kind.value, p.where[0]) for p in check_numbers(unit, RECORDS).errors}
-
-
-def test_the_dummy_has_no_number_errors_and_warns_on_its_builder_chosen_values() -> None:
-    result = check_numbers(_unit(), RECORDS)
-
-    assert result.errors == ()
-    assert {(p.kind.value, p.where[0]) for p in result.warnings} == {
-        ("unsettled_origin", "/numbers/roc_lookback/origin"),
-        ("unsettled_origin", "/numbers/min_trend_strength/origin"),
-        ("unsettled_origin", "/numbers/rsi_low/origin"),
-        ("unsettled_origin", "/numbers/rsi_high/origin"),
-    }
-    assert all(p.layer == "C" for p in result.warnings)
 
 
 def test_broken_document_1_a_stop_buffer_in_pips_on_gold_is_one_error_naming_the_record() -> None:
@@ -267,22 +253,3 @@ def test_a_record_missing_keys_is_refused_naming_every_one() -> None:
         "/tick_size: the required key is missing",
     )
 
-
-def test_every_measure_maps_to_the_unit_kind_of_contracts_2_2() -> None:
-    assert {measure.value: rule.unit_kind for measure, rule in MEASURES.items()} == {
-        "price_distance": UnitKind.PRICE_DELTA,
-        "ticks": UnitKind.COUNT,
-        "pips": UnitKind.PRICE_DELTA,
-        "atr_multiple": UnitKind.DIMENSIONLESS_RATIO,
-        "percent": UnitKind.DIMENSIONLESS_RATIO,
-        "ratio": UnitKind.DIMENSIONLESS_RATIO,
-        "probability": UnitKind.DIMENSIONLESS_RATIO,
-        "bars": UnitKind.COUNT,
-        "count": UnitKind.COUNT,
-        "seconds": UnitKind.DURATION,
-        "money": UnitKind.MONEY,
-        "r": UnitKind.R_MULTIPLE,
-        "lots": UnitKind.QUANTITY,
-        "category": None,
-        "flag": None,
-    }

@@ -20,10 +20,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
-from qmf.core import Ok, Result, Retryability
+from qmf.core import Ok, Result, Retryability, is_refusal
 from qmf.data.store.refusals import storage_failure
 
-__all__ = ["CommittedLine", "JournalLine", "SeriesLine", "read_committed", "stream_folders"]
+__all__ = [
+    "CommittedLine",
+    "JournalLine",
+    "RotationFile",
+    "SeriesLine",
+    "read_committed",
+    "read_files",
+    "stream_folders",
+]
 
 _ROTATION_FILE: Final[re.Pattern[str]] = re.compile(r"\A\d{6}\.jsonl\Z")
 
@@ -50,6 +58,15 @@ class SeriesLine:
 CommittedLine = JournalLine | SeriesLine
 
 
+@dataclass(frozen=True, slots=True)
+class RotationFile:
+    """One rotation file's committed lines. The writer only appends to a stream's last file, so
+    a reader that has seen every other file whole need not open it again."""
+
+    name: str
+    lines: tuple[CommittedLine, ...]
+
+
 def stream_folders(root: Path) -> tuple[Path, ...]:
     """Every stream folder under a writer root, sorted by name."""
     if not root.is_dir():
@@ -57,13 +74,16 @@ def stream_folders(root: Path) -> tuple[Path, ...]:
     return tuple(sorted(entry for entry in root.iterdir() if entry.is_dir()))
 
 
-def read_committed(stream_folder: Path) -> Result[tuple[CommittedLine, ...]]:
-    """Every committed line of one stream, in append order; the files stay byte for byte."""
-    files = sorted(
-        entry for entry in stream_folder.iterdir() if _ROTATION_FILE.fullmatch(entry.name)
+def read_files(stream_folder: Path, start: str = "") -> Result[tuple[RotationFile, ...]]:
+    """One stream's rotation files in append order, from the file named ``start`` on; the files
+    stay byte for byte."""
+    paths = sorted(
+        entry
+        for entry in stream_folder.iterdir()
+        if _ROTATION_FILE.fullmatch(entry.name) and entry.name >= start
     )
-    lines: list[CommittedLine] = []
-    for index, path in enumerate(files):
+    files: list[RotationFile] = []
+    for index, path in enumerate(paths):
         try:
             data = path.read_bytes()
         except OSError as exc:
@@ -72,12 +92,13 @@ def read_committed(stream_folder: Path) -> Result[tuple[CommittedLine, ...]]:
                 context={"file": str(path), "error": str(exc)},
             )
         end = data.rfind(b"\n") + 1
-        if end != len(data) and index != len(files) - 1:
+        if end != len(data) and index != len(paths) - 1:
             return storage_failure(
                 "a journal stream file other than the last ends mid-line",
                 retryability=Retryability.NO,
                 context={"file": str(path)},
             )
+        lines: list[CommittedLine] = []
         for raw in data[:end].splitlines():
             line = _parse(raw)
             if line is None:
@@ -87,7 +108,16 @@ def read_committed(stream_folder: Path) -> Result[tuple[CommittedLine, ...]]:
                     context={"file": str(path), "line": raw[:200].decode("utf-8", "replace")},
                 )
             lines.append(line)
-    return Ok(tuple(lines))
+        files.append(RotationFile(path.name, tuple(lines)))
+    return Ok(tuple(files))
+
+
+def read_committed(stream_folder: Path) -> Result[tuple[CommittedLine, ...]]:
+    """Every committed line of one stream, in append order; the files stay byte for byte."""
+    files = read_files(stream_folder)
+    if is_refusal(files):
+        return files
+    return Ok(tuple(line for file in files.value for line in file.lines))
 
 
 def _parse(raw: bytes) -> CommittedLine | None:

@@ -1,0 +1,16 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "marked-sources",
+  "name": "Marked sources: outside text quoted as data for an agent step, never as instructions",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "mark", "name": "Quote the sources", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/mark.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Quote the sources", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}
