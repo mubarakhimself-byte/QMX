@@ -328,7 +328,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     Hidden rubric for the pick: expresses the 12 parts without workaround; extension by row and plug, no rework; self-configuring answer; performance (no re-stacking, healthy unit above the choke budget); fit to code and build size; simplicity; survival and hard lines. Then cross-judge (Opus), pick, graft, verify.
     **Ledger v1 agent running** → `ledger/v1/`.
 
-49. **M45: usage.** Agents one at a time from now on (memory saved). The bar went from 38% to 40% in minutes with four agents running. He said do not pause the running ones. The bar must last about 20 days. So the rest of the route runs lean: the lead reads the candidates and picks by itself; at most one Opus check after the fold; no cross-judge unless the pick is truly tied.
+49. **M45-M46: usage.** Fable is the special case: few, and one after another. Other agents have no set number, but no waste, and no need to ask first (memory saved). The bar went from 38% to 40% in minutes with four agents running. He said do not pause the running ones. The bar must last about 20 days. So the rest of the route runs lean: the lead reads the candidates and picks by itself; at most one Opus check after the fold; no cross-judge unless the pick is truly tied.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
