@@ -1,0 +1,19 @@
+Model numbers only. The same fold arm at slower trade rates, healthy and weak, one unit and five.
+
+rate 10 a day
+  healthy   N=1  k=2.17 med$    1273 p10$    737  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.80 live 0.92 fires/100d 0.19 lockouts/100d 0.29 skip  0.0% paper  9.0%
+  weak      N=1  k=2.18 med$     662 p10$    447  half   0.0% touch  0.0%  taken 0.80 capped 0.80 opp 0.77 live 0.93 fires/100d 0.24 lockouts/100d 0.26 skip  0.0% paper  6.0%
+  healthy   N=5  k=1.64 med$    4371 p10$   1994  half   0.0% touch  0.0%  taken 0.89 capped 0.85 opp 0.89 live 0.88 fires/100d 0.46 lockouts/100d 0.27 skip  0.1% paper  6.2%
+  weak      N=5  k=1.95 med$     694 p10$    452  half   2.0% touch  0.0%  taken 0.82 capped 0.79 opp 0.64 live 0.39 fires/100d 0.32 lockouts/100d 0.07 skip  0.1% paper  1.4%
+
+rate 4 a day
+  healthy   N=1  k=2.32 med$     783 p10$    509  half   1.0% touch  0.0%  taken 0.88 capped 0.88 opp 0.86 live 0.99 fires/100d 0.56 lockouts/100d 0.08 skip  0.0% paper  0.0%
+  weak      N=1  k=2.33 med$     536 p10$    415  half   7.0% touch  0.0%  taken 0.82 capped 0.82 opp 0.79 live 0.98 fires/100d 0.59 lockouts/100d 0.12 skip  0.0% paper  1.0%
+  healthy   N=5  k=2.31 med$    1346 p10$    707  half   0.0% touch  0.0%  taken 0.87 capped 0.86 opp 0.87 live 0.97 fires/100d 0.47 lockouts/100d 0.08 skip  0.2% paper  1.4%
+  weak      N=5  k=2.55 med$     549 p10$    416  half  12.0% touch  0.0%  taken 0.82 capped 0.78 opp 0.69 live 0.55 fires/100d 0.24 lockouts/100d 0.07 skip  0.1% paper  0.0%
+
+rate 2 a day
+  healthy   N=1  k=2.71 med$     622 p10$    449  half   6.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.85 live 1.00 fires/100d 0.77 lockouts/100d 0.03 skip  0.0% paper  0.0%
+  weak      N=1  k=3.30 med$     494 p10$    401  half  21.0% touch  0.0%  taken 0.73 capped 0.73 opp 0.71 live 1.00 fires/100d 0.15 lockouts/100d 0.02 skip  0.0% paper  0.0%
+  healthy   N=5  k=3.47 med$     738 p10$    492  half   2.0% touch  0.0%  taken 0.84 capped 0.83 opp 0.83 live 0.99 fires/100d 0.03 lockouts/100d 0.02 skip  0.0% paper  0.0%
+  weak      N=5  k=3.63 med$     510 p10$    416  half  11.0% touch  0.0%  taken 0.74 capped 0.70 opp 0.66 live 0.74 fires/100d 0.02 lockouts/100d 0.01 skip  0.1% paper  0.0%

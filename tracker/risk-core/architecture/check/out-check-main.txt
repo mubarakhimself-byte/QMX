@@ -1,0 +1,71 @@
+Model numbers only. The fold as fold_sim runs it, then one change at a time.
+
+A. fold_sim's fold arm (daily cushion, level floor through locks)
+  healthy   N=1  k=2.17 med$    1273 p10$    737  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.80 live 0.92 fires/100d 0.19 lockouts/100d 0.29 skip  0.0% paper  9.0%
+  weak      N=1  k=2.18 med$     662 p10$    447  half   0.0% touch  0.0%  taken 0.80 capped 0.80 opp 0.77 live 0.93 fires/100d 0.24 lockouts/100d 0.26 skip  0.0% paper  6.0%
+  bleeding  N=1  k=2.17 med$     442 p10$    425  half   0.0% touch  0.0%  taken 0.53 capped 0.53 opp 0.21 live 0.34 fires/100d 0.19 lockouts/100d 0.28 skip  0.3% paper 99.0%
+  healthy   N=5  k=1.64 med$    4371 p10$   1994  half   0.0% touch  0.0%  taken 0.89 capped 0.85 opp 0.89 live 0.88 fires/100d 0.46 lockouts/100d 0.27 skip  0.1% paper  6.2%
+  weak      N=5  k=1.95 med$     694 p10$    452  half   2.0% touch  0.0%  taken 0.82 capped 0.79 opp 0.64 live 0.39 fires/100d 0.32 lockouts/100d 0.07 skip  0.1% paper  1.4%
+  bleeding  N=5  k=1.64 med$     411 p10$    391  half  28.0% touch  0.0%  taken 0.62 capped 0.61 opp 0.24 live 0.16 fires/100d 0.73 lockouts/100d 0.06 skip  1.6% paper 25.0%
+  healthy   N=10 k=1.45 med$    5076 p10$   2163  half   0.0% touch  0.0%  taken 0.88 capped 0.85 opp 0.88 live 0.77 fires/100d 1.01 lockouts/100d 0.20 skip  0.1% paper  5.3%
+  weak      N=10 k=1.76 med$     713 p10$    455  half   4.0% touch  0.0%  taken 0.80 capped 0.77 opp 0.58 live 0.20 fires/100d 0.96 lockouts/100d 0.03 skip  0.1% paper  1.0%
+  bleeding  N=10 k=1.45 med$     413 p10$    394  half  23.0% touch  0.0%  taken 0.60 capped 0.59 opp 0.23 live 0.09 fires/100d 1.55 lockouts/100d 0.03 skip  2.6% paper 13.1%
+
+B. baseline at the weekly allocation anchor, as SPINE 4.3 writes it
+  healthy   N=1  k=2.17 med$    1195 p10$    717  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.80 live 0.92 fires/100d 0.19 lockouts/100d 0.29 skip  0.0% paper  9.0%
+  weak      N=1  k=2.18 med$     661 p10$    458  half   1.0% touch  0.0%  taken 0.80 capped 0.80 opp 0.77 live 0.93 fires/100d 0.26 lockouts/100d 0.27 skip  0.0% paper  6.0%
+  bleeding  N=1  k=2.17 med$     441 p10$    424  half   0.0% touch  0.0%  taken 0.52 capped 0.52 opp 0.21 live 0.34 fires/100d 0.17 lockouts/100d 0.28 skip  0.2% paper 99.0%
+  healthy   N=5  k=1.64 med$    3486 p10$   2025  half   0.0% touch  0.0%  taken 0.88 capped 0.85 opp 0.88 live 0.87 fires/100d 0.48 lockouts/100d 0.28 skip  0.0% paper  5.0%
+  weak      N=5  k=1.95 med$     655 p10$    452  half   3.0% touch  0.0%  taken 0.81 capped 0.79 opp 0.61 live 0.35 fires/100d 0.38 lockouts/100d 0.10 skip  0.1% paper  1.0%
+  bleeding  N=5  k=1.64 med$     410 p10$    392  half  27.0% touch  0.0%  taken 0.60 capped 0.60 opp 0.24 live 0.16 fires/100d 0.66 lockouts/100d 0.06 skip  1.6% paper 26.4%
+  healthy   N=10 k=1.45 med$    3902 p10$   2368  half   0.0% touch  0.0%  taken 0.88 capped 0.85 opp 0.87 live 0.75 fires/100d 0.84 lockouts/100d 0.19 skip  0.1% paper  5.8%
+  weak      N=10 k=1.76 med$     717 p10$    473  half   0.0% touch  0.0%  taken 0.81 capped 0.78 opp 0.60 live 0.22 fires/100d 0.97 lockouts/100d 0.04 skip  0.1% paper  0.7%
+  bleeding  N=10 k=1.45 med$     410 p10$    386  half  29.0% touch  0.0%  taken 0.61 capped 0.60 opp 0.23 live 0.09 fires/100d 1.44 lockouts/100d 0.03 skip  2.6% paper 14.1%
+
+C. no level floor, as SPINE.md writes it (the rule is not in it)
+  healthy   N=1  k=2.17 med$    1273 p10$    737  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.80 live 0.92 fires/100d 0.19 lockouts/100d 0.29 skip  0.0% paper  9.0%
+  weak      N=1  k=2.18 med$     662 p10$    447  half   0.0% touch  0.0%  taken 0.80 capped 0.80 opp 0.77 live 0.93 fires/100d 0.24 lockouts/100d 0.26 skip  0.0% paper  6.0%
+  bleeding  N=1  k=2.17 med$     442 p10$    425  half   0.0% touch  0.0%  taken 0.53 capped 0.53 opp 0.21 live 0.34 fires/100d 0.19 lockouts/100d 0.28 skip  0.3% paper 99.0%
+  healthy   N=5  k=1.64 med$    4371 p10$   1994  half   0.0% touch  0.0%  taken 0.89 capped 0.85 opp 0.89 live 0.88 fires/100d 0.46 lockouts/100d 0.27 skip  0.1% paper  6.2%
+  weak      N=5  k=1.95 med$     694 p10$    452  half   2.0% touch  0.0%  taken 0.82 capped 0.79 opp 0.64 live 0.39 fires/100d 0.32 lockouts/100d 0.07 skip  0.1% paper  1.4%
+  bleeding  N=5  k=1.64 med$     413 p10$    396  half  22.0% touch  0.0%  taken 0.62 capped 0.61 opp 0.24 live 0.16 fires/100d 0.67 lockouts/100d 0.06 skip  1.8% paper 25.2%
+  healthy   N=10 k=1.45 med$    5076 p10$   2163  half   0.0% touch  0.0%  taken 0.88 capped 0.85 opp 0.88 live 0.77 fires/100d 1.01 lockouts/100d 0.20 skip  0.1% paper  5.3%
+  weak      N=10 k=1.76 med$     713 p10$    455  half   4.0% touch  0.0%  taken 0.80 capped 0.77 opp 0.58 live 0.20 fires/100d 0.96 lockouts/100d 0.03 skip  0.1% paper  1.0%
+  bleeding  N=10 k=1.45 med$     413 p10$    394  half  23.0% touch  0.0%  taken 0.60 capped 0.59 opp 0.23 live 0.09 fires/100d 1.55 lockouts/100d 0.03 skip  2.6% paper 13.1%
+
+D. level floor stops at the lock
+  healthy   N=1  k=2.17 med$    1273 p10$    737  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.80 live 0.92 fires/100d 0.19 lockouts/100d 0.29 skip  0.0% paper  9.0%
+  weak      N=1  k=2.18 med$     662 p10$    447  half   0.0% touch  0.0%  taken 0.80 capped 0.80 opp 0.77 live 0.93 fires/100d 0.24 lockouts/100d 0.26 skip  0.0% paper  6.0%
+  bleeding  N=1  k=2.17 med$     442 p10$    425  half   0.0% touch  0.0%  taken 0.53 capped 0.53 opp 0.21 live 0.34 fires/100d 0.19 lockouts/100d 0.28 skip  0.3% paper 99.0%
+  healthy   N=5  k=1.64 med$    4371 p10$   1994  half   0.0% touch  0.0%  taken 0.89 capped 0.85 opp 0.89 live 0.88 fires/100d 0.46 lockouts/100d 0.27 skip  0.1% paper  6.2%
+  weak      N=5  k=1.95 med$     694 p10$    452  half   2.0% touch  0.0%  taken 0.82 capped 0.79 opp 0.64 live 0.39 fires/100d 0.32 lockouts/100d 0.07 skip  0.1% paper  1.4%
+  bleeding  N=5  k=1.64 med$     407 p10$    396  half  26.0% touch  0.0%  taken 0.62 capped 0.61 opp 0.26 live 0.17 fires/100d 0.67 lockouts/100d 0.05 skip  1.6% paper 28.0%
+  healthy   N=10 k=1.45 med$    5076 p10$   2163  half   0.0% touch  0.0%  taken 0.88 capped 0.85 opp 0.88 live 0.77 fires/100d 1.01 lockouts/100d 0.20 skip  0.1% paper  5.3%
+  weak      N=10 k=1.76 med$     713 p10$    455  half   4.0% touch  0.0%  taken 0.80 capped 0.77 opp 0.58 live 0.20 fires/100d 0.96 lockouts/100d 0.03 skip  0.1% paper  1.0%
+  bleeding  N=10 k=1.45 med$     413 p10$    394  half  23.0% touch  0.0%  taken 0.60 capped 0.59 opp 0.23 live 0.09 fires/100d 1.55 lockouts/100d 0.03 skip  2.6% paper 13.1%
+
+E. flat B instead of freed swing
+  healthy   N=1  k=2.17 med$    1273 p10$    737  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.80 live 0.92 fires/100d 0.19 lockouts/100d 0.29 skip  0.0% paper  9.0%
+  weak      N=1  k=2.18 med$     662 p10$    447  half   0.0% touch  0.0%  taken 0.80 capped 0.80 opp 0.77 live 0.93 fires/100d 0.24 lockouts/100d 0.26 skip  0.0% paper  6.0%
+  bleeding  N=1  k=2.17 med$     442 p10$    425  half   0.0% touch  0.0%  taken 0.53 capped 0.53 opp 0.21 live 0.34 fires/100d 0.19 lockouts/100d 0.28 skip  0.3% paper 99.0%
+  healthy   N=5  k=1.64 med$    3634 p10$   1692  half   0.0% touch  0.0%  taken 0.83 capped 0.83 opp 0.83 live 0.87 fires/100d 0.52 lockouts/100d 0.23 skip  0.1% paper  5.8%
+  weak      N=5  k=1.95 med$     689 p10$    446  half   3.0% touch  0.0%  taken 0.77 capped 0.77 opp 0.59 live 0.36 fires/100d 0.38 lockouts/100d 0.07 skip  0.0% paper  1.6%
+  bleeding  N=5  k=1.64 med$     413 p10$    398  half  16.0% touch  0.0%  taken 0.58 capped 0.58 opp 0.24 live 0.17 fires/100d 0.58 lockouts/100d 0.05 skip  1.4% paper 27.2%
+  healthy   N=10 k=1.45 med$    3959 p10$   2412  half   0.0% touch  0.0%  taken 0.83 capped 0.83 opp 0.82 live 0.77 fires/100d 1.07 lockouts/100d 0.20 skip  0.1% paper  4.1%
+  weak      N=10 k=1.76 med$     683 p10$    461  half   0.0% touch  0.0%  taken 0.75 capped 0.75 opp 0.54 live 0.21 fires/100d 1.03 lockouts/100d 0.04 skip  0.2% paper  1.2%
+  bleeding  N=10 k=1.45 med$     413 p10$    395  half  18.0% touch  0.0%  taken 0.59 capped 0.59 opp 0.23 live 0.09 fires/100d 1.62 lockouts/100d 0.02 skip  2.1% paper 14.6%
+
+F. gates refuse 15 % of opportunities (SQS, news and hourly admission together, a guess)
+  healthy   N=1  k=2.17 med$    1142 p10$    599  half   0.0% touch  0.0%  taken 0.86 capped 0.86 opp 0.72 live 0.96 fires/100d 0.12 lockouts/100d 0.12 skip  0.0% paper  7.0%
+  healthy   N=5  k=1.64 med$    2653 p10$   1468  half   0.0% touch  0.0%  taken 0.88 capped 0.86 opp 0.76 live 0.88 fires/100d 0.28 lockouts/100d 0.15 skip  0.0% paper  5.8%
+  healthy   N=10 k=1.45 med$    3357 p10$   1909  half   0.0% touch  0.0%  taken 0.88 capped 0.86 opp 0.75 live 0.76 fires/100d 0.42 lockouts/100d 0.08 skip  0.1% paper  2.7%
+
+G. brakes read 0.16R per trade below the card (spread and slippage counted twice, the worked cost)
+  healthy   N=1  k=2.17 med$     552 p10$    499  half   0.0% touch  0.0%  taken 0.53 capped 0.53 opp 0.15 live 0.31 fires/100d 0.03 lockouts/100d 0.49 skip  0.0% paper 100.0%
+  healthy   N=5  k=1.64 med$     863 p10$    584  half   0.0% touch  0.0%  taken 0.62 capped 0.59 opp 0.25 live 0.31 fires/100d 0.29 lockouts/100d 0.33 skip  0.3% paper 93.4%
+  healthy   N=10 k=1.45 med$    1424 p10$    875  half   0.0% touch  0.0%  taken 0.65 capped 0.60 opp 0.38 live 0.32 fires/100d 0.74 lockouts/100d 0.29 skip  0.6% paper 98.3%
+
+H. brakes read 0.08R per trade below the card (half that, e.g. commission only, gross card against net stream)
+  healthy   N=1  k=2.17 med$     724 p10$    519  half   0.0% touch  0.0%  taken 0.68 capped 0.68 opp 0.41 live 0.61 fires/100d 0.12 lockouts/100d 0.52 skip  0.0% paper 76.0%
+  healthy   N=5  k=1.64 med$    1877 p10$   1039  half   0.0% touch  0.0%  taken 0.76 capped 0.71 opp 0.61 live 0.57 fires/100d 0.47 lockouts/100d 0.41 skip  0.2% paper 66.4%
+  healthy   N=10 k=1.45 med$    3257 p10$   1551  half   0.0% touch  0.0%  taken 0.78 capped 0.72 opp 0.70 live 0.56 fires/100d 0.88 lockouts/100d 0.37 skip  0.2% paper 61.3%

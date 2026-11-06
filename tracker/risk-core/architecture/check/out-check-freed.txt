@@ -1,0 +1,7 @@
+Bleeding book, freed swing against flat B, 300 paths, same stream. Model numbers only.
+freed
+  bleeding  N=5  k=1.64 med$     412 p10$    392  half  25.0% touch  0.0%  taken 0.62 capped 0.61 opp 0.24 live 0.16 fires/100d 0.65 lockouts/100d 0.06 skip  1.4% paper 26.5%
+  bleeding  N=10 k=1.45 med$     413 p10$    394  half  21.3% touch  0.0%  taken 0.61 capped 0.60 opp 0.23 live 0.09 fires/100d 1.48 lockouts/100d 0.02 skip  2.5% paper 13.1%
+flat
+  bleeding  N=5  k=1.64 med$     413 p10$    398  half  16.0% touch  0.0%  taken 0.59 capped 0.59 opp 0.24 live 0.17 fires/100d 0.61 lockouts/100d 0.06 skip  1.4% paper 27.5%
+  bleeding  N=10 k=1.45 med$     413 p10$    396  half  18.3% touch  0.0%  taken 0.58 capped 0.58 opp 0.22 live 0.09 fires/100d 1.52 lockouts/100d 0.02 skip  2.3% paper 14.0%

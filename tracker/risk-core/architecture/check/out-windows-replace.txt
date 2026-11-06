@@ -1,0 +1,2 @@
+replace failed with a reader open: PermissionError: [WinError 5] Access is denied: 'C:\\Users\\Mubarak\\AppData\\Local\\Temp\\claude\\704f33895ba593ad\\2928e6ee-7392-4c1c-87c8-23b375749b4f\\scratchpad\\wr\\risk-status.json.tmp' -> 'C:\\Users\\Mubarak\\AppData\\Local\\Temp\\claude\\704f33895ba593ad\\2928e6ee-7392-4c1c-87c8-23b375749b4f\\scratchpad\\wr\\risk-status.json'
+after the reader closed: {"rev": 2}
