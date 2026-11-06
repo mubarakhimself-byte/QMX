@@ -14,7 +14,6 @@ from typing import cast
 import test_app_binding as b
 import test_app_runtime as base
 from qmb.host.unit_handler import FillKind
-from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmn.app.runtime import Runtime, VenueClose
 from qmn.app.store import Json
 from qmn.venue.ctrader_account import CTraderVenue
@@ -25,9 +24,8 @@ ENTRY_WINDOW = 60 * BAR
 """Bars enough for the dummy's next entry after its first trade ends."""
 
 
-def trading(root: Path, **broker: object) -> tuple[b.Bound, Runtime, int]:
+def trading(root: Path, fake: b.FakeCTrader | None = None) -> tuple[b.Bound, Runtime, int]:
     """The dummy with its first entry filled and booked; the next bar's time."""
-    fake = b.FakeCTrader(b.codec(), **cast("dict[str, bool]", broker))
     rig = b.bound_rig(root, broker=fake)
     b.signed_in(rig)
     b.bind(rig)
@@ -66,20 +64,6 @@ def fire_the_stop(rig: b.Bound) -> None:
         rig.fake.fire_stop(held)
 
 
-def paper_sends(root: Path) -> int:
-    lines = [
-        line
-        for folder in stream_folders(root)
-        if folder.name.startswith("journal-node.order.")
-        for line in cast("tuple[JournalLine, ...]", read_committed(folder).value)  # pyright: ignore[reportAttributeAccessIssue]
-    ]
-    return sum(
-        line.record["world"] == "paper"
-        and cast("dict[str, object]", line.record["body"])["step"] == "send"
-        for line in lines
-    )
-
-
 def restarted(rig: b.Bound, root: Path) -> b.Bound:
     again = b.bound_rig(root, grant=rig.grants.held, broker=rig.fake, at=rig.now[0])
     b.compiled(b.runtime(again))
@@ -87,18 +71,18 @@ def restarted(rig: b.Bound, root: Path) -> b.Bound:
 
 
 def test_a_stop_fired_while_down_books_at_the_brokers_price(tmp_path: Path) -> None:
-    rig, runtime, at = trading(tmp_path, stop_slip=Decimal("0.00010"))
+    rig, runtime, at = trading(tmp_path, b.FakeCTrader(b.codec(), stop_slip=Decimal("0.00010")))
     name = b.sent_entries(rig)[0]
     before = entries(rig)
 
     rig.fake.drop_socket()
     rig.fake.refuse_sockets = 2
     fire_the_stop(rig)
-    b.play_spots(rig, at, at + 3 * BAR)
+    b.play_spots(rig, at, at + 8 * BAR)
     closed = venue_of(runtime).closed(name)
     trades = unit_rows(rig, "trade")
     safe = safe_to_restart(rig)
-    b.play_spots(rig, at + 3 * BAR, at + ENTRY_WINDOW)
+    b.play_spots(rig, at + 8 * BAR, at + ENTRY_WINDOW)
 
     assert closed == VenueClose(FillKind.STOP, Decimal("1.08032"), gap=True)
     assert [(t["trade_id"], t["exit_kind"], t["exit_price"]) for t in trades] == [
@@ -158,7 +142,7 @@ def test_a_stop_moved_by_hand_is_read(tmp_path: Path) -> None:
 
 
 def test_a_stop_on_a_later_event_protects_with_no_amend(tmp_path: Path) -> None:
-    rig, runtime, _ = trading(tmp_path, stop_on_later_event=True)
+    rig, runtime, _ = trading(tmp_path, b.FakeCTrader(b.codec(), stop_on_later_event=True))
     name = b.sent_entries(rig)[0]
 
     assert venue_of(runtime).stop_of(name) == Decimal("1.08022")
@@ -169,7 +153,7 @@ def test_a_stop_on_a_later_event_protects_with_no_amend(tmp_path: Path) -> None:
 
 
 def test_a_stop_fired_while_the_process_was_down_writes_the_missing_close(tmp_path: Path) -> None:
-    rig, _, at = trading(tmp_path, stop_slip=Decimal("0.00010"))
+    rig, _, at = trading(tmp_path, b.FakeCTrader(b.codec(), stop_slip=Decimal("0.00010")))
     name = b.sent_entries(rig)[0]
     rig.node.stop()
     rig.fake.drop_socket()
@@ -201,9 +185,9 @@ def test_a_stop_fired_while_the_process_was_down_writes_the_missing_close(tmp_pa
             "why": "the broker closed this position while the node was not running",
         }
     ]
-    assert [(r["client_order_id"], r["price"], r["exit"], r["gap"], r["guessed"]) for r in rows] == [
-        (name, "1.08032", "stop", True, False)
-    ]
+    assert [
+        (r["client_order_id"], r["price"], r["exit"], r["gap"], r["guessed"]) for r in rows
+    ] == [(name, "1.08032", "stop", True, False)]
     assert body == {"ctidTraderAccountId": "4401", "positionId": "9001"}
     assert asked == 1
     assert second_alarms == []
@@ -230,7 +214,7 @@ def test_a_resolved_unknown_finds_its_close_over_the_sends_window(tmp_path: Path
     fire_the_stop(rig)
 
     again = restarted(rig, tmp_path)
-    b.play_spots(again, at + BAR, at + 3 * BAR)
+    b.play_spots(again, at + BAR, at + 5 * BAR)
     filled = [r for r in b.node_rows(again, "order") if r["step"] == "filled"]
     trades = unit_rows(again, "trade")
 
@@ -260,7 +244,11 @@ def test_old_stop_outs_and_a_paper_send_stay_quiet_at_a_restart(tmp_path: Path) 
         b.play_spots(rig, played, played + BAR)
         played += BAR
         live = set(b.sent_entries(rig))
-    papers = paper_sends(tmp_path / "data" / "journal")
+    papers = [
+        row
+        for row in b.node_rows(rig, "order")
+        if row["step"] == "send" and row["deployment_id"] == "dep-2"
+    ]
     held_at_restart = len(rig.fake.held)
     rows = len(b.node_rows(rig, "order"))
     rig.node.stop()
@@ -274,7 +262,7 @@ def test_old_stop_outs_and_a_paper_send_stay_quiet_at_a_restart(tmp_path: Path) 
         "ProtoOADealListReq": again.fake.requests().count("ProtoOADealListReq"),
     }
 
-    assert papers >= 1
+    assert len(papers) >= 1
     assert [t["exit_kind"] for t in unit_rows(again, "trade")] == ["stop", "stop"]
     assert held_at_restart == 0
     assert b.runtime(again).alarms == []
@@ -285,7 +273,9 @@ def test_old_stop_outs_and_a_paper_send_stay_quiet_at_a_restart(tmp_path: Path) 
 
 
 def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Path) -> None:
-    rig, runtime, at = trading(tmp_path, stop_slip=Decimal("0.00010"), history_silent=True)
+    rig, runtime, at = trading(
+        tmp_path, b.FakeCTrader(b.codec(), stop_slip=Decimal("0.00010"), history_silent=True)
+    )
     name = b.sent_entries(rig)[0]
     held = next(iter(rig.fake.held.values()))
     guess = {
@@ -300,7 +290,7 @@ def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Pat
     rig.fake.drop_socket()
     fire_the_stop(rig)
     sent = len(rig.fake.requests())
-    b.play_spots(rig, at, at + 3 * BAR)
+    b.play_spots(rig, at, at + 5 * BAR)
     asked = [
         r
         for r in rig.fake.requests()[sent:]
@@ -312,7 +302,7 @@ def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Pat
 
     rig.fake.drop_socket()
     rig.fake.held[held.position_id] = held
-    b.play_spots(rig, at + 3 * BAR, at + 5 * BAR)
+    b.play_spots(rig, at + 5 * BAR, at + 7 * BAR)
     listed_closed = venue_of(runtime).closed(name)
 
     assert alarms == [guess]
@@ -342,7 +332,9 @@ def test_a_send_with_no_stop_is_skipped_not_a_keyerror(tmp_path: Path) -> None:
     b.tick_quotes(rig)
     rig.node.call("self_test", {"op_id": "test-1", "account": b.ACCOUNT})
     b.tick_quotes(rig, 1)
-    name = str(next(body["clientOrderId"] for n, body in fake.received if n == "ProtoOANewOrderReq"))
+    name = str(
+        next(body["clientOrderId"] for n, body in fake.received if n == "ProtoOANewOrderReq")
+    )
 
     fake.drop_socket()
     for _ in range(3):

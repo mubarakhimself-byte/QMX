@@ -78,6 +78,7 @@ from qml.unit.model import Side
 
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition, tags_of
 from qmn.app.feed_keeper import Bar, Dropped, FeedEvent, Heartbeat, Quote
+from qmn.app.reconciler import Lost
 from qmn.app.runtime import Sent, Ticket, VenueClose
 from qmn.venue.conformance import protective_stop_forms_from_verification, submit_not_ready_refusal
 from qmn.venue.live import LiveCTraderClient, WireKind
@@ -123,6 +124,9 @@ RENEW_CHECK_NS: Final = 3_600_000_000_000
 """How often a bound session asks whether its grant is due for a refresh: hourly."""
 LOOKBACK_NS: Final = 86_400_000_000_000
 """`[node] ctrader_reconcile_lookback_s`: the declared reconcile lookback the client binds."""
+DEAL_WINDOW_NS: Final = 604_800_000_000_000
+"""`[node] ctrader_deal_window_s`, starting at one week: how long after a send the node searches
+the account's deals for its position, when no position id was journalled."""
 _ERRORS: Final = frozenset({"ProtoOAErrorRes", "ProtoErrorRes"})
 _TRADES: Final = frozenset({"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent"})
 _FILLS: Final = frozenset({"ORDER_FILLED", "ORDER_PARTIAL_FILL"})
@@ -154,6 +158,15 @@ def _int(value: object) -> int | None:
 
 def _map(value: object) -> Mapping[str, object]:
     return cast("Mapping[str, object]", value) if isinstance(value, dict) else {}
+
+
+def _history_said_nothing(refusal: TypedRefusal) -> bool:
+    """A silent broker or a refused history request tells nothing about the position. A cut wire
+    or the broker's rate limit means ask again next tick, when the true price may be there."""
+    code = refusal.context.get("code")
+    if code == "venue_silent":
+        return True
+    return refusal.retryability is Retryability.NO and code != "REQUEST_FREQUENCY_EXCEEDED"
 
 
 def _rows(value: object) -> list[Mapping[str, object]]:
@@ -513,6 +526,28 @@ class _Open:
 
 
 @dataclass(frozen=True, slots=True)
+class _Gone:
+    """A position the broker no longer lists, until its close is known."""
+
+    name: str
+    held: _Open
+    """Its ``position_id`` is 0 when no id was journalled."""
+    sent_ns: int | None = None
+    """When its entry was sent, the start of the deal search when it has no id."""
+
+
+def _close_read(held: _Open, price: Decimal, order_type: object) -> VenueClose:
+    """What a close was, from its price and its order's type."""
+    stopped = order_type == "STOP_LOSS_TAKE_PROFIT" and not held.closing
+    gap = (
+        held.stop is not None
+        and stopped
+        and (price < held.stop if held.side is Side.LONG else price > held.stop)
+    )
+    return VenueClose(FillKind.STOP if stopped else FillKind.CLOSE, price, gap)
+
+
+@dataclass(frozen=True, slots=True)
 class _Entry:
     """An entry sent whose fill or refusal has not been read yet."""
 
@@ -596,6 +631,7 @@ class CTraderVenue:
         """Each open position by its entry's client order id, the name the runtime closes."""
         self._unanswered: dict[str, _Entry] = {}
         self._closed: dict[str, VenueClose] = {}
+        self._doubts: list[Mapping[str, object]] = []
         self._orders: list[VenueOrder] = []
         self._events: list[FeedEvent] = []
         self._building: dict[str, _Building] = {}
@@ -664,21 +700,255 @@ class CTraderVenue:
 
     def read_back(self) -> Result[ReadBack]:
         """The account's open positions and orders as cTrader reconciles them, each position
-        named by its entry's client order id. Fills that already arrived are read first."""
+        named by its entry's client order id. Fills that already arrived are read first. The
+        broker wins: each held position takes its stop and volume from the broker's row, and
+        one the broker no longer lists closes (:meth:`_settle`)."""
         with self._lock:
             if self.api is None or not self._pump():
                 return submit_not_ready_refusal()
             api = self.api
-            answered = api.ask("ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid})
-            if is_refusal(answered):
-                return answered
+            listed = self._listed(api)
+            if is_refusal(listed):
+                return listed
+            rows = self._settle(api, self._take_rows(listed.value), listed.value)
+            if is_refusal(rows):
+                return rows
             positions: list[VenuePosition] = []
-            for row in _rows(answered.value.body.get("position")):
+            for row in rows.value:
                 read = self._reconciled(api, row)
                 if is_refusal(read):
                     return read
                 positions.append(read.value)
             return Ok(ReadBack(tuple(self._orders), tuple(positions)))
+
+    def find_closes(self, lost: Sequence[Lost], /) -> Result[Mapping[str, VenueClose]]:
+        """How each entry closed while the node was down: what an earlier start journalled, else
+        the broker's history. A position the broker lists after all answers a refusal, so the
+        next tick's reconcile reads it fresh."""
+        with self._lock:
+            if self.api is None:
+                return submit_not_ready_refusal()
+            gone: list[_Gone] = []
+            for item in lost:
+                position = item.ours.position
+                name = position.position
+                if item.told is not None:
+                    self._closed[name] = VenueClose(
+                        FillKind(str(item.told["exit"])),
+                        Decimal(str(item.told["price"])),
+                        item.told.get("gap") is True,
+                        item.told.get("guessed") is True,
+                    )
+                elif name not in self._closed:
+                    held = _Open(
+                        _int(item.position_id) or 0,
+                        position.market_id,
+                        Side(position.side),
+                        0,
+                        position.quantity,
+                        position.entry_price,
+                        position.stop,
+                        position.label,
+                    )
+                    sent = _int(item.ours.send.get("sent_at_ns"))
+                    gone.append(_Gone(name, held, sent))
+            settled = self._settle(self.api, gone, [])
+            if is_refusal(settled):
+                return settled
+            names = [item.ours.position.position for item in lost]
+            if any(name not in self._closed for name in names):
+                return _refused("listed_after_all", "the broker lists a position it left out")
+            return Ok({name: self._closed[name] for name in names})
+
+    def take_doubts(self) -> Sequence[Mapping[str, object]]:
+        with self._lock:
+            taken, self._doubts = self._doubts, []
+            return taken
+
+    def _listed(self, api: OpenApi) -> Result[list[Mapping[str, object]]]:
+        """The positions the broker lists now. Frames kept while waiting arrived before the
+        answer, so a close among them is read here and never reaches the history path."""
+        answered = api.ask("ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid})
+        if is_refusal(answered):
+            return answered
+        kept, api.pending = api.pending, []
+        for frame in kept:
+            self._absorb(frame)
+        return Ok(_rows(answered.value.body.get("position")))
+
+    def _take_rows(self, rows: Sequence[Mapping[str, object]]) -> list[_Gone]:
+        """Each held position takes its stop and volume from its row, and a row with no stop
+        clears the stop. Answers the held positions with no row."""
+        by_id = {_int(row.get("positionId")): row for row in rows}
+        gone: list[_Gone] = []
+        for name, held in self._open.items():
+            row = by_id.get(held.position_id)
+            if row is None:
+                gone.append(_Gone(name, held))
+                continue
+            held.stop = self._execution_price(row.get("stopLoss"), held.market_id)
+            self._take_volume(held, row)
+        return gone
+
+    def _take_volume(self, held: _Open, position: Mapping[str, object]) -> None:
+        volume = _int(_map(position.get("tradeData")).get("volume"))
+        if volume is not None:
+            held.volume = volume
+            held.lots = Decimal(volume) / Decimal(self.symbols[held.market_id].lot_size)
+
+    def _settle(
+        self, api: OpenApi, gone: Sequence[_Gone], rows: Sequence[Mapping[str, object]]
+    ) -> Result[Sequence[Mapping[str, object]]]:
+        """Close each position the broker no longer lists, at its closing deal. With no deal,
+        ask the broker once more, because a missing report is not flat. One still not listed
+        closes at the stop it held, with an alarm that says the price is a guess, so no position
+        stays held because history was silent. One silent answer ends the asking, since each
+        waits :data:`ANSWER_WAIT_S` and a tick past 30 s stops the node. Answers the rows read
+        last."""
+        unread: list[_Gone] = []
+        silent = False
+        for one in gone:
+            closing: Result[VenueClose | None] = Ok(None) if silent else self._closing(api, one)
+            if is_refusal(closing):
+                if not _history_said_nothing(closing):
+                    return closing
+                silent = closing.context.get("code") == "venue_silent"
+                unread.append(one)
+            elif closing.value is None:
+                unread.append(one)
+            else:
+                self._open.pop(one.name, None)
+                self._closed[one.name] = closing.value
+        if not unread:
+            return Ok(rows)
+        again = self._listed(api)
+        if is_refusal(again):
+            return again
+        for one in unread:
+            if not any(self._lists(row, one.held) for row in again.value):
+                self._guess(one)
+        self._take_rows(again.value)
+        return Ok(again.value)
+
+    def _lists(self, row: Mapping[str, object], held: _Open) -> bool:
+        if held.position_id:
+            return _int(row.get("positionId")) == held.position_id
+        symbol = self.symbols.get(held.market_id)
+        trade = _map(row.get("tradeData"))
+        return (
+            symbol is not None
+            and _int(trade.get("symbolId")) == symbol.symbol_id
+            and trade.get("label") == held.label
+            and (trade.get("tradeSide") == "BUY") == (held.side is Side.LONG)
+        )
+
+    def _guess(self, one: _Gone) -> None:
+        held = one.held
+        kind = FillKind.CLOSE if held.stop is None else FillKind.STOP
+        price = held.entry if held.stop is None else held.stop
+        self._open.pop(one.name, None)
+        self._closed[one.name] = VenueClose(kind, price, guessed=True)
+        self._doubts.append(
+            {
+                "alarm": "close_price_guess",
+                "position": one.name,
+                "market_id": held.market_id,
+                "price": str(price),
+                "why": "the broker no longer lists this position and its history named no closing"
+                " deal, so the node booked it at the stop it held, and that price is a guess",
+            }
+        )
+
+    def _closing(self, api: OpenApi, one: _Gone) -> Result[VenueClose | None]:
+        """How ``one`` closed, from its latest deal that closes, or None when history names none.
+        ``ProtoOADeal`` has no kind, only its ``orderId``, so the kind is that order's."""
+        held = one.held
+        position_id = held.position_id
+        if not position_id:
+            found = self._position_in_window(api, one)
+            if is_refusal(found):
+                return found
+            if found.value is None:
+                return Ok(None)
+            position_id = found.value
+        asked = {"ctidTraderAccountId": self.ctid, "positionId": position_id}
+        deals = api.ask("ProtoOADealListByPositionIdReq", asked)
+        if is_refusal(deals):
+            return deals
+        closing = max(
+            (row for row in _rows(deals.value.body.get("deal")) if row.get("closePositionDetail")),
+            key=lambda row: _int(row.get("executionTimestamp")) or 0,
+            default=None,
+        )
+        if closing is None:
+            return Ok(None)
+        price = self._execution_price(closing.get("executionPrice"), held.market_id)
+        if price is None:
+            return Ok(None)
+        orders = api.ask("ProtoOAOrderListByPositionIdReq", asked)
+        if is_refusal(orders):
+            if not _history_said_nothing(orders):
+                return orders
+            return Ok(_close_read(held, price, None))
+        order_type = next(
+            (
+                row.get("orderType")
+                for row in _rows(orders.value.body.get("order"))
+                if _int(row.get("orderId")) == _int(closing.get("orderId"))
+            ),
+            None,
+        )
+        return Ok(_close_read(held, price, order_type))
+
+    def _position_in_window(self, api: OpenApi, one: _Gone) -> Result[int | None]:
+        """The position an entry opened, when no id was journalled: among the deals on its
+        symbol after its send, the position whose order carries its client order id."""
+        symbol = self.symbols.get(one.held.market_id)
+        if symbol is None or one.sent_ns is None:
+            return Ok(None)
+        deals = api.ask(
+            "ProtoOADealListReq",
+            {
+                "ctidTraderAccountId": self.ctid,
+                "fromTimestamp": one.sent_ns // 1_000_000,
+                "toTimestamp": (one.sent_ns + DEAL_WINDOW_NS) // 1_000_000,
+            },
+        )
+        if is_refusal(deals):
+            return deals
+        candidates = {
+            ident
+            for row in _rows(deals.value.body.get("deal"))
+            if _int(row.get("symbolId")) == symbol.symbol_id
+            and (ident := _int(row.get("positionId"))) is not None
+        }
+        for ident in sorted(candidates):
+            orders = api.ask(
+                "ProtoOAOrderListByPositionIdReq",
+                {"ctidTraderAccountId": self.ctid, "positionId": ident},
+            )
+            if is_refusal(orders):
+                return orders
+            if any(
+                row.get("clientOrderId") == one.name
+                for row in _rows(orders.value.body.get("order"))
+            ):
+                return Ok(ident)
+        return Ok(None)
+
+    def _held_again(self, name: str, seen: _Open) -> None:
+        """The broker lists this position, so it is held, whatever the node read before."""
+        self._open[name] = seen
+        if self._closed.pop(name, None) is not None:
+            self._doubts.append(
+                {
+                    "alarm": "close_undone",
+                    "position": name,
+                    "market_id": seen.market_id,
+                    "why": "the broker lists this position again after the node read it closed, so"
+                    " the node holds it again and the trade row it booked is wrong",
+                }
+            )
 
     def _reconciled(self, api: OpenApi, row: Mapping[str, object]) -> Result[VenuePosition]:
         """One reconciled position. One this binding does not hold, because an entry's answer
@@ -734,9 +1004,9 @@ class CTraderVenue:
             if tags_of(label, None):
                 # The reconcile may find a node-labelled position as an unanswered entry's by
                 # its label, so a close by its cTrader name must reach it.
-                self._open[str(position_id)] = seen
+                self._held_again(str(position_id), seen)
             return Ok(seen.read_back(str(position_id)))
-        self._open[opening] = seen
+        self._held_again(opening, seen)
         self._unanswered.pop(opening, None)
         if all(order.client_order_id != opening for order in self._orders):
             self._orders.append(
@@ -1078,8 +1348,9 @@ class CTraderVenue:
 
     def _execution(self, body: Mapping[str, object]) -> None:
         """A fill of an entry whose answer came after its wait opens its position, and a later
-        deal into a held position sets the volume it holds. A stop the venue fired, or a close
-        it carried out, closes the position it names."""
+        deal into a held position sets the volume it holds. Any event that names a stop sets the
+        stop held, and an event with none keeps it, since only a reconcile row may clear it. A
+        stop the venue fired, or a close it carried out, closes the position it names."""
         name = str(_map(body.get("order")).get("clientOrderId") or "")
         late = self._unanswered.get(name)
         fill = body.get("executionType") in _FILLS
@@ -1093,25 +1364,18 @@ class CTraderVenue:
         if name is None:
             return
         if position.get("positionStatus") != "POSITION_STATUS_CLOSED":
-            volume = _int(_map(position.get("tradeData")).get("volume"))
-            if fill and volume is not None:
-                held = self._open[name]
-                held.volume = volume
-                held.lots = Decimal(volume) / Decimal(self.symbols[held.market_id].lot_size)
+            held = self._open[name]
+            stop = self._execution_price(position.get("stopLoss"), held.market_id)
+            held.stop = held.stop if stop is None else stop
+            if fill:
+                self._take_volume(held, position)
             return
         held = self._open.pop(name)
         deal = _map(body.get("deal"))
         price = self._execution_price(deal.get("executionPrice"), held.market_id)
         if price is None:
             price = held.stop or held.entry
-        order = _map(body.get("order"))
-        stopped = order.get("orderType") == "STOP_LOSS_TAKE_PROFIT" and not held.closing
-        gap = (
-            held.stop is not None
-            and stopped
-            and (price < held.stop if held.side is Side.LONG else price > held.stop)
-        )
-        self._closed[name] = VenueClose(FillKind.STOP if stopped else FillKind.CLOSE, price, gap)
+        self._closed[name] = _close_read(held, price, _map(body.get("order")).get("orderType"))
 
     def _execution_price(self, raw: object, market: str) -> Decimal | None:
         symbol = self.symbols.get(market)
@@ -1211,7 +1475,14 @@ class CTraderVenue:
             opened = self._filled(frame.body, name, entry, client)
             if opened is None:
                 return Ok(Sent(SubmissionOutcome.UNKNOWN))
-            return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, opened.entry, quantity=opened.lots))
+            return Ok(
+                Sent(
+                    SubmissionOutcome.ACCEPTED_BY_VENUE,
+                    opened.entry,
+                    quantity=opened.lots,
+                    position_id=str(opened.position_id),
+                )
+            )
 
     def _filled(
         self, body: Mapping[str, object], name: str, entry: _Entry, client: LiveCTraderClient

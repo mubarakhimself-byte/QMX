@@ -381,7 +381,7 @@ class FakeCTrader:
                 "positionId": held.position_id,
             }
         ]
-        self.deals[held.position_id] = [self._deal(held, price, held.position_id)]
+        self.deals[held.position_id] = [self._deal_row(held, price, held.position_id)]
         if self.lose_answers:
             self.lose_answers -= 1
             return
@@ -521,7 +521,7 @@ class FakeCTrader:
             position["takeProfit"] = float(held.target)
         return position
 
-    def _deal(self, held: Held, price: Decimal, ident: int) -> dict[str, object]:
+    def _deal_row(self, held: Held, price: Decimal, ident: int) -> dict[str, object]:
         return {
             "dealId": ident,
             "orderId": ident,
@@ -560,7 +560,7 @@ class FakeCTrader:
             "closingOrder": closing,
             "positionId": held.position_id,
         }
-        deal = self._deal(held, price, self._next)
+        deal = self._deal_row(held, price, self._next)
         if closing:
             self.orders.setdefault(held.position_id, []).append(order)
             self.deals.setdefault(held.position_id, []).append(
