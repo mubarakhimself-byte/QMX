@@ -1,0 +1,74 @@
+The folded design against the funnel's core as core_sim ran it. size/base = mean size over the flat baseline; paper% = share of units the drift rule sent to paper inside the run. Model numbers only.
+
+  derived k for N=1, card +0.10R: 1.91 (minus the group's own p1 day in sized sigmas)
+
+HEALTHY +0.10R, card +0.10R [N=1 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper     1568     740    0.0%   0.0%      0.92    0.00    0.0   25.0%
+  fold: freed B, sized k derived, 3rd warning paper     1898     869    0.0%   0.0%      0.91    0.48    0.0    5.0%
+  fold with the preset rung k 1.7                  1663     883    0.0%   0.0%      0.91    0.94    0.0    5.0%
+
+  derived k for N=1, card +0.05R: 1.95 (minus the group's own p1 day in sized sigmas)
+
+WEAK +0.05R, card +0.05R [N=1 cost x1.0 days=120 paths=40; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper      733     464    0.0%   0.0%      0.89    0.00    0.0   32.5%
+  fold: freed B, sized k derived, 3rd warning paper      722     502    2.5%   0.0%      0.87    0.48    0.0    5.0%
+  fold with the preset rung k 1.7                   741     508    0.0%   0.0%      0.87    2.02    0.0    7.5%
+
+  derived k for N=1, card +0.10R: 1.91 (minus the group's own p1 day in sized sigmas)
+
+BLEEDING true -0.05R, card +0.10R [N=1 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper      442     430    0.0%   0.0%      0.73    0.00    0.0  100.0%
+  fold: freed B, sized k derived, 3rd warning paper      428     406    5.0%   0.0%      0.68    0.42    0.1   97.5%
+  fold with the preset rung k 1.7                   427     409    5.0%   0.0%      0.68    0.88    0.4   97.5%
+
+  derived k for N=5, card +0.10R: 1.27 (minus the group's own p1 day in sized sigmas)
+
+HEALTHY +0.10R, card +0.10R [N=5 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper     3434    1701    0.0%   0.0%      0.89    0.00    0.0   37.0%
+  fold: freed B, sized k derived, 3rd warning paper     3922    2284    0.0%   0.0%      0.91    2.40    0.1    7.5%
+  fold with the preset rung k 1.7                  4854    3100    0.0%   0.0%      0.91    0.31    0.1    5.5%
+
+  derived k for N=5, card +0.05R: 1.57 (minus the group's own p1 day in sized sigmas)
+
+WEAK +0.05R, card +0.05R [N=5 cost x1.0 days=120 paths=40; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper      696     443    0.0%   0.0%      0.84    0.00    0.0   11.5%
+  fold: freed B, sized k derived, 3rd warning paper      679     442    0.0%   0.0%      0.85    2.50    0.2    3.5%
+  fold with the preset rung k 1.7                   696     488    2.5%   0.0%      0.86    1.35    0.1    2.0%
+
+  derived k for N=5, card +0.10R: 1.27 (minus the group's own p1 day in sized sigmas)
+
+BLEEDING true -0.05R, card +0.10R [N=5 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper      415     387   22.5%   0.0%      0.73    0.00    0.0   59.0%
+  fold: freed B, sized k derived, 3rd warning paper      399     386   60.0%   0.0%      0.73    3.90    1.8   43.0%
+  fold with the preset rung k 1.7                   394     383   75.0%   0.0%      0.72    0.52    0.5   41.5%
+
+  derived k for N=10, card +0.10R: 1.00 (minus the group's own p1 day in sized sigmas)
+
+HEALTHY +0.10R, card +0.10R [N=10 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper     4566    2811    0.0%   0.0%      0.90    0.00    0.0   25.2%
+  fold: freed B, sized k derived, 3rd warning paper     5435    2429    0.0%   0.0%      0.90    2.83    0.1    4.5%
+  fold with the preset rung k 1.7                  5765    3032    0.0%   0.0%      0.91    0.29    0.0    5.0%
+
+  derived k for N=10, card +0.05R: 1.32 (minus the group's own p1 day in sized sigmas)
+
+WEAK +0.05R, card +0.05R [N=10 cost x1.0 days=120 paths=40; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper      686     425    0.0%   0.0%      0.83    0.00    0.0    6.0%
+  fold: freed B, sized k derived, 3rd warning paper      803     479    2.5%   0.0%      0.86    5.90    0.1    1.0%
+  fold with the preset rung k 1.7                   798     481    2.5%   0.0%      0.86    1.46    0.1    1.0%
+
+  derived k for N=10, card +0.10R: 1.00 (minus the group's own p1 day in sized sigmas)
+
+BLEEDING true -0.05R, card +0.10R [N=10 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core: flat B, budget k2.5, 2nd warning paper      412     398   17.5%   0.0%      0.73    0.00    0.0   27.2%
+  fold: freed B, sized k derived, 3rd warning paper      402     388   45.0%   0.0%      0.72    8.44    3.2   23.3%
+  fold with the preset rung k 1.7                   400     370   55.0%   0.0%      0.74    0.50    0.8   20.5%
+exit 0

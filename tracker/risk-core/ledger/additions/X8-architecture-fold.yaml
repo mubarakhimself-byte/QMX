@@ -1,0 +1,83 @@
+# X8 architecture fold: ledger additions, 6 Nov 2026. Rows the folded spine (architecture/SPINE.md) binds to and the
+# ledger lacked (ledger/v1/NOTES.md item 15 and the fold's grafts). Tiers come from funnel/ledger-merge.yaml section 8.
+- id: net_r
+  name: A trade's result in R after its costs
+  level: trade
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "net_r = r minus costs_r, where r is the planned loss at the disaster stop at entry (gross, the judge's trade_r) and costs_r is spread, commission, slippage and swap in R. Brakes, the money ledger, the CUSUM and the admission gate read net_r; the judge and the logic record read gross r. On the trade row from exit step 2; the code field r_after_costs (unit_handler.py:724, which holds gross today) is renamed to it. Our call; his B9 reservation stands (FUNNEL DP11, hand-off 22)."
+  inputs: [round_trip_cost_r, spread_cost, commission_cost, slippage_cost, exit_mechanism]
+  affects:
+    - {id: loss_counting_rule, direction: either, how: "The unit bench and the day stop count losses in net_r, so a cut counts its size and a breakeven its cost."}
+    - {id: money_brake_threshold_r, direction: either, how: "The own-p1 threshold is measured on the net_r stream, so costs cannot hide a loss from the bench."}
+    - {id: drift_state, direction: either, how: "The CUSUM reads net_r against the card's net mean; gross and cost streams stay apart for attribution."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: grounding, ref: "grounding/G12-audit-and-repair-for-risk.md:75", note: "hand-off 22: r_after_costs holds gross today"}
+    - {gen: expansion, ref: "funnel/FUNNEL.md:113", note: "DP11: R is gross, net_r beside it"}
+  aliases: [r_after_costs]
+
+- id: drift_warning_window_trades
+  name: Trades inside which repeated CUSUM warnings count together
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "The window is measured in the unit's own trades, about one healthy alarm spacing of its CUSUM (X5 section 9: about 668 trades at h 17 and allowance 0.05R), so two warnings inside it are more than the healthy rate explains. The funnel's rung is 500 trades; the numbers lens sets it with the fold sim's paper-rate column beside it. Warnings older than the window drop out of the count."
+  inputs: [cusum_limit, trade_rate]
+  affects:
+    - {id: drift_warnings_to_paper, direction: either, how: "The count of warnings that sends a unit to paper is taken inside this window."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "funnel/FUNNEL.md:504", note: "the review's correction: inside 500 trades"}
+    - {gen: expansion, ref: "architecture/candidate-3/out-c3.txt:49-53", note: "paper rate at h 17 and 500 trades"}
+
+- id: drift_warnings_to_paper
+  name: CUSUM warnings inside the window that move a unit to paper
+  level: unit
+  kind: brake_threshold
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 3
+  basis: reasoned
+  derivation: "Every warning steps the unit one level down with cause drift_warning and locks the level's top there for level_lockout_days (the bench's lockout, applied to drift, so one restore rule serves the unit's two brakes); the warning that reaches this count inside drift_warning_window_trades moves it to paper with a demotion cause, and re-promotion is his click. At two with no lock (the funnel's rule) a healthy 10-a-day unit at h 17 and 500 trades reached paper in 42 percent of 120-day model paths and waited on his click (candidate 3's finding, reproduced by the fold). At three with no lock a bleeding unit climbed back between warnings and a bleeding book of 5 or 10 units lost half its cushion in 52 to 57 percent of paths against the funnel's 17 to 25 (architecture/out-decompose.txt). At three with the lock: healthy units to paper in 3 to 8 percent, healthy size 0.86 to 0.89 of baseline, the bleeding book at 17.5 to 25 percent (architecture/out-drift-variants.txt, out-fold.txt). The numbers lens owns h, the window and the lock; the fold's integrated check reports the paper rate beside size and survival (architecture/fold_sim.py)."
+  inputs: [cusum_limit, drift_warning_window_trades, level_lockout_days]
+  affects:
+    - {id: size_levels, direction: down, how: "Each warning below the count is one level down on the ladder."}
+    - {id: drift_state, direction: either, how: "The warning count is the drift monitor's slow key; reaching it is the demotion."}
+    - {id: demotion_cause, direction: either, how: "Reaching the count writes drift_warning as the cause."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "architecture/candidate-3/out-c3.txt:49-53", note: "42 percent of healthy paths to paper at two warnings"}
+    - {gen: expansion, ref: "funnel/FUNNEL.md:224", note: "DP27: a second warning inside 500 trades moves the unit to paper"}
+
+- id: day_stop_sigma_multiple
+  name: Multiple of the book's sized day sigma at which the portfolio day stop fires
+  level: portfolio
+  kind: brake_threshold
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "k = minus the group's own bad day at the target fire rate (bms_breaker_target_fire_rate; one day in a hundred as the rung), in units of its sized day sigma: at the allocation anchor the harness draws the book's day P&L from the admitted units' cards at equal sizes, correlated through stressed_unit_correlation, with the class's tail rows on (worst_step_move_r, gap_loss_beyond_stop), and takes that quantile; the stop fires when the book's day loss passes k times the sized sigma (FUNNEL DP22, F26). Because k times the sigma is a dollar line, a stressed correlation inside the sigma does not move the line. Preset rung 1.7 while the group has no card. In the fold's model k derives to 1.4 to 2.2 and fires 0.5 to 1.9 times per 100 days; without the tail rows it derived to 1.0 at N = 10 and fired on most weeks (architecture/out-fold-notails.txt). At k 2.5 on the sized sigma the stop fired 0.00 to 0.06 times per 100 model days and never on an X4-14 day; at k 1.5 it fired 1 to 3.5 times and cut the worst day from about 13 to about 9 percent of the morning's cushion for about one point of size (candidate 2's kstop run, reproduced by the fold)."
+  inputs: [result_spread_r, live_unit_count, stressed_unit_correlation, bms_breaker_target_fire_rate]
+  affects:
+    - {id: bms_circuit_breaker, direction: either, how: "Sets the line the portfolio day stop fires at, in sized sigmas."}
+    - {id: bms_daily_loss_limit, direction: either, how: "The day's dollar line is k times the sized sigma, so it moves with the sizes in force."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "architecture/candidate-2/out-kstop.txt", note: "fire rates and bad-day loss by k"}
+    - {gen: expansion, ref: "funnel/FUNNEL.md:342", note: "F26: the stop must read the sized sigma"}

@@ -16,8 +16,12 @@
 #     Any surviving id not listed in section 8 is `later`.
 # Ids below are read from the layers' texts and the checker's output; every id named here was checked
 # to exist in variables.yaml or additions/*.yaml on 6 Nov, except the code fields in 6a.
+# Fold round, 6 Nov 2026 (architecture/SPINE.md, SYNTHESIS.md): the ledger questions in ledger/v1/NOTES.md
+# settled here. Two merges added (section 3), cap_multiplier dies (section 4), two plan notes now set a
+# row's level, name, measure or go-live value (the applier reads them), and four rows the spine needs
+# arrive in ledger/additions/X8-architecture-fold.yaml and take their tier in section 8.
 
-version: 2
+version: 3
 source_check: "ledger/check.py --with-additions --no-write --no-paths, 6 Nov 2026: 903 variables, 1758 couplings, 7 duplicate ids, 5 alias warnings, 3 orphans"
 
 # 1. The seven duplicate ids (checker ERRORS). The same id in two files becomes one entry.
@@ -111,7 +115,13 @@ merges:
     absorb: [bucket_stress_percentile]
   - keep: open_risk_cap_per_key_usd
     absorb: [same_bet_exposure_cap]
-    note: "one cap per bet key (X2-H34, X4-92)."
+    note: "one cap per bet key (X2-H34, X4-92). level 'portfolio': the key counts one bet across every unit on the account (FUNNEL 5.2 factor 8), and the guard holds the bet-key ledger (fold, SPINE.md AD-8)."
+  - keep: trades_toward_proof
+    absorb: [ev_trades_toward_proof]
+    note: "one count of trades toward verification_trades_needed (fold; NOTES.md listed the pair as one idea)."
+  - keep: risk_state_emit_interval
+    absorb: [x1_risk_state_emit_interval]
+    note: "one emit cadence for the RiskState row: on change plus a heartbeat (fold; NOTES.md listed the pair as one idea)."
   - keep: per_driver_exposure_cap
     absorb: [class_risk_cap]
     note: "X4-92 derives the cap from the buffer over a tail gap; X0-41's class cap is the same cap keyed by class."
@@ -171,10 +181,13 @@ merges:
     note: "value at go-live: portfolio (both halves of the pair, DP14)."
   - keep: choke_budget_fire_rate
     absorb: []
-    note: "becomes the TOTAL choke budget across all cuts on a healthy unit, tested in the harness (DP19); the per-brake form is a field."
+    note: "becomes the TOTAL choke budget across all cuts on a healthy unit, tested in the harness (DP19); the per-brake form is a field. Fold: measure 'ratio', name 'Least share of baseline size a healthy unit must keep under every binding cut', value at go-live: 0.75 (FUNNEL 5.2; a healthy unit under it fails CI for any change touching a binding factor, SPINE.md AD-16). The old per-brake 5 percent stays in seen_values."
   - keep: exits_never_blocked
     absorb: []
     note: "stays an invariant row; its text gains 'by QMX's controls; a venue refusal raises the incident's urgency'."
+  - keep: level_lockout_days
+    absorb: []
+    note: "promoted to core by the fold (SPINE.md 4.2, appendix C): a CUSUM warning steps the level down and locks its top there for this period, the bench's lockout applied to drift, so the unit's two brakes share one restore rule; 20 days is the rung the fold sim used, the numbers lens owns the value."
 
 # 4. Ids that die with dropped hybrids or dropped mechanisms.
 dies:
@@ -213,6 +226,9 @@ dies:
   - id: decay_record_days
     with: X5 restructure 1
     reason: "as above."
+  - id: cap_multiplier
+    with: DP16
+    reason: "the 2.5x sweep cliff it multiplied is replaced by the ratchet (later); its only edge died with sweep_cap_equity, so it was the ledger's one orphan (fold; NOTES.md item 18)."
 
 # 5. Renames (no merge).
 rename:
@@ -253,17 +269,17 @@ tiers:
     part_3_derivation: [x1_derivation_rule, x1_derivation_receipt, derivation_fallback_order, x1_value_reason_code, calibration_min_trades, calibration_shrink_k, calibration_cadence_trades, number_motion_mode, x1_cautious_direction, x1_tuned_value_guard, x1_guard_freeze_limit, portfolio_floor, bms_buffer_before_floor, kill_line_floor, kill_switch_level, x1_settable_by_levels]
     part_4_guard: [control_rank_table, x1_hook_answer_kinds, x1_trading_state, brake_state, x1_brake_registry_row, loss_counting_rule, brake_equity_basis, x1_brake_shadow_mode, isolation_scope, x1_guard_unavailable_action, open_risk_at_stop, budget_remaining, day_start_equity, session_loss_limit_r, x1_runs_on, bet_key_rule, open_risk_cap_per_key_usd, open_risk_ceiling, live_unit_count]
     part_5_sizer: [risk_fraction, survival_horizon_rounds, horizon_survival_risk_usd, floor_touch_tolerance, result_spread_r, effective_independent_bets, unit_result_correlation, stressed_unit_correlation, planning_edge_point, edge_range, round_trip_cost_r, spread_cost, commission_cost, slippage_cost, stressed_stop_slippage_r, hourly_cost_profile, cost_stress_multiple, edge_to_cost_ratio_min, value_per_point, numeraire, min_lot, lot_step, max_lot, rounding_residue_r, committed_cushion_usd, sizing_equity_basis, worst_step_move_r, largest_bet_contingency_usd, unit_capital_share, instrument_feasible_at_size, min_lot_risk_tolerance, book_day_sigma_budget_usd, unit_day_sigma_budget_usd, trade_rate, gap_loss_beyond_stop, margin_used, leverage]
-    part_6_climb_drift: [size_levels, size_level_fraction_table, cohort_trades, bad_cohort_r, cusum_limit, cusum_allowance_r, drift_state, drift_size_down_step, demotion_cause, verification_trades_needed, ev_evidence_e, ev_bet_grid, ev_score_scale_r, ev_edge_band_rule]
-    part_7_tail_brakes_pair: [money_brake_percentile, money_brake_window_trades, money_brake_threshold_r, money_brake_dollar_clamp, bench_min_rest, bench_retry_max_in_window, risk_stop_resume_rule, bms_daily_loss_limit, bms_circuit_breaker, bms_breaker_target_fire_rate, house_money_multiplier, house_money_winnings_share, house_money_scope, house_money_threshold, house_money_combined_cap, house_money_lockout, cushion_anchor_type, anchor_pnl_usd, cushion_multiplier_min, cushion_multiplier_max, loss_event_window, day_boundary, high_water_mark_equity, floor_breach_dwell_s, per_trade_worst_case_cap_r, max_position_size_lots, size_sanity_band_multiple, margin_headroom_min_share, order_rate_limit_per_min, kill_switch_scope, kill_switch_effect_matrix, accelerator_growth_per_risk_ratio]
-    part_8_exits: [exit_reason_code, exit_mechanism, fast_invalidation_cut_r, fast_invalidation_trigger, fi_cut_mae_percentile, falsifying_condition, disaster_stop_distance, stop_widening_allowed, max_hold_time, forced_flat_instant, excursion_mae_mfe_r, exits_never_blocked, stop_policy_per_style, liquidation_stop_check]
+    part_6_climb_drift: [size_levels, size_level_fraction_table, cohort_trades, bad_cohort_r, cusum_limit, cusum_allowance_r, drift_state, drift_size_down_step, demotion_cause, verification_trades_needed, ev_evidence_e, ev_bet_grid, ev_score_scale_r, ev_edge_band_rule, drift_warning_window_trades, drift_warnings_to_paper, level_lockout_days]
+    part_7_tail_brakes_pair: [money_brake_percentile, money_brake_window_trades, money_brake_threshold_r, money_brake_dollar_clamp, bench_min_rest, bench_retry_max_in_window, risk_stop_resume_rule, bms_daily_loss_limit, bms_circuit_breaker, bms_breaker_target_fire_rate, day_stop_sigma_multiple, house_money_multiplier, house_money_winnings_share, house_money_scope, house_money_threshold, house_money_combined_cap, house_money_lockout, cushion_anchor_type, anchor_pnl_usd, cushion_multiplier_min, cushion_multiplier_max, loss_event_window, day_boundary, high_water_mark_equity, floor_breach_dwell_s, per_trade_worst_case_cap_r, max_position_size_lots, size_sanity_band_multiple, margin_headroom_min_share, order_rate_limit_per_min, kill_switch_scope, kill_switch_effect_matrix, accelerator_growth_per_risk_ratio]
+    part_8_exits: [exit_reason_code, exit_mechanism, net_r, fast_invalidation_cut_r, fast_invalidation_trigger, fi_cut_mae_percentile, falsifying_condition, disaster_stop_distance, stop_widening_allowed, max_hold_time, forced_flat_instant, excursion_mae_mfe_r, exits_never_blocked, stop_policy_per_style, liquidation_stop_check]
     part_9_sqs_news_kill: [sqs_score, sqs_hard_block_threshold, sqs_hysteresis_band, sqs_outlier_guard_multiple, sqs_sample_cadence, sqs_baseline_conditioning, sqs_baseline_refit_schedule, sqs_staleness_horizon, decision_freshness_bound, news_blackout_before, news_blackout_after, news_impact_level_map, news_calendar_max_staleness, shared_driver_tags, news_fail_safe_affected, feed_stale_after]
     part_10_riskstate_words: [risk_state_emit_interval, risk_fact_staleness_limit, risk_light_state, kill_line_distance, phone_wake_conditions, alert_tier, daily_r_digest, bad_day_percentile, liveness_heartbeat_cadence, protection_retry_max]
     part_11_click_versions: [x1_approval_effect_digest, ev_approval_markets, x1_card_required_before_live, replay_match_floor, cost_drift_multiple, trade_rate_band, ev_machine_check_days, ev_machine_check_trades, ev_twin_enabled, paper_to_live_carry_rule, world_switch_reset_rule, x1_adopt_at_next_flat, x1_identity_profile_version_change, x1_money_record_scope, state_carry_rule, effective_tries]
     part_12_harness_door: [scenario_set_version, scenario_severity_percentile, scorecard_survival_gate, brake_path_delta_r, cost_of_conservatism, under_baseline_share, trip_tax_r, brake_precision, choke_budget_fire_rate, x1_proposal_direction_allowed, agent_evidence_ttl, agent_evidence_max_cut, agent_evidence_kinds_accepted]
   fork_F_A: [x1_recommendation_bounds, x1_retune_dead_band, x1_retune_share_cap]
   shadow: [reduce_step_percentile, reduce_step_factor, loss_points_total, loss_points_bench_threshold, loss_points_percentile, loss_streak, reverse_house_money_steps, qualifying_loss_threshold_r, block_persistence_score, breaker_fire_density, breaker_expected_fire_rate, ev_brake_fire_band, density_alarm_ratio, density_cusum_threshold, slow_lane_false_alarm_rate, fire_context_tags, event_ledger_rates, demotion_two_key_rule, brake_recall, brake_random_control_margin, x1_enforcement_percent, chorus_expected_frequency, chorus_k_of_n, period_loss_budget, budget_drain_rule, budget_door_rule, burn_rate_page_threshold, burn_rate_ticket_threshold, burn_short_window_ratio, burn_window_trades, low_traffic_trade_rate, loss_budget_burn_rate, market_isolation_trigger, isolation_end_rule, isolation_mode, isolation_ttl, isolation_two_tell_rule, settling_time, resume_size_fraction, retrip_backoff_multiplier, retrip_lockout_rule, class_caution_k_of_n, cross_market_stress_reading, day_budget_breadth_scale, kelly_fraction_raw, kelly_shrink_factor, cost_gap_kelly_ceiling, stop_fill_gap_factor, nomogram_dead_band, spread_cost_guard, microstructure_multiplier, equity_band, equity_band_thresholds, tier_width_day_sigmas, tier_dwell, best_day_profit_share_max, aimd_cut_factor, aimd_add_step, last_trip_size_level, size_change_settle_trades, upside_alarm_percentile, ev_consistency_best_day_share, ev_ruin_audit_flags, co_loss_fraction, unit_agreement_score, post_loss_raise_window, get_even_window, get_even_cooling_min, agent_risk_scale, context_size_modifier]
-  dead: [lot_dither_max_multiple, x1_oracle_mode, x1_affects_graph_runtime, ev_level_evidence_alpha, session_multiplier, sweep_cap_equity, repromotion_positive_demo_trades, decay_recent_trades, decay_record_days]
+  dead: [lot_dither_max_multiple, x1_oracle_mode, x1_affects_graph_runtime, ev_level_evidence_alpha, session_multiplier, sweep_cap_equity, repromotion_positive_demo_trades, decay_recent_trades, decay_record_days, cap_multiplier]
   counts:
-    core: 202
+    core: 207
     fork_F_A: 3
-    note: "core counted from the twelve part lists above after the section 1 to 3 merges (ids that merge into a core id count once). Every surviving id not listed is later. The review's post-merge count was about 834; after this round's 36 further merges it is about 800, of which 202 are core, roughly a quarter. Every earlier QMX generation together held 267 (STATE item 23)."
+    note: "core counted from the twelve part lists above after the section 1 to 3 merges (ids that merge into a core id count once). Every surviving id not listed is later. The review's post-merge count was about 834; after this round's 36 further merges it is about 800, of which 202 were core, roughly a quarter; the fold adds four core rows (net_r, drift_warning_window_trades, drift_warnings_to_paper, day_stop_sigma_multiple) and promotes level_lockout_days from later, so 207. Every earlier QMX generation together held 267 (STATE item 23)."

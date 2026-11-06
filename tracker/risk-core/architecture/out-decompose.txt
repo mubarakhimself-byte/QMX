@@ -1,0 +1,46 @@
+The fold's changes added one at a time. Model numbers only.
+
+  derived k for N=5, card +0.10R: 1.64
+
+HEALTHY +0.10R, card +0.10R [N=5 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core (core_sim)                           3434    1701    0.0%   0.0%      0.89    0.00    0.0   37.0%
+  + raises at the anchor                           3587    2165    0.0%   0.0%      0.89    0.00    0.0   34.0%
+  + freed swing B                                  4969    2167    0.0%   0.0%      0.92    0.00    0.0   27.5%
+  + sized sigma, k derived                         4225    1856    0.0%   0.0%      0.91    0.65    0.1   33.0%
+  + 3rd warning to paper (no lock)                 4003    2188    0.0%   0.0%      0.91    0.35    0.0    8.5%
+  + 3rd warning to paper, warnings lock the top     3185    1396    0.0%   0.0%      0.83    0.50    0.1    5.0%
+
+  derived k for N=5, card +0.10R: 1.64
+
+BLEEDING true -0.05R, card +0.10R [N=5 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core (core_sim)                            415     387   22.5%   0.0%      0.73    0.00    0.0   59.0%
+  + raises at the anchor                            414     397   20.0%   0.0%      0.73    0.00    0.0   58.0%
+  + freed swing B                                   412     394   25.0%   0.0%      0.76    0.00    0.0   54.5%
+  + sized sigma, k derived                          412     395   17.5%   0.0%      0.71    0.50    1.0   56.0%
+  + 3rd warning to paper (no lock)                  399     380   57.5%   0.0%      0.73    0.58    0.8   35.0%
+  + 3rd warning to paper, warnings lock the top      419     396   20.0%   0.0%      0.59    0.56    1.7   24.0%
+
+  derived k for N=10, card +0.10R: 1.45
+
+HEALTHY +0.10R, card +0.10R [N=10 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core (core_sim)                           4566    2811    0.0%   0.0%      0.90    0.00    0.0   25.2%
+  + raises at the anchor                           4373    2670    0.0%   0.0%      0.89    0.00    0.0   29.8%
+  + freed swing B                                  5308    3554    0.0%   0.0%      0.92    0.00    0.0   27.0%
+  + sized sigma, k derived                         5641    3413    0.0%   0.0%      0.91    0.94    0.1   25.5%
+  + 3rd warning to paper (no lock)                 5894    3128    0.0%   0.0%      0.91    1.08    0.1    4.3%
+  + 3rd warning to paper, warnings lock the top     4748    2230    0.0%   0.0%      0.85    0.94    0.1    4.3%
+
+  derived k for N=10, card +0.10R: 1.45
+
+BLEEDING true -0.05R, card +0.10R [N=10 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel core (core_sim)                            412     398   17.5%   0.0%      0.73    0.00    0.0   27.2%
+  + raises at the anchor                            411     395   27.5%   0.0%      0.72    0.00    0.0   29.2%
+  + freed swing B                                   413     400   12.5%   0.0%      0.76    0.00    0.0   24.2%
+  + sized sigma, k derived                          416     396   25.0%   0.0%      0.72    1.38    1.5   28.8%
+  + 3rd warning to paper (no lock)                  400     384   52.5%   0.0%      0.73    1.85    1.6   21.0%
+  + 3rd warning to paper, warnings lock the top      418     399   20.0%   0.0%      0.60    1.42    2.1   12.8%
+exit 0

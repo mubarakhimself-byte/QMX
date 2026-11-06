@@ -1,0 +1,38 @@
+Candidate 2's finding, re-run: DP9's level-weighted B read literally. At N=1 B = l, so size = D/(s z sqrt(H) l) x l: the level cancels and a stepped-down unit trades at full size.
+
+HEALTHY +0.10R, card +0.10R [N=1 cost x1.0 days=120 paths=30; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  B flat on live units (core_sim)                  1501     763    0.0%   0.0%      0.92    0.00    0.0   23.3%
+  B pure level-weighted (DP9 literal)              1573     825    0.0%   0.0%      0.97    0.00    0.0   23.3%
+  B freed swing only to full-level units (fold)     1501     763    0.0%   0.0%      0.92    0.00    0.0   23.3%
+
+WEAK +0.05R, card +0.05R [N=1 cost x1.0 days=120 paths=30; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  B flat on live units (core_sim)                   715     459    0.0%   0.0%      0.88    0.00    0.0   36.7%
+  B pure level-weighted (DP9 literal)               742     480    0.0%   0.0%      0.96    0.00    0.0   36.7%
+  B freed swing only to full-level units (fold)      715     459    0.0%   0.0%      0.88    0.00    0.0   36.7%
+
+BLEEDING true -0.05R, card +0.10R [N=1 cost x1.0 days=120 paths=30; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  B flat on live units (core_sim)                   442     430    0.0%   0.0%      0.72    0.00    0.0  100.0%
+  B pure level-weighted (DP9 literal)               429     415    0.0%   0.0%      0.93    0.00    0.0  100.0%
+  B freed swing only to full-level units (fold)      442     430    0.0%   0.0%      0.72    0.00    0.0  100.0%
+
+HEALTHY +0.10R, card +0.10R [N=10 cost x1.0 days=120 paths=30; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  B flat on live units (core_sim)                  4309    2646    0.0%   0.0%      0.89    0.00    0.0   31.7%
+  B pure level-weighted (DP9 literal)              4749    2129    0.0%   0.0%      0.92    0.00    0.0   27.3%
+  B freed swing only to full-level units (fold)     4789    3554    0.0%   0.0%      0.92    0.00    0.0   26.7%
+
+WEAK +0.05R, card +0.05R [N=10 cost x1.0 days=120 paths=30; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  B flat on live units (core_sim)                   800     452    0.0%   0.0%      0.83    0.00    0.0    6.0%
+  B pure level-weighted (DP9 literal)               836     445    3.3%   0.0%      0.93    0.00    0.0    8.7%
+  B freed swing only to full-level units (fold)      843     441    0.0%   0.0%      0.86    0.00    0.0    8.7%
+
+BLEEDING true -0.05R, card +0.10R [N=10 cost x1.0 days=120 paths=30; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  B flat on live units (core_sim)                   412     395   23.3%   0.0%      0.73    0.00    0.0   29.7%
+  B pure level-weighted (DP9 literal)               407     394   23.3%   0.0%      0.88    0.00    0.0   25.7%
+  B freed swing only to full-level units (fold)      415     400   13.3%   0.0%      0.75    0.00    0.0   24.0%
+exit 0

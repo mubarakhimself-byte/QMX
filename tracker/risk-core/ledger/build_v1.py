@@ -182,12 +182,20 @@ def apply_plan_note(row: dict, note: str | None) -> None:
     if not note:
         return
     add_note(row, f"Plan: {note}")
-    if match := re.match(r"measure '([^']+)'", note):
+    if match := re.search(r"\bmeasure '([^']+)'", note):
         row["measure"] = match[1]
+    if match := re.search(r"\blevel '([^']+)'", note):
+        row["level"] = match[1]
+    if match := re.search(r"\bname '([^']+)'", note):
+        row["name"] = match[1]
     if match := re.search(r"its text gains '(.+)'\.?$", note):
         row["derivation"] = f"{sentence(row['derivation'])} Exits are never blocked {match[1]}."
-    if match := re.match(r"value at go-live: (\w+)", note):
-        row["default"] = match[1]
+    if match := re.search(r"value at go-live: ([\w.]+)", note):
+        text = match[1].rstrip(".")
+        try:
+            row["default"] = int(text) if re.fullmatch(r"\d+", text) else float(text)
+        except ValueError:
+            row["default"] = text
         row["basis"] = "reasoned"
         row["derivation"] = f"{note} Earlier text: {row['derivation']}"
 
@@ -510,27 +518,27 @@ uv run --no-project --with pyyaml python ledger/check.py --v1
 1. **Same-level edges have no type.** The plan types every `affects` edge as `down:cap`, `down:state` or `up:event` from the two levels, but {types['same:level']} of {sum(types.values())} edges join rows at one level. Calling those down or up would be false, so they get a fourth value, `same:level`. The level order is the checker's list: {', '.join(LEVELS)}.
 2. **The plan's own section 6 edges go against its level rule.** All of them are honoured as written, and the checker prints them:
 {chr(10).join(bullets(log.explicit_edges))}
-3. **Section 1 promises a merge that section 3 omits.** Done as the note says: {', '.join(log.implied_merges) or 'none'}. The absorbed row's default of 5 is a threshold, while the surviving row reads as a measure of where a day sits, so check that default.
+3. **Section 1 promises a merge that section 3 omits.** Done as the note says: {', '.join(log.implied_merges) or 'none'}. The absorbed row's default of 5 is a threshold, while the surviving row reads as a measure of where a day sits. Settled by the fold (architecture/SPINE.md): the row measures where the day sits and its default is the line below which the day reads "bad"; one row, two readings, kept.
 4. **Section 7 would mark running rows as proposals.** A row that runs in the shipped stack stays `running`: {', '.join(log.status_kept_running) or 'none'}. Its derivation says it is confirmed in code.
 5. **Core and shadow rows with status `dropped`.** Section 7 revives only `house_money_multiplier`, but section 8 also puts these at a live tier. They become `proposal`, and the checker now refuses a dropped row at a live tier: {', '.join(log.revived_from_dropped) or 'none'}.
 6. **The canary merges into a core row but is a later plug-in.** `ev_approval_markets` is core and absorbs `ev_canary_share` and `x1_canary_share`, while FUNNEL 5.1 part 11 and DP7 say the canary comes later. Applied as written, so a market list now carries percent shares in its history, and its couplings to `size_levels` and `size_ramp_to_full` hang off a core row. Worth a second look.
-7. **`choke_budget_fire_rate` changes meaning and keeps its old shape.** The plan makes it the total budget across all cuts; FUNNEL 5.2 states that test as 0.75 of baseline. Its name, measure and default (5 percent, per brake) still describe the per-brake form. Left for the numbers lens, with the plan's note on the row.
+7. **`choke_budget_fire_rate` changed meaning.** The plan makes it the total budget across all cuts; FUNNEL 5.2 states that test as 0.75 of baseline. Settled by the fold: the plan's note now sets name, measure (ratio) and the go-live value 0.75; the old per-brake 5 percent stays in `seen_values`. The id keeps its old name so references resolve.
 8. **The decay check dies by halves.** `decay_recent_trades` and `decay_record_days` die because the check is replaced, but `decay_watch_drop_r`, `decay_watch_loss_streak`, `decay_alarm_expectancy_r` and `decay_alarm_loss_streak` survive as later and running. All six run in the shipped stack today, so the two dead rows keep `status_before: running` and the code must lose them in the build.
 9. **`holding_horizon` keeps dial-era couplings.** The plan drops the dial and says it raises yellow only, but its edges to `round_trip_cost_r`, `gap_allowance_r` and `hourly_volatility_profile` are unchanged because the plan does not remove them.
 10. **Notes that state a value.** `house_money_scope` says "value at go-live: portfolio", so that became its default. Numbers stay notes, because FUNNEL.md says no number in it is a value: the go-live fractions on `size_level_fraction_table`, and format 4 and 5 on `compiler_format`, whose name still says format 2.
 11. **A note and section 8 disagree.** `last_trip_size_level`'s note says later and section 8 says shadow; section 8 wins, and FUNNEL 5.2 agrees. `loss_event_window`'s note says shadow use only and section 8 says core; section 8 wins.
-12. **Level left at the survivor's.** `open_risk_cap_per_key_usd` stays at position level, though FUNNEL 5.2 says the bet key cap counts one bet across units, which reads as portfolio. Worth a second look.
+12. **Level moved by the fold.** `open_risk_cap_per_key_usd` was at position level, though FUNNEL 5.2 says the bet key cap counts one bet across units. The plan's note now sets it to portfolio, where the guard holds the bet-key ledger (SPINE.md AD-8); its edge types follow.
 13. **Section 8 uses a pre-rename id.** It lists `x1_compiler_format`; the build follows the rename to `compiler_format`.
 14. **"Seen_values kept" has nothing to keep.** `session_multiplier` and `sweep_cap_equity` have no `seen_values`; their old values sit in the derivation text. The whole row moves to `dead.yaml`, so nothing is lost.
-15. **Section 6a names code fields, not ledger ids.** `r_after_costs` and `net_r` are not ids here, so nothing was changed. FUNNEL 5.1 part 8 puts `net_r` on the trade row, but no ledger row carries it.
+15. **Section 6a names code fields, not ledger ids.** `r_after_costs` and `net_r` were not ids here. The fold adds `ledger/additions/X8-architecture-fold.yaml` with the rows the spine needs and the ledger lacked: `net_r` (part 8, alias `r_after_costs`), `drift_warning_window_trades` and `drift_warnings_to_paper` (part 6, the drift rule as a derivation), `day_stop_sigma_multiple` (part 7, the day stop's k); it also promotes `level_lockout_days` from later to core (part 6), because the drift monitor's lock reads it. The twelve part counts below therefore differ from FUNNEL 5.1 by these five.
 16. **The tier list in the plan has `fork`.** The three F-A ids get `tier: fork`, as the plan's header says, not core or later.
 17. **The plan's deaths make new orphans.** Removing references to dead ids left three rows with no coupling, and the plan does not mention them. Two had a real target left, so each gets one edge, which is this script's call and not the plan's:
 {chr(10).join(bullets(log.repaired_orphans))}
-18. **One orphan stays, on purpose.** `cap_multiplier` fed only `sweep_cap_equity`. It is the 2.5x cliff that section 4 says is replaced, yet the plan keeps it as later and dropped. No honest edge exists, so the checker reports it as the one orphan. It probably belongs in `dies`, which is the plan's call.
+18. **The last orphan died.** `cap_multiplier` fed only `sweep_cap_equity`, the 2.5x cliff section 4 replaces with the ratchet. The fold put it in `dies` with DP16, so the checker reports no orphan.
 
 ## Same idea, not merged because the plan does not list it
 
-These survive as two rows. Add them to the plan if they are one idea:
+These survive as two rows. Add them to the plan if they are one idea. The fold merged `ev_trades_toward_proof` into `trades_toward_proof` and `x1_risk_state_emit_interval` into `risk_state_emit_interval`, and kept `ev_fallback_dwell_trades` apart from `fallback_dwell_trades`: one is the verification decider's dwell, the other the sizer fallback's.
 
 {chr(10).join(bullets(near))}
 

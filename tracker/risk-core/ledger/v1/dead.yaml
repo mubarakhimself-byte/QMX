@@ -202,9 +202,6 @@
   - from: book_seed_capital
     field: affects
     how: July cap C = 2.5 x S.
-  - from: cap_multiplier
-    field: affects
-    how: C = cap_multiple x S.
   level: book
   kind: limit
   measure: USD
@@ -355,3 +352,44 @@
     ref: D:/QMX-worktrees/bld-us-c13/qmx-agents/packages/qmx-engine/src/qmx_engine/templates/dc-decay-and-limit-report/README.md:17
   aliases:
   - record_days
+- id: cap_multiplier
+  name: Multiple of seed at which Book profit is swept out
+  tier: dead
+  dead_reason: the 2.5x sweep cliff it multiplied is replaced by the ratchet (later); its only edge died with sweep_cap_equity, so it was the ledger's one orphan (fold; NOTES.md item 18).
+  dead_with: DP16
+  status: dropped
+  removed_references: []
+  level: book
+  kind: limit
+  measure: ratio
+  applies_to:
+    classes:
+    - all
+    styles:
+    - all
+    timeframes: all
+  default: null
+  basis: stated
+  derivation: 'July: 2.5, ''cap C is derived from S times this multiplier'', operator-countersigned; no working. Dropped in the Sept docs. His 1 Nov: the sweep cap makes sense at portfolio and Book level; open whether it returns.'
+  seen_values:
+  - value: 2.5
+    gen: july
+    ref: C:/Users/Mubarak/Documents/QMX/raw/online/qmx-gitbook/captures/2026-07-18T141659Z/endpoints/llms-full.txt:1086-1094
+  inputs: []
+  affects:
+  - id: sweep_cap_equity
+    direction: up
+    how: C = cap_multiple x S.
+  configurable: true
+  changed_by:
+  - operator
+  sources:
+  - gen: july
+    ref: C:/Users/Mubarak/Documents/QMX/raw/online/qmx-gitbook/captures/2026-07-18T141659Z/endpoints/llms-full.txt:1086-1094
+  seed_ids:
+  - B10
+  - C12
+  aliases:
+  - cap_multiple
+  - scalper_cap_multiplier
+  - sweep cap

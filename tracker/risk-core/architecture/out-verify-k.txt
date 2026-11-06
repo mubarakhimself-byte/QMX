@@ -1,0 +1,44 @@
+Candidate 2's finding, re-run: the day stop on the budget sigma never fires; on the sized sigma k decides the rate.
+
+HEALTHY +0.10R, card +0.10R [N=1 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  budget sigma k2.5 (core_sim)                     1501     739    0.0%   0.0%      0.92    0.00    0.0   25.0%
+  sized sigma k2.5                                 1491     734    0.0%   0.0%      0.92    0.04    0.0   25.0%
+  sized sigma k derived (2.17)                     1499     732    0.0%   0.0%      0.91    0.25    0.0   25.0%
+  sized sigma k1.7 (preset rung)                   1543     770    0.0%   0.0%      0.90    0.81    0.0   20.0%
+
+WEAK +0.05R, card +0.05R [N=1 cost x1.0 days=120 paths=40; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  budget sigma k2.5 (core_sim)                      738     459    0.0%   0.0%      0.89    0.00    0.0   32.5%
+  sized sigma k2.5                                  748     463    0.0%   0.0%      0.88    0.10    0.0   32.5%
+  sized sigma k derived (2.18)                      737     465    0.0%   0.0%      0.88    0.27    0.0   32.5%
+  sized sigma k1.7 (preset rung)                    702     459    0.0%   0.0%      0.86    1.71    0.0   30.0%
+
+BLEEDING true -0.05R, card +0.10R [N=1 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  budget sigma k2.5 (core_sim)                      442     430    0.0%   0.0%      0.72    0.00    0.0  100.0%
+  sized sigma k2.5                                  444     430    0.0%   0.0%      0.71    0.02    0.0  100.0%
+  sized sigma k derived (2.17)                      441     426    0.0%   0.0%      0.73    0.15    0.1  100.0%
+  sized sigma k1.7 (preset rung)                    445     428    0.0%   0.0%      0.70    0.54    0.3  100.0%
+
+HEALTHY +0.10R, card +0.10R [N=10 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  budget sigma k2.5 (core_sim)                     4373    2670    0.0%   0.0%      0.89    0.00    0.0   29.8%
+  sized sigma k2.5                                 5490    2965    0.0%   0.0%      0.89    0.00    0.0   22.5%
+  sized sigma k derived (1.45)                     4900    3108    0.0%   0.0%      0.88    0.92    0.1   25.0%
+  sized sigma k1.7 (preset rung)                   5372    2833    0.0%   0.0%      0.88    0.23    0.0   25.2%
+
+WEAK +0.05R, card +0.05R [N=10 cost x1.0 days=120 paths=40; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  budget sigma k2.5 (core_sim)                      736     452    0.0%   0.0%      0.82    0.00    0.0    5.5%
+  sized sigma k2.5                                  854     467    0.0%   0.0%      0.83    0.00    0.0    5.5%
+  sized sigma k derived (1.76)                      792     456    0.0%   0.0%      0.79    0.71    0.1    6.2%
+  sized sigma k1.7 (preset rung)                    797     467    0.0%   0.0%      0.82    1.08    0.1    5.5%
+
+BLEEDING true -0.05R, card +0.10R [N=10 cost x1.0 days=120 paths=40; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  budget sigma k2.5 (core_sim)                      411     395   27.5%   0.0%      0.72    0.00    0.0   29.2%
+  sized sigma k2.5                                  408     397   17.5%   0.0%      0.72    0.00    0.0   29.8%
+  sized sigma k derived (1.45)                      415     399   15.0%   0.0%      0.68    1.10    1.6   28.8%
+  sized sigma k1.7 (preset rung)                    416     394   20.0%   0.0%      0.69    0.27    0.6   29.5%
+exit 0

@@ -1,0 +1,22 @@
+Candidate 3's finding, re-run: share of one-unit paths the drift rule sends to paper inside the run (N=1).
+
+HEALTHY +0.10R, card +0.10R [N=1 cost x1.0 days=120 paths=200; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel: 2nd warning inside 500 trades -> paper     1356     537    0.0%   0.0%      0.91    0.00    0.0   31.5%
+  fold: each warning one level down; 3rd -> paper     1469     725    0.0%   0.0%      0.92    0.00    0.0    7.0%
+
+WEAK +0.05R, card +0.05R [N=1 cost x1.0 days=120 paths=200; card p1=-5.9R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel: 2nd warning inside 500 trades -> paper      633     455    0.0%   0.0%      0.88    0.00    0.0   35.5%
+  fold: each warning one level down; 3rd -> paper      671     465    3.5%   0.0%      0.89    0.00    0.0    5.0%
+
+BLEEDING true -0.05R, card +0.10R [N=1 cost x1.0 days=120 paths=200; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel: 2nd warning inside 500 trades -> paper      442     427    0.0%   0.0%      0.73    0.00    0.0  100.0%
+  fold: each warning one level down; 3rd -> paper      421     406    2.0%   0.0%      0.73    0.00    0.0   99.0%
+
+OVERSTATED true +0.03R, card +0.10R [N=1 cost x1.0 days=120 paths=200; card p1=-5.3R]
+  arm                                           median$    p10$  <50%cu  touch size/base st/100d  dark%  paper%
+  funnel: 2nd warning inside 500 trades -> paper      490     441    0.0%   0.0%      0.84    0.00    0.0   92.5%
+  fold: each warning one level down; 3rd -> paper      502     426    0.0%   0.0%      0.85    0.00    0.0   63.0%
+exit 0
