@@ -17,6 +17,10 @@ It asserts the chat's tool calls in order, the saved draft's bindings, the resul
 verdict's own words before " by the ". It does not assert which verdict, because his question is
 whether an agent can build and backtest, not whether the dummy passes.
 
+Durable blocks are read through the paged `GET /api/sessions/<sid>/events`, which is the console's
+own route. The plan's `GET /api/events/sessions?subject=<sid>` is the SSE form of the same rows,
+and it ends only after `max_events`, which the test cannot know ahead.
+
 The script is the one R09 proved at `S/evidence/r09/december_real.py` and the tick form is the one
 R08 proved at `S/proofs/ground-qmb/bridge.py`. From `qmx-agents/` on This PC, with the agents venv
 and the engine lane lock free:
@@ -183,6 +187,10 @@ def make_folder() -> Path:
     assert folder.is_relative_to(S / "homes"), folder
     remove_junction(folder / "data" / "claude")
     shutil.rmtree(folder, ignore_errors=True)
+    if folder.exists():
+        raise AssertionError(
+            f"{folder} could not be removed; a stale folder would poison the check"
+        )
     (folder.parent / "serve.log").unlink(missing_ok=True)
     layout = resolve(folder, create=True, drives=[])
     home = layout.home
