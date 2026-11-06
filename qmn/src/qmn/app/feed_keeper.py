@@ -384,6 +384,7 @@ class FeedKeeper:
         self.source.close()
         self.state = SessionState.DOWN
         self.reason = reason
+        self.retry_at_ns = 0
         self._quotes.clear()
         for market in self.markets:
             self._books[market] = (BookState.REBUILDING, ())
