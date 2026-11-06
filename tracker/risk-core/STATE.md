@@ -8,13 +8,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 **The deliverable:** a self-configuring, extensible risk-and-sizing template for the unit that ships through builders. His first message of 3 Nov still stands. Numbers come after: he will argue them with me using the numbers lens and the scenario harness.
 
-**Where we are on the to-do list:** research, take-apart, linking, audit grounding, funnel, review, fix round and the arena are done. **Now: one Fable fold agent is writing `architecture/SPINE.md`, `SYNTHESIS.md`, `handoff/FOR-REPAIR-SOCKET.md`, `fold_sim.py`, and settling `ledger/v1` questions.**
+**Where we are on the to-do list (6 Nov, evening):** the final fix round is done and committed. `architecture/SPINE.md` is the folded design (about 43 PRs, range 38 to 45; section 13 is the go-live list). The plain-words explainer for him is published at https://claude.ai/artifact/Axd5Hg3GEHk7nV4zZTc3ra (source `explainers/risk-template.html`). **Stopped there, cooling off, as he asked.**
 
-**Next, in order:**
-1. Check and commit the fold.
-2. One independent Opus check, named the last round, then one fix round if needed.
-3. The plain-words explanation for him as an interactive explainer page, with Q1-Q8 and defaults (`funnel/FUNNEL.md` section 6). Include what is on at go-live (5.5) and the weak spots: F1 (the 55% scalper exists only if the cut catches few winners), drift brakes slow at ten units, F12, F22, F23.
-4. Then we cool off. Slices for builders and the QML dictionary expansion wait until he is ready. Then the numbers lens.
+**Next, when he comes back:**
+1. His answers to Q1-Q9 (`funnel/FUNNEL.md` section 6), which he may paste from the page. Work proceeds on the defaults.
+2. He passes `handoff/FOR-REPAIR-SOCKET.md` and `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md` to the repair.
+3. Slice for builders on landed repair tips, including QML dictionary entries.
+4. The numbers lens: the scenario harness and the argument about numbers. Open there: the scalper's cut trial, the thin choke budget (healthy 0.79 to 0.83 on 12 of 23 binding things), the bleeding book.
 
 **The map, all under `tracker/risk-core/`:**
 - `seeds/`: his words verbatim (M1-M9 1 Nov; M10-M40 3 Nov; M41-M43 6 Nov; later ones are in the session transcript `2928e6ee-...jsonl`) and `SEEDS.md`.

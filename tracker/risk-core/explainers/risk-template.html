@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit Risk Template</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Plan: a trader's desk sheet. Slate paper, ink text, one deep teal accent; green, amber and red only for state. One column of reading, tools set off by a tinted panel. */
+:root{
+  --bg:#eef1f3; --panel:#ffffff; --tint:#e2e8ec; --ink:#16232c; --muted:#54656f; --line:#c9d3d9;
+  --accent:#0b6e75; --accent-soft:#d3e9ea;
+  --good:#1f7a4d; --warn:#a86a00; --bad:#b23a31;
+  --display:'Archivo',system-ui,sans-serif; --body:'Source Sans 3',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10181d; --panel:#18232a; --tint:#22303a; --ink:#e6edf1; --muted:#9db0bb; --line:#33444f;
+    --accent:#4fc0c7; --accent-soft:#17363a;
+    --good:#5cc08f; --warn:#e0a84a; --bad:#ec7f75; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10181d; --panel:#18232a; --tint:#22303a; --ink:#e6edf1; --muted:#9db0bb; --line:#33444f;
+  --accent:#4fc0c7; --accent-soft:#17363a;
+  --good:#5cc08f; --warn:#e0a84a; --bad:#ec7f75; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.55 var(--body)}
+main{max-width:860px;margin:0 auto;padding:28px 16px 80px;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(30px,6vw,44px);font-weight:800}
+h2{font-size:clamp(22px,4vw,28px);font-weight:700;margin-bottom:12px}
+h3{font-size:17px;font-weight:700;margin-bottom:6px}
+p{margin:0 0 12px;max-width:68ch}
+.lead{font-size:19px;color:var(--ink)}
+.muted{color:var(--muted)}
+.small{font-size:15px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+.tile b{display:block;font:600 24px/1.1 var(--mono)}
+.tile span{font-size:14px;color:var(--muted)}
+ul{margin:0;padding-left:20px}
+li{margin-bottom:7px;max-width:66ch}
+.tag{display:inline-block;font:600 12px/1 var(--mono);padding:4px 7px;border-radius:5px;white-space:nowrap}
+.tag.good{color:var(--good);border:1px solid var(--good)}
+.tag.warn{color:var(--warn);border:1px solid var(--warn)}
+.tag.bad{color:var(--bad);border:1px solid var(--bad)}
+button{font:600 15px var(--body);color:var(--ink);background:var(--tint);border:1px solid var(--line);border-radius:7px;padding:8px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* calculator */
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+label.s{display:block;font-size:15px;margin-bottom:12px}
+label.s output{float:right;font:600 15px var(--mono)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.result{background:var(--accent-soft);border-radius:8px;padding:14px}
+.result .big{font:600 34px/1.1 var(--mono);color:var(--accent)}
+.line{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:6px 0;font-size:15px}
+.line b{font:600 15px var(--mono);white-space:nowrap}
+/* flow */
+.flowwrap{overflow-x:auto}
+svg text{font-family:var(--body);fill:var(--ink)}
+svg .node{fill:var(--tint);stroke:var(--line);stroke-width:1.5;transition:fill .25s,stroke .25s}
+svg .node.on{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2.5}
+svg .wire{stroke:var(--muted);stroke-width:2;fill:none}
+svg .dot{fill:var(--accent);transition:cx .45s ease,cy .45s ease}
+ol.steps{margin:12px 0 0;padding:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:6px}
+ol.steps li{counter-increment:s;max-width:none;margin:0;padding:8px 10px 8px 38px;border-radius:7px;position:relative;font-size:16px;border:1px solid transparent}
+ol.steps li::before{content:counter(s);position:absolute;left:10px;top:8px;font:600 14px var(--mono);color:var(--muted)}
+ol.steps li.on{background:var(--accent-soft);border-color:var(--accent)}
+/* table */
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;min-width:520px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font:600 13px var(--body);color:var(--muted)}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar{display:inline-block;height:9px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-right:7px}
+.bar.low{background:var(--warn)}
+.bar.vlow{background:var(--bad)}
+/* questions */
+.q{border-top:1px solid var(--line);padding:14px 0}
+.q:first-of-type{border-top:0;padding-top:0}
+.q .rec{font-size:15px;color:var(--muted);margin-bottom:8px}
+textarea{width:100%;min-height:150px;font:400 14px/1.45 var(--mono);color:var(--ink);background:var(--tint);border:1px solid var(--line);border-radius:7px;padding:10px;margin-top:10px}
+nav{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:15px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 0}
+nav a{color:var(--accent);text-decoration:none}
+nav a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<main>
+
+<header class="stack">
+  <p class="muted small" style="margin:0">QMX risk and sizing, plain-words explanation, 6 Nov 2026</p>
+  <h1>The risk template for a unit</h1>
+  <p class="lead">The plan is finished and nothing is built yet. Every unit gets one risk document that works out its own numbers. One guard sits above all units and answers every entry with pass, shrink or refuse. Exits never pass through it.</p>
+  <p class="muted">Every money figure on this page comes from a simple model with made-up edges. Use them to see direction. They are not forecasts, and we argue the real numbers in the numbers lens.</p>
+  <div class="tiles">
+    <div class="tile"><b>1,050</b><span>parts taken from papers, MT5 articles, old QMX and your words</span></div>
+    <div class="tile"><b>510</b><span>hybrids linked from those parts</span></div>
+    <div class="tile"><b>12</b><span>parts in the first version; the rest plugs in later</span></div>
+    <div class="tile"><b>207</b><span>variables in that core, each with a rule (832 in the full ledger)</span></div>
+    <div class="tile"><b>≈43</b><span>builder PRs, range 38 to 45</span></div>
+  </div>
+</header>
+
+<nav aria-label="Sections">
+  <a href="#size">How size works</a><a href="#order">Follow a trade</a><a href="#self">Self-configuring</a><a href="#words">Brakes and accelerators</a><a href="#model">What the model shows</a><a href="#hear">What you must hear</a><a href="#ask">Your decisions</a><a href="#next">What is next</a>
+</nav>
+
+<section id="size">
+  <h2>How a trade gets its size</h2>
+  <p>Size comes from survival. It starts from the cushion above your floor and asks: how big can each trade be so that touching the floor stays rare, even if the edge turns out to be zero? A real edge is then checked three ways: may the unit trade, what level does it run at, and later, may it go above base size.</p>
+  <p>This also settles your split question. Adding units neither keeps full size nor divides by the count. Size falls with the square root of the count, more when units lose together. Move the sliders.</p>
+  <div class="panel calc">
+    <div>
+      <label class="s">Equity <output id="oEq"></output><input type="range" id="eq" min="320" max="5000" step="10" value="500"></label>
+      <label class="s">Floor <output id="oFl"></output><input type="range" id="fl" min="100" max="1000" step="10" value="300"></label>
+      <label class="s">Trades a day, per unit <output id="oTr"></output><input type="range" id="tr" min="2" max="40" step="1" value="10"></label>
+      <label class="s">Units <output id="oN"></output><input type="range" id="n" min="1" max="20" step="1" value="1"></label>
+      <label class="s">How much units lose together <output id="oRho"></output><input type="range" id="rho" min="0" max="0.6" step="0.05" value="0.3"></label>
+      <label class="s">Level <output id="oLv"></output><input type="range" id="lv" min="0" max="3" step="1" value="1"></label>
+    </div>
+    <div class="result" aria-live="polite">
+      <div class="small muted">Risk on each trade, per unit</div>
+      <div class="big" id="rOut"></div>
+      <div class="small" id="rPct" style="margin-bottom:10px"></div>
+      <div class="line"><span>Cushion after the 15% reserve</span><b id="rCush"></b></div>
+      <div class="line"><span>Base size at full level</span><b id="rBase"></b></div>
+      <div class="line"><span>After rounding down to a $0.50 lot</span><b id="rRound"></b></div>
+      <div class="line"><span>Your plain split, base ÷ units</span><b id="rSplit"></b></div>
+      <div class="line"><span>Share of one-unit size each unit keeps</span><b id="rShare"></b></div>
+    </div>
+  </div>
+  <p class="small muted" style="margin-top:10px">Example settings, all for the numbers lens to set: 1% chance of touching the floor, 20 days, result spread 0.87R including fast-invalidation cuts, $0.50 lot, no extra cost. In the real design a unit below one lot does not trade until the cushion grows.</p>
+</section>
+
+<section id="order">
+  <h2>Follow a trade through</h2>
+  <div class="panel">
+    <div class="row" role="group" aria-label="Choose a situation" style="margin-bottom:12px">
+      <button data-sc="healthy" aria-pressed="true">A healthy unit</button>
+      <button data-sc="shared" aria-pressed="false">Five units, one shared move</button>
+      <button data-sc="bleeding" aria-pressed="false">A unit whose edge was never real</button>
+    </div>
+    <div class="flowwrap">
+      <svg viewBox="0 0 760 190" width="100%" style="min-width:560px" role="img" aria-label="An entry goes from the unit to the sizer to the guard to the order. Exits go straight from the unit to the order and never meet the guard.">
+        <path class="wire" d="M150 55H200M340 55H390M530 55H580"/>
+        <path class="wire" d="M85 80V150H650V80" stroke-dasharray="6 5"/>
+        <rect id="nU" class="node" x="20" y="30" width="130" height="50" rx="8"/><text x="85" y="60" text-anchor="middle" font-size="15">Unit signals</text>
+        <rect id="nS" class="node" x="200" y="30" width="140" height="50" rx="8"/><text x="270" y="60" text-anchor="middle" font-size="15">Sizer works out lots</text>
+        <rect id="nG" class="node" x="390" y="30" width="140" height="50" rx="8"/><text x="460" y="60" text-anchor="middle" font-size="15">Guard answers</text>
+        <rect id="nO" class="node" x="580" y="30" width="150" height="50" rx="8"/><text x="655" y="60" text-anchor="middle" font-size="15">Order with venue stop</text>
+        <text x="367" y="172" text-anchor="middle" font-size="14" style="fill:var(--muted)">Exits take this path, so no brake can ever block one</text>
+        <circle id="dot" class="dot" cx="85" cy="20" r="7"/>
+      </svg>
+    </div>
+    <ol class="steps" id="steps"></ol>
+    <div class="row" style="margin-top:12px"><button id="prev">Back</button><button id="nextS">Next step</button></div>
+  </div>
+</section>
+
+<section id="self">
+  <h2>How it configures itself</h2>
+  <p>You found the right model: Kubernetes, the self-healing software. The first version runs it in its simplest modes, and the document already has the fields for the full version, so growing needs no rework.</p>
+  <div class="grid2">
+    <div class="panel">
+      <h3>How does a number get its value?</h3>
+      <ul>
+        <li>Each number names a rule and a ladder: its own record, then its class, then the preset, then refuse.</li>
+        <li>At the day or week mark the rule runs and writes a receipt saying why.</li>
+        <li>The number's mode decides whether the value moves: never, watch only, at the mark, or when the unit is flat.</li>
+        <li>If what the rule assumed breaks, it drops down the ladder, and it freezes after repeated trips.</li>
+        <li>A key number with no rule stops the unit compiling. No blanks.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>What if you want to change how it derives?</h3>
+      <ul>
+        <li>Change the value, swap the rule or reorder the ladder, in a new version of the document, then click.</li>
+        <li>Floor, buffer, kill line and kill level never tune themselves.</li>
+        <li><b>Facts move live.</b> A broker cost or spread change acts at once.</li>
+        <li><b>Learned numbers move at the marks.</b> Cuts act at once; raises wait.</li>
+        <li>A new brake, sizing method or scope is one folder in the dictionary. A new instrument class still needs its venue work.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="words">
+  <h2>Brakes and accelerators, defined</h2>
+  <p>Both are measured against a declared base size. These definitions came from how you used the words, plus the research.</p>
+  <div class="grid2">
+    <div class="panel"><h3>Brake</h3><p class="small" style="margin:0">Holds risk at or below base. Your circuit breaker keeps its name.</p></div>
+    <div class="panel"><h3>Accelerator</h3><p class="small" style="margin:0">Raises risk above base. It stays off while any brake is active.</p></div>
+    <div class="panel"><h3>Restore</h3><p class="small" style="margin:0">Growing back after a cut. It never goes above base, so it is not an accelerator.</p></div>
+    <div class="panel"><h3>Clamp</h3><p class="small" style="margin:0">A fixed limit that reads no evidence, such as margin headroom.</p></div>
+  </div>
+  <div class="panel" style="margin-top:14px">
+    <h3>House money and your reverse house money</h3>
+    <p class="small">The old versions were not mirrors of each other. On one ledger they become one rule: size eases down as the day loses and can press as it wins. Your reverse half binds from day one at portfolio level. The press after wins measures only, until a unit's own trades show that it pays, because in the model no accelerator beats a steady size when trades are independent.</p>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="panel">
+      <h3><span class="tag good">BINDS</span> at go-live</h3>
+      <p class="small">Twenty-three things bind, and three of them read results:</p>
+      <ul class="small">
+        <li><b>Unit bench:</b> trips at the unit's own worst-1% money loss, counting fast-invalidation cuts by size.</li>
+        <li><b>Day pair:</b> a taper, then a stop for the whole book until the next day.</li>
+        <li><b>Drift monitor:</b> each warning drops one level for 20 days; the third goes to paper.</li>
+      </ul>
+      <p class="small" style="margin:8px 0 0">The rest are mechanics: costs, the split, level, bet key, cushion clip, margin, order checks, SQS, news, admission.</p>
+    </div>
+    <div class="panel">
+      <h3><span class="tag warn">SHADOW</span> measures only</h3>
+      <p class="small">These write what they would have done and change nothing:</p>
+      <ul class="small">
+        <li>Class isolation and the weekend scale</li>
+        <li>Your "about three", at the unit's own run length, which works out to 5 to 10 losses</li>
+        <li>Your session drawdown brake</li>
+        <li>Reducing at the 10% day, loss points, chorus and burn tiers</li>
+        <li>The Kelly ceiling and the press after wins</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <h2>What the model shows</h2>
+  <p>"Kept" is dollars risked over base size on every chance to trade, counting refused trades. The first funnel kept a weak unit near 0.15 of size on a kinder measure; that was the handbrake. The safety line is 0.75 for a healthy unit. 120 days, $500 seed, 10 trades a day per unit, with fat tails, gaps and lot rounding.</p>
+  <div class="panel tablewrap">
+    <table>
+      <thead><tr><th>Unit</th><th>Units</th><th>Kept</th><th>Typical end</th><th>Runs losing half the cushion</th><th>Sent to paper</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <p class="small muted" style="margin-top:10px">Runs with 12 of the 23 binding things simulated. The floor was never touched in any row. If SQS and news refuse 10% of chances, a healthy unit at 5 and 10 units falls to 0.74 and 0.72, under the line. Building the harness settles this.</p>
+</section>
+
+<section id="hear">
+  <h2>What you must hear</h2>
+  <div class="grid2">
+    <div class="panel"><h3>Your scalper may not exist yet</h3><p class="small" style="margin:0">A 55% scalper at 1:1 and a 5-pip stop loses after costs, because break-even is 58%. It only works if the fast-invalidation cut catches few winners. At 10% of winners caught it just survives; at 20% it loses. No paper tests this, so QMX's own two-arm trial is the first job.</p></div>
+    <div class="panel"><h3>Your frequency waits on the cushion</h3><p class="small" style="margin:0">At $500 over a $300 floor with a $0.50 lot, about 3 of 10 proved units can trade, and 1 of a weak ten. The others wait in paper and join as the cushion grows.</p></div>
+    <div class="panel"><h3>The first version is plainer than the vision</h3><p class="small" style="margin:0">15-minute bars on the node until after the demo, so no 1-minute cut before then. No trails, breakeven or partial closes at first. One position per market per unit. The first live entry waits hours for a live SQS baseline.</p></div>
+    <div class="panel"><h3>The soft spot is many bleeding units</h3><p class="small" style="margin:0">5 or 10 units with overstated proof lose half the cushion in 11 to 14% of model runs. A unit can re-enter the same move once its stops fire, and the class isolation that would help measures only at first.</p></div>
+    <div class="panel"><h3>Some things wait for your click</h3><p class="small" style="margin:0">A third bench within 40 days stops a unit until you resume it. About one healthy unit in three hits that per 120 days when it runs alone. If you never click, that book falls under the safety line.</p></div>
+    <div class="panel"><h3>Some asks come later</h3><p class="small" style="margin:0">The sweep cap returns as a ratchet, after go-live. Several positions per unit wait. Book against tags is a question for after go-live. Agents get read, propose and cut-only evidence for now.</p></div>
+  </div>
+</section>
+
+<section id="ask">
+  <h2>Your decisions</h2>
+  <p>Nothing waits on these, and the work proceeds on my recommendation. Pick what you like, copy your answers and paste them to me, or we talk them through. The numbers come separately in the numbers lens.</p>
+  <div class="panel" id="qs"></div>
+  <div class="row" style="margin-top:12px"><button id="copy">Copy my answers</button><span id="copied" class="small muted" aria-live="polite"></span></div>
+  <textarea id="ans" readonly aria-label="Your answers as text"></textarea>
+</section>
+
+<section id="next">
+  <h2>What is next</h2>
+  <ul>
+    <li><b>You now:</b> read this when you like, then we cool off.</li>
+    <li><b>Pass to the repair session:</b> <span class="num small">handoff/FOR-REPAIR-SOCKET.md</span> answers what it was waiting on, including that a guard failure can never stop exits and one question for its last PR. <span class="num small">handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md</span> lists the files its deletion must leave alone.</li>
+    <li><b>Also yours to pass on:</b> crypto has no MCP yet, as you noticed. Agents with cTrader's MCP on the node's demo account open positions no unit holds, so the rules must count them.</li>
+    <li><b>When you are ready:</b> the plan is cut into slices for builders, including the QML dictionary entries. Then the numbers lens: we run the scenario harness and argue the numbers.</li>
+  </ul>
+  <p class="small muted" style="margin-top:12px">The full design is on branch <span class="num">plan/risk-core</span> at <span class="num">tracker/risk-core/architecture/SPINE.md</span>. Nothing is pushed or merged.</p>
+</section>
+
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const money=v=>'$'+(v>=100?v.toFixed(0):v.toFixed(2));
+  const levels=[0.25,0.5,0.75,1];
+  function calc(){
+    const eq=+$('eq').value, fl=+$('fl').value, tr=+$('tr').value, n=+$('n').value, rho=+$('rho').value, lv=levels[+$('lv').value];
+    $('oEq').textContent='$'+eq; $('oFl').textContent='$'+fl; $('oTr').textContent=tr; $('oN').textContent=n; $('oRho').textContent=rho.toFixed(2); $('oLv').textContent=lv.toFixed(2);
+    const raw=Math.max(eq-fl,0), cush=raw*0.85, s=0.87, z=2.58, H=tr*20;
+    const B=Math.sqrt(n*(1+(n-1)*rho));
+    const one=cush/(s*z*Math.sqrt(H));
+    const base=one/B, r=base*lv, rounded=Math.floor(r/0.5)*0.5;
+    $('rOut').textContent=money(r);
+    $('rPct').textContent=(eq>0?(r/eq*100).toFixed(2):'0')+'% of equity';
+    $('rCush').textContent=money(cush);
+    $('rBase').textContent=money(base);
+    $('rRound').textContent=rounded>0?money(rounded):'under one lot: waits';
+    $('rSplit').textContent=money(one/n);
+    $('rShare').textContent=(100/B).toFixed(0)+'%';
+  }
+  ['eq','fl','tr','n','rho','lv'].forEach(i=>$(i).addEventListener('input',calc)); calc();
+
+  const SC={
+    healthy:[
+      ['nU',85,'A bar closes and the unit signals. Its stop gives a price for the disaster stop.'],
+      ['nS',270,'The sizer turns dollars at risk into lots: cushion $170, base about $5.40. Proven in QMB, so it starts at level 0.50: about $2.70.'],
+      ['nG',460,'The guard checks admission, SQS, news, bet key, cushion, margin. All clear: pass, and the receipt says nothing bound.'],
+      ['nO',655,'The order goes out with its stop resting at the broker.'],
+      ['nG',460,'After two clean groups of 25 trades the level climbs at the next mark, to 1.00 by about day 6 to 8.'],
+      ['nO',655,'A fast-invalidation cut or the stop closes the trade straight to the broker. The guard never sees it, and its true loss goes on the unit\'s ledger.']
+    ],
+    shared:[
+      ['nU',85,'Five units are all short USD: EURUSD, GBPUSD, gold and two indices.'],
+      ['nG',460,'The bet key counts them as one bet. The third entry reaches the cap, the fourth shrinks, the fifth is refused, each with its reason.'],
+      ['nO',655,'The move comes. Every stop fires at the broker. Exits are never blocked.'],
+      ['nG',460,'Each unit logs one normal loss, so no unit bench fires falsely. The book\'s day loss starts the taper: new entries shrink.'],
+      ['nG',460,'If the day loss passes the stop line, all entries stop until the next day and a card offers you the kill switch in one tap.'],
+      ['nS',270,'Next day, sizes are worked out from the smaller cushion and trading resumes.']
+    ],
+    bleeding:[
+      ['nU',85,'The backtest said +0.10R, but the true edge is zero or worse. Proof looked fine, so the machine check passes.'],
+      ['nS',270,'It starts at level 0.50, never full size, and bad groups of trades stop it climbing.'],
+      ['nG',460,'The drift monitor warns in a median of about 190 trades: one level down, locked for 20 days.'],
+      ['nG',460,'A second warning drops another level. A third inside 500 trades moves it to paper. Only your click brings it back.'],
+      ['nG',460,'Meanwhile the bench can trip at its own worst-1% loss. Second bench: a lock. Third inside 40 days: stopped until you resume it.'],
+      ['nO',655,'Open trades still close normally. In the model a lone bleeding unit ends near $443 from $500.']
+    ]
+  };
+  let cur='healthy', step=0;
+  function draw(){
+    const list=SC[cur], ol=$('steps'); ol.innerHTML='';
+    list.forEach((s,i)=>{const li=document.createElement('li');li.textContent=s[2];if(i===step)li.className='on';ol.appendChild(li);});
+    ['nU','nS','nG','nO'].forEach(id=>$(id).classList.toggle('on',id===list[step][0]));
+    $('dot').setAttribute('cx',list[step][1]);
+    $('prev').disabled=step===0; $('nextS').disabled=step===list.length-1;
+  }
+  document.querySelectorAll('[data-sc]').forEach(b=>b.addEventListener('click',()=>{
+    cur=b.dataset.sc; step=0;
+    document.querySelectorAll('[data-sc]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+    draw();
+  }));
+  $('prev').addEventListener('click',()=>{if(step>0){step--;draw();}});
+  $('nextS').addEventListener('click',()=>{if(step<SC[cur].length-1){step++;draw();}});
+  draw();
+
+  const rows=[
+    ['Healthy +0.10R',1,.83,'$1,432','0%','8%'],['Healthy +0.10R',5,.81,'$3,389','0%','7%'],['Healthy +0.10R',10,.79,'$3,509','0%','5%'],
+    ['Weak +0.05R',1,.80,'$650','1%','6%'],['Weak +0.05R',5,.59,'$693','2%','2%'],['Weak +0.05R',10,.55,'$729','2%','1%'],
+    ['Bleeding, proof overstated',1,.20,'$443','0%','100%'],['Bleeding, proof overstated',5,.23,'$418','11%','29%'],['Bleeding, proof overstated',10,.22,'$416','14%','15%']
+  ];
+  $('tb').innerHTML=rows.map(r=>{
+    const c=r[2]>=.75?'':(r[2]>=.5?' low':' vlow');
+    return '<tr><td>'+r[0]+'</td><td class="n">'+r[1]+'</td><td class="n"><span class="bar'+c+'" style="width:'+Math.round(r[2]*70)+'px"></span>'+r[2].toFixed(2)+'</td><td class="n">'+r[3]+'</td><td class="n">'+r[4]+'</td><td class="n">'+r[5]+'</td></tr>';
+  }).join('');
+
+  const QS=[
+    ['Q1','May a unit step down and come back by rule? A warning drops a level, a bench clears after its rest. Only a full halt, lockouts, the kill switch, promotion and raises above base wait for you.','Yes. Otherwise the book goes dark whenever you sleep.'],
+    ['Q1b','May a rule close positions by itself, or only stop new entries?','Entries only at go-live. Automatic closes come after the harness shows what they save.'],
+    ['Q2','Does QMB\'s proof set a unit\'s starting level, so a proved unit starts at half its safe size?','Yes. The old way holds a weak real edge at a tenth for months: the sitting duck.'],
+    ['Q3','May a unit go live at that level while proof continues, after one week of machine check in paper? Your click shows "proof pending, 212 of 610 trades".','Yes. If no, most units sit in paper for months.'],
+    ['Q4','House money: your reverse half binds from day one; the press switches on by itself once the unit\'s own record passes, under a rule you approve once. Approve?','Yes to both.'],
+    ['Q5','When the portfolio day stop fires, may it raise the kill switch itself, or only stop entries and send you a one-tap card?','Stop entries and send the card. The kill switch stays yours.'],
+    ['Q6','After proof, may size rise above the zero-edge base by a rule you approve once, or by a card each time?','By rule, with a card telling you.'],
+    ['Q7','May the build add three phone pushes: day stop fired, stop not at the broker, node unreachable with open positions? Wake you only when money is at risk and your action changes the outcome? While you are away: no new entries once flat?','Yes to all three.'],
+    ['Q8','After go-live: keep Book and BMS as documents, or replace them with tags and one portfolio config?','Decide later. Tags, if the harness shows they catch losing together better.'],
+    ['Q9','Freed swing: may a unit at full level take swing the others leave idle, above base, by rule? In the model healthy gains 5 to 34%, and a bleeding book\'s bad runs rise a few points.','Your call. It changes nothing on the first few units.']
+  ];
+  const answers={};
+  try{Object.assign(answers,JSON.parse(localStorage.getItem('qmxRiskAnswers')||'{}'));}catch(e){}
+  $('qs').innerHTML=QS.map(q=>'<div class="q"><h3>'+q[0]+'</h3><p style="margin-bottom:6px">'+q[1]+'</p><p class="rec">My recommendation: '+q[2]+'</p><div class="row" role="group" aria-label="'+q[0]+'">'+['As you recommend','No','Let\'s talk'].map(a=>'<button data-q="'+q[0]+'" data-a="'+a+'" aria-pressed="false">'+a+'</button>').join('')+'</div></div>').join('');
+  function renderAns(){
+    document.querySelectorAll('[data-q]').forEach(b=>b.setAttribute('aria-pressed',answers[b.dataset.q]===b.dataset.a?'true':'false'));
+    $('ans').value=QS.map(q=>q[0]+': '+(answers[q[0]]||'as you recommend (default)')).join('\n');
+  }
+  document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>{
+    answers[b.dataset.q]=b.dataset.a;
+    try{localStorage.setItem('qmxRiskAnswers',JSON.stringify(answers));}catch(e){}
+    renderAns();
+  }));
+  $('copy').addEventListener('click',async()=>{
+    try{await navigator.clipboard.writeText($('ans').value);$('copied').textContent='Copied. Paste it to me.';}
+    catch(e){$('ans').focus();$('ans').select();$('copied').textContent='Press Ctrl+C to copy the selected text.';}
+  });
+  renderAns();
+})();
+</script>
+</body>
+</html>
