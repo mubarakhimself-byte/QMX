@@ -13,7 +13,8 @@ Each record on the account gets one :class:`Claim`:
 - ``foreign``: it carries another node's tag. One node trades an account (AD-8), so the account
   stands down; the record itself is never touched.
 - ``untagged``: it carries no node's tag, such as his own trade. It is never touched and never
-  adopted, and the node shows it as "not ours, protected".
+  adopted, and the node shows it as "not ours, never touched", adding "no stop at the broker"
+  when the venue holds none.
 
 Nothing here reads a venue or a journal; :mod:`qmn.app.reconciler` does both.
 """
@@ -40,7 +41,7 @@ __all__ = [
     "tags_of",
 ]
 
-NOT_OURS: Final = "not ours, protected"
+NOT_OURS: Final = "not ours, never touched"
 """What the node shows beside a position that is not its own."""
 _LABEL: Final = re.compile(r"qmx:([a-z2-7]{8}):.+")
 _CLIENT_ORDER_ID: Final = re.compile(r"q([a-z2-7]{8})-[0-9A-HJKMNP-TV-Z]{26}")

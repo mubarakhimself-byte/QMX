@@ -156,7 +156,7 @@ def test_an_untagged_position_is_protected_flagged_and_never_adopted(tmp_path: P
             "entry_price": "1.08000",
             "stop_at_venue": None,
             "claim": "untagged",
-            "shown": "not ours, protected",
+            "shown": "not ours, never touched, no stop at the broker",
         }
     ]
     assert cast("list[object]", status["alarms"])[0] == {
@@ -164,7 +164,7 @@ def test_an_untagged_position_is_protected_flagged_and_never_adopted(tmp_path: P
         "account": "demo-1",
         "position": "manual-1",
         "market_id": "fx.eurusd",
-        "shown": "not ours, protected",
+        "shown": "not ours, never touched",
     }
     assert [r.get("stand_down") for r in reconcile_rows(node)] == [None]
 
@@ -195,5 +195,5 @@ def test_a_position_another_node_tagged_is_left_alone_and_reported(tmp_path: Pat
         }
     ]
     assert [(p["position"], p["claim"], p["shown"]) for p in positions] == [
-        (OTHER, "foreign", "not ours, protected")
+        (OTHER, "foreign", "not ours, never touched, no stop at the broker")
     ]

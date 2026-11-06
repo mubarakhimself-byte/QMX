@@ -19,7 +19,7 @@ client order id and the positions by their label, and attributes each record
   keep it UNKNOWN with an alarm.
 - a twin or a foreign node's record stands the account down: no new entry, with an alarm.
 - a position that is not the node's is never touched and never adopted. It is shown as
-  "not ours, protected", and an untagged one raises the ``not_ours`` alarm once.
+  "not ours, never touched", and an untagged one raises the ``not_ours`` alarm once.
 - one ``reconcile`` row records the run, with the node's price and stop distance beside the
   venue's fill price and stop for each of the node's positions (C-12a low L6).
 - at the first run after a process start, a venue with history is asked how each entry closed
@@ -640,6 +640,7 @@ def _text(value: Decimal | None) -> str | None:
 
 
 def _shown(account: str, position: VenuePosition, claimed: Attributed) -> dict[str, object]:
+    shown = NOT_OURS if position.stop is not None else f"{NOT_OURS}, no stop at the broker"
     return {
         "account": account,
         "position": position.position,
@@ -649,7 +650,7 @@ def _shown(account: str, position: VenuePosition, claimed: Attributed) -> dict[s
         "entry_price": str(position.entry_price),
         "stop_at_venue": _text(position.stop),
         "claim": claimed.claim.value,
-        "shown": NOT_OURS,
+        "shown": shown,
     }
 
 
