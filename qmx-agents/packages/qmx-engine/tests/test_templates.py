@@ -7,12 +7,14 @@ ids appear in its own chunk."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -33,11 +35,19 @@ from qmf.readings.record import (  # pyright: ignore[reportMissingTypeStubs]
     Tier,
     TimeBase,
 )
+from qmx_control.service import ControlService
 from qmx_home import resolve
+from qmx_judge.presets import PRESETS
+from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.port import Draft as LibraryDraft
+from qmx_library.principal import MAIN, Principal
 from qmx_library.store import Store
+from qmx_tools.functions import domain_functions
+from qmx_tools.service import DomainContext
 from scheduled import Clock
 
 from qmx_engine.__main__ import main
+from qmx_engine.control_door import EngineDoor
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.validate import checked, validate
 from qmx_engine.ledger import redact
@@ -228,10 +238,14 @@ def votes(chunk: str) -> str:
 
 
 def answers(
-    note: str | None = None, synthesis: str | None = None, planted: dict[str, str] | None = None
+    note: str | None = None,
+    synthesis: str | None = None,
+    planted: dict[str, str] | None = None,
+    referee: Callable[[str], str] | None = None,
 ) -> FakePort:
     """A port that answers every model turn from the recorded files, by the prompt's first words.
-    `planted` replaces the answer to a prompt that starts with its key."""
+    `planted` replaces the answer to a prompt that starts with its key, and `referee` answers the
+    referee step from what it was given."""
     whole = {
         "You triage new quant-finance papers": recorded(RS1, "triage.json"),
         "You write the research note": note or recorded(RS1, "note.json"),
@@ -285,6 +299,7 @@ def answers(
         "You are an analyst on QMX's overnight": lambda c: mine(
             [T4], "claims.json", "claims", "source_id", c
         ),
+        **({"You ask QMX's referee": referee} if referee else {}),
     }
 
     async def answer(port: FakePort, chat: str) -> Turn:
@@ -1180,6 +1195,315 @@ def test_b_asks_qmb_for_a_walk_forward_only_when_the_run_names_ranges() -> None:
     }
     assert plain["walk_forward"] is None
     assert (asked["ok"], asked["window"]) == (True, {"start": "2020-01-01", "end": "2023-01-01"})
+
+
+AGENTS = Path(__file__).resolve().parents[3]
+MARCH = {"start": "2025-03-01", "end": "2025-04-01"}
+"""QML's synthetic month: the dummy makes 6 trades on `fx.eurusd` and 2 on `metal.xauusd` in it."""
+IDEA_ON_MARCH = {"idea": IDEA["idea"], "window": MARCH, "study": {"min_in_sample_days": 20}}
+UNIT_IDEA = "buy pullbacks in an uptrend, sell rallies in a downtrend"
+"""The dummy's own claim card, which a quick study claims."""
+
+
+@dataclass
+class World:
+    """A real store, the real QMB app and the real landers, as the host composes them."""
+
+    control: ControlService
+    store: Store
+    dummy: str
+    tools: dict[str, Any]
+
+
+@pytest.fixture(scope="module")
+def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
+    from qmx_host.first_start import land_dummy  # pyright: ignore[reportMissingTypeStubs]
+    from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
+        STUDY_CHECKER,
+        landers,
+        study_check,
+    )
+
+    root = tmp_path_factory.mktemp("qmb-world")
+    bars = root / "bars"
+    bars.mkdir()
+    for source in (AGENTS.parent / "qml" / "tests" / "fixtures" / "slices").glob("synthetic-*.csv"):
+        shutil.copyfile(source, bars / source.name.removeprefix("synthetic-"))
+    home = qmx_folder(root / "QMX")
+    control = ControlService(home)
+    control.settings_put("qmb", {"bars": str(bars), "gap_bars_refuse": 108})
+    with Store.open(home / "library", redactor=redact) as store:
+        control.attach_library(store)
+        runtime = control.app_runtime()
+        runtime.attach_landers(
+            landers(store, runtime, "pc", settings=lambda: control.settings_get("qmb"))
+        )
+        runtime.install(AGENTS / "apps" / "qmb", trust="first_party")
+        runtime.start("qmb")
+        store.register_checker(STUDY_CHECKER, study_check)
+        dummy = land_dummy(store)
+        assert dummy is not None
+        context = DomainContext(root=root / "tools")
+        context.control, context.library = control, control.library
+        try:
+            yield World(control, store, dummy, domain_functions(context)["backtest"])
+        finally:
+            control.close()
+
+
+@pytest.fixture
+def judged_on_a_small_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped preset asks 100 trades before any step counts, and a study cannot lower that,
+    so the dummy's month is `too_thin` and lands no paper. Only this number moves, and only in the
+    process that judges."""
+    small = dataclasses.replace(PRESETS["shipped"], min_trades=2)
+    monkeypatch.setitem(PRESETS, "shipped", small)
+
+
+def the_real_referee(world: World, change: Callable[[dict[str, Any]], dict[str, Any]]) -> Any:
+    """A referee step that presses the real tool on the runs its input names, then answers `change`
+    of what the tool said, as a model that copies or forges it would."""
+
+    def answer(chunk: str) -> str:
+        runs = sorted(set(re.findall(r"qmbr-[\w-]+", chunk)))
+        results = [world.store.with_field("backtest-result", "run_id", run)[0] for run in runs]
+        said = world.tools["backtest_judge_run"](results=results)["result"]
+        return json.dumps({"verdict": change({**said, "result_ids": results})})
+
+    return answer
+
+
+def real_run(world: World, folder: Path, inputs: Any, port: FakePort) -> tuple[Any, dict[str, Any]]:
+    """`folder` test-run on the real store with no `fixture`: its report, and each finished node's
+    outputs."""
+
+    async def run() -> Any:
+        async with EngineDoor.open(
+            world.control,
+            library=EngineLibraryAdapter(world.store),
+            harness=port,
+            principal=lambda: OPERATOR,
+        ) as door:
+            item = door.svc.drafts.put(None, Bundle.read(folder), 0, caller=OPERATOR).item
+            return await door.svc.tests.run(item, caller=OPERATOR, inputs=inputs)
+
+    report = asyncio.run(run())
+    with Reader.open(world.control.home) as reader:
+        finished = {
+            str(e.data["node_id"]): e.data.get("outputs")
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished"
+        }
+    return report, finished
+
+
+def real_b(
+    world: World, change: Callable[[dict[str, Any]], dict[str, Any]] = lambda said: said
+) -> tuple[Any, dict[str, Any], FakePort]:
+    """`b` from a sentence, its builder answering the dummy's pin, on real QMB and the real tool."""
+    built = {**json.loads(recorded(B, "build.json")), "object_id": world.dummy}
+    port = answers(
+        planted={"You build one QMX trading unit": json.dumps(built)},
+        referee=the_real_referee(world, change),
+    )
+    report, finished = real_run(world, B, IDEA_ON_MARCH, port)
+    return report, finished, port
+
+
+def real_u1(
+    world: World, change: Callable[[dict[str, Any]], dict[str, Any]] = lambda said: said
+) -> tuple[Any, dict[str, Any]]:
+    """u1 over the dummy's two markets, a markets-only sweep on real QMB and the real tool."""
+    inputs = {"unit": world.dummy, "window": MARCH, "markets": ["fx.eurusd", "metal.xauusd"]}
+    return real_run(world, U1, inputs, answers(referee=the_real_referee(world, change)))
+
+
+def papers_on_main(world: World, verdict: str) -> list[dict[str, Any]]:
+    return [
+        dict(world.store.get(OPERATOR, found).fields)
+        for kind in ("death-certificate", "proposal-card", "baseline-card")
+        for found in world.store.with_field(kind, "verdict", verdict)
+    ]
+
+
+def artifacts_on_the_run(world: World, run_id: str) -> list[str]:
+    views = (world.store.get(OPERATOR, o) for _, o in world.store.heads_on(f"refs/runs/{run_id}"))
+    return sorted(str(view.fields["type"]) for view in views if view.kind == "artifact")
+
+
+def judge_one_sweep(world: World) -> dict[str, Any]:
+    """A real sweep of one market, then the real tool over it."""
+    ran = world.control.app_job(
+        "qmb",
+        "jobs/sweep.py",
+        inputs={"unit": world.dummy, "window": MARCH, "grid": {"markets": ["fx.eurusd"]}},
+        principal="agent:chat-9",
+    )
+    [result] = world.store.with_field("backtest-result", "run_id", str(ran["run_id"]))
+    return cast("dict[str, Any]", world.tools["backtest_judge_run"](results=[result])["result"])
+
+
+def test_b_real_qmb_real_referee_real_scorecard(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    report, finished, port = real_b(world)
+
+    assert report.status == "passed", report.reason
+    card = finished["deliver"]["main"]
+    assert [(m["market"], m["outcome"], m["trades"]) for m in card["judge"]["per_market"]] == [
+        ("fx.eurusd", "fail", 6),
+        ("metal.xauusd", "fail", 2),
+    ]
+    assert card["judge"]["overall"] == "fail"
+    assert card["certificate"]["cause"] == "no_signal"
+    assert card["certificate"]["verdict"] == card["judge"]["verdict_id"]
+    assert card["proposal"] is None
+    assert [p["cause"] for p in papers_on_main(world, card["judge"]["verdict_id"])] == ["no_signal"]
+    assert artifacts_on_the_run(world, report.run_id) == ["lineage"]
+    assert [c["toolsets"] for c in port.chats if ":build:" in str(c["title"])] == [
+        ("unit", "blocks", "memory")
+    ]
+
+
+def test_a_real_sweep_reaches_the_same_one_paper(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    report, finished = real_u1(world)
+
+    assert report.status == "passed", report.reason
+    table = finished["table"]["main"]
+    assert [(m["market"], m["outcome"], m["trades"]) for m in table["markets"]] == [
+        ("fx.eurusd", "fail", 6),
+        ("metal.xauusd", "incomplete", 2),
+    ]
+    assert table["unjudged"] == []
+    assert table["verdict"]["overall"] == "fail"
+    assert [p["cause"] for p in papers_on_main(world, table["verdict"]["verdict_id"])] == [
+        "no_signal"
+    ]
+    assert artifacts_on_the_run(world, report.run_id) == []
+
+
+def test_a_failed_cost_step_lands_cause_costs(world: World, judged_on_a_small_record: None) -> None:
+    window = {"unit": world.dummy, "window": MARCH}
+    results = []
+    for job, inputs in (
+        ("backtest", window),
+        ("robustness", {**window, "battery": ["cost_stress"]}),
+    ):
+        ran = world.control.app_job(
+            "qmb", f"jobs/{job}.py", inputs=inputs, principal="agent:chat-9"
+        )
+        results += world.store.with_field("backtest-result", "run_id", str(ran["run_id"]))
+
+    said = world.tools["backtest_judge_run"](results=results)["result"]
+
+    assert said["overall"] == "fail"
+    assert [p["cause"] for p in papers_on_main(world, said["verdict_id"])] == ["costs"]
+
+
+def test_a_forged_pass_routes_as_fail(world: World, judged_on_a_small_record: None) -> None:
+    def forged(said: dict[str, Any]) -> dict[str, Any]:
+        markets = [{**m, "outcome": "pass"} for m in said["per_market"]]
+        return {**said, "overall": "pass", "says": "Holds.", "per_market": markets}
+
+    report, finished, _ = real_b(world, forged)
+
+    assert report.status == "passed", report.reason
+    card = finished["deliver"]["main"]
+    assert finished["referee"]["main"]["verdict"]["overall"] == "pass"
+    assert card["judge"]["overall"] == "fail"
+    assert sorted(finished["passed"]) == ["false"]
+    assert "paper" not in finished
+    assert card["card"] is None
+    assert card["proposal"] is None
+    assert card["dead_end"]["verdict"] == "fail"
+    assert card["certificate"]["cause"] == "no_signal"
+
+
+def test_a_forged_id_naming_another_units_verdict_is_refused(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    theirs = world.store.put(
+        Principal("operator"),
+        LibraryDraft(
+            "verdict",
+            "verdict-of-another-unit",
+            "another unit passed",
+            fields={
+                "overall": "pass",
+                "unit": "another-unit",
+                "results": [],
+                "per_market": [],
+                "says": "Holds.",
+                "raw_tries": 1,
+                "effective_tries": 1,
+            },
+        ),
+        on=MAIN,
+        expected_head=None,
+    ).object_id
+
+    report, finished = real_u1(world, lambda said: {**said, "verdict_id": theirs, "cards": {}})
+
+    assert report.status == "failed"
+    assert report.reason == (
+        f"node stored failed: qmx_failure: the verdict {theirs} judged another-unit, and this run "
+        f"tested {world.dummy}"
+    )
+    assert "table" not in finished
+
+
+def test_a_true_verdict_of_an_earlier_run_is_refused(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    earlier = judge_one_sweep(world)
+
+    report, finished = real_u1(
+        world,
+        lambda said: {
+            **said,
+            "verdict_id": earlier["verdict_id"],
+            "cards": earlier["cards"],
+            "result_ids": said["result_ids"],
+        },
+    )
+
+    assert report.status == "failed"
+    assert report.reason is not None
+    assert "judged other results than the referee named" in report.reason
+    assert "table" not in finished
+
+
+def test_a_dead_unit_leaves_a_memory_row_the_builder_can_read(
+    world: World, judged_on_a_small_record: None, tmp_path: Path
+) -> None:
+    from qmx_host.host import dead_end_memory  # pyright: ignore[reportMissingTypeStubs]
+    from qmx_host.sessions import memory_reads  # pyright: ignore[reportMissingTypeStubs]
+    from qmx_memory.engine import RecallEngine
+    from qmx_tools.functions import attach_dead_ends
+
+    engine = RecallEngine(world.store, home=tmp_path / "memory")
+    attach_dead_ends(world.control, dead_end_memory(engine, tmp_path))
+    try:
+        said = judge_one_sweep(world)
+        again = world.tools["backtest_judge_run"](
+            results=world.store.get(OPERATOR, said["verdict_id"]).fields["results"]
+        )["result"]
+    finally:
+        attach_dead_ends(world.control, None)
+
+    death = world.store.get(OPERATOR, said["cards"]["death-certificate"]).fields
+    checked = asyncio.run(
+        memory_reads(engine, SessionId("builder"))["memory_check"]({"query": UNIT_IDEA})
+    )
+    engine.close()
+    assert again["cards"] == said["cards"]
+    assert [row["row_id"] for row in checked["dead_ends"]] == [death["memory_row"]]
+    [row] = checked["dead_ends"]
+    assert row["text"].startswith(f"{UNIT_IDEA}: {world.dummy} died of no_signal. ")
+    assert row["refs"] == [f"object:{world.dummy}", f"object:{said['verdict_id']}"]
+    assert "died of no_signal" in (tmp_path / "memory" / "general.md").read_text("utf-8")
 
 
 T7 = PACK / "t7-trade-journal-review"

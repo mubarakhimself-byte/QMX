@@ -174,6 +174,7 @@ def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> N
         (family, CHAT, (opened, result))
     }
     cells = report(world, result)["cells"]
+    assert "trades" not in report(world, result)
     assert [(c["markets"], c["numbers"], c["status"]) for c in cells][:2] == [
         (["fx.eurusd"], {"ema_period": "50"}, "finished"),
         (["fx.eurusd"], {"ema_period": "100"}, "finished"),
@@ -187,6 +188,18 @@ def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> N
         (2, "1.0013"),
         (3, "-1.0258"),
     ]
+
+
+def test_a_sweep_that_traded_is_judged_on_its_trades(world: World) -> None:
+    result, landed = job(world, "sweep", grid={"markets": ["fx.eurusd"]})
+
+    answer = world.tools["backtest_judge_run"](results=[result])["result"]
+
+    assert landed["measures"]["trades"] == 6
+    assert answer["overall"] == "too_thin"
+    assert answer["per_market"] == [{"market": "fx.eurusd", "outcome": "too_thin", "trades": 6}]
+    assert answer["cards"] == {}
+    assert [t["market_id"] for t in report(world, result)["trades"]] == ["fx.eurusd"] * 6
 
 
 def test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason(world: World) -> None:
