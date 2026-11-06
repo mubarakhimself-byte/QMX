@@ -1,8 +1,9 @@
 """The proof runner's own proof: the table names real tests, and a failing check reads FAIL.
 
-The relation is read from the files, not by importing them: this test runs in the whole-repo lane,
-and a `pytest --collect-only` of `qml`, `qmb` and the agents packages costs minutes on a loaded
-machine. That the table collects and runs is lane 3's `--only 1-17`, which is the run that matters.
+The table is a relation across rows. The relation is read from the files, not by importing them:
+this test runs in the whole-repo lane, and a `pytest --collect-only` of `qml`, `qmb` and the agents
+packages costs minutes on a loaded machine. That the table collects and runs is lane 3's
+`--only 1-17`, which is the run that matters.
 """
 
 from __future__ import annotations
@@ -45,9 +46,7 @@ def test_every_check_names_a_test_that_exists() -> None:
         for test in check.tests:
             assert test.environment in {"root", "agents"}, test.node_id
 
-    absent = {
-        test.node_id for check in table for test in check.tests if not defines(test.node_id)
-    }
+    absent = {test.node_id for check in table for test in check.tests if not defines(test.node_id)}
     assert absent == set()
 
 
