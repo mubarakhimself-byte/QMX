@@ -401,6 +401,10 @@ def rig(home: Path, placement: Mapping[str, object] | None) -> Rig:
         if at < LIVE_FROM:
             feed.recording.keep(market, bar)
     built = Rig(home, node, runtime, cast("ConformanceAccount", made["client"]), source, now)
+    # R22 holds a compiled unit until its account's session is ready, so the rig takes the feed's
+    # first turn here: a node whose feed has never pumped waits instead of hosting the unit.
+    feed.pump()
+    assert feed.ready, feed.reason
     answer = node.call(
         "deploy", {"op_id": "op-deploy-1", "deployment": deployment(data, placement)}
     )

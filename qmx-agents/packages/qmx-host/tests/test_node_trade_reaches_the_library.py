@@ -23,6 +23,7 @@ from qmf.core import is_refusal
 from qmf.data.series import SeriesKey, SeriesStore
 from qmf.venue.commands import CommandKind
 from qmn.app.attribution import VenuePosition
+from qmn.app.reconciler import Ours
 from qmn.app.runtime import NodeUnit
 from qmx_engine.ledger import redact
 from qmx_library.principal import MAIN, Principal
@@ -144,19 +145,23 @@ def the_hook_refuses(node: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def an_orphan_is_open(node: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
-    """One older position of ours on the market, as the reconcile reads it."""
+    """One older position of ours on the market, as the reconcile reads it, with the journal's
+    send row R21 pairs each of ours with."""
 
-    def orphans(account: str, venue: object) -> list[VenuePosition]:
+    def orphans(account: str, venue: object) -> list[Ours]:
         del account, venue
         return [
-            VenuePosition(
-                "qold-1",
-                "qmx:x:y",
-                "fx.eurusd",
-                "short",
-                Decimal("0.1"),
-                Decimal("1.07"),
-                Decimal("1.08"),
+            Ours(
+                VenuePosition(
+                    "qold-1",
+                    "qmx:x:y",
+                    "fx.eurusd",
+                    "short",
+                    Decimal("0.1"),
+                    Decimal("1.07"),
+                    Decimal("1.08"),
+                ),
+                {"deployment_id": "dep-1"},
             )
         ]
 
