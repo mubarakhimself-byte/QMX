@@ -80,15 +80,28 @@ def blocked_signals(node: Rig) -> list[tuple[object, object]]:
     return [(body["reason"], body["detail"]) for body in bodies if body["outcome"] == "blocked"]
 
 
+@pytest.mark.parametrize(
+    ("lane", "world", "paper_runs", "kinds"),
+    [
+        ("paper", "paper", 1, ["artifact", "paper-run", "trade"]),
+        ("live", "demo", 0, ["artifact", "trade"]),
+    ],
+    ids=["paper-lane", "practice-account"],
+)
 def test_a_real_writer_row_lands_a_trade_and_a_paper_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lane: str,
+    world: str,
+    paper_runs: int,
+    kinds: list[str],
 ) -> None:
-    live = test_feed_relay.deployment
+    written = test_feed_relay.deployment
 
-    def on_the_paper_lane(data: Path, placement: None) -> dict[str, object]:
-        return {**live(data, placement), "lane": "paper"}
+    def on_the_lane(data: Path, placement: None) -> dict[str, object]:
+        return {**written(data, placement), "lane": lane}
 
-    monkeypatch.setattr(test_feed_relay, "deployment", on_the_paper_lane)
+    monkeypatch.setattr(test_feed_relay, "deployment", on_the_lane)
     home = tmp_path / "QMX"
     node = rig(home, None)
     play(node, FIRST_TRADE_CLOSED)
@@ -108,14 +121,14 @@ def test_a_real_writer_row_lands_a_trade_and_a_paper_run(
         heads_again = list(store.heads_on(MAIN))
         views = [store.get(OPERATOR, object_id) for _item, object_id in heads]
 
-    assert (first.trades, first.paper_runs, first.refusals) == (1, 1, ())
+    assert (first.trades, first.paper_runs, first.refusals) == (1, paper_runs, ())
     assert (again.trades, again.paper_runs, again.refusals) == (0, 0, ())
     assert heads_again == heads
-    assert sorted(view.kind for view in views) == ["artifact", "paper-run", "trade"]
+    assert sorted(view.kind for view in views) == kinds
     trade = next(view for view in views if view.kind == "trade")
     assert (trade.fields["account"], trade.fields["world"], trade.fields["instrument"]) == (
         ACCOUNT,
-        "paper",
+        world,
         "fx.eurusd",
     )
 
