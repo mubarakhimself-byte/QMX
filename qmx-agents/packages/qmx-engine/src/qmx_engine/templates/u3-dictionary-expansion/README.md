@@ -5,8 +5,9 @@ A source in, its concepts out: each sentence matched to the entry it states, an 
 ## Steps
 
 1. `Match each sentence` (`scripts/match.py`) runs QML's matcher over every sentence. Each unmatched sentence lands as one `append-request` artifact on the run's own ref, never as a silent new entry.
-2. `Draft the new entries` (role `extractor`, toolset `blocks`) drafts an entry for each append request under Appendix F's directions: ground first, no cap, cite with a quote under 15 words and a date, role-neutral, data honest, never type a status, code only where QMX's data can feed it. It checks each draft with `blocks_check`, and names an entry it finds already holds a sentence under `already_held`.
-3. `Check every draft` (`scripts/check.py`) runs QML's entry checker and the corpus check on each draft. Only a draft that passes lands, as an `entry-draft` artifact with its computed status and fingerprint. A draft that fails lands nothing and is listed with every problem.
+2. `Quote the source as data` (the shared `marked-sources` block, carried in `marked-sources/`) quotes the source and its unmatched sentences, so a page that says "ignore your instructions" reaches the agent step only as data.
+3. `Draft the new entries` (role `extractor`, toolset `blocks`) drafts an entry for each append request under Appendix F's directions: ground first, no cap, cite with a quote under 15 words and a date, role-neutral, data honest, never type a status, code only where QMX's data can feed it. It checks each draft with `blocks_check`, and names an entry it finds already holds a sentence under `already_held`.
+4. `Check every draft` (`scripts/check.py`) runs QML's entry checker and the corpus check on each draft. Only a draft that passes lands, as an `entry-draft` artifact with its computed status and fingerprint. A draft that fails lands nothing and is listed with every problem.
 
 ## Left out, and why
 

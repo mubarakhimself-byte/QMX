@@ -461,28 +461,19 @@ UNITS_DEFAULTS: Final[Document] = {
         ),
         _identity_row("title_change", "none", False, False),
     ],
-    "lifecycle": {"auto_paper": False},
 }
 """`[units]` with every default (Part A AD-115): which edit makes a new version or a new unit, as
-one table QML reads as data, and tested to paper waits for his click (`auto_paper` off)."""
+one table QML reads as data."""
 
 
 def _check_units(values: Document) -> None:
-    """Refuse an identity table QML cannot read, or an `auto_paper` that is not true or false."""
+    """Refuse an identity table QML cannot read."""
     from qml.identity import IdentityTableError, parse_table  # noqa: PLC0415
 
     try:
         parse_table(_merged(UNITS_DEFAULTS, values)["identity_table"])
     except IdentityTableError as error:
         raise ControlError("invalid_units", str(error)) from error
-    lifecycle = values.get("lifecycle", {})
-    auto = (
-        cast("dict[str, object]", lifecycle).get("auto_paper", False)
-        if isinstance(lifecycle, dict)
-        else None
-    )
-    if not isinstance(auto, bool):
-        raise ControlError("invalid_units", "[units.lifecycle] auto_paper is true or false")
 
 
 def _check_node(values: Document) -> None:

@@ -555,7 +555,10 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
     each launch so a Settings edit applies to the next chat. A relayed launch adds
     the relay URL, the grant secret (never a provider key), the four pinned tiers, `NO_PROXY` for
     loopback, the profile's env quirks and, while the router's port is pinned, `API_TIMEOUT_MS`.
-    The `QMA_*` names are the launcher's inputs, which it strips before the CLI starts."""
+    The `QMA_*` names are the launcher's inputs, which it strips before the CLI starts. `PATH`
+    starts with this Python's folder, because a plugin hook runs a bare `python`, and a host not
+    started under `uv run` would otherwise leave every Write or Edit waiting on whatever `python`
+    comes first."""
     routing: dict[str, str]
     match launch:
         case PlanLaunch():
@@ -576,6 +579,7 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
         **CONSTANT_ENV,
         **telemetry_env(configured(home.root), headers(home.root, CredentialManager().read)),
         **routing,
+        "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}",
         "QMA_CHAT_ID": session_id,
         "QMA_PROC_DIR": str(home.procs_dir),
         "QMA_CAP": cap,

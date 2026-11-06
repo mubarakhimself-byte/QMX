@@ -10,6 +10,8 @@ from typing import Any, cast
 
 import pytest
 import qml
+from qml.catalogue.entry import compute_status
+from qml.catalogue.loader import block_fingerprint
 from qmx_library.kinds import KindRefused, Problem
 from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import MAIN, Principal, drafts_ref
@@ -137,6 +139,115 @@ def test_check_refuses_a_native_claim_with_no_source_and_a_name_another_entry_ho
         ("hold-bars@1/aliases/0", "'EMA' already names ema"),
     ]
     assert result["fingerprint"] == entry("time-exit-bars")["fingerprint"]
+
+
+A_DRAFT = '''"""A draft."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from decimal import Decimal
+
+from qml.blocks.api import Side
+
+
+class _It:
+    @property
+    def warm_up_bars(self) -> int:
+        return 3
+
+    @property
+    def state_bound(self) -> int:
+        return 5
+
+    def retained(self) -> int:
+        return 0
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal | None:
+        UPDATE
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        return None
+
+
+class _Block:
+    def make(
+        self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
+    ) -> _It:
+        return _It()
+
+
+BLOCK = _Block()
+TOP
+'''
+
+
+@pytest.mark.parametrize(
+    ("update", "top"),
+    [
+        ("raise SystemExit(1)", ""),
+        ("exit(1)", ""),
+        ("raise KeyboardInterrupt", ""),
+        ("raise BaseException('x')", ""),
+        ("return None", "raise SystemExit(1)"),
+    ],
+)
+def test_check_answers_fail_for_a_draft_whose_code_would_end_the_process(
+    blocks: dict[str, Row], update: str, top: str
+) -> None:
+    code = A_DRAFT.replace("UPDATE", update).replace("TOP", top)
+    draft = {
+        "schema": "qmx.entry/1",
+        "component_type": "indicator",
+        "entry_id": "agents-draft",
+        "version": 1,
+        "origin": "agent",
+        "definition": "An agent's word for it.",
+        "sources": [{"source_ref": "a note", "quote": "its words", "dated": "2026-11-06"}],
+        "inputs": [
+            {"port": "series", "stream_kind": "series", "measure": "price", "data_level": 1}
+        ],
+        "output": {"type": "series", "measure": "price"},
+        "parameters": {},
+        "warm_up": {"rule": "1", "bars": 3},
+        "transfer": {"fx": "not_assessed"},
+        "mirroring": "not_applicable",
+        "fingerprint": block_fingerprint(code.encode()).value,
+    }
+
+    # An exit left to reach pytest ends the worker, and the run reports nothing.
+    try:
+        result = blocks["blocks_check"](entry=draft, source=code)
+    except BaseException as ended:
+        result = {"verdict": f"a raise got out: {type(ended).__name__}"}
+
+    assert (result["verdict"], result.get("status"), result.get("errors")) == (
+        "fail",
+        None,
+        [
+            {
+                "where": "/code",
+                "message": "this entry's code stopped its own check, "
+                "by an exit or a raise no check can read",
+                "hint": "a block returns a value or raises an ordinary error; remove the exit",
+            }
+        ],
+    )
+
+
+def test_a_real_interrupt_rises_when_no_entry_code_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def pressed(*_: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("qml.catalogue.entry.check_entry", pressed)
+
+    with pytest.raises(KeyboardInterrupt):
+        compute_status({"entry_id": "a-word"})
 
 
 def test_check_refuses_a_draft_that_reuses_a_held_pin_with_different_content(
