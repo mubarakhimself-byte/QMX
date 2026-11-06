@@ -4,7 +4,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
-**Latest (3 Nov evening): Stage B complete and stopped at his stop line. Read items 41-43 first.**
+**Latest (6 Nov): resumed; read items 41-44 first. Next: G12, then the Fable funnel.**
 
 1. Grounding DONE 2026-11-01: G1-G5 in `grounding/` (G5 is the timeline), sims in `grounding/sims/`. Next: find the clean starting point with him, then design by scenarios.
 2. Grounding files land in `grounding/`:
@@ -284,6 +284,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - night paging.
     **Safety flag for the build session:** the cTrader MCP's order tools must sit behind the operator-only guard (see item 42).
     **On resume** (item 41): Fable funnel judge, Opus reviewer, architecture versions, fold, plain-words explanation, slices.
+
+44. **Resumed 6 Nov, 14:15 local (M43; words in `seeds/operator-words-2026-11-06.md`).** He wants this session to carry on mostly by itself. Usage is 30% of the weekly bar.
+    - **The to-do list stays the one from before the pause:** funnel with the Fable judge, architecture in versions if they emerge, fold into one with recommendations, plain-words explanation, review then slices. He corrected a list written before anchoring. One step is added, for a reason found while anchoring: ground what changed first.
+    - **What changed since 3 Nov** (other sessions, not this one): the unit build was frozen and audited (`D:/QMX-worktrees/audit-ship/`); he ruled foundation before demo; a repair program R01-R24 is in `D:/QMX-worktrees/repair-ship/`, now moved to DeepSeek on DSH, and R01-R06 are ready to land. Claude's usage goes to risk and sizing, wrap-up and UI.
+    - **The audit handed this session real items:** SQS placement, kill levels, R and costs, signed stop distance, targets, the sizer wrong on USDJPY, and the exit half of the socket ("agree the socket with it first").
+    - **G12 started** (Opus) → `grounding/G12-audit-and-repair-for-risk.md`. It lists those items, keeps the old SQS gate's rule text, marks which G8/G9/G11 facts are stale, and checks the cTrader MCP flag. The funnel waits for it.
+    - The build session's heads-up mentioned on 4 Nov never reached this session; G12 looks for it.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
