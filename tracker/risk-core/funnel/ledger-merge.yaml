@@ -1,0 +1,243 @@
+# Ledger merge for v1, written as data by the funnel judge, 6 Nov 2026.
+# A later step applies this to variables.yaml plus additions/*.yaml and re-runs ledger/check.py.
+# Rules the applier must follow:
+#   - `keep` is the surviving id. Every id in `absorb` is deleted; its name, aliases, seen_values,
+#     sources, seed_ids, inputs and affects are folded into `keep`; the absorbed id is added to
+#     `keep`'s aliases so old references still resolve.
+#   - Where two absorbed entries disagree on level or measure, `note` says which wins.
+#   - `dies` lists ids that leave the ledger with their dropped hybrid; references to them are removed.
+#   - `rename` lists ids that change name with no merge.
+#   - `type_edges` is a new field the applier adds to every `affects` entry (down:cap, down:state,
+#     up:event); FUNNEL.md DP6 and X1-H35 define it. Default by level: a higher level affecting a
+#     lower one is down:cap unless the target is a state (brake_state, x1_trading_state, kill_switch_*),
+#     then down:state; a lower level affecting a higher one is up:event.
+# Ids below are read from the layers' texts and the checker's output, not from the additions
+# files themselves; the applier validates every id against the loaded set and reports any it cannot find.
+
+version: 1
+source_check: "ledger/check.py --with-additions --no-write --no-paths, 6 Nov 2026: 903 variables, 1758 couplings, 7 duplicate ids, 5 alias warnings, 3 orphans"
+
+# 1. The seven duplicate ids (checker ERRORS). The same id in two files becomes one entry.
+duplicates:
+  - keep: co_loss_breadth
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X0-trading-lens.yaml
+    note: "X0's definition (share of live units losing in one window and the loss given that) is the fuller one; X4's adds the family case (64)."
+  - keep: open_breadth_budget_scale
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X2-sizing-accelerators.yaml
+    note: "X2's carries the derivation (sigma budget scaled by N_eff open); X4-24 and 93 are its scenarios. Also absorbs X0's day_budget_breadth_scale (same idea) below."
+  - keep: sleeve_stress_loss_usd
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X2-sizing-accelerators.yaml
+    note: "measure USD at the class's worst step; X4's use in 87 is the de-gross ranking."
+  - keep: world_switch_reset_rule
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X2-sizing-accelerators.yaml
+    note: "one rule: level 1, house money zero, brake counters reset, costs uncalibrated, new stage tag, paid e-restart (X5-H28)."
+  - keep: burn_rate_ticket_threshold
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X6-observability.yaml
+    note: "X6-15 defines burn in expected trades over two windows; X4-07 is its scenario."
+  - keep: burn_rate_page_threshold
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X6-observability.yaml
+    note: "as above."
+  - keep: bad_day_percentile
+    absorb_from: [X4-scenarios.yaml]
+    keep_file: X6-observability.yaml
+    note: "the card's daily distribution percentile for 'yesterday was a one-in-N day'. X5's ev_bad_day_percentile merges into it below."
+
+# 2. The five alias warnings. One idea split in two.
+aliases:
+  - keep: status_generation
+    absorb: [x1_status_generation]
+    note: "X6-01's id survives; X1-H01 defined the same stamp."
+  - keep: derivation_fallback_order
+    absorb: [x1_derivation_fallback_order]
+    note: "X4-56's id survives; X1-H08 is the fuller definition, fold its text into the derivation."
+  - keep: bet_key_rule
+    absorb: [x1_bet_key_rule]
+    note: "X4-92's id survives; X1-H38's text (underlying, currency legs, class, direction, driver, window) is the rule."
+  - keep: shed_priority_class
+    absorb: [x1_shed_priority_class]
+    note: "X4-65's id survives; X1-H41's four classes and X2-H30's QoS classes are its values (probation, paper-graduate, proven, core = BestEffort, Burstable, Guaranteed)."
+  - keep: agent_evidence_ttl
+    absorb: [x1_proposal_expiry]
+    note: "both carried the alias evidence_expiry_by_type; X7-H39's per-kind TTL table is the definition; X1-H50's proposal expiry is the same field."
+
+# 3. Same idea under different ids across layers (not flagged by the checker; merged by the picks).
+merges:
+  - keep: day_budget_breadth_scale
+    absorb: [open_breadth_budget_scale]
+    note: "after section 1 collapses X2/X4, fold the result into X0's id, which is the one X3-H37 reuses; final survivor: day_budget_breadth_scale."
+  - keep: trip_tax_r
+    absorb: [ev_trip_tax, trip_tax_record]
+    note: "one trip-tax measure (X6-22, X3-H64); X4-76's record is its per-action row."
+  - keep: demotion_cause
+    absorb: [ev_demotion_cause]
+  - keep: upside_alarm_percentile
+    absorb: [ev_upside_alarm_percentile, upside_alarm_cone_percentile]
+  - keep: twin_gap_r
+    absorb: [ev_twin_gap_r]
+  - keep: exit_mechanism
+    absorb: [ev_exit_mechanism]
+    note: "the mechanism field on the trade row (X6-04); exit_reason_code (v0) stays as the closed-code list the mechanism draws from."
+  - keep: loss_event_window
+    absorb: [ev_event_window_minutes, event_window_by_driver]
+    note: "one event window; the per-driver length is its derivation (state-based with a class maximum, DP21)."
+  - keep: cohort_trades
+    absorb: [ev_cohort_trades]
+  - keep: bad_cohort_r
+    absorb: [ev_bad_cohort_r]
+  - keep: last_trip_size_level
+    absorb: [x1_memory_ceiling, ev_level_memory_ceiling, trip_memory_ceiling]
+    note: "one memory ceiling (DP20)."
+  - keep: size_change_settle_trades
+    absorb: [settling_trades_after_change]
+    note: "settling_time (X4) stays separate: it is the isolation's settling window in minutes, not the size change's in trades."
+  - keep: retrip_backoff_multiplier
+    absorb: [isolation_retrip_backoff]
+    note: "X3 says its id covers both the unit's restore cool-down and the isolation's TTL; X4's isolation-only form merges into it."
+  - keep: tier_dwell
+    absorb: [tier_dwell_active_days, tier_dwell_trades]
+    note: "measure 'other: trades or active days per style'; X2-H18's dwell in days and X4-63's in trades are the per-style values."
+  - keep: cross_market_stress_reading
+    absorb: [co_move_score]
+    note: "v0 id survives; X4's co-move score is its fast-tell form."
+  - keep: isolation_two_tell_rule
+    absorb: [bucket_stress_percentile]
+    note: "X3-H28's percentile is the tell threshold inside X4-94's two-tell rule."
+  - keep: open_risk_cap_per_key_usd
+    absorb: [same_bet_exposure_cap]
+    note: "one cap per bet key (X2-H34, X4-92)."
+  - keep: per_driver_exposure_cap
+    absorb: [class_risk_cap]
+    note: "X4-92 derives the cap from the buffer over a tail gap; X0-41's class cap is the same cap keyed by class; keep the derived one."
+  - keep: hourly_cost_profile
+    absorb: [cost_cell_key]
+    note: "the cell key (instrument, hour of week, broker, order type) is the profile's index, not a second variable."
+  - keep: stressed_unit_correlation
+    absorb: [correlation_stress_rho]
+  - keep: worst_step_move_r
+    absorb: [tail_gap_assumption_pct]
+    note: "one worst-move table per class; X4's percent form converts through value_per_point and the typical stop."
+  - keep: size_level_fraction_table
+    absorb: [size_level_now, ev_level_count]
+    note: "size_levels (v0) stays as the ladder; the fraction table is its values; the level now is a status field, not a ledger variable (X1-H01 status)."
+  - keep: house_money_lockout
+    absorb: [accelerator_lockout_trades_after_version]
+    note: "one accelerator lockout with two triggers (event window, version slow start)."
+  - keep: x1_approval_effect_digest
+    absorb: [ev_approval_hash, approval_ttl, ev_approval_expiry_days]
+    note: "the bound click is one descriptor (hash, markets, level, expiry, staleness check): DP7. X1-H46's staleness check is a field of this descriptor, not an id."
+  - keep: ev_approval_markets
+    absorb: [ev_canary_share, x1_canary_share]
+    note: "the market list with its canary subset."
+  - keep: x1_proposal_direction_allowed
+    absorb: [agent_proposal_bounds, loosening_evidence_bar, operation_risk_direction]
+    note: "one direction field on every operation and proposal (X7-H02); the loosening bar is its raise-side evidence rule."
+  - keep: agent_risk_scale
+    absorb: [agent_risk_scale_proposal]
+  - keep: x1_brake_shadow_mode
+    absorb: [ev_applier_mode]
+    note: "one mode field (shadow, ramped, live) for brakes, numbers and verification thresholds; number_motion_mode (v0) stays as the learner's cadence mode."
+  - keep: x1_restore_probe_trades
+    absorb: [restore_cooldown_trades]
+    note: "cool-down and probe count are two numbers; keep both as fields of one restore row (restore_cooldown_trades becomes a field, not an id)."
+  - keep: ev_lifetime_demotion_budget
+    absorb: [ev_demotion_alpha]
+    note: "alpha per unit is derived from the budget by the union bound."
+  - keep: ev_min_viable_edge_r
+    absorb: [expectancy_floor_r]
+    note: "one minimum viable edge after costs; expectancy_floor_r (v0) is its old name."
+  - keep: verification_trades_needed
+    absorb: [min_trades_for_verdict]
+    note: "hand-off 34: too_thin derives from the plan, not a fixed 100."
+  - keep: brake_precision
+    absorb: [agent_precision]
+    note: "one precision measure keyed by brake or agent; agent_vs_random_lift stays as the agent's lift row."
+  - keep: card_expected_value
+    absorb: [card_value_floor]
+    note: "the floor is a threshold on the same measure; keep as a field."
+  - keep: isolation_scope
+    absorb: [x1_scope_key_set]
+    note: "the scope key set (class, region, currency, underlying, session, instrument, deployment, all) is isolation_scope's value list and the kill switch's."
+  - keep: x1_fail_mode
+    absorb: [agent_evidence_fail_mode, context_need_fail_mode, journal_write_fail_mode]
+    note: "one fail-mode field per feed or brake row (DP23, F9), with the three defaults (board open, isolation closed, evidence neutral, journal closed)."
+  - keep: exits_never_blocked
+    absorb: []
+    note: "stays an invariant row; its text gains 'by QMX's controls; a venue refusal raises the incident's urgency' (X4 collision 15)."
+  - keep: bench_min_rest
+    absorb: []
+    note: "kept; referenced by X3-H74 and X4-29, 71."
+
+# 4. Ids that die with dropped hybrids.
+dies:
+  - id: lot_dither_max_multiple
+    with: X2-H46
+    reason: "lot dither dropped: rounds single trades up to 1.5x plan."
+  - id: x1_oracle_mode
+    with: X1-H69
+    reason: "the central oracle dropped: single point of failure."
+  - id: x1_affects_graph_runtime
+    with: X1-H71
+    reason: "affects edges at run time dropped; the typed edges live in the ledger and compile-time layer H (x1_layer_h_rules stays)."
+  - id: holding_horizon
+    with: X0-49
+    reason: "NOT dead: the dial is dropped but the id stays as a measured field with status idea; the applier keeps it and adds the note 'measured realised hold against the preset's range; raises yellow only'."
+    keep: true
+  - id: session_multiplier
+    with: X2-H40 (restructure 5)
+    reason: "the free session size multiplier is deleted; the id moves to status dropped with seen_values kept."
+  - id: premium_window_flag
+    with: X2-H40
+    reason: "NOT dead: stays as the measured-slice flag (X0-47, X5-H47); its 'lift' semantics are removed from the derivation; status proposal."
+    keep: true
+  - id: sweep_cap_equity
+    with: DP16
+    reason: "the 2.5x cliff is replaced by the ratchet; status dropped with seen_values kept; gain_lock_fraction and rising_floor_fraction carry the idea."
+  - id: repromotion_positive_demo_trades
+    with: X5-H26
+    reason: "the ten-wins rule is dropped; status dropped with seen_values kept."
+  - id: decay_recent_trades
+    with: X5 restructure 1
+    reason: "the 20-trade decay check is replaced; status dropped; ev_look_schedule and cusum_limit carry the job."
+  - id: decay_record_days
+    with: X5 restructure 1
+    reason: "as above."
+
+# 5. Renames (no merge).
+rename:
+  - from: x1_compiler_format
+    to: compiler_format
+    reason: "the format is the stack's, not X1's; value now 4 (G12), the bump this set needs is 5."
+
+# 6. Orphans reported by the checker (no coupling either way).
+orphans:
+  - id: x1_adapters_per_slot_min
+    action: "couple: affects x1_min_trust_per_slot (down:cap)."
+  - id: x1_ledger_snapshot_in_compiled_unit
+    action: "couple: inputs [x1_layer_h_rules]; affects decision_freshness_bound (down:cap). Who releases a snapshot is DP2's compile step; note it in open_questions."
+  - id: x1_runs_on
+    action: "couple: affects x1_number_authority_mode (down:state; the applier runs beside the order path, X1-H31) and risk_fact_staleness_limit (down:cap; a replicated fold is late by its harvest cadence)."
+
+# 6a. Code field names, not ledger ids (hand-off 22). The ledger carries R measures as `expectancy_r`,
+#     `round_trip_cost_r` and the trade-row ids; the code fields rename beside them:
+code_fields:
+  - from: r_after_costs
+    to: net_r
+    reason: "the misleading name; trade_r stays gross at the stop; net_r = trade_r minus costs in R; brakes, the money ledger and the proof battery read net_r, drift attribution keeps both streams."
+
+# Existence check, 6 Nov 2026: every id named in sections 1 to 7 was found as an id in variables.yaml
+# or additions/*.yaml, except the three in 6a (code fields) and X1-H46's staleness check (a field).
+
+# 7. Status changes the picks imply (applied after the merges).
+status:
+  - ids: [x1_number_authority_mode, x1_retune_share_cap, x1_restore_probe_trades, money_brake_percentile, money_brake_window_trades, money_brake_threshold_r, money_brake_dollar_clamp, survival_horizon_rounds, horizon_survival_risk_usd, planning_edge_point, stressed_unit_correlation, cost_gap_kelly_ceiling, stop_fill_gap_factor, committed_cushion_usd, fast_invalidation_cut_r, fi_cut_mae_percentile, falsifying_condition, exits_never_blocked, control_rank_table, x1_trading_state, risk_state_emit_interval, risk_fact_staleness_limit]
+    to: proposal
+    note: "the first-increment set (shape C); everything else picked stays at its current status; 'later' hybrids' ids stay idea."
+  - ids: [choke_budget_fire_rate, brake_random_control_margin, x1_enforcement_percent]
+    to: proposal
+    note: "the certificate rule (DP19) is a compile requirement in the first increment."
