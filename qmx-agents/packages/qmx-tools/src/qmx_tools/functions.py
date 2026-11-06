@@ -817,7 +817,7 @@ def _qml_entries() -> tuple[_Held, ...]:
     return tuple(held)
 
 
-def _entry_items(store: Store) -> list[str]:
+def entry_items(store: Store) -> list[str]:
     """Every Library item that ever held an entry marked `qmx.entry/1`."""
     return sorted(
         {
@@ -830,7 +830,7 @@ def _entry_items(store: Store) -> list[str]:
 def _library_entries(store: Store) -> list[_Held]:
     """The Library's entries on `main`, each with the status its last status run wrote."""
     held: list[_Held] = []
-    for item in _entry_items(store):
+    for item in entry_items(store):
         head = store.head(item, MAIN)
         if head is None:
             continue
@@ -880,7 +880,7 @@ def write_entry_status(store: Store, item: str) -> list[tuple[str, str, Computed
 
 def write_entry_statuses(store: Store) -> list[tuple[str, str, Computed]]:
     """`write_entry_status` for every Library entry. Rerunning writes nothing new."""
-    return [row for item in _entry_items(store) for row in write_entry_status(store, item)]
+    return [row for item in entry_items(store) for row in write_entry_status(store, item)]
 
 
 @cache

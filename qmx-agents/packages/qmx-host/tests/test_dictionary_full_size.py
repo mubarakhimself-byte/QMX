@@ -18,6 +18,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from qml.catalogue.loader import block_fingerprint
 from qmx_control.service import ControlService
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.service.context import Caller
@@ -107,7 +108,7 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
     assert [c["refused"] for c in counts] == [0] * 5
     assert len(pages) == 467
     assert [p["entry_id"] for p in pages if p["status"] is None] == []
-    assert len(list(STDLIB.glob("*/*/entry.json"))) == 124
+    assert len(list(cast(Path, STDLIB).glob("*/*/entry.json"))) == 124
     assert store.annotation_log.read_bytes() == log
 
 
@@ -136,9 +137,113 @@ def a_draft(entry_id: str, **more: object) -> Draft:
         "definition": "An agent's word for it.",
         "sources": [{"source_ref": "a note", "quote": "its words", "dated": "2026-11-06"}],
     } | more
+    fields = {"component_type": "indicator", "entry": cast(Any, entry)}
+    return Draft("component", entry_id, entry_id, fields=fields)
+
+
+A_BLOCK = '''"""An agent's block."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from decimal import Decimal
+
+from qml.blocks.api import Side, quantise
+
+
+class _It:
+    __slots__ = ("_seen",)
+
+    def __init__(self) -> None:
+        self._seen: list[Decimal] = []
+
+    @property
+    def warm_up_bars(self) -> int:
+        return 3
+
+    @property
+    def state_bound(self) -> int:
+        return 5
+
+    def retained(self) -> int:
+        return len(self._seen)
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal | None:
+        STATEMENT
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        return None
+
+
+class _Block:
+    def make(
+        self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
+    ) -> _It:
+        return _It()
+
+
+BLOCK = _Block()
+'''
+
+
+def a_block(entry_id: str, statement: str, **blobs: bytes) -> Draft:
+    code = A_BLOCK.replace("STATEMENT", statement).encode()
+    entry = a_draft(
+        entry_id,
+        inputs=[{"port": "series", "stream_kind": "series", "measure": "price", "data_level": 1}],
+        output={"type": "series", "measure": "price"},
+        parameters={},
+        warm_up={"rule": "1", "bars": 3},
+        transfer={"fx": "not_assessed"},
+        mirroring="not_applicable",
+        fingerprint=block_fingerprint(code).value,
+    ).fields["entry"]
     return Draft(
-        "component", entry_id, entry_id, fields={"component_type": "indicator", "entry": entry}
+        "component",
+        entry_id,
+        entry_id,
+        fields={"component_type": "indicator", "entry": entry},
+        blobs={"code": code, **blobs},
     )
+
+
+def test_one_bad_entry_costs_its_own_status_and_the_start_carries_on(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    saved = [
+        a_block("a-index-error", "return quantise(self._seen[7])"),
+        a_block("b-exits", "raise SystemExit(1)"),
+        a_block("c-unreadable-golden", "return None", golden=b"not json"),
+        a_draft("d-older-word"),
+    ]
+    with open_store(tmp_path, tmp_path / "library", serving=False, floor=0) as store:
+        register_checkers(store)
+        heads = {
+            d.item: Store.put(store, OPERATOR, d, on=drafts_ref(str(d.item)), expected_head=None)
+            for d in saved
+        }
+
+        land_dictionary_statuses(store)
+
+        status = {
+            item: store.get(OPERATOR, commit.object_id).annotations.get("status")
+            for item, commit in heads.items()
+        }
+    said = capsys.readouterr().err
+
+    assert {
+        item: mark and cast(dict[str, str], mark)["value"] for item, mark in status.items()
+    } == {
+        "a-index-error": "specified",
+        "b-exits": None,
+        "c-unreadable-golden": None,
+        "d-older-word": "named",
+    }
+    assert "library: the status of b-exits was not written: 1" in said
+    assert "library: the status of c-unreadable-golden was not written: " in said
 
 
 def test_a_clashing_save_is_refused_and_a_new_version_is_not(

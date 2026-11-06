@@ -777,7 +777,7 @@ def _golden_problems(
             ]
             cuts = [len(closes) * k // (CUT_SAMPLES + 1) for k in range(1, CUT_SAMPLES + 1)]
             unequal = [c for c in cuts if run(closes[: c + 1])[-1] != full[c]]
-        except (KeyError, TypeError, ValueError, ArithmeticError) as error:
+        except Exception as error:
             problems.append(EntryProblem("/golden", f"{name} does not run: {error}", ""))
             continue
         if misses:
@@ -849,8 +849,9 @@ def _walk(bars: int) -> dict[str, object]:
 def _settle_problems(raw: Mapping[str, object], source: bytes) -> list[EntryProblem]:
     """A block of an origin QML's tests do not hold that a cold start ``declared`` bars back still
     disagrees with a longer run. ``declared`` is its recorded length, or its warm-up when it records
-    none, so a recursive block that declares nothing answers too. A block that does not load or
-    does not read a series or bars says so elsewhere and answers nothing here."""
+    none, so a recursive block that declares nothing answers too. A block that does not load, does
+    not read a series or bars, or raises on this walk answers nothing here: without a golden run
+    it earns no more than specified, and a golden run says it does not run."""
     if raw.get("origin") not in _OWN_PROOF:
         return []
     try:
@@ -884,7 +885,7 @@ def _settle_problems(raw: Mapping[str, object], source: bytes) -> list[EntryProb
             )
             for start in starts
         )
-    except (KeyError, TypeError, ValueError, ArithmeticError):
+    except Exception:
         return []
     if settled:
         return []

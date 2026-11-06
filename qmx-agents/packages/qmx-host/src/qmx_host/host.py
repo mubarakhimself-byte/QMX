@@ -161,7 +161,7 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
-from qmx_tools.functions import entry_clashes, write_entry_status, write_entry_statuses
+from qmx_tools.functions import entry_clashes, entry_items, write_entry_status
 from qmx_tools.gather import FIXTURE_RECORDS, check_unit, entry_problems, gather
 from qmx_tools.service import attach_node
 from uvicorn.config import STARTUP_FAILURE
@@ -905,10 +905,11 @@ def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -
 def land_entry_status(store: Store, item: str) -> None:
     """One saved entry's status. A status that fails to compute or write is printed: the save has
     committed and stands, and the next start's pass tries again. It runs the entry's own code, as
-    `blocks_check` does, so any exception that code raises stops here."""
+    `blocks_check` does, so anything that code raises stops here. Layer F allows `SystemExit`,
+    which would otherwise end the host."""
     try:
         write_entry_status(store, item)
-    except Exception as refused:
+    except (Exception, SystemExit) as refused:
         print(f"library: the status of {item} was not written: {refused}", file=sys.stderr)
 
 
@@ -1007,9 +1008,12 @@ def land_dictionary_wave(store: Store) -> None:
 
 def land_dictionary_statuses(store: Store) -> None:
     """Every Library entry's status at each PC start, because a store an older checker wrote or a
-    save whose status failed reads true only after this. A head already true writes nothing."""
+    save whose status failed reads true only after this. A head already true writes nothing. One
+    entry at a time, so a bad one names itself and costs only its own status, and the host starts
+    anyway."""
     try:
-        write_entry_statuses(store)
+        for item in entry_items(store):
+            land_entry_status(store, item)
     except (LibraryRefused, OSError, ValueError) as refused:
         print(f"library: the dictionary's statuses were not written: {refused}", file=sys.stderr)
 

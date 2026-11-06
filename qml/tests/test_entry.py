@@ -245,6 +245,26 @@ def test_an_unsettled_block_fails_check_entry() -> None:
     assert check_entry(_agent_entry(settle_bars=too_short)) == ()
 
 
+def test_a_block_whose_code_raises_still_gets_an_answer() -> None:
+    raising = _AGENT_EMA.replace(b"return quantise(self._value)", b"return quantise([][7])")
+    stated = block_fingerprint(raising).value
+    cases = {"close": ["1", "2"], "cases": {"agents-average@1 period=20": [None, None]}}
+
+    no_golden = compute_status(_agent_entry(fingerprint=stated), raising)
+    declared = {"reference": "a note", "cases": "its-cases.json"}
+    golden = compute_status(_agent_entry(fingerprint=stated, golden=declared), raising, cases)
+
+    assert (no_golden.status, no_golden.problems, no_golden.missing) == (
+        Status.SPECIFIED,
+        (),
+        ("implementation: golden cases for its cut-against-full run",),
+    )
+    assert (golden.status, [(p.where, p.message) for p in golden.problems]) == (
+        Status.SPECIFIED,
+        [("/golden", "agents-average@1 period=20 does not run: list index out of range")],
+    )
+
+
 def test_a_settle_row_scales_with_the_parameter_it_names() -> None:
     row = {"params": {"period": "14"}, "bars": 285, "tolerance": "1e-9", "scales_by": "period"}
 
