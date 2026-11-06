@@ -210,12 +210,33 @@ def a_block(entry_id: str, statement: str, **blobs: bytes) -> Draft:
     )
 
 
+NO_WORDS = """class _Bad:
+            def __str__(self) -> str:
+                raise RuntimeError("no words")
+
+        raise SystemExit(_Bad())"""
+NO_NAME = """class _Meta(type):
+            @property
+            def __name__(cls) -> str:
+                raise RuntimeError("no name")
+
+        class _Boom(BaseException, metaclass=_Meta):
+            pass
+
+        raise _Boom()"""
+
+
 def test_one_bad_entry_costs_its_own_status_and_the_start_carries_on(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     saved = [
         a_block("a-index-error", "return quantise(self._seen[7])"),
+        a_block("b-base", "raise BaseException('x')"),
         a_block("b-exits", "raise SystemExit(1)"),
+        a_block("b-generator-exit", "raise GeneratorExit"),
+        a_block("b-keyboard", "raise KeyboardInterrupt"),
+        a_block("b-no-name", NO_NAME),
+        a_block("b-no-words", NO_WORDS),
         a_block("c-unreadable-golden", "return None", golden=b"not json"),
         a_draft("d-older-word"),
     ]
@@ -226,7 +247,17 @@ def test_one_bad_entry_costs_its_own_status_and_the_start_carries_on(
             for d in saved
         }
 
-        land_dictionary_statuses(store)
+        # A raise left to reach pytest crashes its report on the same bad name, and the run exits 0.
+        try:
+            land_dictionary_statuses(store)
+            answer = store.put(
+                OPERATOR,
+                a_block("e-saved-now", "raise KeyboardInterrupt"),
+                on=drafts_ref("e-saved-now"),
+                expected_head=None,
+            ).item
+        except BaseException:
+            answer = "a raise got out"
 
         status = {
             item: store.get(OPERATOR, commit.object_id).annotations.get("status")
@@ -234,16 +265,31 @@ def test_one_bad_entry_costs_its_own_status_and_the_start_carries_on(
         }
     said = capsys.readouterr().err
 
+    assert answer == "e-saved-now"
     assert {
         item: mark and cast(dict[str, str], mark)["value"] for item, mark in status.items()
     } == {
         "a-index-error": "specified",
+        "b-base": None,
         "b-exits": None,
+        "b-generator-exit": None,
+        "b-keyboard": None,
+        "b-no-name": None,
+        "b-no-words": None,
         "c-unreadable-golden": None,
         "d-older-word": "named",
     }
-    assert "library: the status of b-exits was not written: 1" in said
-    assert "library: the status of c-unreadable-golden was not written: " in said
+    for line in (
+        "b-base was not written: BaseException: x",
+        "b-exits was not written: SystemExit: 1",
+        "b-generator-exit was not written: GeneratorExit: ",
+        "b-keyboard was not written: KeyboardInterrupt: ",
+        "b-no-name was not written: an error that cannot be printed",
+        "b-no-words was not written: an error that cannot be printed",
+        "c-unreadable-golden was not written: JSONDecodeError: ",
+        "e-saved-now was not written: KeyboardInterrupt: ",
+    ):
+        assert f"library: the status of {line}" in said
 
 
 def test_a_clashing_save_is_refused_and_a_new_version_is_not(

@@ -905,12 +905,17 @@ def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -
 def land_entry_status(store: Store, item: str) -> None:
     """One saved entry's status. A status that fails to compute or write is printed: the save has
     committed and stands, and the next start's pass tries again. It runs the entry's own code, as
-    `blocks_check` does, so anything that code raises stops here. Layer F allows `SystemExit`,
-    which would otherwise end the host."""
+    `blocks_check` does, and layer F lets that code raise anything, with a name and words that
+    raise when read, so all of it stops here. A real Ctrl-C still ends the host: asyncio's first
+    press cancels `serve` the next time it waits, and only a later press can raise in here."""
     try:
         write_entry_status(store, item)
-    except (Exception, SystemExit) as refused:
-        print(f"library: the status of {item} was not written: {refused}", file=sys.stderr)
+    except BaseException as refused:
+        try:
+            why = f"{type(refused).__name__}: {refused}"
+        except BaseException:
+            why = "an error that cannot be printed"
+        print(f"library: the status of {item} was not written: {why}", file=sys.stderr)
 
 
 def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
@@ -1009,8 +1014,8 @@ def land_dictionary_wave(store: Store) -> None:
 def land_dictionary_statuses(store: Store) -> None:
     """Every Library entry's status at each PC start, because a store an older checker wrote or a
     save whose status failed reads true only after this. A head already true writes nothing. One
-    entry at a time, so a bad one names itself and costs only its own status, and the host starts
-    anyway."""
+    entry at a time, so one that raises names itself and costs only its own status, and the host
+    starts anyway."""
     try:
         for item in entry_items(store):
             land_entry_status(store, item)

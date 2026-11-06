@@ -851,7 +851,8 @@ def _settle_problems(raw: Mapping[str, object], source: bytes) -> list[EntryProb
     disagrees with a longer run. ``declared`` is its recorded length, or its warm-up when it records
     none, so a recursive block that declares nothing answers too. A block that does not load, does
     not read a series or bars, or raises on this walk answers nothing here: without a golden run
-    it earns no more than specified, and a golden run says it does not run."""
+    it earns no more than specified, and a golden run says it does not run, unless it raises only
+    past that run's last bar, which earns implemented."""
     if raw.get("origin") not in _OWN_PROOF:
         return []
     try:
