@@ -142,6 +142,7 @@ from qmn.venue import (
     SubmissionOutcome,
     TimeInForce,
     order_tags,
+    submit_not_ready_refusal,
 )
 
 __all__ = [
@@ -901,8 +902,8 @@ class OrderPath:
     """Each entry whose outcome is unknown, by client order id, with its market: no entry on
     that market until the reconciler resolves it (TN-01). Nothing is ever resent."""
     unprotected: set[str] = field(default_factory=set[str])
-    """Positions the venue filled without holding their stop, which the node closes on every
-    tick until the venue shows them closed."""
+    """Positions the node closes on every tick until the venue shows them closed: filled without
+    holding their stop, or a unit's full exit the venue refused."""
     _ordinal: int = 0
     _sent: dict[str, Placed | Blocked] = field(default_factory=dict[str, Placed | Blocked])
     _refusals: dict[str, int] = field(default_factory=dict[str, int])
@@ -921,6 +922,8 @@ class OrderPath:
         return Ok(cast("Sent", enacted.value.dispatcher_result))
 
     def _send(self, ticket: Ticket) -> Result[Sent]:
+        if isinstance(self.venue.client, ConformanceAccount) and not self.venue.feed.ready:
+            return submit_not_ready_refusal()
         return self.venue.client.send(ticket)
 
     def _note(self, client_order_id: str, step: str, body: Mapping[str, object]) -> None:
@@ -1192,7 +1195,15 @@ class OrderPath:
         )
         if is_refusal(command):
             return Blocked(f"the close could not be built ({command.category.value})")
-        ticket = Ticket(command.value, market, side, reference, position=position)
+        quote = self.venue.feed.quote(market)
+        current = None if quote is None else quote.bid if side is Side.LONG else quote.ask
+        ticket = Ticket(
+            command.value,
+            market,
+            side,
+            reference if current is None else current,
+            position=position,
+        )
         body: dict[str, object] = {
             "event_id": f"{position}/close-{why}",
             "client_order_id": position,
@@ -1636,7 +1647,10 @@ class NodeUnit:
                 new_stop = Decimal(stop.value).scaleb(-stop.scale)
                 return self._amend(exit_, market, position, held, new_stop)
             case _:
-                return self.orders.close(position, market, held.side, held.entry_price, "unit")
+                done = self.orders.close(position, market, held.side, held.entry_price, "unit")
+                if not isinstance(done, Placed):
+                    self.orders.unprotected.add(position)
+                return done
 
     def _amend(
         self,

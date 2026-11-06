@@ -220,6 +220,7 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     case.clear(node, probes)
     played(node, probes, at(1320))
     cleared_first = node.runtime.stand_downs.document()
+    exits_by_then = tickets(node, first)
 
     played(node, probes, at(5570))
     second = len(node.account.received)
@@ -242,7 +243,9 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     ]
 
     assert [held["stand_down"] for held in held_first] == [case.kind.value]
-    assert exits == [(CommandKind.CLOSE_POSITION, "fx.eurusd", "short")]
+    the_exit = [(CommandKind.CLOSE_POSITION, "fx.eurusd", "short")]
+    assert exits == ([] if case.kind is Kind.VENUE_NOT_READY else the_exit)
+    assert exits_by_then == the_exit
     assert cleared_first == []
     assert kept_back == []
     assert stops[:5] == [
