@@ -20,6 +20,9 @@ Three rules keep a reader safe across a reconnect:
   before the drop; until a fresh quote arrives the order path places no entry.
 - A session that stays silent past ``silent_after_ns`` is dropped and opened again, so a dead
   socket that never says so is noticed.
+- A socket the venue refuses is not retried on every turn. The first retry is immediate, so a
+  dropped session still reopens at once, and after it the wait doubles to ``FEED_RETRY_CAP_S``,
+  so a refused internet connection cannot sign in thousands of times an hour.
 """
 
 from __future__ import annotations
@@ -38,9 +41,11 @@ from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter
 from qml.protocol.unit import OHLC, QuoteBar
 
+from qmn.app.healing import Backoff
 from qmn.venue.conformance import submit_not_ready_refusal
 
 __all__ = [
+    "FEED_RETRY_CAP_S",
     "SILENT_AFTER_NS",
     "Bar",
     "Book",
@@ -62,6 +67,10 @@ SILENT_AFTER_NS: Final = 30_000_000_000
 """`[node] feed_silent_after_s`, starting at 30 s: how long a session may say nothing before
 the keeper drops it and opens it again. cTrader asks for a heartbeat every 10 s, so a live
 session that is silent for three of them is dead."""
+FEED_RETRY_CAP_S: Final = 300.0
+"""`[node] feed_retry_cap_s`, starting at 300 s: the longest wait between sign-ins after the
+venue refuses the socket. `Backoff`'s 60 s default gives about 66 sign-ins an hour from the node's
+200 ms tick, above the rule of 40."""
 RECORDING_KEPT: Final = 10_000
 """`[node] recording_kept_bars`: the newest bars per market the recorder keeps in memory for
 warm-up, the `local_queue_bound` default (NODE.md section 9)."""
@@ -252,6 +261,10 @@ class FeedKeeper:
     reconnects: int = 0
     last_heard_ns: int = 0
     reason: str = "not opened yet"
+    retry_at_ns: int = 0
+    """When the next sign-in may be tried; 0 while none is waiting."""
+    _failures: int = 0
+    _backoff: Backoff = field(default_factory=lambda: Backoff(cap_s=FEED_RETRY_CAP_S))
     _books: dict[str, tuple[BookState, tuple[Level, ...]]] = field(
         default_factory=dict[str, tuple[BookState, tuple[Level, ...]]]
     )
@@ -283,8 +296,12 @@ class FeedKeeper:
         Answers the closed bars this turn brought, after every listener saw each of them.
         """
         now = self.clock_ns()
-        if self.state is SessionState.DOWN and not self._open(now):
-            return ()
+        if self.state is SessionState.DOWN:
+            if now < self.retry_at_ns:
+                return ()
+            if not self._open(now):
+                self._wait(now)
+                return ()
         if self.state is SessionState.CONNECTED:
             self._verify()
         events = self.source.read()
@@ -340,8 +357,20 @@ class FeedKeeper:
                 return False
         self.state = SessionState.CONNECTED
         self.last_heard_ns = now
+        self.retry_at_ns = 0
+        self._failures = 0
+        self._backoff.attempts = 0
         self._verify()
         return True
+
+    def _wait(self, now: int) -> None:
+        """Arm the next sign-in after a refused one. The first retry is immediate, so a dropped
+        session keeps reopening on the next turn; after it the wait doubles to the cap."""
+        wait = 0.0 if self._failures == 0 else self._backoff.next(now)
+        self._failures += 1
+        self.retry_at_ns = now + int(wait * 1e9)
+        if wait:
+            self.reason = f"{self.reason}; the next sign-in waits {wait:g} s"
 
     def _verify(self) -> None:
         verified = self.source.verify()
