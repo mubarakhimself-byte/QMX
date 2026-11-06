@@ -687,7 +687,7 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("trading-node", "0.1.3"): "427dec7882d57dfda282a09abd4a13e2",
     ("trading-node", "0.1.4"): "60d93b001fa2ccc9a3a7f8f65b81c0a3",
     ("trading-node", "0.1.5"): "044091fa8c9ed9b92b675a0f43adcba7",
-    ("trading-node", "0.1.6"): "fe1c2f7d55e261b9e5a6037c731fd6ba",
+    ("trading-node", "0.1.6"): "9bbc7724e4d0e47fc20c80412847c54c",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
