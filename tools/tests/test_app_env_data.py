@@ -39,7 +39,7 @@ SHIPPED = {
     "us-index-cfd@1",
 }
 
-NODE_READS = f"""
+NODE_READS = """
 import hashlib, json, sys
 from pathlib import Path
 
@@ -50,7 +50,7 @@ from qmn.time.calendars import market_calendars
 
 raw = DEFINITIONS.read_bytes()
 compiled = compile_descriptor_set(raw, package_name=SPOTWARE_PROTO_PACKAGE, release_tag=91)
-print(json.dumps({{
+print(json.dumps({
     "calendars": sorted(market_calendars()),
     "definitions_sha256": hashlib.sha256(raw).hexdigest(),
     "definitions_in_env": Path(sys.prefix) in DEFINITIONS.parents,
@@ -58,7 +58,7 @@ print(json.dumps({{
     "alarm_list": type(load_alert_allow_list()).__name__,
     "extensions_imported": sorted(m for m in sys.modules if m.startswith("qmf.calendar_")),
     "broker_door": any(m.startswith("qmx_broker") for m in sys.modules),
-}}))
+}))
 """
 QMB_READS = """
 import json, sys

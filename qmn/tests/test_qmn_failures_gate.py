@@ -18,13 +18,13 @@ from qmn.doors.library import EVIDENCE_CAPABILITIES, POWERS_CAPABILITIES
 from qmn.observability import (
     NFR11_REQUIRED_FIELDS,
     PUSH_ALERT_CLASSES,
+    alerts,
     default_failures_path,
     generate_alert_allow_list,
     load_alert_allow_list,
     parse_failures_register,
     push_classes_for_tier,
 )
-from qmn.observability import alerts
 from qmn.observability.failures_gate import (
     DESIGNED_TYPED_FAILURE_IDS,
     collect_emitted_failure_ids,
