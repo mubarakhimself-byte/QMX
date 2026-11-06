@@ -1,0 +1,40 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k     1388     608    0.0%   0.0%      0.92     0.0    0.0
+  strict: in force one anchor later      1355     600    0.0%   0.0%      0.92     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k      635     465    0.0%   0.0%      0.88     0.0    0.0
+  strict: in force one anchor later       635     462    0.0%   0.0%      0.88     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k      494     441    0.0%   0.0%      0.84     0.0    0.0
+  strict: in force one anchor later       496     442    0.0%   0.0%      0.84     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k      442     429    0.0%   0.0%      0.71     0.0    0.0
+  strict: in force one anchor later       442     427    0.0%   0.0%      0.71     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k     5112    2559    0.0%   0.0%      0.89     0.0    0.0
+  strict: in force one anchor later      4577    2615    0.0%   0.0%      0.89     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k      731     438    0.0%   0.0%      0.83     0.0    0.0
+  strict: in force one anchor later       772     468    0.0%   0.0%      0.83     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k      607     424    0.0%   0.0%      0.80     0.0    0.0
+  strict: in force one anchor later       596     423    4.2%   0.0%      0.81     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  evidence to anchor k, in force from k      409     391   26.7%   0.0%      0.73     0.0    0.0
+  strict: in force one anchor later       409     385   34.2%   0.0%      0.73     0.0    0.0

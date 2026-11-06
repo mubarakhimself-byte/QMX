@@ -1,0 +1,7 @@
+
+MIX 2 healthy + 8 thin [N=10 rate=10/day days=120 paths=200]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat                                 1244     811    0.0%   0.0%      0.85     0.0    0.0
+  B pure                                 1485     880    0.0%   0.0%      0.93     0.0    0.0
+  B others                               1440     842    0.0%   0.0%      0.92     0.0    0.0
+  B climbed                              1439     862    0.0%   0.0%      0.90     0.0    0.0

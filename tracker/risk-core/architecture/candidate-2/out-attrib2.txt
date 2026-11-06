@@ -1,0 +1,99 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost     1813     885    1.0%   0.0%      0.97     0.0    0.0
+  + start level from holdout              864     661    0.0%   0.0%      0.46     0.0    0.0
+  + cohort climb, raises at anchor       1799     904    1.0%   0.0%      0.96     0.0    0.0
+  + CUSUM step, second warning to paper     1602     501    0.0%   0.0%      0.93     0.0    0.0
+  + unit bench, retry-lockout            1376     573    0.0%   0.0%      0.91     0.0    0.0
+  + day stop, sized sigma k1.7           1417     581    0.0%   0.0%      0.93     3.1    0.0
+  + pair's taper into it                 1381     604    0.0%   0.0%      0.90     0.9    0.0
+  + open risk deducted live              1381     604    0.0%   0.0%      0.90     0.9    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost      731     488    4.0%   0.0%      0.96     0.0    0.0
+  + start level from holdout              544     509    0.0%   0.0%      0.20     0.0    0.0
+  + cohort climb, raises at anchor        708     484    4.0%   0.0%      0.92     0.0    0.0
+  + CUSUM step, second warning to paper      729     437    0.0%   0.0%      0.90     0.0    0.0
+  + unit bench, retry-lockout             640     453    0.0%   0.0%      0.88     0.0    0.0
+  + day stop, sized sigma k1.7            632     433    1.0%   0.0%      0.89     4.4    0.0
+  + pair's taper into it                  638     463    0.0%   0.0%      0.86     1.7    0.0
+  + open risk deducted live               638     463    0.0%   0.0%      0.86     1.7    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost      339     324   99.0%   0.0%      0.84     0.0    1.1
+  + start level from holdout              394     375   68.0%   0.0%      0.41     0.0    0.0
+  + cohort climb, raises at anchor        340     325   98.0%   0.0%      0.82     0.0    1.0
+  + CUSUM step, second warning to paper      440     425    0.0%   0.0%      0.75     0.0    0.0
+  + unit bench, retry-lockout             445     429    0.0%   0.0%      0.73     0.0    0.0
+  + day stop, sized sigma k1.7            440     426    0.0%   0.0%      0.73     1.9    0.0
+  + pair's taper into it                  450     426    0.0%   0.0%      0.70     0.4    0.1
+  + open risk deducted live               450     426    0.0%   0.0%      0.70     0.4    0.1
+
+HEALTHY +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost     4959    2568    0.0%   0.0%      0.94     0.0    0.0
+  + start level from holdout             1221     967    0.0%   0.0%      0.43     0.0    0.0
+  + cohort climb, raises at anchor       4688    2752    0.0%   0.0%      0.93     0.0    0.0
+  + CUSUM step, second warning to paper     4804    2359    0.0%   0.0%      0.93     0.0    0.0
+  + unit bench, retry-lockout            5024    2250    0.0%   0.0%      0.92     0.0    0.0
+  + day stop, sized sigma k1.7           4373    2146    0.0%   0.0%      0.92     1.7    0.0
+  + pair's taper into it                 4377    1946    0.0%   0.0%      0.91     0.4    0.0
+  + open risk deducted live              4342    2228    0.0%   0.0%      0.90     0.3    0.0
+
+WEAK +0.05R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost      935     672    0.0%   0.0%      0.88     0.0    0.0
+  + start level from holdout              540     503    0.0%   0.0%      0.20     0.0    0.0
+  + cohort climb, raises at anchor        800     526    6.0%   0.0%      0.91     0.0    0.0
+  + CUSUM step, second warning to paper      783     462    1.0%   0.0%      0.90     0.0    0.0
+  + unit bench, retry-lockout             791     441    0.0%   0.0%      0.87     0.0    0.0
+  + day stop, sized sigma k1.7            686     437    0.0%   0.0%      0.88     3.7    0.0
+  + pair's taper into it                  719     435    0.0%   0.0%      0.85     1.2    0.1
+  + open risk deducted live               733     430    0.0%   0.0%      0.83     1.2    0.1
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost      330     321  100.0%   0.0%      0.83     0.0    1.9
+  + start level from holdout              381     366   86.0%   0.0%      0.41     0.0    0.0
+  + cohort climb, raises at anchor        334     321  100.0%   0.0%      0.80     0.0    1.5
+  + CUSUM step, second warning to paper      406     391   31.0%   0.0%      0.77     0.0    0.0
+  + unit bench, retry-lockout             410     392   20.0%   0.0%      0.75     0.0    0.0
+  + day stop, sized sigma k1.7            410     396   17.0%   0.0%      0.76     2.4    0.0
+  + pair's taper into it                  409     391   31.0%   0.0%      0.73     0.3    0.5
+  + open risk deducted live               411     395   22.0%   0.0%      0.72     0.4    0.7
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost     6745    3828    0.0%   0.0%      0.93     0.0    0.0
+  + start level from holdout             1304    1019    0.0%   0.0%      0.44     0.0    0.0
+  + cohort climb, raises at anchor       6415    3570    0.0%   0.0%      0.93     0.0    0.0
+  + CUSUM step, second warning to paper     6021    3189    0.0%   0.0%      0.93     0.0    0.0
+  + unit bench, retry-lockout            5078    3123    0.0%   0.0%      0.92     0.0    0.0
+  + day stop, sized sigma k1.7           5286    2666    0.0%   0.0%      0.92     1.9    0.0
+  + pair's taper into it                 5232    2810    0.0%   0.0%      0.91     0.2    0.0
+  + open risk deducted live              5460    2849    0.0%   0.0%      0.89     0.2    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost      998     727    0.0%   0.0%      0.88     0.0    0.0
+  + start level from holdout              547     515    0.0%   0.0%      0.20     0.0    0.0
+  + cohort climb, raises at anchor        831     483    5.0%   0.0%      0.91     0.0    0.0
+  + CUSUM step, second warning to paper      787     435    0.0%   0.0%      0.89     0.0    0.0
+  + unit bench, retry-lockout             800     448    0.0%   0.0%      0.87     0.0    0.0
+  + day stop, sized sigma k1.7            756     425    1.0%   0.0%      0.88     3.7    0.0
+  + pair's taper into it                  714     438    0.0%   0.0%      0.86     1.2    0.1
+  + open risk deducted live               799     446    0.0%   0.0%      0.83     1.1    0.2
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer: cushion, spread, B, reserve, cost      330     321  100.0%   0.0%      0.87     0.0    1.4
+  + start level from holdout              382     366   80.0%   0.0%      0.41     0.0    0.0
+  + cohort climb, raises at anchor        336     321  100.0%   0.0%      0.80     0.0    1.9
+  + CUSUM step, second warning to paper      407     393   30.0%   0.0%      0.77     0.0    0.0
+  + unit bench, retry-lockout             409     387   28.0%   0.0%      0.75     0.0    0.0
+  + day stop, sized sigma k1.7            411     391   23.0%   0.0%      0.76     2.5    0.0
+  + pair's taper into it                  409     394   22.0%   0.0%      0.72     0.3    0.8
+  + open risk deducted live               411     390   27.0%   0.0%      0.72     0.3    0.6

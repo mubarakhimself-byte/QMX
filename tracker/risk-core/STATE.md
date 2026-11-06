@@ -330,6 +330,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 49. **M45-M46: usage.** Fable is the special case: few, and one after another. Other agents have no set number, but no waste, and no need to ask first (memory saved). The bar went from 38% to 40% in minutes with four agents running. He said do not pause the running ones. The bar must last about 20 days. So the rest of the route runs lean: the lead reads the candidates and picks by itself; at most one Opus check after the fold; no cross-judge unless the pick is truly tied.
 
+50. **Arena: three candidates done; base picked (`architecture/PICK.md`): candidate 1 plus grafts from 2 and 3.** One guard above the position. The document has the full Kubernetes shape, with the simple modes on at go-live (facts move live, numbers at anchors). The fold agent (one Fable, alone) writes `architecture/SPINE.md`, `SYNTHESIS.md`, `handoff/FOR-REPAIR-SOCKET.md` and settles the ledger questions. Ledger v1 committed (832 entries, 202 core). Next: one independent Opus check as the last round, then the plain-words explanation as an explainer page, then we cool off. Slices wait until he is ready.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.

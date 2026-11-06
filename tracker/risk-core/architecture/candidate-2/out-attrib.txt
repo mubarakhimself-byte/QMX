@@ -1,0 +1,132 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                          1850     974    0.0%   0.0%      0.97     0.0    0.0
+  +start level from holdout               854     682    0.0%   0.0%      0.46     0.0    0.0
+  +cohort climb, raises at anchor        1749     953    0.0%   0.0%      0.96     0.0    0.0
+  +CUSUM step-down                       1538     528    0.0%   0.0%      0.94     0.0    0.0
+  +unit bench, retry-lockout             1389     661    0.0%   0.0%      0.92     0.0    0.0
+  +day stop                              1389     661    0.0%   0.0%      0.92     0.0    0.0
+  +pair's taper                          1389     661    0.0%   0.0%      0.92     0.0    0.0
+  +open risk deducted live               1389     661    0.0%   0.0%      0.92     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           711     518    3.0%   0.0%      0.96     0.0    0.0
+  +start level from holdout               543     513    0.0%   0.0%      0.20     0.0    0.0
+  +cohort climb, raises at anchor         708     519    3.0%   0.0%      0.92     0.0    0.0
+  +CUSUM step-down                        661     443    1.0%   0.0%      0.90     0.0    0.0
+  +unit bench, retry-lockout              629     466    0.0%   0.0%      0.88     0.0    0.0
+  +day stop                               629     466    0.0%   0.0%      0.88     0.0    0.0
+  +pair's taper                           629     465    0.0%   0.0%      0.88     0.0    0.0
+  +open risk deducted live                629     465    0.0%   0.0%      0.88     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           547     408   19.0%   0.0%      0.95     0.0    0.0
+  +start level from holdout               537     457    0.0%   0.0%      0.45     0.0    0.0
+  +cohort climb, raises at anchor         562     410   16.0%   0.0%      0.93     0.0    0.0
+  +CUSUM step-down                        492     452    0.0%   0.0%      0.88     0.0    0.0
+  +unit bench, retry-lockout              495     441    0.0%   0.0%      0.84     0.0    0.0
+  +day stop                               495     441    0.0%   0.0%      0.84     0.0    0.0
+  +pair's taper                           495     441    0.0%   0.0%      0.84     0.0    0.0
+  +open risk deducted live                495     441    0.0%   0.0%      0.84     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           337     321   95.0%   0.0%      0.85     0.0    2.2
+  +start level from holdout               390     372   67.0%   0.0%      0.41     0.0    0.0
+  +cohort climb, raises at anchor         338     322   95.0%   0.0%      0.83     0.0    1.4
+  +CUSUM step-down                        441     426    0.0%   0.0%      0.77     0.0    0.0
+  +unit bench, retry-lockout              444     429    0.0%   0.0%      0.70     0.0    0.0
+  +day stop                               444     429    0.0%   0.0%      0.70     0.0    0.0
+  +pair's taper                           444     429    0.0%   0.0%      0.70     0.0    0.0
+  +open risk deducted live                444     429    0.0%   0.0%      0.70     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                          5264    2514    0.0%   0.0%      0.94     0.0    0.0
+  +start level from holdout              1177     943    0.0%   0.0%      0.43     0.0    0.0
+  +cohort climb, raises at anchor        4666    2553    0.0%   0.0%      0.93     0.0    0.0
+  +CUSUM step-down                       4740    2543    0.0%   0.0%      0.92     0.0    0.0
+  +unit bench, retry-lockout             3704    1716    0.0%   0.0%      0.89     0.0    0.0
+  +day stop                              3704    1716    0.0%   0.0%      0.89     0.0    0.0
+  +pair's taper                          3700    1717    0.0%   0.0%      0.89     0.0    0.0
+  +open risk deducted live               3821    1953    0.0%   0.0%      0.88     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           970     605    0.0%   0.0%      0.88     0.0    0.0
+  +start level from holdout               540     508    0.0%   0.0%      0.20     0.0    0.0
+  +cohort climb, raises at anchor         781     507    5.0%   0.0%      0.88     0.0    0.0
+  +CUSUM step-down                        715     437    0.0%   0.0%      0.87     0.0    0.0
+  +unit bench, retry-lockout              741     464    0.0%   0.0%      0.85     0.0    0.0
+  +day stop                               741     464    0.0%   0.0%      0.85     0.0    0.0
+  +pair's taper                           684     481    1.0%   0.0%      0.85     0.0    0.0
+  +open risk deducted live                642     428    1.0%   0.0%      0.83     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           600     490    0.0%   0.0%      0.84     0.0    0.0
+  +start level from holdout               553     468    0.0%   0.0%      0.44     0.0    0.0
+  +cohort climb, raises at anchor         600     448    6.0%   0.0%      0.86     0.0    0.0
+  +CUSUM step-down                        593     430    2.0%   0.0%      0.85     0.0    0.0
+  +unit bench, retry-lockout              548     437    2.0%   0.0%      0.82     0.0    0.0
+  +day stop                               548     437    2.0%   0.0%      0.82     0.0    0.0
+  +pair's taper                           565     425    3.0%   0.0%      0.82     0.0    0.0
+  +open risk deducted live                584     425    4.0%   0.0%      0.80     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           327     321  100.0%   0.0%      0.83     0.0    1.8
+  +start level from holdout               382     367   84.0%   0.0%      0.41     0.0    0.0
+  +cohort climb, raises at anchor         333     322  100.0%   0.0%      0.79     0.0    0.7
+  +CUSUM step-down                        409     394   25.0%   0.0%      0.75     0.0    0.0
+  +unit bench, retry-lockout              411     397   24.0%   0.0%      0.73     0.0    0.0
+  +day stop                               411     397   24.0%   0.0%      0.73     0.0    0.0
+  +pair's taper                           411     397   23.0%   0.0%      0.73     0.0    0.0
+  +open risk deducted live                410     392   29.0%   0.0%      0.71     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                          6214    3755    0.0%   0.0%      0.93     0.0    0.0
+  +start level from holdout              1301    1021    0.0%   0.0%      0.44     0.0    0.0
+  +cohort climb, raises at anchor        5569    3607    0.0%   0.0%      0.92     0.0    0.0
+  +CUSUM step-down                       5527    2817    0.0%   0.0%      0.92     0.0    0.0
+  +unit bench, retry-lockout             4435    2507    0.0%   0.0%      0.89     0.0    0.0
+  +day stop                              4435    2507    0.0%   0.0%      0.89     0.0    0.0
+  +pair's taper                          5040    2503    0.0%   0.0%      0.89     0.0    0.0
+  +open risk deducted live               4762    2676    0.0%   0.0%      0.87     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                          1074     758    0.0%   0.0%      0.87     0.0    0.0
+  +start level from holdout               540     500    0.0%   0.0%      0.20     0.0    0.0
+  +cohort climb, raises at anchor         780     457    7.0%   0.0%      0.88     0.0    0.0
+  +CUSUM step-down                        784     437    0.0%   0.0%      0.86     0.0    0.0
+  +unit bench, retry-lockout              729     434    0.0%   0.0%      0.82     0.0    0.0
+  +day stop                               729     434    0.0%   0.0%      0.82     0.0    0.0
+  +pair's taper                           703     436    0.0%   0.0%      0.83     0.0    0.0
+  +open risk deducted live                792     438    0.0%   0.0%      0.82     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           657     503    0.0%   0.0%      0.90     0.0    0.0
+  +start level from holdout               556     481    0.0%   0.0%      0.45     0.0    0.0
+  +cohort climb, raises at anchor         639     482    0.0%   0.0%      0.85     0.0    0.0
+  +CUSUM step-down                        624     415    4.0%   0.0%      0.83     0.0    0.0
+  +unit bench, retry-lockout              579     453    2.0%   0.0%      0.80     0.0    0.0
+  +day stop                               579     453    2.0%   0.0%      0.80     0.0    0.0
+  +pair's taper                           607     427    0.0%   0.0%      0.80     0.0    0.0
+  +open risk deducted live                610     431    3.0%   0.0%      0.79     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=100; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  sizer+reserve                           334     321  100.0%   0.0%      0.87     0.0    2.5
+  +start level from holdout               384     368   87.0%   0.0%      0.41     0.0    0.0
+  +cohort climb, raises at anchor         337     321  100.0%   0.0%      0.79     0.0    1.9
+  +CUSUM step-down                        409     393   22.0%   0.0%      0.74     0.0    0.0
+  +unit bench, retry-lockout              412     394   25.0%   0.0%      0.73     0.0    0.1
+  +day stop                               412     394   25.0%   0.0%      0.73     0.0    0.1
+  +pair's taper                           409     391   29.0%   0.0%      0.74     0.0    0.0
+  +open risk deducted live                411     391   22.0%   0.0%      0.71     0.0    0.0

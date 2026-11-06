@@ -1,0 +1,120 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                1422     586    0.0%   0.0%      0.91     0.0    0.0
+  + a cut that changes no lots goes to paper     1422     586    0.0%   0.0%      0.91     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 643     447    0.0%   0.0%      0.88     0.0    0.0
+  + a cut that changes no lots goes to paper      643     447    0.0%   0.0%      0.88     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 496     443    0.0%   0.0%      0.83     0.0    0.0
+  + a cut that changes no lots goes to paper      496     443    0.0%   0.0%      0.83     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 446     429    0.0%   0.0%      0.73     0.0    0.0
+  + a cut that changes no lots goes to paper      446     429    0.0%   0.0%      0.73     0.0    0.0
+
+HEALTHY +0.10R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 473     439    0.0%   0.0%      0.80     0.0    0.0
+  + a cut that changes no lots goes to paper      473     439    0.0%   0.0%      0.80     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 428     403    5.0%   0.0%      0.71     0.0    0.0
+  + a cut that changes no lots goes to paper      428     403    5.0%   0.0%      0.72     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 444     428    0.0%   0.0%      0.71     0.0    0.0
+  + a cut that changes no lots goes to paper      444     428    0.0%   0.0%      0.71     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 442     427    0.0%   0.0%      0.55     0.0    0.0
+  + a cut that changes no lots goes to paper      442     427    0.0%   0.0%      0.56     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                4004    1947    0.0%   0.0%      0.90     0.0    0.0
+  + a cut that changes no lots goes to paper     4004    1947    0.0%   0.0%      0.90     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 730     455    0.0%   0.0%      0.84     0.0    0.0
+  + a cut that changes no lots goes to paper      730     455    0.0%   0.0%      0.84     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 588     435    0.0%   0.0%      0.81     0.0    0.0
+  + a cut that changes no lots goes to paper      588     435    0.0%   0.0%      0.81     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 407     390   32.5%   0.0%      0.73     0.0    0.0
+  + a cut that changes no lots goes to paper      408     388   25.8%   0.0%      0.73     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 521     414    5.0%   0.0%      0.80     0.0    0.0
+  + a cut that changes no lots goes to paper      493     409    6.7%   0.0%      0.79     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 423     407    2.5%   0.0%      0.71     0.0    0.0
+  + a cut that changes no lots goes to paper      423     407    2.5%   0.0%      0.71     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 409     393   25.0%   0.0%      0.72     0.0    0.0
+  + a cut that changes no lots goes to paper      409     393   25.0%   0.0%      0.72     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 411     396   13.3%   0.0%      0.63     0.0    0.0
+  + a cut that changes no lots goes to paper      411     396   13.3%   0.0%      0.63     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                4914    2244    0.0%   0.0%      0.89     0.0    0.0
+  + a cut that changes no lots goes to paper     4914    2244    0.0%   0.0%      0.89     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 837     452    0.8%   0.0%      0.83     0.0    0.0
+  + a cut that changes no lots goes to paper      837     452    0.8%   0.0%      0.84     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 622     429    3.3%   0.0%      0.81     0.0    0.0
+  + a cut that changes no lots goes to paper      614     429    2.5%   0.0%      0.81     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 410     393   22.5%   0.0%      0.73     0.0    0.0
+  + a cut that changes no lots goes to paper      410     393   22.5%   0.0%      0.73     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 531     415    5.0%   0.0%      0.79     0.0    0.0
+  + a cut that changes no lots goes to paper      523     411    6.7%   0.0%      0.79     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 420     405    0.8%   0.0%      0.74     0.0    0.0
+  + a cut that changes no lots goes to paper      420     405    0.8%   0.0%      0.74     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 411     392   28.3%   0.0%      0.71     0.0    0.0
+  + a cut that changes no lots goes to paper      408     393   30.0%   0.0%      0.72     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  refresh                                 411     394   19.2%   0.0%      0.64     0.0    0.0
+  + a cut that changes no lots goes to paper      411     394   19.2%   0.0%      0.64     0.0    0.0

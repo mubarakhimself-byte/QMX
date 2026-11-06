@@ -1,0 +1,20 @@
+
+DECAY +0.10R to +0.01R over 400 trades [N=1 cost x1.0 rate=10/day days=160 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       521     459    0.0%   0.0%      0.87     0.0    0.0
+  refresh: raises wait for the anchor      524     459    0.0%   0.0%      0.87     0.0    0.0
+
+DECAY +0.10R to +0.01R over 400 trades [N=10 cost x1.0 rate=10/day days=160 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       665     505    0.8%   0.0%      0.83     0.0    0.0
+  refresh: raises wait for the anchor      672     522    0.0%   0.0%      0.82     0.0    0.0
+
+DECAY +0.10R to +0.01R over 1200 trades [N=1 cost x1.0 rate=10/day days=160 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       653     509    0.0%   0.0%      0.90     0.0    0.0
+  refresh: raises wait for the anchor      655     508    0.0%   0.0%      0.89     0.0    0.0
+
+DECAY +0.10R to +0.01R over 1200 trades [N=10 cost x1.0 rate=10/day days=160 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)      1663    1127    0.0%   0.0%      0.87     0.0    0.0
+  refresh: raises wait for the anchor     1713    1088    0.0%   0.0%      0.86     0.0    0.0

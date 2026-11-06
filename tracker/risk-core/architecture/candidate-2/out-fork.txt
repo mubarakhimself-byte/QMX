@@ -1,0 +1,140 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)      1417     615    0.0%   0.0%      0.92     0.0    0.0
+  refresh: raises wait for the anchor     1388     608    0.0%   0.0%      0.92     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       643     467    0.0%   0.0%      0.88     0.0    0.0
+  refresh: raises wait for the anchor      635     465    0.0%   0.0%      0.88     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       492     439    0.0%   0.0%      0.85     0.0    0.0
+  refresh: raises wait for the anchor      494     441    0.0%   0.0%      0.84     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       442     427    0.0%   0.0%      0.72     0.0    0.0
+  refresh: raises wait for the anchor      442     429    0.0%   0.0%      0.71     0.0    0.0
+
+HEALTHY +0.10R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       478     439    0.0%   0.0%      0.83     0.0    0.0
+  refresh: raises wait for the anchor      482     439    0.0%   0.0%      0.82     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       421     403    4.2%   0.0%      0.75     0.0    0.0
+  refresh: raises wait for the anchor      423     405    3.3%   0.0%      0.74     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       445     429    0.0%   0.0%      0.72     0.0    0.0
+  refresh: raises wait for the anchor      446     431    0.0%   0.0%      0.70     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       436     425    0.0%   0.0%      0.61     0.0    0.0
+  refresh: raises wait for the anchor      438     426    0.0%   0.0%      0.59     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)      4605    2398    0.0%   0.0%      0.90     0.0    0.0
+  refresh: raises wait for the anchor     3700    1717    0.0%   0.0%      0.89     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       761     431    0.8%   0.0%      0.84     0.0    0.0
+  refresh: raises wait for the anchor      711     474    0.8%   0.0%      0.85     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       571     432    0.8%   0.0%      0.82     0.0    0.0
+  refresh: raises wait for the anchor      565     425    3.3%   0.0%      0.82     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       411     392   21.7%   0.0%      0.73     0.0    0.0
+  refresh: raises wait for the anchor      411     395   24.2%   0.0%      0.73     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       508     413    5.8%   0.0%      0.80     0.0    0.0
+  refresh: raises wait for the anchor      493     411    6.7%   0.0%      0.79     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       419     406    1.7%   0.0%      0.74     0.0    0.0
+  refresh: raises wait for the anchor      419     405    1.7%   0.0%      0.73     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       410     394   23.3%   0.0%      0.72     0.0    0.0
+  refresh: raises wait for the anchor      410     392   22.5%   0.0%      0.71     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       410     394   23.3%   0.0%      0.63     0.0    0.0
+  refresh: raises wait for the anchor      413     401    8.3%   0.0%      0.61     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)      4991    2742    0.0%   0.0%      0.89     0.0    0.0
+  refresh: raises wait for the anchor     5112    2559    0.0%   0.0%      0.89     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       726     448    0.0%   0.0%      0.84     0.0    0.0
+  refresh: raises wait for the anchor      731     438    0.0%   0.0%      0.83     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       608     420    0.8%   0.0%      0.81     0.0    0.0
+  refresh: raises wait for the anchor      607     424    0.0%   0.0%      0.80     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       412     389   26.7%   0.0%      0.73     0.0    0.0
+  refresh: raises wait for the anchor      409     391   26.7%   0.0%      0.73     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       506     408    5.0%   0.0%      0.80     0.0    0.0
+  refresh: raises wait for the anchor      524     408    5.0%   0.0%      0.79     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       423     405    5.8%   0.0%      0.74     0.0    0.0
+  refresh: raises wait for the anchor      427     405    1.7%   0.0%      0.70     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       410     391   23.3%   0.0%      0.73     0.0    0.0
+  refresh: raises wait for the anchor      405     388   37.5%   0.0%      0.73     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.5 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       410     395   17.5%   0.0%      0.65     0.0    0.0
+  refresh: raises wait for the anchor      409     393   26.7%   0.0%      0.63     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=40/day days=120 paths=120; card p1=-9.8R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)    177038   38967    0.0%   0.0%      0.92     0.0    0.0
+  refresh: raises wait for the anchor   156855   35263    0.0%   0.0%      0.91     0.0    0.0
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=2/day days=120 paths=120; card p1=-5.8R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       606     431    8.3%   0.0%      0.87     0.0    0.0
+  refresh: raises wait for the anchor      607     431    8.3%   0.0%      0.86     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=40/day days=120 paths=120; card p1=-11.6R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       709     491    0.0%   0.0%      0.87     0.0    0.0
+  refresh: raises wait for the anchor      711     478    0.0%   0.0%      0.85     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=2/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  as core_sim (climb on next trade)       481     388   28.3%   0.0%      0.75     0.0    0.0
+  refresh: raises wait for the anchor      481     387   28.3%   0.0%      0.75     0.0    0.0

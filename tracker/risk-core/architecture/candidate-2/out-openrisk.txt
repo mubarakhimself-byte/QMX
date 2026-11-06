@@ -1,0 +1,72 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                    1388     608    0.0%   0.0%      0.92     0.0    0.0
+  + open risk deducted live              1388     608    0.0%   0.0%      0.92     0.0    0.0
+  + day's realised loss deducted live     1368     609    0.0%   0.0%      0.91     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     635     465    0.0%   0.0%      0.88     0.0    0.0
+  + open risk deducted live               635     465    0.0%   0.0%      0.88     0.0    0.0
+  + day's realised loss deducted live      632     466    0.0%   0.0%      0.86     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     494     441    0.0%   0.0%      0.84     0.0    0.0
+  + open risk deducted live               494     441    0.0%   0.0%      0.84     0.0    0.0
+  + day's realised loss deducted live      496     441    0.0%   0.0%      0.83     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     442     429    0.0%   0.0%      0.71     0.0    0.0
+  + open risk deducted live               442     429    0.0%   0.0%      0.71     0.0    0.0
+  + day's realised loss deducted live      444     429    0.0%   0.0%      0.70     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                    3700    1717    0.0%   0.0%      0.89     0.0    0.0
+  + open risk deducted live              3821    1953    0.0%   0.0%      0.88     0.0    0.0
+  + day's realised loss deducted live     4043    1974    0.0%   0.0%      0.88     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     711     474    0.8%   0.0%      0.85     0.0    0.0
+  + open risk deducted live               675     430    0.8%   0.0%      0.83     0.0    0.0
+  + day's realised loss deducted live      743     448    0.0%   0.0%      0.82     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     565     425    3.3%   0.0%      0.82     0.0    0.0
+  + open risk deducted live               584     423    3.3%   0.0%      0.80     0.0    0.0
+  + day's realised loss deducted live      581     425    0.0%   0.0%      0.79     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     411     395   24.2%   0.0%      0.73     0.0    0.0
+  + open risk deducted live               410     392   29.2%   0.0%      0.71     0.0    0.0
+  + day's realised loss deducted live      413     393   24.2%   0.0%      0.69     0.0    0.1
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                    5112    2559    0.0%   0.0%      0.89     0.0    0.0
+  + open risk deducted live              4762    2636    0.0%   0.0%      0.87     0.0    0.0
+  + day's realised loss deducted live     5210    2614    0.0%   0.0%      0.87     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     731     438    0.0%   0.0%      0.83     0.0    0.0
+  + open risk deducted live               813     438    0.0%   0.0%      0.82     0.0    0.0
+  + day's realised loss deducted live      787     441    0.0%   0.0%      0.81     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     607     424    0.0%   0.0%      0.80     0.0    0.0
+  + open risk deducted live               610     431    3.3%   0.0%      0.79     0.0    0.0
+  + day's realised loss deducted live      589     422    3.3%   0.0%      0.77     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  anchor cushion only                     409     391   26.7%   0.0%      0.73     0.0    0.0
+  + open risk deducted live               410     393   21.7%   0.0%      0.71     0.0    0.0
+  + day's realised loss deducted live      410     393   20.8%   0.0%      0.70     0.0    0.0

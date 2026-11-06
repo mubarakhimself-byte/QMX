@@ -1,0 +1,112 @@
+
+HEALTHY +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)       1388     608    0.0%   0.0%      0.92     0.0    0.0
+  B pure level-weighted (DP9 literal)     1471     648    0.0%   0.0%      0.97     0.0    0.0
+  B others at level, self at full        1388     608    0.0%   0.0%      0.92     0.0    0.0
+  B freed swing only to full level       1388     608    0.0%   0.0%      0.92     0.0    0.0
+
+WEAK +0.05R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        635     465    0.0%   0.0%      0.88     0.0    0.0
+  B pure level-weighted (DP9 literal)      668     465    0.0%   0.0%      0.96     0.0    0.0
+  B others at level, self at full         635     465    0.0%   0.0%      0.88     0.0    0.0
+  B freed swing only to full level        635     465    0.0%   0.0%      0.88     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        494     441    0.0%   0.0%      0.84     0.0    0.0
+  B pure level-weighted (DP9 literal)      498     432    0.0%   0.0%      0.95     0.0    0.0
+  B others at level, self at full         494     441    0.0%   0.0%      0.84     0.0    0.0
+  B freed swing only to full level        494     441    0.0%   0.0%      0.84     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=1 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        442     429    0.0%   0.0%      0.71     0.0    0.0
+  B pure level-weighted (DP9 literal)      428     413    0.8%   0.0%      0.93     0.0    0.0
+  B others at level, self at full         442     429    0.0%   0.0%      0.71     0.0    0.0
+  B freed swing only to full level        442     429    0.0%   0.0%      0.71     0.0    0.0
+
+HEALTHY +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)       3700    1717    0.0%   0.0%      0.89     0.0    0.0
+  B pure level-weighted (DP9 literal)     4890    2511    0.0%   0.0%      0.94     0.0    0.0
+  B others at level, self at full        4653    2217    0.0%   0.0%      0.93     0.0    0.0
+  B freed swing only to full level       4291    2169    0.0%   0.0%      0.92     0.0    0.0
+
+WEAK +0.05R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        711     474    0.8%   0.0%      0.85     0.0    0.0
+  B pure level-weighted (DP9 literal)      755     440    0.8%   0.0%      0.93     0.0    0.0
+  B others at level, self at full         699     442    0.0%   0.0%      0.88     0.0    0.0
+  B freed swing only to full level        687     442    0.0%   0.0%      0.88     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        565     425    3.3%   0.0%      0.82     0.0    0.0
+  B pure level-weighted (DP9 literal)      601     420    1.7%   0.0%      0.89     0.0    0.0
+  B others at level, self at full         582     422    3.3%   0.0%      0.86     0.0    0.0
+  B freed swing only to full level        566     417    5.0%   0.0%      0.85     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=5 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        411     395   24.2%   0.0%      0.73     0.0    0.0
+  B pure level-weighted (DP9 literal)      405     392   34.2%   0.0%      0.88     0.0    0.0
+  B others at level, self at full         409     393   23.3%   0.0%      0.79     0.0    0.0
+  B freed swing only to full level        411     395   22.5%   0.0%      0.74     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)       5112    2559    0.0%   0.0%      0.89     0.0    0.0
+  B pure level-weighted (DP9 literal)     5980    3014    0.0%   0.0%      0.93     0.0    0.0
+  B others at level, self at full        5825    3107    0.0%   0.0%      0.92     0.0    0.0
+  B freed swing only to full level       5796    3237    0.0%   0.0%      0.92     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        731     438    0.0%   0.0%      0.83     0.0    0.0
+  B pure level-weighted (DP9 literal)      749     428    0.0%   0.0%      0.93     0.0    0.0
+  B others at level, self at full         743     434    0.0%   0.0%      0.87     0.0    0.0
+  B freed swing only to full level        851     435    0.0%   0.0%      0.87     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        607     424    0.0%   0.0%      0.80     0.0    0.0
+  B pure level-weighted (DP9 literal)      609     449    0.8%   0.0%      0.87     0.0    0.0
+  B others at level, self at full         622     433    2.5%   0.0%      0.85     0.0    0.0
+  B freed swing only to full level        617     421    3.3%   0.0%      0.84     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=10/day days=120 paths=120; card p1=-5.3R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        409     391   26.7%   0.0%      0.73     0.0    0.0
+  B pure level-weighted (DP9 literal)      404     383   39.2%   0.0%      0.88     0.0    0.0
+  B others at level, self at full         407     392   27.5%   0.0%      0.79     0.0    0.0
+  B freed swing only to full level        408     392   30.0%   0.0%      0.76     0.0    0.0
+
+HEALTHY +0.10R [N=10 cost x1.0 rate=2/day days=120 paths=120; card p1=-5.8R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        807     547    0.8%   0.0%      0.81     0.0    0.0
+  B pure level-weighted (DP9 literal)      938     567    0.0%   0.0%      0.91     0.0    0.0
+  B others at level, self at full         859     567    0.8%   0.0%      0.88     0.0    0.0
+  B freed swing only to full level        811     554    0.8%   0.0%      0.83     0.0    0.0
+
+WEAK +0.05R [N=10 cost x1.0 rate=2/day days=120 paths=120; card p1=-5.9R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        505     394   24.2%   0.0%      0.68     0.0    0.0
+  B pure level-weighted (DP9 literal)      538     384   20.0%   0.0%      0.92     0.0    0.0
+  B others at level, self at full         509     409   18.3%   0.0%      0.81     0.0    0.0
+  B freed swing only to full level        515     409   12.5%   0.0%      0.75     0.0    0.0
+
+OVERSTATED +0.03R, card +0.10R [N=10 cost x1.0 rate=2/day days=120 paths=120; card p1=-5.8R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        483     412   10.8%   0.0%      0.77     0.0    0.0
+  B pure level-weighted (DP9 literal)      467     382   28.3%   0.0%      0.88     0.0    0.0
+  B others at level, self at full         460     389   25.8%   0.0%      0.84     0.0    0.0
+  B freed swing only to full level        465     391   26.7%   0.0%      0.79     0.0    0.0
+
+BLEEDING -0.05R, card +0.10R [N=10 cost x1.0 rate=2/day days=120 paths=120; card p1=-5.8R]
+  arm                                 median$    p10$  <50%cu  touch size/base st/100d  dark%
+  B flat on live units (as simmed)        367     339   95.0%   0.0%      0.71     0.0    0.0
+  B pure level-weighted (DP9 literal)      353     333   92.5%   0.0%      0.87     0.0    0.0
+  B others at level, self at full         359     335   94.2%   0.0%      0.81     0.0    0.0
+  B freed swing only to full level        358     337   92.5%   0.0%      0.73     0.0    0.0
