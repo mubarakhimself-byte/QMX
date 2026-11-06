@@ -452,6 +452,35 @@ def test_a_second_unit_on_a_netting_symbol_is_refused(tmp_path: Path) -> None:
     runtime(rig).stop()
 
 
+def test_a_withdrawn_flat_unit_no_longer_blocks_its_market(tmp_path: Path) -> None:
+    """A withdrawn and flat unit trades nothing from then on, so its market must come back to
+    his replacement deployment instead of being held by a unit that only still has the object."""
+    rig = bound_rig(tmp_path, broker=Netting(binding.codec()))
+    binding.signed_in(rig)
+    binding.bind(rig)
+    keep_history(rig)
+    binding.tick_quotes(rig)
+
+    deploy(rig, deployment_on(rig.data, "dep-1", "fx.eurusd"), "op-deploy-1")
+    assert settled(rig) in ("warming up", "trading")
+    assert open_positions(rig) == 0
+
+    gone = value(rig.node.call("withdraw", {"op_id": "op-withdraw-1", "deployment_id": "dep-1"}))
+    assert gone["state"] == "accepted"
+
+    rt = runtime(rig)
+    rt.tick()
+    kept = rt.hosted["dep-1"]
+    assert (kept.phase.value, kept.detail) == ("stopped", "withdrawn and flat")
+    assert kept.unit is not None
+    assert shown(rig)["dep-1"]["state"] == "withdrawing"
+
+    deploy(rig, deployment_on(rig.data, "dep-2", "fx.eurusd"), "op-deploy-2")
+    assert settled(rig, "dep-2") in ("warming up", "trading")
+    assert shown(rig)["dep-2"]["state"] == "trading"
+    rt.stop()
+
+
 def test_a_deploy_before_bind_warms_once_bound(tmp_path: Path) -> None:
     rig = bound_rig(tmp_path)
     binding.signed_in(rig)
