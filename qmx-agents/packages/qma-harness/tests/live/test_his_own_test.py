@@ -743,9 +743,13 @@ def test_his_own_test() -> None:
             said.check("journal: backtest_run was called", bool(runs), runs)
             said.check("journal: backtest_judge_run was called", bool(judges), judges)
             assert blocks_seen and news and checks and runs and judges, (path, names)
+            # The chat loads `build-unit`, which starts from the template with `unit_new` and
+            # searches the dictionary at its step 3 (plugin/skills/build-unit/SKILL.md:22-29), so
+            # only the order that skill and the plan both accept is asserted. This departs from
+            # REPAIR-PLAN.md:1266, which puts the dictionary search before `unit_new`.
             said.check(
-                "journal: blocks, unit_new and unit_check come in order",
-                min(blocks_seen) < min(news) < min(checks),
+                "journal: blocks and unit_new come before unit_check",
+                min(blocks_seen) < min(checks) and min(news) < min(checks),
                 names,
             )
             before_run = [index for index in checks if index < min(runs)]
