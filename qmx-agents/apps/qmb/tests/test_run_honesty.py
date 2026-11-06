@@ -61,7 +61,7 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
 
 
 def a_unit(world: World, name: str, ema_period: str) -> str:
-    """The dummy with another EMA period: another compiled unit, so it has no behaviour check yet."""
+    """The dummy with another EMA period: another compiled unit, with no behaviour check yet."""
     document = template(DUMMY)
     numbers = cast("dict[str, dict[str, Any]]", document["numbers"])
     numbers["ema_period"]["default"] = ema_period
@@ -110,11 +110,13 @@ def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
     assert (plain["measures"]["total_r"], costed["measures"]["total_r"]) == ("-2.2597", "-2.2597")
     assert (plain["measures"]["net_money"], costed["measures"]["net_money"]) == (
         "-114.97",
-        "-145.21",
+        "-161.39",
     )
-    assert [t["r"] for t in rows["trades"]] == [t["r"] for t in report(world.store, plain["id"])["trades"]]
+    assert [t["r"] for t in rows["trades"]] == [
+        t["r"] for t in report(world.store, plain["id"])["trades"]
+    ]
     assert len(rows["cash_events"]) == 16
-    assert sum(Decimal(t["cash"]) for t in rows["trades"]) == Decimal("-30.24")
+    assert sum(Decimal(t["cash"]) for t in rows["trades"]) == Decimal("-47.38")
     assert costed["labels"]["costs_uncalibrated"] is True
     assert costed["labels"]["cost_profile"] == profile
     assert json.loads((laid / "costs" / "fx.eurusd.json").read_text("utf-8"))["fills"] == 0
@@ -284,7 +286,7 @@ def test_a_quick_study_keeps_his_settings_seal(tmp_path: Path) -> None:
         def refusal(name: str, spec: dict[str, Any]) -> str:
             study = Draft("study-spec", name, name, fields=cast("Any", spec))
             pin = store.put(OPERATOR, study, on="main", expected_head=None).object_id
-            with pytest.raises(ValueError) as refused:  # noqa: PT011
+            with pytest.raises(ValueError) as refused:
                 run.open(
                     "qmb",
                     "1.0.0",

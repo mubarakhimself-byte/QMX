@@ -271,7 +271,7 @@ def conformance(host: Host) -> JsonValue:
             app, job, inputs=cast(Document, dict(inputs)), principal=principal
         )
 
-    ran = run_conformance("qmb", "1.0.3", run_job=run_job, library=host.library, principal=CHAT)
+    ran = run_conformance("qmb", "1.0.4", run_job=run_job, library=host.library, principal=CHAT)
     return {"passed": ran.verdict.passed, "says": ran.verdict.says()}
 
 
@@ -403,7 +403,7 @@ def refused(code: str) -> JsonValue:
     return {"ok": False, "code": code}
 
 
-FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": "1.0.3"}}
+FINISHED: JsonValue = {"status": "finished", "tester": {"app": "qmb", "version": "1.0.4"}}
 EXAMPLES: Mapping[str, Shipped] = {
     "exchange-status": Shipped(
         asks=(
@@ -531,7 +531,7 @@ EXAMPLES: Mapping[str, Shipped] = {
                 {},
                 {
                     "contract": "qmb/1",
-                    "tester": {"app": "qmb", "version": "1.0.3"},
+                    "tester": {"app": "qmb", "version": "1.0.4"},
                     "fidelities": ["quotes"],
                     "instrument_classes": ["fx", "metal"],
                 },

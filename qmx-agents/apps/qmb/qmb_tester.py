@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core import fingerprint_bytes
 from qmf.core.refusal import TypedRefusal
+
+if TYPE_CHECKING:
+    from qmb.data.gap_check import ShortEnds
 
 OUTPUT: Final = "backtest-result"
 CONTRACT: Final = "qmb/1"
@@ -58,6 +61,18 @@ def unit_body(asked: Mapping[str, object], run_id: str) -> Document:
         "gap_bars_refuse": asked.get("gap_bars_refuse"),
         "calibrated_min_fills": asked.get("calibrated_min_fills"),
     }
+
+
+def data_short(short: Iterable[ShortEnds]) -> list[dict[str, object]]:
+    """A run's `data_short` label: each market whose bars stop short of its window."""
+    return [
+        {
+            "market_id": ends.market_id,
+            "before_first": ends.before_first,
+            "after_last": ends.after_last,
+        }
+        for ends in short
+    ]
 
 
 def reason(refusal: TypedRefusal) -> str:

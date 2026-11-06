@@ -1,6 +1,6 @@
 id = "qmb"
 name = "QMB"
-version = "1.0.3"
+version = "1.0.4"
 risk = "runs"
 kind = "headless"
 

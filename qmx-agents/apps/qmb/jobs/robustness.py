@@ -23,6 +23,7 @@ from qmb.robustness.unit_battery import (
     EDGE_HORIZON_BARS,
     EDGE_RESAMPLES,
     STRESS_MULTIPLIER,
+    compact_bars,
     cost_stress,
     entry_edge,
 )
@@ -52,10 +53,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         return tester.failed(run_id, "cost_multiplier is decimal text")
     if not all(type(n) is int for n in (horizon, resamples, seed)):
         return tester.failed(run_id, "horizon_bars, resamples and seed are whole numbers")
-    ran = run_cell(folder / "in", tester.unit_body(asked, run_id))
+    body = tester.unit_body(asked, run_id) | {"window": asked.get("window")}
+    ran = run_cell(folder / "in", body)
     if is_refusal(ran):
         return tester.failed(run_id, tester.reason(ran))
-    held = ran.value.loaded.bars()
+    held = compact_bars(ran.value.loaded.feeds)
     if is_refusal(held):
         return tester.failed(run_id, tester.reason(held))
     trades = ran.value.result.trades
@@ -87,6 +89,7 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         labels={
             "zero_trades": not trades,
             "fixture_records": asked.get("fixture_records", []),
+            "data_short": tester.data_short(result.short),
             "fidelity": "quotes",
         },
         files=[
