@@ -639,24 +639,36 @@ class _Credential(ctypes.Structure):
     )
 
 
-def credential_manager(target: str) -> str | None:
-    """One generic Credential Manager entry the host's keyring wrote, whose blob is UTF-16."""
+def _credential(target: str) -> tuple[str | None, str | None]:
+    """One generic Credential Manager entry the host's keyring wrote: its blob decoded from
+    UTF-16 and the user the entry names, or `(None, None)` when it is not there."""
     if sys.platform != "win32":
-        return None
+        return None, None
     api = ctypes.WinDLL("advapi32", use_last_error=True)
     found = ctypes.c_void_p()
     if not api.CredReadW(ctypes.c_wchar_p(target), 1, 0, ctypes.byref(found)):
-        return None
+        return None, None
     try:
         credential = ctypes.cast(found, ctypes.POINTER(_Credential)).contents
         blob = ctypes.string_at(credential.CredentialBlob, credential.CredentialBlobSize)
+        user = credential.UserName
     finally:
         api.CredFree(found)
-    return blob.decode("utf-16-le")
+    return blob.decode("utf-16-le"), user
+
+
+def credential_manager(service: str, user: str) -> str | None:
+    """What keyring answers for `(service, user)`: the service's own entry, unless it is missing
+    or names another user, and then the `user@service` entry keyring moves the value to whenever
+    anything writes that service under another user (`keyring/backends/Windows.py`)."""
+    held, owner = _credential(service)
+    if held is None or owner != user:
+        held, _ = _credential(f"{user}@{service}")
+    return held
 
 
 def real_bearer() -> str | None:
-    return credential_manager(BEARER_SERVICE)
+    return credential_manager(BEARER_SERVICE, BEARER_USER)
 
 
 class AtTheKeyboard:

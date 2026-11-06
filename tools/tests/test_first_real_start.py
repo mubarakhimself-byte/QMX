@@ -435,12 +435,13 @@ def test_the_reader_follows_keyrings_rule(monkeypatch: pytest.MonkeyPatch) -> No
     service, user = script.BEARER_SERVICE, script.BEARER_USER
     compound = f"{user}@{service}"
     store: dict[str, tuple[str, str]] = {}
+    """Each entry as the reader sees it: its value and the user it names."""
 
     def write(target: str, owner: str, value: str) -> None:
         if target == service and service in store:
             previous = store[service]
-            store[f"{previous[0]}@{service}"] = previous
-        store[target] = (owner, value)
+            store[f"{previous[1]}@{service}"] = previous
+        store[target] = (value, owner)
 
     def read(target: str) -> tuple[str | None, str | None]:
         return store.get(target, (None, None))
@@ -452,7 +453,7 @@ def test_the_reader_follows_keyrings_rule(monkeypatch: pytest.MonkeyPatch) -> No
     write(service, user, "second")
     assert script.real_bearer() == "second"
     write(service, "someone-else", "other")
-    assert store[compound] == (user, "second")
+    assert store[compound] == ("second", user)
     assert script.real_bearer() == "second"
     del store[service]
     assert script.real_bearer() == "second"
