@@ -25,13 +25,15 @@
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "match", "name": "Match each sentence", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/match.py"}, "effect": "none"},
     {"id": "unmatched", "name": "Anything unmatched?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.append_requests != []"}, "effect": "none"},
-    {"id": "draft", "name": "Draft the new entries", "type": "agent", "typeVersion": 1, "toolsets": ["blocks"], "position": [660, 0], "role": "extractor", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/draft.md", "output_schema_ref": "schemas/drafts.json", "tools": []}, "effect": "none"},
-    {"id": "check", "name": "Check every draft", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/check.py"}, "effect": "none"}
+    {"id": "quote", "name": "Quote the source as data", "type": "subworkflow", "typeVersion": 1, "position": [660, 0], "parameters": {"workflow": "marked-sources"}},
+    {"id": "draft", "name": "Draft the new entries", "type": "agent", "typeVersion": 1, "toolsets": ["blocks"], "position": [880, 0], "role": "extractor", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/draft.md", "output_schema_ref": "schemas/drafts.json", "tools": []}, "effect": "none"},
+    {"id": "check", "name": "Check every draft", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/check.py"}, "effect": "none"}
   ],
   "connections": {
     "On request": {"main": [[{"node": "Match each sentence", "port": "in", "map": "one"}]]},
     "Match each sentence": {"main": [[{"node": "Anything unmatched?", "port": "in", "map": "one"}, {"node": "Check every draft", "port": "in", "map": "one"}]]},
-    "Anything unmatched?": {"true": [[{"node": "Draft the new entries", "port": "in", "map": "one"}]]},
+    "Anything unmatched?": {"true": [[{"node": "Quote the source as data", "port": "in", "map": "one"}]]},
+    "Quote the source as data": {"main": [[{"node": "Draft the new entries", "port": "in", "map": "one"}]]},
     "Draft the new entries": {"main": [[{"node": "Check every draft", "port": "in", "map": "one"}]]}
   },
   "meta": {"template": "expand-the-dictionary-from-a-source"}
