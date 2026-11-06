@@ -270,12 +270,15 @@ def test_the_best_slice_of_a_record_reads_the_record_and_a_later_run_reads_its_o
             key=lambda t: -float(str(t["r"])),
         )[:100]
     ]
-    picked = world.land(best_hundred, markets=others)
+    one_past_the_record: list[dict[str, object]] = [
+        {"market_id": market, "closed_at": START + 200 * DAY, "r": "1.0000"} for market in others
+    ]
+    picked = world.land([*best_hundred, *one_past_the_record], markets=others)
 
     answer, markets = verdict_of(world, results=[alone, picked])
 
     assert (markets["fx.m02"]["raw_r"], markets["fx.m02"]["shrunk_r"]) == ("0.2193", "0.0558")
-    assert (markets["fx.m03"]["trades"], answer["overall"]) == (100, "fail")
+    assert (markets["fx.m03"]["trades"], answer["overall"]) == (101, "fail")
 
     later = world.land(
         [

@@ -768,7 +768,7 @@ def _pull_table(
 ) -> dict[str, list[Decimal]]:
     """The trades the shrink reads, so that what an agent chooses to judge cannot weaken the pull.
     A market reads the longest record the same code has of it in `family`. Its judged trades stand
-    only when they are `enough` to judge it on and are not a slice of that record from this tester.
+    only when they are `enough` to judge it on and overlap no longer record from this tester.
     Same code means an equal `compiled_fp`, else an equal `unit`, or a record holding every judged
     trade. Reruns of one market are never added together."""
     table = {market: rs for market, rs in trades.items() if rs}
@@ -785,11 +785,11 @@ def _pull_table(
             held.setdefault(trade.market, []).append(trade)
         for market, rows in held.items():
             low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
-            a_slice = other.tester in testers and all(
+            overlaps = other.tester in testers and any(
                 low <= t.closed_at <= high for t in judged if t.market == market
             )
             thin = len(trades.get(market, ())) < enough
-            if (thin or a_slice) and len(rows) > len(table.get(market, ())):
+            if (thin or overlaps) and len(rows) > len(table.get(market, ())):
                 table[market] = [t.r for t in rows]
     return table
 
