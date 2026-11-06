@@ -511,7 +511,7 @@ def test_a_withdraw_that_times_out_keeps_the_park_and_a_second_click_finishes_it
     assert timed_out[1]["value"]["node_answer"] == "queued"
     assert timed_out[1]["value"]["lifecycle_event_id"] == again[1]["value"]["lifecycle_event_id"]
     assert (again[0], again[1]["value"]["node_answer"]) == (200, "accepted")
-    assert rig.node.withdraws() == [deployment, deployment]
+    assert rig.node.withdraws() == [deployment, deployment, deployment]
     assert [move[1:3] for move in rig.moves()] == [
         ("draft", "tested"),
         ("tested", "paper"),

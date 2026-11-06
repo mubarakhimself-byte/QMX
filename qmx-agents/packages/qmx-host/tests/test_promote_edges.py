@@ -32,9 +32,11 @@ from qmx_apps.supervisor import Supervisor
 from qmx_control.models import Document
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.service.context import Caller
+from qmx_library.port import JsonObject
 from qmx_library.principal import Principal
 from qmx_tools.gather import FIXTURE_RECORDS, gather
 from starlette.types import ASGIApp, Receive, Scope, Send
+from test_promote import CLICKED, DUMMY, HIM, TAG, ConformanceNode, g_report, judged, put
 
 from qmx_host.first_start import land_dummy
 from qmx_host.host import HostStore, LanderLibrary, open_store, register_checkers
@@ -42,13 +44,11 @@ from qmx_host.lifecycle import LifecycleWriter
 from qmx_host.node_link import NodeLink
 from qmx_host.promote import ROUTE, Promoter, harvested_calibrations, promote_router
 
-from test_promote import CLICKED, DUMMY, HIM, TAG, ConformanceNode, g_report, judged, put
-
 OPERATOR = Principal("operator")
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 APP = "trading-node"
 STALL_S = 25.0
-"""Past the supervisor's 20 s MCP ask and inside the 30 s outer one, so the answer is `tool_failed`."""
+"""Past the supervisor's 20 s MCP ask and inside its 30 s one, so the answer is `tool_failed`."""
 UV_SHIM = """\
 import os
 from pathlib import Path
@@ -225,7 +225,9 @@ class Rig:
 
     def live(self) -> list[str]:
         """The deployment ids the node itself holds, without the host's refused rows."""
-        return [str(row["deployment_id"]) for row in self.deployments() if row["state"] != "refused"]
+        return [
+            str(row["deployment_id"]) for row in self.deployments() if row["state"] != "refused"
+        ]
 
 
 def as_caller(app: ASGIApp, caller: Caller) -> ASGIApp:
@@ -252,12 +254,12 @@ def library(tmp_path: Path) -> Iterator[Library]:
             record.pop("record_version")
             put(store, "instrument", f"instrument-{name}", record)
         for account_id, world in (("demo-1", "demo"), ("live-1", "live")):
-            account: dict[str, object] = {
+            account: JsonObject = {
                 "venue": "icmarkets-ctrader",
                 "account_id": account_id,
                 "world": world,
             }
-            put(store, "account", f"account-{account_id}", cast("dict[str, object]", account))
+            put(store, "account", f"account-{account_id}", account)
         unit = cast(str, land_dummy(store))
         document = store.get(OPERATOR, unit).fields
         compiled = compile_unit(document, gather(store, document).context)
@@ -291,7 +293,14 @@ def rig_of(library: Library, node: Any) -> Rig:
     app = FastAPI()
     app.include_router(promote_router(promoter))
     return Rig(
-        library.home, library.store, library.writer, node, app, library.unit, library.compiled, promoter
+        library.home,
+        library.store,
+        library.writer,
+        node,
+        app,
+        library.unit,
+        library.compiled,
+        promoter,
     )
 
 
@@ -322,9 +331,7 @@ def app_folder(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def supervised(
-    library: Library, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[Rig]:
+def supervised(library: Library, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Rig]:
     """A real supervisor over a real app process, and the promoter over it."""
     program = recording_uv(tmp_path)
     found = shutil.which
@@ -353,6 +360,11 @@ def until(check: Any, what: str) -> None:
         time.sleep(0.05)
 
 
+def papers(rig: Rig) -> int:
+    """How many of his moves into paper the journal holds."""
+    return sum(1 for move in rig.moves() if move[1:3] == ("tested", "paper"))
+
+
 def test_a_timed_out_deploy_waits_and_lands_once(supervised: Rig) -> None:
     g_report(supervised.store, supervised.compiled.compiled_fingerprint.value)
     data = supervised.home / "data" / "apps" / APP / "data"
@@ -370,14 +382,16 @@ def test_a_timed_out_deploy_waits_and_lands_once(supervised: Rig) -> None:
     until((data / "deploy-released").is_file, "the node's first deploy never returned")
     supervised.promoter.nodes.flush("pc")
 
-    assert supervised.promoter.nodes.outbox.get(deployment).state == "applied"
+    settled = supervised.promoter.nodes.outbox.get(deployment)
+    assert settled is not None
+    assert settled.state == "applied"
     assert supervised.live() == [deployment]
-    assert len(supervised.moves()) == 2
+    assert papers(supervised) == 1
 
     status, again = supervised.click(op_id="click-1", to="paper")
 
     assert (status, again["value"]["node_answer"]) == (200, "accepted")
-    assert (len(supervised.moves()), supervised.live()) == (2, [deployment])
+    assert (papers(supervised), supervised.live()) == (1, [deployment])
 
     status, fresh = supervised.click(op_id="click-2", to="paper")
 
@@ -386,7 +400,7 @@ def test_a_timed_out_deploy_waits_and_lands_once(supervised: Rig) -> None:
         "illegal_move",
         "not_in_table: his_click cannot move paper to paper",
     )
-    assert (len(supervised.moves()), supervised.live()) == (2, [deployment])
+    assert (papers(supervised), supervised.live()) == (1, [deployment])
 
 
 def test_a_click_after_a_refused_deploy_deploys_again(library: Library) -> None:
@@ -403,7 +417,9 @@ def test_a_click_after_a_refused_deploy_deploys_again(library: Library) -> None:
     node.down = False
     node.refuse_deploy = "identity_unconfirmed"
     rig.promoter.nodes.flush("pc")
-    assert rig.promoter.nodes.outbox.get(refused_id).state == "refused"
+    settled_refusal = rig.promoter.nodes.outbox.get(refused_id)
+    assert settled_refusal is not None
+    assert settled_refusal.state == "refused"
     moves = rig.moves()
 
     node.refuse_deploy = None
