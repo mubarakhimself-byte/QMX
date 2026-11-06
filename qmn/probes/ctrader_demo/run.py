@@ -73,6 +73,8 @@ DEMO_HOME: Final = "data/apps/trading-node/data"
 PASSPORT: Final = "data/trading-node-passport.json"
 KEYS: Final = "qmx/trading-node-keys"
 BAR: Final = 900_000_000_000
+FILL_QUESTION: Final = "whether a fill, a non-closing event, carries its stop and its clientMsgId"
+PASSPORT_QUESTION: Final = "the six literal facts the node's passport holds"
 MARK_MODULES: Final = (
     label_survives,
     partial_keeps_label,
@@ -110,6 +112,25 @@ def _spot(one: Frame) -> bool:
 
 def _answered(one: Frame) -> bool:
     return one.name in {"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent", "ProtoOAErrorRes"}
+
+
+def _observed(one: Frame) -> dict[str, object]:
+    """What one order answer carries, field by field, so the demo run says what it saw and never
+    what it expected."""
+    body: Mapping[str, object] = one.body
+    order = body.get("order")
+    nested: Mapping[str, object] = (
+        cast("Mapping[str, object]", order) if isinstance(order, dict) else {}
+    )
+    return {
+        "event": one.name,
+        "fields on the event": sorted(body),
+        "fields on its order": sorted(nested),
+        "stopLoss on the event": "stopLoss" in body,
+        "stopLoss on its order": "stopLoss" in nested,
+        "clientMsgId on the event": "clientMsgId" in body,
+        "clientMsgId on its order": "clientMsgId" in nested,
+    }
 
 
 class Crossing:
@@ -213,7 +234,11 @@ class Crossing:
         api = self.venue.api
         if api is None:
             return None
-        return api.wait(_filled)
+        found = api.wait(_filled)
+        answered = getattr(found, "value", None)
+        if answered is not None and not is_refusal(found):
+            self.observations[FILL_QUESTION] = _observed(answered)
+        return found
 
     def push_order(self, client_order_id: str, *, volume: int = WHOLE) -> Any:
         """One market order down the wire, over the real codec, without waiting for the answer."""
@@ -441,7 +466,12 @@ class Demo(Crossing):
             return f"cTrader refused the deal list ({reasons(asked)})"
         body = cast("dict[str, object]", asked.value.body)
         deals = cast("list[object]", body.get("deal") or [])
-        return f"{len(deals)} deals on the first page, hasMore={body.get('hasMore')}"
+        first = deals[0] if deals else None
+        fields = sorted(cast("Mapping[str, object]", first)) if isinstance(first, dict) else []
+        return (
+            f"{len(deals)} deals on the first page, hasMore={body.get('hasMore')}, "
+            f"first deal's fields {fields}"
+        )
 
     def trendbars(self) -> str:
         """One trendbar page: how many rows, and whether the answer says more are behind it."""
@@ -577,13 +607,30 @@ def demo(home: Path, tag: str | None, account: str | None) -> Demo:
     verified = venue.verify()
     if is_refusal(verified):
         raise SystemExit(f"FAIL setup: the session did not verify ({reasons(verified)})")
-    return Demo(venue, ctid, grant, store, app, holder)
+    session = Demo(venue, ctid, grant, store, app, holder)
+    session.observations[PASSPORT_QUESTION] = _facts(passport)
+    return session
+
+
+def _facts(passport: Mapping[str, object]) -> dict[str, object]:
+    """The six facts the node's passport carries: its five self-test checks and its clock."""
+    checks = passport.get("checks")
+    rows: Mapping[str, object] = (
+        cast("Mapping[str, object]", checks) if isinstance(checks, dict) else {}
+    )
+    facts: dict[str, object] = {}
+    for name, row in rows.items():
+        held: Mapping[str, object] = (
+            cast("Mapping[str, object]", row) if isinstance(row, dict) else {}
+        )
+        facts[str(name)] = held.get("ok", held.get("value"))
+    return facts
 
 
 def questions(session: Demo) -> None:
     """What only his demo settles, each printing what it found, never a verdict."""
-    for question, found in session.observations.items():
-        print(f"FOUND {question}: {found}")
+    for question in (FILL_QUESTION, PASSPORT_QUESTION):
+        print(f"FOUND {question}: {session.observations.get(question, 'not observed in this run')}")
     for question, found in (
         ("what a close on a gone position answers", session.gone_close()),
         ("the deal list of the probe's last position", session.deal_list()),
