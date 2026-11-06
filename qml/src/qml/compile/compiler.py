@@ -33,7 +33,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
@@ -56,14 +56,18 @@ from qml.numbers.records import InstrumentRecord
 from qml.unit.model import (
     BarKind,
     Binding,
+    Combiner,
     CombinerKind,
     Market,
     MirrorSide,
+    Motion,
     MotionMode,
     NumberKind,
     NumberParam,
+    NumberSpec,
     Price,
     Role,
+    Scope,
     Side,
     Slot,
     SlotsSide,
@@ -360,6 +364,25 @@ def _exit_gap(face: EntryFace, use: ExitUse | None) -> str | None:
     return None
 
 
+def _exit_inputs_unread(bound: BoundBlock) -> dict[str, str]:
+    """The ports of an exit whose written reference runs nothing: the host feeds its bars port
+    whole bars and its position ports the position, whatever the document says."""
+    whole_bars = {port.port for port in bound.face.inputs if port.stream_kind == "bars"}
+    return {port: ref for port, ref in bound.inputs.items() if port not in whole_bars or "." in ref}
+
+
+def _combiner_extras(combiner: Combiner) -> tuple[str, ...]:
+    """The combiner's written fields that ``_Run.combine`` does not read."""
+    written = {
+        "k": combiner.k is not None and combiner.kind is not CombinerKind.K_OF_N,
+        "weights": bool(combiner.weights),
+        "open": combiner.open is not None,
+        "close": combiner.close is not None,
+        "within_bars": combiner.within_bars is not None,
+    }
+    return tuple(name for name, is_written in written.items() if is_written)
+
+
 class _Wiring:
     """Binds each document binding to its loaded block and records what does not fit."""
 
@@ -405,6 +428,13 @@ class _Wiring:
                     f"{where}/combiner/kind",
                     f"combiner {slot.combiner.kind.value} is not in {_FORMAT}",
                 )
+            for extra in _combiner_extras(slot.combiner):
+                self.problems.add(
+                    "combiner_not_built",
+                    f"{where}/combiner/{extra}",
+                    f"{_FORMAT} reads no {extra} on a {slot.combiner.kind.value} combiner, so this "
+                    "slot would hold or not without it",
+                )
             if slot.role not in ROLES_BUILT:
                 self.problems.add(
                     "role_not_built",
@@ -439,10 +469,22 @@ class _Wiring:
         unresolved = False
         for index, binding in enumerate(self.unit.exit_set):
             where = f"/exit_set/{index}"
+            if binding.scope is not Scope.POSITION:
+                self.problems.add(
+                    "exit_not_built",
+                    f"{where}/scope",
+                    f"{_FORMAT} runs an exit per position, not on the {binding.scope.value}",
+                )
             bound = self.bind(binding, f"exit.{binding.name}", where)
             if bound is None:
                 unresolved = True
                 continue
+            for port, ref in _exit_inputs_unread(bound).items():
+                self.problems.add(
+                    "inputs_not_built",
+                    f"{where}/inputs/{port}",
+                    f"{_FORMAT} hands an exit whole bars and its position, so it never reads {ref}",
+                )
             use = _exit_use(bound.face)
             gap = _exit_gap(bound.face, use)
             if gap is not None:
@@ -491,22 +533,68 @@ def _only_on_a_dropped_side(unit: Unit, number: str) -> bool:
     return bool(binding_sides) and not binding_sides.intersection(TRADED_SIDES[unit.direction])
 
 
+def _bound_numbers(unit: Unit) -> set[str]:
+    """Every number a binding on a stated side, an exit or the sizer reads."""
+    bindings: list[Binding] = [
+        binding
+        for side in Side
+        if (found := _side_slots(unit, side)) is not None
+        for slot in found[1].values()
+        for binding in slot.bindings
+    ]
+    bindings += [*unit.exit_set, *([unit.sizer] if unit.sizer is not None else [])]
+    return {
+        param.number
+        for binding in bindings
+        for param in binding.params.values()
+        if isinstance(param, NumberParam)
+    }
+
+
+def _unread_rule_params(
+    given: Mapping[str, str],
+    face: EntryFace | None,
+    set_here: Mapping[str, Decimal],
+    where: str,
+    problems: _Problems,
+) -> None:
+    """A rule param the block does not declare, or one the compiler sets itself, runs nothing."""
+    if face is None:
+        return
+    for key in sorted(given.keys() - (face.parameters.keys() - set_here.keys())):
+        problems.add(
+            "motion_not_built", f"{where}/rule_params/{key}", f"{face.pin} never reads {key} here"
+        )
+
+
 def _motion(
-    unit: Unit, sides: Sequence[SidePlan], loaded: Loaded, problems: _Problems
+    unit: Unit,
+    sides: Sequence[SidePlan],
+    loaded: Loaded,
+    faces: Mapping[str, EntryFace],
+    problems: _Problems,
 ) -> tuple[tuple[DerivedPlan, ...], tuple[SlowPlan, ...]]:
     derived: list[DerivedPlan] = []
     slow: list[SlowPlan] = []
+    bound = _bound_numbers(unit)
     for name, spec in unit.numbers.items():
         where = f"/numbers/{name}/motion"
         motion = spec.motion
         if _only_on_a_dropped_side(unit, name):
             continue
+        if spec.kind is NumberKind.FIXED and name not in bound:
+            problems.add(
+                "number_not_read",
+                f"/numbers/{name}",
+                f"no binding reads {name}, so writing it changes nothing",
+            )
         if spec.kind is NumberKind.DERIVED:
             pin = DERIVED_BLOCKS.get(motion.mode)
             block = loaded.blocks.get(pin) if pin is not None else None
             if pin is None or block is None:
                 problems.add("motion_not_built", where, f"no pinned block runs {motion.mode.value}")
                 continue
+            _unread_rule_params(motion.rule_params, faces.get(pin), {}, where, problems)
             params = {k: d for k, v in motion.rule_params.items() if (d := _decimal(v)) is not None}
             hosts = [s for s in sides if _bound_on(s, name)]
             sources = [
@@ -555,7 +643,7 @@ def _motion(
                 continue
             params = {k: d for k, v in motion.rule_params.items() if (d := _decimal(v)) is not None}
             default = _decimal(spec.default) or Decimal(0)
-            params |= {
+            set_here = {
                 "min_count": Decimal(
                     motion.min_count if motion.min_count is not None else MIN_TRADES
                 ),
@@ -566,6 +654,8 @@ def _motion(
                 "step": spec.range.step,
                 "default": default,
             }
+            _unread_rule_params(motion.rule_params, faces.get(rule), set_here, where, problems)
+            params |= set_here
             every = (
                 motion.cadence.every_closed_trades if motion.cadence else None
             ) or SLOW_CADENCE_TRADES
@@ -573,17 +663,44 @@ def _motion(
     return tuple(derived), tuple(slow)
 
 
-def _not_read(b: BoundBlock, read: AbstractSet[str]) -> str | None:
+def _wrong_feed(b: BoundBlock, streams: AbstractSet[str]) -> str | None:
+    """Why a port of ``b`` would never answer. ``resolve`` hands a whole bar for a stream's bare
+    name and one value or nothing for any other ref, and each port reads only one of those."""
+    for port in b.face.inputs:
+        ref = b.inputs.get(port.port)
+        if ref is None:
+            continue
+        stream, _, part = ref.partition(".")
+        whole_bar = stream in streams and not part
+        if whole_bar and port.stream_kind == "series":
+            return (
+                f"{b.pin}'s {port.port} port takes one value, and {ref} is a whole bar. "
+                f"Feed it {stream}.close or a binding that gives a value"
+            )
+        if not whole_bar and port.stream_kind == "bars":
+            return (
+                f"{b.pin}'s {port.port} port takes a whole bar, and {ref} is not one. "
+                f"Feed it {' or '.join(sorted(streams))}"
+            )
+    return None
+
+
+def _not_read(b: BoundBlock, read: AbstractSet[str], streams: AbstractSet[str]) -> str | None:
     """Why ``b`` can neither hold nor feed, by the shape of its face and never by its name, so an
     agent's block of the same shape refuses too. A block not built yet answers only for that."""
     if b.pin in BLOCKS_NOT_BUILT:
         return None
+    if b.face.output.type is OutputType.EXIT_ACTION:
+        return f"{b.pin} is an exit, and a slot never acts on one. Put it in /exit_set"
     unfed = next((p for p in b.face.inputs if p.stream_kind not in _SLOT_PORT_KINDS), None)
     if unfed is not None:
         return (
             f"{b.pin} reads its {unfed.stream_kind} port {unfed.port}, which no slot is fed, so it "
             "can neither hold nor feed here"
         )
+    wrong_feed = _wrong_feed(b, streams)
+    if wrong_feed is not None:
+        return wrong_feed
     if _holds_a_slot(b.face) or b.name in read:
         return None
     return (
@@ -592,12 +709,17 @@ def _not_read(b: BoundBlock, read: AbstractSet[str]) -> str | None:
     )
 
 
-def _with_feeders(side: SidePlan, derived: Sequence[DerivedPlan], problems: _Problems) -> SidePlan:
+def _with_feeders(
+    side: SidePlan,
+    derived: Sequence[DerivedPlan],
+    streams: AbstractSet[str],
+    problems: _Problems,
+) -> SidePlan:
     """``side`` with its feeders marked. A binding that can neither hold nor feed refuses."""
     read = {d.source for d in derived if d.side is side.side}
     feeders: set[str] = set()
     for b in reversed([b for slot in side.slots for b in slot.bindings]):
-        why = _not_read(b, read)
+        why = _not_read(b, read, streams)
         if why is not None:
             problems.add("binding_not_read", b.where, why)
         elif not _holds_a_slot(b.face):
@@ -744,6 +866,33 @@ def _named_seconds(stream: str) -> int | None:
     return (_SECONDS_PER[named[1]] * int(named[2]) or None) if named else None
 
 
+_MOTION_READ: Final[Mapping[NumberKind, frozenset[str]]] = {
+    NumberKind.FIXED: frozenset(),
+    NumberKind.DERIVED: frozenset({"source", "rule_params"}),
+    NumberKind.CALIBRATED: frozenset(
+        {"cadence", "min_count", "shrink_k", "step_limit", "rule", "rule_params"}
+    ),
+}
+"""The motion fields the compiled unit runs for each kind of number, beside ``mode``."""
+_OWN_RECORD: Final[str] = "own_record"
+"""The one ``source`` true of a calibrated number, which moves from the unit's own closed trades."""
+
+
+def _motion_unread(spec: NumberSpec) -> tuple[str, ...]:
+    motion = spec.motion
+    read = _MOTION_READ[spec.kind]
+    unread = [
+        item.name
+        for item in fields(Motion)
+        if item.name != "mode"
+        and item.name not in read
+        and getattr(motion, item.name) not in (None, {})
+    ]
+    if spec.kind is NumberKind.CALIBRATED and motion.source == _OWN_RECORD:
+        unread.remove("source")
+    return tuple(unread)
+
+
 def _shape_problems(unit: Unit, problems: _Problems) -> None:
     """The fields of the document this format runs nothing behind."""
     if len(unit.streams) != 1:
@@ -758,7 +907,40 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
             "/sessions",
             f"{_FORMAT} runs no session window, so this unit would trade outside it",
         )
+    needs = unit.context_needs
+    if needs is not None and (needs.require or needs.warn or needs.block):
+        problems.add(
+            "context_not_built",
+            "/context_needs",
+            f"{_FORMAT} reads no context, so this unit would trade whatever the context is",
+        )
+    routes = unit.routes
+    if routes is not None and (routes.data or routes.execution is not None):
+        problems.add(
+            "routes_not_built",
+            "/routes",
+            f"{_FORMAT} takes no route from a unit, so this one would run on the host's own",
+        )
+    if unit.plain_python is not None:
+        problems.add(
+            "plain_python_not_built",
+            "/plain_python",
+            f"{_FORMAT} runs the unit's slots, so {unit.plain_python.block} would never run",
+        )
+    if unit.sizer is not None:
+        for port, ref in unit.sizer.inputs.items():
+            problems.add(
+                "inputs_not_built",
+                f"/sizer/inputs/{port}",
+                f"{_FORMAT} hands a sizer its equity, prices and record, so it never reads {ref}",
+            )
     for index, market in enumerate(unit.markets):
+        if market.roll is not None:
+            problems.add(
+                "roll_not_built",
+                f"/markets/{index}/roll",
+                f"{_FORMAT} reads no roll rule, so {market.market_id} would not roll by it",
+            )
         if market.settings:
             problems.add(
                 "settings_not_built",
@@ -778,6 +960,13 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
             "limit_not_built", "/position_limit", f"{_FORMAT} holds one position per market"
         )
     for index, stream in enumerate(unit.streams):
+        if stream.market != "*" and {stream.market} != {m.market_id for m in unit.markets}:
+            problems.add(
+                "market_not_built",
+                f"/streams/{index}/market",
+                f"{_FORMAT} runs the one stream on every market in /markets, not on "
+                f"{stream.market} alone",
+            )
         if stream.price is not Price.BID_ASK:
             problems.add(
                 "price_not_built",
@@ -809,6 +998,12 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
                 "open_positions_not_built",
                 f"/numbers/{name}/applies_to_open_positions",
                 f"{_FORMAT} moves no open position by a number, so {name} would not reach one",
+            )
+        for field in _motion_unread(spec):
+            problems.add(
+                "motion_not_built",
+                f"/numbers/{name}/motion/{field}",
+                f"{_FORMAT} reads no {field} on a {spec.kind.value} number",
             )
         cadence = spec.motion.cadence
         if cadence is not None and cadence.at is not None and cadence.every_closed_trades is None:
@@ -852,8 +1047,9 @@ def compile_unit(
     )
     exits = wiring.exits()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
-    derived, slow = _motion(unit, sides, loaded, problems)
-    sides = tuple(_with_feeders(s, derived, problems) for s in sides)
+    derived, slow = _motion(unit, sides, loaded, faces, problems)
+    streams = frozenset(s.name for s in unit.streams)
+    sides = tuple(_with_feeders(s, derived, streams, problems) for s in sides)
     document_fp = fingerprint(document)
     if is_refusal(document_fp):
         problems.add("document_fingerprint", "", str(document_fp.context.get("reason")))

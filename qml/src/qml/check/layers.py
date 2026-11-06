@@ -275,13 +275,16 @@ def _binding(
         if stream in streams and part in _BAR_FIELDS:
             continue
         if ref not in use.earlier:
+            takes_a_bar = port in ports and ports[port].stream_kind == "bars"
             found.error(
                 "B",
                 ProblemKind.UNKNOWN_INPUT,
                 where,
                 f"{ref} is neither a stream field nor an earlier binding",
-                "feed a stream such as m15.close, or a binding written before this one",
-                _nearest(ref, list(use.earlier)),
+                "feed the whole bar by its stream's name, such as m15"
+                if takes_a_bar
+                else "feed one value such as m15.close, or a binding written before this one",
+                _nearest(ref, list(streams if takes_a_bar else use.earlier)),
             )
     for port in face.inputs:
         if port.stream_kind in _BOUND_PORT_KINDS and port.port not in use.binding.inputs:

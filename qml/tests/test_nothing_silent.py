@@ -12,6 +12,7 @@ from typing import Any, Final, cast
 from qmf.risk.unit_intent import UnitExitIntent
 from qml.check import check
 from qml.compile import CompiledUnit, compile_unit
+from qml.compile.compiler import BLOCKS_NOT_BUILT
 from qml.protocol.unit import OwnPosition, TraceLevel, construct_unit
 from qml.unit.model import Side
 from test_compile_dummy import (
@@ -29,6 +30,8 @@ Document = dict[str, Any]
 _STDLIB = Path(__file__).resolve().parents[1] / "src" / "qml" / "blocks" / "stdlib"
 _MARKET = "fx.eurusd"
 _REFUSED, _FIRED, _READ, _SILENT = "refused", "fired", "read", "silent"
+_RIGHT_SHAPE: Final[dict[str, str]] = {"bars": "m15", "series": "m15.close"}
+_OTHER_SHAPE: Final[dict[str, str]] = {"bars": "m15.close", "series": "m15"}
 _DUMMYS_OWN = frozenset(
     {
         "ema",
@@ -64,10 +67,8 @@ def _faces() -> dict[str, Document]:
     }
 
 
-def _probe(face: Document) -> Document:
-    """A binding of `face` at its default parameters, feeding a bars port the stream and a series
-    port its close."""
-    fed = {"bars": "m15", "series": "m15.close"}
+def _probe(face: Document, fed: dict[str, str] = _RIGHT_SHAPE) -> Document:
+    """A binding of `face` at its default parameters, its ports fed as `fed` says."""
     return {
         "name": "probe",
         "block": f"{face['entry_id']}@{face['version']}",
@@ -93,10 +94,10 @@ def _base(probe: str) -> Document:
     return document
 
 
-def _trigger_document(face: Document) -> Document:
+def _trigger_document(face: Document, fed: dict[str, str] = _RIGHT_SHAPE) -> Document:
     document = _base(face["entry_id"])
     for side in ("long", "short"):
-        document["logic"][side]["slots"]["trigger"]["bindings"] = [_probe(face)]
+        document["logic"][side]["slots"]["trigger"]["bindings"] = [_probe(face, fed)]
     for number in ("rsi_low", "rsi_high", "rsi_period"):
         del document["numbers"][number]
     return document
@@ -119,6 +120,8 @@ def _exit_document(face: Document) -> Document:
     if index is None:
         document["exit_set"].append(binding)
     else:
+        for param in document["exit_set"][index]["params"].values():
+            del document["numbers"][param["number"]]
         document["exit_set"][index] = binding
     return document
 
@@ -238,6 +241,33 @@ def test_every_stdlib_block_acts_or_refuses() -> None:
         pin: _FIRED for pin in _MEASURES_ON_ITS_CLOCK
     }
     assert triggers["vwap-session-anchored@2"] == _REFUSED
+
+
+def _refuses_the_feed(document: Document) -> bool:
+    problems = compile_unit(document, _CONTEXT)
+    return isinstance(problems, tuple) and any(
+        p.kind == "binding_not_read" and "Feed it" in p.message for p in problems
+    )
+
+
+def test_every_block_fed_the_other_shape_refuses_and_none_fed_the_right_shape_does() -> None:
+    """Check pass and no trades again if a whole bar reached a value port, or a value a bar port.
+    A block on other facts, an exit or a block not built refuses for that reason first."""
+    fed = [
+        face
+        for name, face in _faces().items()
+        if {port["stream_kind"] for port in face["inputs"]} in ({"series"}, {"bars"})
+        and face["output"]["type"] != "exit_action"
+        and name not in BLOCKS_NOT_BUILT
+    ]
+
+    wrong = [f["entry_id"] for f in fed if _refuses_the_feed(_trigger_document(f, _OTHER_SHAPE))]
+    right = [f["entry_id"] for f in fed if _refuses_the_feed(_trigger_document(f))]
+
+    assert wrong == [f["entry_id"] for f in fed]
+    assert right == []
+    assert len(wrong) == 90
+    assert set(_SESSION_BLOCKS) - {"vwap-session-anchored"} <= set(wrong)
 
 
 _SESSION_BLOCKS: Final[tuple[str, ...]] = (
