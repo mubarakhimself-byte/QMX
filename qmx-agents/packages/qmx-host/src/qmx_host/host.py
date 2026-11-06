@@ -2287,11 +2287,12 @@ class QmbRun:
         return landed
 
     def fail(self, ticket: AppTicket, reason: str, status: Ending) -> str:
+        own = cast(Ticket, ticket)
         try:
-            landed = self.lander.fail(cast(Ticket, ticket), reason, status=status)
+            landed = self.lander.fail(own, reason, status=status)
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
-        _lighten(self.folder_of(ticket.app_id, ticket.run_id) / "in")
+        _lighten(self.folder_of(own.app_id, own.run_id) / "in")
         return landed
 
 
