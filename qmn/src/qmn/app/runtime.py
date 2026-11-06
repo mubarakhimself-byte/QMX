@@ -2875,6 +2875,7 @@ class Runtime:
                 and other.account_id == deployment.account_id
                 and other.lane == "live"
                 and unit is not None
+                and (hosted.phase is not Phase.STOPPED or unit.venue_open())
             ):
                 shared = sorted(set(unit.traded) & set(deployment.markets))
                 if shared:
