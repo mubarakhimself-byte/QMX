@@ -1,0 +1,142 @@
+# Which rule moves each core numeric row, on what clock, which way when data is missing, and which row reads it.
+# Rules are decided here; values stay open for the numbers lens. build_preset_numbers.py joins this to ledger/v1/ and
+# refuses a core numeric row with no line here, or a line for a row that is not core and numeric.
+# c class: user (never-self-tune, his), preset (a value in the preset through preset-default@1), derive (a rule computes it),
+#          fact (measured, never chosen), venue (from the instrument record), report (written, reads into no size)
+# r rule, g rung on day one, k clock, d cautious direction, m authority mode, o owning row, v model value (the sim's, no authority), n note
+# d: down or up (the way the value moves when data is missing), hold, blocks (a blank blocks the live click), refuse, label
+rows:
+  # Part 3: derivation
+  calibration_min_trades: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: guard.applier}
+  calibration_shrink_k: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: guard.applier}
+  calibration_cadence_trades: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: motion-engine, n: "logic numbers only; risk numbers move at anchors (AD-9)"}
+  x1_guard_freeze_limit: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: guard.applier}
+  portfolio_floor: {c: user, r: user_only, g: user, k: his door, d: blocks, m: user_only, o: cushion-clip@1, v: "$300 on a $500 seed"}
+  bms_buffer_before_floor: {c: user, r: user_only, g: user, k: his door, d: blocks, m: user_only, o: cushion-clip@1}
+  kill_line_floor: {c: user, r: user_only, g: user, k: his door, d: blocks, m: user_only, o: cushion-clip@1}
+  # Part 4: guard
+  open_risk_at_stop: {c: fact, r: kernel, g: measured, k: live, d: label, o: guard.facts, n: "missing: count at the entry stop"}
+  budget_remaining: {c: fact, r: kernel, g: measured, k: live, d: refuse, o: guard.facts}
+  day_start_equity: {c: fact, r: kernel, g: measured, k: day, d: refuse, o: guard.facts}
+  open_risk_cap_per_key_usd: {c: derive, r: reserve-and-key@1, g: preset, k: day, d: down, m: at_anchor, o: bet-key-cap@1}
+  open_risk_ceiling: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: cushion-clip@1}
+  live_unit_count: {c: fact, r: kernel, g: measured, k: allocation, d: down, o: feasibility, n: "N admitted; never rises under a caution"}
+  # Part 5: sizer
+  risk_fraction: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: horizon-floor-odds@1, n: "the preset rung of the baseline: smaller of last in force and share / B"}
+  survival_horizon_rounds: {c: user, r: user_only, g: user, k: his door, d: blocks, m: user_only, o: horizon-floor-odds@1, v: "200 (20 days x 10 a day)"}
+  horizon_survival_risk_usd: {c: derive, r: horizon-floor-odds@1, g: own_record (card), k: day, d: down, m: at_anchor, o: horizon-floor-odds@1, n: "baseline_risk_usd; cushion on day, N and B on allocation"}
+  floor_touch_tolerance: {c: user, r: user_only, g: user, k: his door, d: blocks, m: user_only, o: horizon-floor-odds@1, v: "1 %"}
+  result_spread_r: {c: derive, r: own-shrink@1, g: own_record (card), k: allocation, d: up, m: at_anchor, o: horizon-floor-odds@1}
+  effective_independent_bets: {c: derive, r: horizon-floor-odds@1, g: own_record (card), k: allocation, d: down, m: at_anchor, o: horizon-floor-odds@1, n: "B, by b_split_rule"}
+  unit_result_correlation: {c: fact, r: kernel, g: measured, k: allocation, d: label, o: guard.facts, n: "missing: the stressed floor stands"}
+  stressed_unit_correlation: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: horizon-floor-odds@1, v: 0.3, n: "the higher of measured and this floor"}
+  edge_range: {c: derive, r: holdout-band@1, g: own_record (card), k: allocation, d: down, m: at_anchor, o: admission-gate@1, v: "half-width 0.05R"}
+  round_trip_cost_r: {c: fact, r: cost-cell@1, g: pooled_class, k: live, d: up, o: money-at-stop@1, v: 0.16, n: "label cost:uncalibrated; never refuses"}
+  spread_cost: {c: fact, r: cost-cell@1, g: pooled_class, k: live, d: up, o: money-at-stop@1}
+  commission_cost: {c: fact, r: cost-cell@1, g: pooled_class, k: live, d: up, o: money-at-stop@1, n: "no commission key on the record until after G-DEMO"}
+  slippage_cost: {c: fact, r: cost-cell@1, g: pooled_class, k: live, d: up, o: money-at-stop@1}
+  stressed_stop_slippage_r: {c: fact, r: cost-cell@1, g: pooled_class, k: live, d: up, o: money-at-stop@1}
+  hourly_cost_profile: {c: fact, r: cost-cell@1, g: pooled_class, k: live, d: up, o: money-at-stop@1}
+  cost_stress_multiple: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: cost-cell@1, v: "2 x posted typical spread"}
+  value_per_point: {c: venue, r: record, g: measured, k: record version, d: refuse, o: money-at-stop@1}
+  min_lot: {c: venue, r: record, g: measured, k: record version, d: refuse, o: money-at-stop@1}
+  lot_step: {c: venue, r: record, g: measured, k: record version, d: refuse, o: money-at-stop@1}
+  max_lot: {c: venue, r: record, g: measured, k: record version, d: refuse, o: money-at-stop@1}
+  rounding_residue_r: {c: report, r: kernel, g: measured, k: on the order, d: hold, o: money-at-stop@1, n: "on Size and the receipt; nothing rounds up"}
+  committed_cushion_usd: {c: fact, r: kernel, g: measured, k: day, d: refuse, o: horizon-floor-odds@1}
+  sizing_equity_basis: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: horizon-floor-odds@1, v: "committed cushion", n: "a choice, not an amount"}
+  worst_step_move_r: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: cushion-clip@1, v: "3R", n: "one row per class"}
+  largest_bet_contingency_usd: {c: derive, r: reserve-and-key@1, g: preset, k: day, d: up, m: at_anchor, o: cushion-clip@1, v: "15 % of the cushion"}
+  unit_capital_share: {c: derive, r: horizon-floor-odds@1, g: own_record (card), k: allocation, d: down, m: at_anchor, o: horizon-floor-odds@1, n: "1 / B"}
+  min_lot_risk_tolerance: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: feasibility}
+  book_day_sigma_budget_usd: {c: derive, r: horizon-floor-odds@1, g: own_record (card), k: day, d: down, m: at_anchor, o: horizon-floor-odds@1}
+  unit_day_sigma_budget_usd: {c: derive, r: horizon-floor-odds@1, g: own_record (card), k: day, d: down, m: at_anchor, o: horizon-floor-odds@1}
+  trade_rate: {c: fact, r: kernel, g: measured, k: allocation, d: up, o: horizon-floor-odds@1, n: "floored at the card's rate, so a dead month cannot raise size"}
+  gap_loss_beyond_stop: {c: fact, r: kernel, g: measured, k: on the close, d: hold, o: trade-row}
+  margin_used: {c: fact, r: kernel, g: measured, k: live, d: refuse, o: margin-headroom@1, n: "computed by the kernel with margin_free; the record holds only the rule"}
+  leverage: {c: venue, r: record, g: measured, k: record version, d: refuse, o: margin-headroom@1, n: "account leverage until leverageId after G-DEMO"}
+  # Part 6: climb and drift
+  size_levels: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: guard.level, v: "0.25, 0.50, 0.75, 1.00"}
+  size_level_fraction_table: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: guard.level, v: "0.25, 0.50, 0.75, 1.00"}
+  cohort_trades: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: guard.level}
+  bad_cohort_r: {c: derive, r: own-percentile@1, g: own_record (card), k: allocation, d: up, m: at_anchor, o: guard.level}
+  cusum_limit: {c: derive, r: cusum-from-card@1, g: own_record (card), k: allocation, d: down, m: at_anchor, o: drift-monitor@1, v: 17}
+  cusum_allowance_r: {c: derive, r: cusum-from-card@1, g: own_record (card), k: allocation, d: down, m: at_anchor, o: drift-monitor@1, v: 0.05}
+  drift_size_down_step: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: drift-monitor@1, v: "one level"}
+  verification_trades_needed: {c: derive, r: proof-plan@1, g: own_record (card), k: allocation, d: up, m: at_anchor, o: judge}
+  ev_evidence_e: {c: fact, r: kernel, g: measured, k: on the close, d: hold, o: house-money-press@1, n: "raises above baseline only; never gates a size under it"}
+  ev_score_scale_r: {c: derive, r: own-percentile@1, g: own_record (card), k: allocation, d: hold, m: off, o: house-money-press@1, v: "2R"}
+  drift_warning_window_trades: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: drift-monitor@1, v: 500}
+  drift_warnings_to_paper: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: drift-monitor@1}
+  level_lockout_days: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: retry-then-lockout@1, v: 20}
+  # Part 7: tail brakes and clamps
+  money_brake_percentile: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: unit-money-bench@1}
+  money_brake_window_trades: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: unit-money-bench@1}
+  money_brake_threshold_r: {c: derive, r: own-percentile@1, g: own_record (card), k: allocation, d: up, m: at_anchor, o: unit-money-bench@1, n: "own record, the card's block bootstrap, the class default, then refuse live"}
+  money_brake_dollar_clamp: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: unit-money-bench@1}
+  bench_min_rest: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: retry-then-lockout@1, v: "the window's calendar equivalent"}
+  bench_retry_max_in_window: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: retry-then-lockout@1, v: "2 in 20 days locks a level; 3 in 40 days locks out"}
+  bms_daily_loss_limit: {c: derive, r: day-stop-k@1, g: preset, k: day, d: down, m: at_anchor, o: group-day-pair@1, n: "k x the sized day sigma, a dollar line"}
+  bms_breaker_target_fire_rate: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: group-day-pair@1, v: "1 day in 100"}
+  day_stop_sigma_multiple: {c: derive, r: day-stop-k@1, g: preset, k: allocation, d: down, m: at_anchor, o: group-day-pair@1, v: "1.7 preset rung", n: "reads the harness's table of k by N; no draw on the runtime thread"}
+  house_money_multiplier: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: off, o: house-money-press@1, n: "shadow row"}
+  house_money_winnings_share: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: off, o: house-money-press@1, n: "shadow row"}
+  house_money_threshold: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: off, o: house-money-press@1, n: "shadow row"}
+  house_money_combined_cap: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: off, o: house-money-press@1, n: "shadow row"}
+  anchor_pnl_usd: {c: fact, r: kernel, g: measured, k: live, d: refuse, o: group-day-pair@1}
+  cushion_multiplier_min: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: group-day-pair@1, v: 0.25, n: "the taper's floor"}
+  cushion_multiplier_max: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: off, o: house-money-press@1, n: "shadow row"}
+  loss_event_window: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: off, o: house-money-press@1, n: "shadow row"}
+  high_water_mark_equity: {c: fact, r: kernel, g: measured, k: live, d: refuse, o: guard.facts}
+  floor_breach_dwell_s: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: cushion-clip@1}
+  per_trade_worst_case_cap_r: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: per-trade-cap@1}
+  max_position_size_lots: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: per-trade-cap@1}
+  size_sanity_band_multiple: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: sanity-band@1}
+  margin_headroom_min_share: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: margin-headroom@1}
+  order_rate_limit_per_min: {c: derive, r: card-rate@1, g: own_record (card), k: allocation, d: down, m: at_anchor, o: order-rate@1}
+  accelerator_growth_per_risk_ratio: {c: report, r: harness, g: measured, k: on the card, d: hold, o: house-money-press@1, n: "the press's proof card"}
+  # Part 8: exits (stamped at entry; a change is a counted try)
+  net_r: {c: fact, r: kernel, g: measured, k: on the close, d: label, o: trade-row, n: "(money + cash) / risk; costs_r is display"}
+  fast_invalidation_cut_r: {c: derive, r: own-percentile@1, g: own_record (card), k: allocation, d: hold, m: at_flat, o: fast-invalidation-cut@1, n: "from winners' MAE; F1's two-arm trial first"}
+  fi_cut_mae_percentile: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_flat, o: fast-invalidation-cut@1}
+  disaster_stop_distance: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_flat, o: disaster-stop, n: "one row per class; open trades keep their stamp"}
+  max_hold_time: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_flat, o: time-exit-bars}
+  excursion_mae_mfe_r: {c: fact, r: kernel, g: measured, k: live, d: hold, o: trade-row}
+  # Part 9: SQS, news, feed
+  sqs_score: {c: fact, r: spread-histogram@1, g: measured, k: live, d: refuse, o: sqs-gate@1}
+  sqs_hard_block_threshold: {c: derive, r: spread-histogram@1, g: own_record (live baseline), k: allocation, d: up, m: at_anchor, o: sqs-gate@1}
+  sqs_hysteresis_band: {c: derive, r: spread-histogram@1, g: own_record (live baseline), k: allocation, d: up, m: at_anchor, o: sqs-gate@1}
+  sqs_outlier_guard_multiple: {c: derive, r: spread-histogram@1, g: own_record (live baseline), k: allocation, d: down, m: at_anchor, o: sqs-gate@1}
+  sqs_sample_cadence: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: sqs-gate@1}
+  sqs_baseline_refit_schedule: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: sqs-gate@1}
+  sqs_staleness_horizon: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: sqs-gate@1, v: "equals decision_freshness_bound", n: "no second bound (DEC-0153)"}
+  decision_freshness_bound: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: sqs-gate@1}
+  news_blackout_before: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: news-window@1}
+  news_blackout_after: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: news-window@1}
+  news_calendar_max_staleness: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: news-window@1}
+  feed_stale_after: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: node-fast-lane}
+  # Part 10: RiskState
+  risk_state_emit_interval: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: risk-state}
+  risk_fact_staleness_limit: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: guard.facts}
+  kill_line_distance: {c: fact, r: kernel, g: measured, k: live, d: refuse, o: risk-state}
+  daily_r_digest: {c: report, r: kernel, g: measured, k: day, d: hold, o: risk-state}
+  bad_day_percentile: {c: report, r: preset-default@1, g: preset, k: allocation, d: hold, o: risk-state, n: "the morning card's line; moves no size"}
+  liveness_heartbeat_cadence: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: node-fast-lane}
+  protection_retry_max: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: order-path}
+  # Part 11: machine check
+  replay_match_floor: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: machine-check}
+  cost_drift_multiple: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: machine-check}
+  trade_rate_band: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: at_anchor, o: machine-check}
+  ev_machine_check_days: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: machine-check}
+  ev_machine_check_trades: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: machine-check}
+  effective_tries: {c: report, r: kernel, g: measured, k: on the card, d: hold, o: judge}
+  # Part 12: harness and agents
+  scenario_severity_percentile: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: at_anchor, o: harness}
+  brake_path_delta_r: {c: report, r: harness, g: measured, k: on a run, d: hold, o: harness}
+  cost_of_conservatism: {c: report, r: harness, g: measured, k: day, d: hold, o: harness}
+  under_baseline_share: {c: report, r: harness, g: measured, k: day, d: hold, o: harness}
+  trip_tax_r: {c: report, r: harness, g: measured, k: on a run, d: hold, o: harness}
+  brake_precision: {c: report, r: harness, g: measured, k: on a run, d: hold, o: harness}
+  choke_budget_fire_rate: {c: preset, r: preset-default@1, g: preset, k: allocation, d: up, m: at_anchor, o: harness, n: "dollars risked over baseline on every opportunity; CI, not the runtime"}
+  agent_evidence_ttl: {c: preset, r: preset-default@1, g: preset, k: allocation, d: down, m: off, o: evidence, n: "unread at go-live: accepts_evidence is empty"}
+  agent_evidence_max_cut: {c: preset, r: preset-default@1, g: preset, k: allocation, d: hold, m: off, o: evidence, n: "unread at go-live: accepts_evidence is empty"}

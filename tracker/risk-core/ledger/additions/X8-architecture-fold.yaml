@@ -1,5 +1,6 @@
 # X8 architecture fold: ledger additions, 6 Nov 2026. Rows the folded spine (architecture/SPINE.md) binds to and the
 # ledger lacked (ledger/v1/NOTES.md item 15 and the fold's grafts). Tiers come from funnel/ledger-merge.yaml section 8.
+# Last round, same day (architecture/CHECK.md): net_r corrected (B1), conversion_market (B5) and b_split_rule (item 2) added.
 - id: net_r
   name: A trade's result in R after its costs
   level: trade
@@ -8,7 +9,7 @@
   applies_to: {classes: [all], styles: [all], timeframes: all}
   default: null
   basis: formula
-  derivation: "net_r = r minus costs_r, where r is the planned loss at the disaster stop at entry (gross, the judge's trade_r) and costs_r is spread, commission, slippage and swap in R. Brakes, the money ledger, the CUSUM and the admission gate read net_r; the judge and the logic record read gross r. On the trade row from exit step 2; the code field r_after_costs (unit_handler.py:724, which holds gross today) is renamed to it. Our call; his B9 reservation stands (FUNNEL DP11, hand-off 22)."
+  derivation: "net_r = (money + cash) / risk. risk is one R: the planned loss at the disaster stop at entry. money is the close at fill prices, which already hold spread and slippage. cash is commission and swap. This is the form QMB's report already computes (qmx-agents/apps/qmb/jobs/backtest.py). r = money / risk is the judge's trade_r, gross of cash. costs_r{spread, commission, slippage, swap} on the row is a display split and is never subtracted again: subtracting it counts spread and slippage twice, and at 0.16R a trade that sends 93 to 100 percent of healthy model units to paper (architecture/check/out-check-main.txt arm G). Until R24 proves deal money the node takes cash from the cost cell's commission and swap, labelled cost:uncalibrated, so its stream and the card stay on one basis. Brakes, the money ledger, the CUSUM and the admission gate read net_r, and the CUSUM's reference is the holdout's net_r. The judge and the logic record read r. The code field r_after_costs (unit_handler.py:724, ClosedTrade, motion/engine.py) holds gross despite its name: it keeps its value, is renamed gross_r in the risk session's slice 1, and is never net_r. Our call; his B9 reservation stands (FUNNEL DP11, hand-off 22; CHECK.md B1)."
   inputs: [round_trip_cost_r, spread_cost, commission_cost, slippage_cost, exit_mechanism]
   affects:
     - {id: loss_counting_rule, direction: either, how: "The unit bench and the day stop count losses in net_r, so a cut counts its size and a breakeven its cost."}
@@ -20,7 +21,7 @@
   sources:
     - {gen: grounding, ref: "grounding/G12-audit-and-repair-for-risk.md:75", note: "hand-off 22: r_after_costs holds gross today"}
     - {gen: expansion, ref: "funnel/FUNNEL.md:113", note: "DP11: R is gross, net_r beside it"}
-  aliases: [r_after_costs]
+    - {gen: expansion, ref: "architecture/CHECK.md:13-17", note: "B1: the double count and the true form"}
 
 - id: drift_warning_window_trades
   name: Trades inside which repeated CUSUM warnings count together
@@ -38,7 +39,7 @@
   changed_by: [operator]
   status: proposal
   sources:
-    - {gen: expansion, ref: "funnel/FUNNEL.md:504", note: "the review's correction: inside 500 trades"}
+    - {gen: expansion, ref: "funnel/FUNNEL.md:497", note: "the review's correction: inside 500 trades"}
     - {gen: expansion, ref: "architecture/candidate-3/out-c3.txt:49-53", note: "paper rate at h 17 and 500 trades"}
 
 - id: drift_warnings_to_paper
@@ -70,7 +71,7 @@
   applies_to: {classes: [all], styles: [all], timeframes: all}
   default: null
   basis: formula
-  derivation: "k = minus the group's own bad day at the target fire rate (bms_breaker_target_fire_rate; one day in a hundred as the rung), in units of its sized day sigma: at the allocation anchor the harness draws the book's day P&L from the admitted units' cards at equal sizes, correlated through stressed_unit_correlation, with the class's tail rows on (worst_step_move_r, gap_loss_beyond_stop), and takes that quantile; the stop fires when the book's day loss passes k times the sized sigma (FUNNEL DP22, F26). Because k times the sigma is a dollar line, a stressed correlation inside the sigma does not move the line. Preset rung 1.7 while the group has no card. In the fold's model k derives to 1.4 to 2.2 and fires 0.5 to 1.9 times per 100 days; without the tail rows it derived to 1.0 at N = 10 and fired on most weeks (architecture/out-fold-notails.txt). At k 2.5 on the sized sigma the stop fired 0.00 to 0.06 times per 100 model days and never on an X4-14 day; at k 1.5 it fired 1 to 3.5 times and cut the worst day from about 13 to about 9 percent of the morning's cushion for about one point of size (candidate 2's kstop run, reproduced by the fold)."
+  derivation: "k = minus the group's own bad day at the target fire rate (bms_breaker_target_fire_rate; one day in a hundred as the rung), in units of its sized day sigma: at the allocation anchor the harness draws the book's day P&L from the admitted units' cards at equal sizes, correlated through stressed_unit_correlation, with the class's tail rows on (worst_step_move_r, gap_loss_beyond_stop), and takes that quantile; the stop fires when the book's day loss passes k times the sized sigma (FUNNEL DP22, F26). Because k times the sigma is a dollar line, a stressed correlation inside the sigma does not move the line. Preset rung 1.7 while the group has no card. The draw runs in the harness, never on the runtime thread: it leaves a table of k by N in the group's receipt and the anchor reads the table. In the fold's model k derives to 1.4 to 2.2 and fires 0.2 to 1.4 times per 100 days (architecture/out-choke.txt); without the tail rows it derived to 1.0 at N = 10 and fired on most weeks (architecture/out-fold-notails.txt). At k 2.5 on the sized sigma the stop fired 0.00 to 0.06 times per 100 model days and never on an X4-14 day; at k 1.5 it fired 1 to 3.5 times and cut the worst day from about 13 to about 9 percent of the morning's cushion for about one point of size (candidate 2's kstop run, reproduced by the fold)."
   inputs: [result_spread_r, live_unit_count, stressed_unit_correlation, bms_breaker_target_fire_rate]
   affects:
     - {id: bms_circuit_breaker, direction: either, how: "Sets the line the portfolio day stop fires at, in sized sigmas."}
@@ -81,3 +82,42 @@
   sources:
     - {gen: expansion, ref: "architecture/candidate-2/out-kstop.txt", note: "fire rates and bad-day loss by k"}
     - {gen: expansion, ref: "funnel/FUNNEL.md:342", note: "F26: the stop must read the sized sigma"}
+
+- id: conversion_market
+  name: Market whose quote turns an instrument's quote currency into USD
+  level: trade
+  kind: size_input
+  measure: "other: market id or none"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "On the instrument record, from the venue's symbol facts: none when the quote is USD; otherwise the USD pair of the quote currency: USDJPY for USDJPY and for EURJPY, EURUSD for a EUR-quoted index. Both ports load it beside the traded markets, because neither loads a market nobody asked for today (host.py _bars, feed_keeper.py). The fact kernel converts every money figure through it, the account sum and the price-derived deal fallback included. A missing one refuses in plain words, conversion_missing (SPINE.md 4.4; CHECK.md B5)."
+  inputs: [value_per_point, numeraire]
+  affects:
+    - {id: horizon_survival_risk_usd, direction: either, how: "The sizer's dollars at the stop read usd_per_quote from this market."}
+    - {id: net_r, direction: either, how: "The money ledgers read USD, so a yen loser is not read as hundreds of dollars."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "architecture/CHECK.md:37-41", note: "B5: USDJPY fixed only in the sizer"}
+
+- id: b_split_rule
+  name: How a unit's share of the book's swing is split
+  level: portfolio
+  kind: size_input
+  measure: "other: flat or freed"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: flat
+  basis: reasoned
+  derivation: "flat: B = sqrt(N (1 + (N - 1) rho)) over admitted units at the allocation anchor. freed: a unit at level 1.00 takes the swing the others leave idle, B_i = sqrt(1 + S2 + 2 rho S1 + rho (S1^2 - S2)) with S1 and S2 the sum and the sum of squares of the other units' levels; a unit below 1.00 stays on flat. Freed swing raises a unit above the flat baseline by rule, so it is a raise above baseline and waits for his once-rule (FUNNEL Q9); flat until he signs. In the model at N = 5 and 10 it lifts healthy medians and adds to a bleeding book's half-cushion runs (architecture/out-choke.txt arms A and B, CHECK.md item 2)."
+  inputs: [stressed_unit_correlation, live_unit_count, size_level_fraction_table]
+  affects:
+    - {id: effective_independent_bets, direction: either, how: "Sets which B a unit's baseline divides by."}
+    - {id: horizon_survival_risk_usd, direction: up, how: "Freed swing raises a full-level unit's baseline above the flat one."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "architecture/CHECK.md:74", note: "item 2: freed swing has no formula and is a raise"}
+    - {gen: expansion, ref: "funnel/FUNNEL.md:98", note: "DP9: level-weighted B"}

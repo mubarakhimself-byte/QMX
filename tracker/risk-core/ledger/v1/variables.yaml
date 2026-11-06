@@ -4159,7 +4159,7 @@
   - low-profit-lock-halt
 - id: session_loss_limit_r
   name: Loss in R in one session at which the unit is flattened for that session
-  tier: core
+  tier: shadow
   level: unit
   kind: brake_threshold
   measure: R
@@ -4199,6 +4199,7 @@
   aliases:
   - session-loss-limit-halt
   - session drawdown
+  notes: 'Plan: last round (CHECK.md item 11): shadow at go-live as session-loss@1, written as would_have. Binding it would be a second live reading of the unit''s running loss, which SPINE.md AD-8 refuses. He must be told this brake does not bind at go-live (SPINE.md section 13).'
 - id: session_fill_limit
   name: Fills in one session at which the unit is flattened for that session
   tier: later
@@ -4323,9 +4324,9 @@
     styles:
     - all
     timeframes: all
-  default: null
-  basis: open
-  derivation: 'open. Unit build: a risk stop holds a unit on one market, survives restarts and waits for his resume; leaving ''stopped'' for paper or live is his click. April and July reset breakers by themselves at the day boundary. The bench needs its own row (G10 idea 9).'
+  default: his_click
+  basis: reasoned
+  derivation: 'last round (CHECK.md item 6), value at go-live: his_click. A lockout (the third bench inside the window) waits for his resume, so a healthy unit''s lockout costs what his attention costs; the fold''s sim let it expire. Earlier text: open. Unit build: a risk stop holds a unit on one market, survives restarts and waits for his resume; leaving ''stopped'' for paper or live is his click. April and July reset breakers by themselves at the day boundary. The bench needs its own row (G10 idea 9).'
   inputs: []
   affects:
   - id: circuit_breaker_reset
@@ -4344,7 +4345,7 @@
   aliases:
   - resume after risk stop
   - risk stop
-  notes: 'The pipe is built but nothing feeds it: the compiler refuses halts. A risk stop''s text maps to the kill_switch code in QMB''s journal (G9 1.4).'
+  notes: 'The pipe is built but nothing feeds it: the compiler refuses halts. A risk stop''s text maps to the kill_switch code in QMB''s journal (G9 1.4). Plan: last round (CHECK.md item 6), value at go-live: his_click. A lockout (the third bench inside the window) waits for his resume, so a healthy unit''s lockout costs what his attention costs; the fold''s sim let it expire.'
 - id: session_result_r
   name: Result in R so far this session
   tier: later
@@ -7015,9 +7016,9 @@
     styles:
     - all
     timeframes: all
-  default: null
-  basis: open
-  derivation: 'open. Sept docs: a mandatory carry or reset declaration per counter (ledger, cycle, budget, bench counter, exposure), carry only under a signed edge. Unit build: any new version restarts its blocks'' memory, and swapping the sizer makes a new unit with a fresh record.'
+  default: carry_brake_states
+  basis: reasoned
+  derivation: 'last round (CHECK.md B7), value at go-live: carry_brake_states. A version, a rebind or a restart never clears a bench, a lockout, a drift lock, a stand-down, a paper state, the level, or the ledgers those read. A version restarts the money record as a report only. A world switch keeps its own rule (world_switch_reset_rule) and needs his click. Earlier text: open. Sept docs: a mandatory carry or reset declaration per counter (ledger, cycle, budget, bench counter, exposure), carry only under a signed edge. Unit build: any new version restarts its blocks'' memory, and swapping the sizer makes a new unit with a fresh record.'
   inputs: []
   affects:
   - id: circuit_breaker_strikes
@@ -7039,6 +7040,7 @@
     ref: grounding/G8-unit-chassis-and-extensibility.md:201
   aliases:
   - state_carry_declaration
+  notes: 'Plan: last round (CHECK.md B7), value at go-live: carry_brake_states. A version, a rebind or a restart never clears a bench, a lockout, a drift lock, a stand-down, a paper state, the level, or the ledgers those read. A version restarts the money record as a report only. A world switch keeps its own rule (world_switch_reset_rule) and needs his click.'
 - id: decision_freshness_bound
   name: Oldest evidence a live-money decision may read
   tier: core
@@ -10711,7 +10713,7 @@
   - Does rho come from result correlation (slow, needs trades) or from exposure overlap (fast, needs the exposure ledger)?
 - id: edge_to_cost_ratio_min
   name: Smallest ratio of the edge's lower bound to stressed round-trip cost that may trade
-  tier: core
+  tier: shadow
   level: unit
   kind: limit
   measure: ratio
@@ -10761,7 +10763,7 @@
   - A11
   - A24
   - A14
-  notes: 'The gate is the honest form of ''cost is the master state'' for scalpers. Collides with A14 (too safe) when the bound is undefined for a thin record: the unit waits.'
+  notes: 'The gate is the honest form of ''cost is the master state'' for scalpers. Collides with A14 (too safe) when the bound is undefined for a thin record: the unit waits. Plan: last round (CHECK.md B2): shadow at go-live, written on the receipt as would_have. At 2 it refuses the worked healthy unit at every hour on the pooled stressed default, which is M7 again. The gate reads the holdout''s net low end and a cell''s own fills; the numbers lens may bind a ratio only on measured cells, with F1''s table beside it.'
 - id: hourly_cost_profile
   name: Round-trip cost per instrument, venue, hour and session, measured
   tier: core
@@ -11758,7 +11760,7 @@
   tier: core
   level: unit
   kind: other
-  measure: 'other: off, at_flat, at_new_position, at_period_open, live'
+  measure: 'other: user_only, off, at_anchor, at_flat; at_period_open and live parse and refuse'
   applies_to:
     classes:
     - all
@@ -11767,7 +11769,7 @@
     timeframes: all
   default: 'off'
   basis: reasoned
-  derivation: Default off (shadow) because the VPA's Off mode computes and shows without changing, and because his rule is to size down 'not quickly' and to let nothing reach live without evidence; a number earns a stronger mode through shadow rows. The shipped authority field is parsed and never read, so this gives it a runtime meaning.
+  derivation: 'last round: measure ''other: user_only, off, at_anchor, at_flat; at_period_open and live parse and refuse'', as SPINE.md AD-6 has them; value at go-live: off. Earlier text: Default off (shadow) because the VPA''s Off mode computes and shows without changing, and because his rule is to size down ''not quickly'' and to let nothing reach live without evidence; a number earns a stronger mode through shadow rows. The shipped authority field is parsed and never read, so this gives it a runtime meaning.'
   inputs:
   - x1_recommendation_bounds
   affects:
@@ -11800,6 +11802,7 @@
   - A3
   aliases:
   - number_authority_mode
+  notes: 'Plan: last round: measure ''other: user_only, off, at_anchor, at_flat; at_period_open and live parse and refuse'', as SPINE.md AD-6 has them; value at go-live: off.'
   open_questions:
   - What does at_flat mean for a unit holding several positions at once (A8)?
 - id: x1_retune_dead_band
@@ -12263,6 +12266,8 @@
   - bms_buffer_before_floor
   - kill_line_floor
   - kill_switch_level
+  - floor_touch_tolerance
+  - survival_horizon_rounds
   basis: reasoned
   derivation: The floor and the cushion are user-configured by his ruling (C11); the kill switch goes down only by his hand (C21). OtterTune keeps a per-version black-list of knobs the tuner may never touch and MT5 sinput excludes an input from optimisation. He may add rows; the list is his to edit.
   inputs: []
@@ -12299,6 +12304,7 @@
   - C21
   aliases:
   - never_self_tune_list
+  notes: 'Plan: last round, as SPINE.md 4.1 has it: values at go-live: [portfolio_floor, bms_buffer_before_floor, kill_line_floor, kill_switch_level, floor_touch_tolerance, survival_horizon_rounds]'
 - id: x1_changed_by_class
   name: Measured, self or user, per ledger row
   tier: core
@@ -13447,9 +13453,9 @@
     styles:
     - all
     timeframes: all
-  default: null
-  basis: open
-  derivation: 'open: a stand-down row to add (guard_unavailable). RiskGate rejects everything, freqtrade trades on position rules, REDUCING is the middle; the brakes layer picks the default.'
+  default: entries_refuse_exits_run
+  basis: reasoned
+  derivation: 'last round (CHECK.md B3), value at go-live: entries_refuse_exits_run. Any raise or refusal from a guard call or a status write becomes guard_unavailable on entries; exits mint; the unit stays trading. Earlier text: open: a stand-down row to add (guard_unavailable). RiskGate rejects everything, freqtrade trades on position rules, REDUCING is the middle; the brakes layer picks the default.'
   inputs:
   - x1_fail_mode
   affects:
@@ -13469,6 +13475,7 @@
     ref: linking/components/A4-template-agents-telemetry.yaml:1985
   aliases:
   - guard_unavailable_action
+  notes: 'Plan: last round (CHECK.md B3), value at go-live: entries_refuse_exits_run. Any raise or refusal from a guard call or a status write becomes guard_unavailable on entries; exits mint; the unit stays trading.'
 - id: x1_runs_on
   name: Where a profile's unit and guard run, the PC, the node or both
   tier: core
@@ -17761,7 +17768,7 @@
   seed_ids:
   - A26
 - id: choke_budget_fire_rate
-  name: Least share of baseline size a healthy unit must keep under every binding cut
+  name: Least share of baseline dollars a healthy unit must risk over every opportunity, refusals counted as zero
   tier: core
   level: unit
   kind: limit
@@ -17774,7 +17781,8 @@
     timeframes: all
   default: 0.75
   basis: reasoned
-  derivation: 'becomes the TOTAL choke budget across all cuts on a healthy unit, tested in the harness (DP19); the per-brake form is a field. Fold: measure ''ratio'', name ''Least share of baseline size a healthy unit must keep under every binding cut'', value at go-live: 0.75 (FUNNEL 5.2; a healthy unit under it fails CI for any change touching a binding factor, SPINE.md AD-16). The old per-brake 5 percent stays in seen_values. Earlier text: Share of healthy windows on the card. Bench brakes at or under about 5 percent kept 97 percent or more of healthy R in the X3 SIM; brakes firing on 40-100 percent of days kept 18-84 percent. A brake above the budget is refused or forced to shadow. He can change the budget or derive it as a share of expected R thrown away.'
+  derivation: 'becomes the TOTAL choke budget across all cuts on a healthy unit, tested in the harness (DP19); the per-brake form is a field. Fold: measure ''ratio'', name ''Least share of baseline dollars a healthy unit must risk over every opportunity, refusals counted as zero'', value at go-live: 0.75 (FUNNEL 5.2; a healthy unit under it fails CI for any change touching a binding item, SPINE.md AD-16). The metric is dollars risked over the flat baseline of N on every opportunity, because size over baseline on trades taken cannot see a refusal (CHECK.md B8). The baseline already holds the reserve and the cost denominator, 0.7225 of the raw formula in the model. The test runs all 23 things that bind. The old per-brake 5 percent stays in seen_values. Earlier text: Share of healthy windows on the card. Bench brakes at or under about 5 percent kept 97 percent or more of healthy R in the X3 SIM; brakes firing on 40-100 percent of days kept 18-84 percent. A brake above the budget is refused
+    or forced to shadow. He can change the budget or derive it as a share of expected R thrown away.'
   inputs:
   - breaker_expected_fire_rate
   - expectancy_r
@@ -17804,7 +17812,7 @@
   seed_ids:
   - C33
   - C31
-  notes: 'Plan: becomes the TOTAL choke budget across all cuts on a healthy unit, tested in the harness (DP19); the per-brake form is a field. Fold: measure ''ratio'', name ''Least share of baseline size a healthy unit must keep under every binding cut'', value at go-live: 0.75 (FUNNEL 5.2; a healthy unit under it fails CI for any change touching a binding factor, SPINE.md AD-16). The old per-brake 5 percent stays in seen_values.'
+  notes: 'Plan: becomes the TOTAL choke budget across all cuts on a healthy unit, tested in the harness (DP19); the per-brake form is a field. Fold: measure ''ratio'', name ''Least share of baseline dollars a healthy unit must risk over every opportunity, refusals counted as zero'', value at go-live: 0.75 (FUNNEL 5.2; a healthy unit under it fails CI for any change touching a binding item, SPINE.md AD-16). The metric is dollars risked over the flat baseline of N on every opportunity, because size over baseline on trades taken cannot see a refusal (CHECK.md B8). The baseline already holds the reserve and the cost denominator, 0.7225 of the raw formula in the model. The test runs all 23 things that bind. The old per-brake 5 percent stays in seen_values.'
 - id: retrip_backoff_multiplier
   name: Growth of the cool-down after each consecutive trip
   tier: shadow
@@ -21661,10 +21669,10 @@
     timeframes: all
   default:
   - own_record
-  - pooled_group
-  - class_default
-  - preset_default
-  - refuse_compile
+  - pooled_class
+  - preset
+  - user
+  - refuse
   basis: reasoned
   derivation: 'Own record first because the unit self-configures (A3); a pooled group posterior next because shrinkage borrows strength when the record is thin (chat-17, Carver); class then preset defaults because every number must have a reasoned value (D30); refuse to compile last because a blank key setting must never reach live (Gen 3 blank_effect). Each rung writes a receipt. Earlier text under derivation_fallback_order: open: defaults, class, bucket, instrument, unit overrides with a residual bucket; nothing is blank by construction.'
   seen_values:
@@ -21717,7 +21725,7 @@
   aliases:
   - x1_derivation_fallback_order
   - Rungs a number falls back through when its derivation lacks evidence
-  notes: 'Folded x1_derivation_fallback_order (X1-template-shape.yaml). It had level unit. Plan: X4-56''s id survives; X1-H08 is the fuller definition, fold its text into the derivation.'
+  notes: 'Folded x1_derivation_fallback_order (X1-template-shape.yaml). It had level unit. Plan: X4-56''s id survives; X1-H08 is the fuller definition, fold its text into the derivation. Plan: last round, as SPINE.md 4.1 has it: values at go-live: [own_record, pooled_class, preset, user, refuse]'
 - id: news_item_effect_cap
   name: Cap on the effect any single news item from an agent may have
   tier: later
@@ -22911,6 +22919,7 @@
   - gen: expansion
     ref: expansion/X4-scenarios.md
     note: scenario 84
+  notes: 'Plan: last round (CHECK.md B1): the CUSUM reads net_r against the holdout''s net_r at go-live. This row is the drift attribution''s gross half, later. Its r_after_costs is the code field that holds gross, renamed gross_r.'
 - id: cost_stream_r
   name: The unit's cost stream in R per trade
   tier: later
@@ -30920,7 +30929,8 @@
     timeframes: all
   default: null
   basis: formula
-  derivation: net_r = r minus costs_r, where r is the planned loss at the disaster stop at entry (gross, the judge's trade_r) and costs_r is spread, commission, slippage and swap in R. Brakes, the money ledger, the CUSUM and the admission gate read net_r; the judge and the logic record read gross r. On the trade row from exit step 2; the code field r_after_costs (unit_handler.py:724, which holds gross today) is renamed to it. Our call; his B9 reservation stands (FUNNEL DP11, hand-off 22).
+  derivation: 'net_r = (money + cash) / risk. risk is one R: the planned loss at the disaster stop at entry. money is the close at fill prices, which already hold spread and slippage. cash is commission and swap. This is the form QMB''s report already computes (qmx-agents/apps/qmb/jobs/backtest.py). r = money / risk is the judge''s trade_r, gross of cash. costs_r{spread, commission, slippage, swap} on the row is a display split and is never subtracted again: subtracting it counts spread and slippage twice, and at 0.16R a trade that sends 93 to 100 percent of healthy model units to paper (architecture/check/out-check-main.txt arm G). Until R24 proves deal money the node takes cash from the cost cell''s commission and swap, labelled cost:uncalibrated, so its stream and the card stay on one basis. Brakes, the money ledger, the CUSUM and the admission gate read net_r, and the CUSUM''s reference is the holdout''s net_r. The judge and the logic record read r. The code field r_after_costs (unit_handler.py:724,
+    ClosedTrade, motion/engine.py) holds gross despite its name: it keeps its value, is renamed gross_r in the risk session''s slice 1, and is never net_r. Our call; his B9 reservation stands (FUNNEL DP11, hand-off 22; CHECK.md B1).'
   inputs:
   - round_trip_cost_r
   - spread_cost
@@ -30951,8 +30961,9 @@
   - gen: expansion
     ref: funnel/FUNNEL.md:113
     note: 'DP11: R is gross, net_r beside it'
-  aliases:
-  - r_after_costs
+  - gen: expansion
+    ref: architecture/CHECK.md:13-17
+    note: 'B1: the double count and the true form'
 - id: drift_warning_window_trades
   name: Trades inside which repeated CUSUM warnings count together
   tier: core
@@ -30982,7 +30993,7 @@
   status: proposal
   sources:
   - gen: expansion
-    ref: funnel/FUNNEL.md:504
+    ref: funnel/FUNNEL.md:497
     note: 'the review''s correction: inside 500 trades'
   - gen: expansion
     ref: architecture/candidate-3/out-c3.txt:49-53
@@ -31045,8 +31056,8 @@
     timeframes: all
   default: null
   basis: formula
-  derivation: 'k = minus the group''s own bad day at the target fire rate (bms_breaker_target_fire_rate; one day in a hundred as the rung), in units of its sized day sigma: at the allocation anchor the harness draws the book''s day P&L from the admitted units'' cards at equal sizes, correlated through stressed_unit_correlation, with the class''s tail rows on (worst_step_move_r, gap_loss_beyond_stop), and takes that quantile; the stop fires when the book''s day loss passes k times the sized sigma (FUNNEL DP22, F26). Because k times the sigma is a dollar line, a stressed correlation inside the sigma does not move the line. Preset rung 1.7 while the group has no card. In the fold''s model k derives to 1.4 to 2.2 and fires 0.5 to 1.9 times per 100 days; without the tail rows it derived to 1.0 at N = 10 and fired on most weeks (architecture/out-fold-notails.txt). At k 2.5 on the sized sigma the stop fired 0.00 to 0.06 times per 100 model days and never on an X4-14 day; at k 1.5 it fired 1 to
-    3.5 times and cut the worst day from about 13 to about 9 percent of the morning''s cushion for about one point of size (candidate 2''s kstop run, reproduced by the fold).'
+  derivation: 'k = minus the group''s own bad day at the target fire rate (bms_breaker_target_fire_rate; one day in a hundred as the rung), in units of its sized day sigma: at the allocation anchor the harness draws the book''s day P&L from the admitted units'' cards at equal sizes, correlated through stressed_unit_correlation, with the class''s tail rows on (worst_step_move_r, gap_loss_beyond_stop), and takes that quantile; the stop fires when the book''s day loss passes k times the sized sigma (FUNNEL DP22, F26). Because k times the sigma is a dollar line, a stressed correlation inside the sigma does not move the line. Preset rung 1.7 while the group has no card. The draw runs in the harness, never on the runtime thread: it leaves a table of k by N in the group''s receipt and the anchor reads the table. In the fold''s model k derives to 1.4 to 2.2 and fires 0.2 to 1.4 times per 100 days (architecture/out-choke.txt); without the tail rows it derived to 1.0 at N = 10 and fired on most weeks
+    (architecture/out-fold-notails.txt). At k 2.5 on the sized sigma the stop fired 0.00 to 0.06 times per 100 model days and never on an X4-14 day; at k 1.5 it fired 1 to 3.5 times and cut the worst day from about 13 to about 9 percent of the morning''s cushion for about one point of size (candidate 2''s kstop run, reproduced by the fold).'
   inputs:
   - result_spread_r
   - live_unit_count
@@ -31072,3 +31083,77 @@
   - gen: expansion
     ref: funnel/FUNNEL.md:342
     note: 'F26: the stop must read the sized sigma'
+- id: conversion_market
+  name: Market whose quote turns an instrument's quote currency into USD
+  tier: core
+  level: trade
+  kind: size_input
+  measure: 'other: market id or none'
+  applies_to:
+    classes:
+    - all
+    styles:
+    - all
+    timeframes: all
+  default: null
+  basis: formula
+  derivation: 'On the instrument record, from the venue''s symbol facts: none when the quote is USD; otherwise the USD pair of the quote currency: USDJPY for USDJPY and for EURJPY, EURUSD for a EUR-quoted index. Both ports load it beside the traded markets, because neither loads a market nobody asked for today (host.py _bars, feed_keeper.py). The fact kernel converts every money figure through it, the account sum and the price-derived deal fallback included. A missing one refuses in plain words, conversion_missing (SPINE.md 4.4; CHECK.md B5).'
+  inputs:
+  - value_per_point
+  - numeraire
+  affects:
+  - id: horizon_survival_risk_usd
+    direction: either
+    type: up:event
+    how: The sizer's dollars at the stop read usd_per_quote from this market.
+  - id: net_r
+    direction: either
+    type: same:level
+    how: The money ledgers read USD, so a yen loser is not read as hundreds of dollars.
+  configurable: false
+  changed_by:
+  - automatic
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: architecture/CHECK.md:37-41
+    note: 'B5: USDJPY fixed only in the sizer'
+- id: b_split_rule
+  name: How a unit's share of the book's swing is split
+  tier: core
+  level: portfolio
+  kind: size_input
+  measure: 'other: flat or freed'
+  applies_to:
+    classes:
+    - all
+    styles:
+    - all
+    timeframes: all
+  default: flat
+  basis: reasoned
+  derivation: 'flat: B = sqrt(N (1 + (N - 1) rho)) over admitted units at the allocation anchor. freed: a unit at level 1.00 takes the swing the others leave idle, B_i = sqrt(1 + S2 + 2 rho S1 + rho (S1^2 - S2)) with S1 and S2 the sum and the sum of squares of the other units'' levels; a unit below 1.00 stays on flat. Freed swing raises a unit above the flat baseline by rule, so it is a raise above baseline and waits for his once-rule (FUNNEL Q9); flat until he signs. In the model at N = 5 and 10 it lifts healthy medians and adds to a bleeding book''s half-cushion runs (architecture/out-choke.txt arms A and B, CHECK.md item 2).'
+  inputs:
+  - stressed_unit_correlation
+  - live_unit_count
+  - size_level_fraction_table
+  affects:
+  - id: effective_independent_bets
+    direction: either
+    type: same:level
+    how: Sets which B a unit's baseline divides by.
+  - id: horizon_survival_risk_usd
+    direction: up
+    type: down:cap
+    how: Freed swing raises a full-level unit's baseline above the flat one.
+  configurable: true
+  changed_by:
+  - operator
+  status: proposal
+  sources:
+  - gen: expansion
+    ref: architecture/CHECK.md:74
+    note: 'item 2: freed swing has no formula and is a raise'
+  - gen: expansion
+    ref: funnel/FUNNEL.md:98
+    note: 'DP9: level-weighted B'

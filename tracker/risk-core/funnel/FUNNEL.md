@@ -434,25 +434,17 @@ Shapes A, B and C of the first pass are withdrawn: A against B is one layer and 
 
 ### 5.5 What he must be told at go-live
 
-- On and binding: the fifteen factors above; the unit bench and the portfolio day stop are the two brakes.
-- Shadow, measuring, not binding: class isolation; REDUCING; loss points; his "about three" (at the unit's own run length, 5 to 10 losses, not three); chorus and burn tiers; the Kelly ceiling; the accelerators.
-- House money: the brake half (his reverse house money) is on from day one at portfolio scope; the press after wins switches on by itself when the unit's own trades pass its card, under the rule he approves once (Q4).
-- The sweep cap he asked about twice: not at go-live; it returns later as a ratchet at the portfolio, a trade-off against idle money.
-- R stays gross with `net_r` beside it: our call; his B9 reservation stands.
-- The floor and buffer are fixed at go-live; nothing raises them by rule.
-- His phone: the push list on the node is closed; the three pushes in Q7 need his word.
-- The weak unit: starts at the level its holdout earns, not at a tenth; drift watches it down.
-- A scalper at a 5-pip stop may not exist after costs unless its cut catches few winners (F1); the harness's first trial says.
+**The list moved.** `architecture/SPINE.md` section 13, "What he must be told at go-live", is the one list. It carries this section's items, corrected and added to: three brakes read results, not two; the drift rule; what binds and what is shadow; no trails or breakeven at first; 15-minute bars until after G-DEMO; about 3 of 10 units at the first seed; freed swing; lockouts waiting for his click; the session brake that had been dropped; the first entry waiting for a live SQS baseline; Kubernetes in its simplest modes.
 
 ---
 
 ## 6. Questions for him
 
-Filtered against SEEDS and the rulings. Each has the recommended answer and the default the work proceeds on. Nothing blocks on him. The old Q7 (outside code) is later; the old Q2 vocabulary question is folded into Q8 as structure.
+Filtered against SEEDS and the rulings. Each has the recommended answer and the default the work proceeds on. Nothing blocks on him. Q9 came from the architecture's independent check (`architecture/CHECK.md`). The old Q7 (outside code) is later; the old Q2 vocabulary question is folded into Q8 as structure.
 
 | # | Question | Kind | Recommendation | Default while open |
 |---|---|---|---|---|
-| Q1 | May a unit step down (a CUSUM warning drops one level; a second warning inside 500 trades moves it to paper at a planned look, never on one day) and come back (a bench clears after its rest with retry-then-lockout; a level climbs on clean cohorts) **by rule**, and may a confirmed class isolation apply in `no_new_entries` mode with a time to live, so that only HALTED, lockouts, the kill switch, promotion and raises above baseline wait for your click? This restates ruling 2 by direction. | irreversible scope | Yes. | Yes, journalled with its cause |
+| Q1 | May a unit step down (a CUSUM warning drops one level and locks it there for 20 days; a third warning inside 500 trades moves it to paper at a planned look, never on one day) and come back (a bench clears after its rest with retry-then-lockout; a level climbs on clean cohorts) **by rule**, and may a confirmed class isolation apply in `no_new_entries` mode with a time to live, so that only HALTED, lockouts, the kill switch, promotion and raises above baseline wait for your click? This restates ruling 2 by direction. | irreversible scope | Yes. | Yes, journalled with its cause |
 | Q1b | May a rule **close positions** by itself (the cushion clip reducing at the buffer; the de-gross before a broker's close-out), or only stop new entries, with closes left to the kill switch and your hand? | irreversible scope | Entries only at go-live; automatic reduce after the harness shows its loss saved. | Entries only |
 | Q2 | Does QMB's proof set the **starting level** (a proved unit starts at half its safe size and climbs on cohorts; drift watches it down), rather than every unit earning its way up from a tenth over months? | scope (the sitting duck) | Yes. The old way holds a weak real edge at a tenth of its safe size for over six months. | Yes |
 | Q3 | May a unit go live at its holdout level **while proof continues**, with the packet saying "proof pending, 212 of 610 trades, level 0.50, expires on this date", after one week of machine check in paper? If no, paper runs for months for most units. | irreversible scope | Yes. The click still approves one hash at one level on these markets. | Yes |
@@ -461,6 +453,7 @@ Filtered against SEEDS and the rulings. Each has the recommended answer and the 
 | Q6 | After proof, may the **edge dial** move from `zero` to `low` by rule (size rises above the zero-edge baseline for a unit whose e-meter has crossed its bar), under a rule you approve once, or by a card each time? | once-rule | By rule, with a card telling you. | Card each time until you approve the rule |
 | Q7 | The node's **push list** is closed. May the build add three pushes: portfolio day stop fired; stop not at the venue after escalation failed; node unreachable with open positions? At night, wake you only when money is at risk, the system cannot fix it and your action changes the outcome before a deadline; otherwise the morning card? And while away: no new entries once flat (benches still clear by rule), or trade on at the holdout level under every brake? | scope | Yes to the three; wake contract as stated; absence policy dark-after-flat. | Ask the build for the three; wake contract; dark after flat |
 | Q8 | **After go-live, a structure question**: keep the Book and BMS as documents (the Book path code stays, 5,951 lines plus up to 4,732), or replace them with cluster tags and one portfolio config (a unit in several clusters at once, one floor)? The harness tests both on the losing-together scenarios first; the words on screen can stay either way. | irreversible scope, later | Tags, if the harness shows driver clusters catch co-loss the style Book misses. | Not asked until after go-live; the first increment has one portfolio config and no cluster level |
+| Q9 | **Freed swing**: a unit at full level may take the swing the other units leave idle, so it trades above the flat baseline, by rule, with the book's planned swing unchanged. It is a raise above baseline, so it is yours. Model: healthy medians up 5 % at N = 5 and 34 % at N = 10; a bleeding book's half-cushion runs from 11 to 13 % and from 14 to 18 % (`architecture/out-choke.txt`). Do you approve the rule once? | once-rule | Your call; it changes nothing at N = 1 or on the first seed's few units. | Flat: every unit on the flat baseline until you sign |
 
 **Numbers lens, when he gets there (not questions now):** the floor-touch tolerance; the survival horizon in days; the first floor and buffer; the ratchet share; k for the portfolio day stop and k for the admission gate (with F1's table); the cut size per unit; the floor-hit action (stop the pot, or one feasible micro unit at the holdout level); cards per day.
 

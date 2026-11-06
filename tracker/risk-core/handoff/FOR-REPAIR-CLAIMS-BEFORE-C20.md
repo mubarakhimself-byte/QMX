@@ -1,6 +1,6 @@
 # For the repair program: keep these files before C-20 and the deletion sweep
 
-From the risk-and-sizing session, 6 Nov 2026 (funnel decisions DP24, DP25 and DP33; source `funnel/FUNNEL.md` on branch `plan/risk-core`).
+From the risk-and-sizing session, 6 Nov 2026 (funnel decisions DP24, DP25 and DP33; architecture `architecture/SPINE.md` section 10; source `funnel/FUNNEL.md` on branch `plan/risk-core`).
 
 The audit's call graph reads these as having no callers, so the deletion sweep would remove them. The risk template builds on them. Please do not delete them until the risk session has moved what it needs.
 
@@ -12,6 +12,11 @@ The audit's call graph reads these as having no callers, so the deletion sweep w
 - `labelers.py`: its SQS rule text.
 - `qmn/replay/port.py`: its SQS replay rule.
 - `qmn/protection/dispatch.py`, the `control_window` module in `qmf-risk`, and `registry_catalog.py`: named by the funnel's news and SQS decisions.
+- `qmf-risk/control_rank.py` and `control_action.py`: the rank table's shape, and what `effect_matrix.py` imports.
+- `qmf-risk/sizing.py`: the kill line `qmn/capital` reads.
+- `qmf-risk/versioning.py`: the migration map's seed.
+- `qmn/protection/effect_matrix.py`: the kill table.
+- `qmf-data/calendar_feed.py`: the news window's feed.
 
 The old SQS gate's rule text (`qmn/src/qmn/host/decision_root.py:493-510`) is already copied verbatim into `grounding/G12-audit-and-repair-for-risk.md` section 2, so C-20 can still remove that gate when its time comes.
 
@@ -21,4 +26,4 @@ Agents with cTrader's MCP on the node's own demo account open positions that no 
 
 ## Not asked of the repair
 
-Nothing here changes a repair PR before C-20. These are claims to honour when the deletion runs. Risk and sizing rules stay with the risk session.
+Nothing here changes a repair PR before C-20. These are claims to honour when the deletion runs. The only ask on a repair PR is the one R24 question in `FOR-REPAIR-SOCKET.md`. Risk and sizing rules stay with the risk session.
