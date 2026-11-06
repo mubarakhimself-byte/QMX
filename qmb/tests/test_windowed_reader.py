@@ -23,6 +23,7 @@ from qmb.host.replay import (
     replay_feed,
     window_size,
 )
+from qmb.host.behaviour import check_behaviour
 from qmb.host.unit_runner import load_unit_folder, run_loaded
 from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
@@ -88,7 +89,7 @@ def test_peak_memory_at_200000_steps_stays_within_the_tolerance_of_10000() -> No
 
 
 def _one_side_on_one_market() -> dict[str, object]:
-    """The dummy trading one side of one market, so a long run stays inside a coordinator's lane."""
+    """The dummy trading one side of one market, the cheapest real run to repeat 200,000 times."""
     document = dummy_document()
     logic = cast("dict[str, object]", document["logic"])
     del logic["short"]
@@ -130,6 +131,20 @@ def test_a_real_backtest_of_200000_steps_stays_flat(tmp_path: Path) -> None:
 
     assert (small_trades, large_trades) == (0, 0)
     assert large_peak <= small_peak * (1 + WINDOW_MEMORY_TOLERANCE)
+
+
+def test_the_behaviour_check_reads_no_more_than_its_slice(tmp_path: Path) -> None:
+    folder = make_run_folder(tmp_path)
+
+    whole = check_behaviour(folder, request(folder), loaded_in_isolation=False)
+    cut = check_behaviour(folder, request(folder), slice_bars=1200, loaded_in_isolation=False)
+    floor = check_behaviour(folder, request(folder), slice_bars=1, loaded_in_isolation=False)
+
+    assert not isinstance(whole, TypedRefusal), whole
+    assert not isinstance(cut, TypedRefusal), cut
+    assert not isinstance(floor, TypedRefusal), floor
+    ends = [cast("dict[str, object]", c.value.report["slice"])["to"] for c in (whole, cut, floor)]
+    assert ends == [1743199200000000000, 1742378400000000000, 1742293800000000000]
 
 
 def test_a_card_refuses_a_row_of_another_kind_and_the_feed_stops_there() -> None:
