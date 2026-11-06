@@ -26,6 +26,7 @@ from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
 )
 from qmx_host.market_data import MarketDoor, Placement  # pyright: ignore[reportMissingTypeStubs]
 from qmx_judge.judge import quick_spec
+from qmx_judge.tries import TRY_KIND
 from qmx_library.port import Draft
 from qmx_library.principal import drafts_ref
 from qmx_library.store import Store
@@ -46,8 +47,15 @@ from test_qmb_app import (
     until,
 )
 
-COMMISSION = {"schema": "qmx.qmb.cost-profile/1", "broker": "ic", "account_type": "raw", "fills": 0}
-"""A stated profile's head. `hours` and `market_id` are each market's own."""
+COMMISSION = {
+    "schema": "qmx.qmb.cost-profile/1",
+    "broker": "ic",
+    "account_type": "raw",
+    "fills": 9999,
+}
+"""A stated profile's head, claiming fills it never measured. `hours` and `market_id` are each
+market's own."""
+FUNDING = "timestamp,rate\n1740787200000,0.0001\n"
 
 
 @pytest.fixture(scope="module")
@@ -71,23 +79,33 @@ def a_unit(world: World, name: str, ema_period: str) -> str:
     return world.store.put(OPERATOR, draft, on=drafts_ref(name), expected_head=None).object_id
 
 
-def a_stated_profile(world: World, per_lot: str) -> str:
-    """A cost profile as an agent saves it, charging `per_lot` on every fill, every hour."""
+def charging(market: str, per_lot: str = "3.50") -> dict[str, Any]:
+    """One market's profile, charging `per_lot` on every fill, every hour."""
     hours = [
         {"hour_of_week": hour, "slippage": "0", "commission_per_lot": per_lot}
         for hour in range(168)
     ]
-    content = {
-        "costs": {
-            market: {**COMMISSION, "market_id": market, "hours": hours}
-            for market in ("fx.eurusd", "metal.xauusd")
-        },
-        "funding": {"fx.eurusd": "timestamp,rate\n1740787200000,0.0001\n"},
-    }
-    saved = world.control.library_save(
+    return {**COMMISSION, "market_id": market, "hours": hours}
+
+
+def saved(world: World, content: object) -> str:
+    """A cost profile as an agent saves it."""
+    landed = world.control.library_save(
         LibraryInput(title="commission", kind="cost-profile", content=cast("Any", content))
     )
-    return str(saved["id"])
+    return str(landed["id"])
+
+
+def a_stated_profile(world: World, per_lot: str) -> str:
+    return saved(
+        world,
+        {
+            "costs": {
+                market: charging(market, per_lot) for market in ("fx.eurusd", "metal.xauusd")
+            },
+            "funding": {"fx.eurusd": FUNDING},
+        },
+    )
 
 
 def job(world: World, kind: str = "backtest", **inputs: Any) -> dict[str, Any]:
@@ -311,3 +329,70 @@ def test_nothing_starts_on_a_cost_profile_that_is_not_one(world: World) -> None:
 
     assert refused.value.code == "run_refused"
     assert str(refused.value) == f"cost_profile {world.dummy} is a unit, not a cost-profile"
+
+
+def refusal_with_no_try(world: World, profile: str, **asked: Any) -> str:
+    tries = len(world.store.with_field(TRY_KIND, "state", "opened"))
+
+    with pytest.raises(ControlError) as refused:
+        job(world, unit=world.dummy, **GAPS, cost_profile=profile, **asked)
+
+    assert refused.value.code == "run_refused"
+    assert len(world.store.with_field(TRY_KIND, "state", "opened")) == tries
+    return str(refused.value)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {"costs": {"fx.eurusd": "3.50", "metal.xauusd": "3.50"}},
+        {"costs": "3.50"},
+        {"funding": {"fx.eurusd": 5}},
+        ["3.50"],
+    ],
+    ids=["entry is text", "costs is text", "funding is a number", "not an object"],
+)
+def test_nothing_starts_on_a_cost_profile_of_the_wrong_shape(world: World, content: object) -> None:
+    profile = saved(world, content)
+
+    assert refusal_with_no_try(world, profile) == (
+        f"cost_profile {profile} needs costs by market, each an object, and funding by market, "
+        "each CSV text"
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "missing"),
+    [
+        (
+            {"costs": {"EURUSD": charging("EURUSD"), "XAUUSD": charging("XAUUSD")}},
+            "fx.eurusd, metal.xauusd",
+        ),
+        ({"costs": {"fx.eurusd": charging("fx.eurusd")}}, "metal.xauusd"),
+        ({"funding": {"fx.eurusd": FUNDING, "metal.xauusd": FUNDING}}, "fx.eurusd, metal.xauusd"),
+    ],
+    ids=["keyed by symbol", "one market of two", "funding alone"],
+)
+def test_nothing_starts_on_a_cost_profile_that_misses_a_run_market(
+    world: World, content: object, missing: str
+) -> None:
+    profile = saved(world, content)
+
+    assert (
+        refusal_with_no_try(world, profile)
+        == f"cost_profile {profile} names no costs for {missing}"
+    )
+
+
+def test_a_cost_profile_needs_only_the_markets_the_run_trades(world: World) -> None:
+    profile = saved(world, {"costs": {"fx.eurusd": charging("fx.eurusd")}})
+
+    landed = landed_of(
+        world, job(world, unit=world.dummy, markets=["fx.eurusd"], **GAPS, cost_profile=profile)
+    )
+
+    assert (landed["status"], landed["labels"]["cost_profile"]) == ("finished", profile)
+    charged = {
+        t["market_id"] for t in report(world.store, landed["id"])["trades"] if Decimal(t["cash"])
+    }
+    assert charged == {"fx.eurusd"}
