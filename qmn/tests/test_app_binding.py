@@ -403,7 +403,8 @@ class FakeCTrader:
         if self.close_error is not None:
             self._error(msg_id, self.close_error)
             return
-        held = self.held.pop(int(str(body["positionId"])), None)
+        position = int(str(body["positionId"]))
+        held = self.held.get(position)
         if held is None:
             self._say(
                 "ProtoOAOrderErrorEvent",
@@ -411,10 +412,23 @@ class FakeCTrader:
                 msg_id,
             )
             return
+        closed = min(int(str(body.get("volume") or held.volume)), held.volume)
+        remainder = held.volume - closed
+        if remainder:
+            held.volume = remainder
+        else:
+            self.held.pop(position, None)
         bid, ask = self.quotes[held.symbol_id]
         price = bid if held.side == "BUY" else ask
         self._execution(
-            "ORDER_FILLED", held, "POSITION_STATUS_CLOSED", price, "MARKET", msg_id, closing=True
+            "ORDER_FILLED",
+            held,
+            "POSITION_STATUS_OPEN" if remainder else "POSITION_STATUS_CLOSED",
+            price,
+            "MARKET",
+            msg_id,
+            closing=True,
+            volume=closed,
         )
 
     def _on_ProtoOAAmendPositionSLTPReq(self, msg_id: str, body: dict[str, object]) -> None:
@@ -527,13 +541,16 @@ class FakeCTrader:
             position["takeProfit"] = float(held.target)
         return position
 
-    def _deal_row(self, held: Held, price: Decimal, ident: int) -> dict[str, object]:
+    def _deal_row(
+        self, held: Held, price: Decimal, ident: int, volume: int | None = None
+    ) -> dict[str, object]:
+        size = held.volume if volume is None else volume
         return {
             "dealId": ident,
             "orderId": ident,
             "positionId": held.position_id,
-            "volume": held.volume,
-            "filledVolume": held.volume,
+            "volume": size,
+            "filledVolume": size,
             "symbolId": held.symbol_id,
             "createTimestamp": self._at_ms,
             "executionTimestamp": self._at_ms,
@@ -552,9 +569,11 @@ class FakeCTrader:
         msg_id: str,
         *,
         closing: bool = False,
+        volume: int | None = None,
     ) -> None:
+        size = held.volume if volume is None else volume
         self._next += 1
-        trade = {"symbolId": held.symbol_id, "volume": held.volume, "tradeSide": held.side}
+        trade = {"symbolId": held.symbol_id, "volume": size, "tradeSide": held.side}
         order: dict[str, object] = {
             "orderId": self._next,
             "tradeData": trade,
@@ -566,7 +585,7 @@ class FakeCTrader:
             "closingOrder": closing,
             "positionId": held.position_id,
         }
-        deal = self._deal_row(held, price, self._next)
+        deal = self._deal_row(held, price, self._next, size)
         if closing:
             self.orders.setdefault(held.position_id, []).append(order)
             self.deals.setdefault(held.position_id, []).append(
