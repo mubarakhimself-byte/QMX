@@ -1,7 +1,7 @@
 {
   "plugin": "qmx",
   "generated": "uv run --no-sync python -c \"from qma.harness.home import PLUGIN_DIR; from qma.harness.packs import write_manifest; write_manifest(PLUGIN_DIR)\"",
-  "sha256": "91ae01fc2ef4b3a781c00c0f39f755da84250995ef7f9afb1436381f6415529d",
+  "sha256": "fe735903cca9971b65f72e5ef518d4d8467b6adba97abcd7f18348a35d31862b",
   "files": {
     ".claude-plugin/plugin.json": "sha256:30ec523f11f39f52ef395d93a798f1211fc968a5f48722089039fa7af2274223",
     "QMX.md": "sha256:05983587486db87737b3603b058310e16309bc0d64d3f7cf601e05cdf13fc547",
@@ -9,7 +9,7 @@
     "agents/data-analyst.md": "sha256:91adecdf50963b8395401d5bcdbf44d53b692927c312b6cff984aed0b21eed41",
     "agents/overnight-builder.md": "sha256:ec9a6037c25f3e34e4b591947e09410497da1aed129219ac86c824e4ba67cdde",
     "agents/researcher.md": "sha256:319896f8844224b68585970c67effccd91e7cf5cb41143dfc2adf7def8a2d0da",
-    "hooks/hooks.json": "sha256:716edaac52dce1c9ea9d3fdc20cc677d0ec7eba4768e86b1eedab4209c8111a6",
+    "hooks/hooks.json": "sha256:7c3d105f0e3f66c0758a261215fd35b2213f391f70c42c5a76470cca96cdd5df",
     "skills/build-mini-app/SKILL.md": "sha256:7e397d958e3a946b445eaecf5729c292b47329d601809ba025227007c28838d8",
     "skills/build-unit/SKILL.md": "sha256:01a9c29b1b3bbe7638ca4938c9836fa8400dd943fdd748ec2fd585da5903948a",
     "skills/build-workflow/SKILL.md": "sha256:3df430cee1493fb222e68839fb421c78e4953efe41bb6a5326a095cfcbfbb564",

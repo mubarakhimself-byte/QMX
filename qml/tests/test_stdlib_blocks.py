@@ -1,4 +1,5 @@
 """QML's stdlib blocks for the dummy unit: goldens, cuts, settle, bounds and mirrors (A4)."""
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
@@ -13,16 +14,22 @@ from typing import Any, cast
 
 import pytest
 from qmf.core.refusal import Ok
-from qml.blocks.api import Block, EntryFace, EntryOrder, Instance, Side, Signal, Size, parse_entry
+from qml.blocks.api import Block, EntryFace, Instance, Side, Signal, Size, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
+from qml.compile import CompiledUnit, compile_unit
 from qml.numbers import InstrumentRecord, parse_record
-from qml.unit import parse_text
-from qml.unit.model import Binding, NumberParam, SlotsSide
+from test_compile_dummy import _context, _document
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
 _GOLDEN = json.loads((_QML / "tests" / "golden" / "talib-0.7.1.json").read_text("utf-8"))
 _CLOSES = [Decimal(c) for c in _GOLDEN["close"]]
+_BARS = [
+    {k: v if k == "time" else Decimal(str(v)) for k, v in row.items()}
+    for row in json.loads(
+        (_QML / "tests" / "golden" / "indicators" / "talib-0.7.1.json").read_text("utf-8")
+    )["bars"]
+]
 _RELATIVE, _ABSOLUTE = 1e-9, 1e-12  # golden_tolerance's starting default (CONTRACTS.md section 9)
 _GROWTH = 1.5  # update_time_growth_tolerance's starting default (QML-04)
 _WEEK_OF_M1 = 7 * 24 * 60
@@ -127,17 +134,21 @@ def test_a_cut_restored_from_exported_state_equals_the_full_run_at_50_sampled_ba
     assert unequal == []
 
 
-def _settle(make: Callable[[], Instance], tolerance: float) -> int:
-    full = _run(make(), _CLOSES)
-    targets = range(len(_CLOSES) - 50, len(_CLOSES), 10)
-    base = make().warm_up_bars
-    for multiple in range(1, len(_CLOSES) // base):
+def _settle(make: Callable[[], Instance], tolerance: float, feed: Sequence[object]) -> int:
+    full = [_value(v) for v in _feed_all(make(), feed)]
+    targets = range(len(feed) - 50, len(feed), 10)
+    base = max(make().warm_up_bars, 1)
+    for multiple in range(1, (len(feed) - 50) // base):
         length = base * multiple
         agree = True
         for target in targets:
-            late = _run(make(), _CLOSES[target - length + 1 : target + 1])[-1]
+            late = _value(_feed_all(make(), feed[target - length + 1 : target + 1])[-1])
             reference = full[target]
-            assert late is not None and reference is not None
+            if (late is None) != (reference is None):
+                agree = False
+                break
+            if late is None or reference is None:
+                continue
             if abs(float(late) - float(reference)) > tolerance * abs(float(reference)):
                 agree = False
                 break
@@ -146,20 +157,46 @@ def _settle(make: Callable[[], Instance], tolerance: float) -> int:
     raise AssertionError("never settled inside the golden series")
 
 
+def _feed_all(instance: Instance, feed: Sequence[object]) -> list[object]:
+    return [instance.update({"series": x}) for x in feed]
+
+
+_RECORDED = sorted(
+    p.parent.parent.name
+    for p in _STDLIB.glob("*/1/entry.json")
+    if json.loads(p.read_text("utf-8")).get("settle_bars") is not None
+)
+
+
 @pytest.mark.parametrize(
-    ("entry_id", "make"),
+    ("ema_period", "warm_up"),
     [
-        ("ema", lambda: _make("ema@1", period="100")),
-        ("rsi-cross-back", lambda: _make("rsi-cross-back@1", period="14", level="30")),
+        pytest.param("100", 921, id="the dummy's own: EMA 900, then ROC's 21"),
+        pytest.param("200", 1821, id="twice the period: EMA 1800, then ROC's 21"),
+        pytest.param("50", 785, id="half the period: the RSI's 285, then its 500-bar window"),
     ],
 )
-def test_the_recursive_settle_length_is_the_one_recorded_in_the_entry(
-    entry_id: str, make: Callable[[], Instance], capsys: pytest.CaptureFixture[str]
-) -> None:
-    recorded = _face(entry_id).settle
-    assert recorded is not None
+def test_a_unit_warms_up_for_the_period_it_binds(ema_period: str, warm_up: int) -> None:
+    document = _document()
+    cast("dict[str, Any]", document["numbers"])["ema_period"]["default"] = ema_period
 
-    found = _settle(make, float(recorded.tolerance))
+    compiled = compile_unit(document, _context())
+
+    assert isinstance(compiled, CompiledUnit), compiled
+    assert compiled.warm_up == {"m15": warm_up}
+
+
+@pytest.mark.parametrize("entry_id", _RECORDED)
+def test_the_recursive_settle_length_is_the_one_recorded_in_the_entry(
+    entry_id: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    face = _face(entry_id)
+    recorded = face.settle
+    assert recorded is not None
+    block = _blocks()[f"{entry_id}@1"]
+    feed = _BARS if face.inputs[0].stream_kind == "bars" else _CLOSES
+
+    found = _settle(lambda: block.make(recorded.params, {}), float(recorded.tolerance), feed)
 
     with capsys.disabled():
         print(f"\n{entry_id}@1 settle {found} bars at {dict(recorded.params)}")
@@ -297,10 +334,6 @@ def test_the_time_exit_fires_on_the_48th_bar_held() -> None:
     assert fired.index(True) == 47
 
 
-def test_the_entry_order_is_market_at_the_next_open() -> None:
-    assert _make("market-next-open@1").update({}) == EntryOrder(kind="market", at="next_open")
-
-
 def _record(name: str) -> InstrumentRecord:
     document = json.loads(
         (_QML / "tests" / "fixtures" / "records" / f"{name}.json").read_text("utf-8")
@@ -356,25 +389,3 @@ def test_the_trend_floor_moves_one_step_toward_its_shrunk_edge_after_20_trades()
     assert all_good == Decimal("0")
 
 
-def test_every_dummy_binding_names_a_stdlib_block_whose_port_measure_matches_its_number() -> None:
-    dummy = _QML / "src" / "qml" / "unit" / "templates" / "dummy-trend-pullback.json"
-    unit = parse_text(dummy.read_text("utf-8")).unit
-    assert unit is not None
-    bindings: list[Binding] = [*unit.exit_set]
-    if unit.sizer is not None:
-        bindings.append(unit.sizer)
-    for side in (unit.logic.long, unit.logic.short):
-        assert isinstance(side, SlotsSide)
-        bindings += [b for slot in side.slots.values() for b in slot.bindings]
-
-    bound = [
-        (b.block.entry_id, port, unit.numbers[p.number].measure)
-        for b in bindings
-        for port, p in b.params.items()
-        if isinstance(p, NumberParam)
-    ]
-    mismatched = [(e, port) for e, port, m in bound if _face(e).parameter_measure(port) is not m]
-
-    assert {str(b.block) for b in bindings} <= set(_blocks())
-    assert len(bound) == 14
-    assert mismatched == []

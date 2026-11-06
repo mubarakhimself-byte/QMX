@@ -38,6 +38,10 @@ EVERY_S: Final = 1.0
 """`[telemetry] ship_every_s`: how often the host looks for new lines."""
 KIND: Final = "app_log"
 INCIDENT: Final = "incident"
+ERROR_EVENTS: Final = frozenset(
+    {"breaker_open", "restart_refused", "restart_failed", "process_error"}
+)
+"""The supervisor events that read as errors; every other event reads at its own level or info."""
 SECRET_WORDS: Final = frozenset(
     {
         "apikey",
@@ -85,16 +89,29 @@ def scrubbed(value: JsonValue) -> JsonValue:
 def record_of(line: str, app_id: str, file: str) -> str:
     """One log line as the JSON text the exporter takes: its own fields, the app and the file it
     came from, secret-named values masked and every string redacted. A line that is not a JSON
-    object is sent as its message."""
+    object, or is nested too deep to walk, is sent as its message."""
     try:
         parsed: object = json.loads(line, parse_constant=str, parse_float=_finite_or_text)
-    except ValueError:
+    except ValueError, RecursionError:
         parsed = None
     fields = cast("dict[str, JsonValue]", parsed) if isinstance(parsed, dict) else {"message": line}
     at = fields.get("at")
     if at is not None and not _instant(at):
         fields = {**{k: v for k, v in fields.items() if k != "at"}, "app_at": at}
-    return _sent({**fields, "app_id": app_id, "log_file": file})
+    try:
+        return _sent({**_read_event(fields), "app_id": app_id, "log_file": file})
+    except RecursionError:
+        return _sent({"message": line, "app_id": app_id, "log_file": file})
+
+
+def _read_event(fields: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """A supervisor line names its `event` and carries no message or level, so its event is its
+    message, and the events in `ERROR_EVENTS` read as errors. A line's own fields win."""
+    event = fields.get("event")
+    if not isinstance(event, str):
+        return fields
+    level: dict[str, JsonValue] = {"level": "error"} if event in ERROR_EVENTS else {}
+    return {"message": event, **level, **fields}
 
 
 def _finite_or_text(text: str) -> float | str:
@@ -105,8 +122,7 @@ def _finite_or_text(text: str) -> float | str:
 
 def _sent(fields: JsonValue) -> str:
     """The one way a record leaves the shipper. The exporter's own `json.dumps(allow_nan=False)`
-    raises outside its guard on NaN or infinity and kills its sender thread, so a non-finite
-    float is sent as its JSON spelling."""
+    fails a whole batch on NaN or infinity, so a non-finite float is sent as its JSON spelling."""
     clean, _ = redact.redact_json(scrubbed(_finite(fields)))
     return json.dumps(clean, sort_keys=True, allow_nan=False)
 
@@ -155,6 +171,9 @@ class AppLogs:
         self.cursors: dict[str, int] = {}
         self.shipped = 0
         self.incidents: dict[str, tuple[object, object]] = {}
+        self.last_post_failed = False
+        self._posts_sent: JsonValue = 0
+        self._posts_failed: JsonValue = 0
         self._load()
 
     @property
@@ -173,6 +192,7 @@ class AppLogs:
         found = self.exporter()
         if found is None:
             return 0
+        self._read_posts(found.stats())
         room = telemetry.CAPACITY - _held(found)
         handed = 0
         before = dict(self.cursors)
@@ -200,27 +220,41 @@ class AppLogs:
             try:
                 await asyncio.to_thread(self.tick)
                 every = self.every_s()
-            except (OSError, ValueError) as error:
+            except Exception as error:  # a shipper that ends is worse than one that logs
                 print(f"app logs: a shipping pass was skipped: {error}", file=sys.stderr)
             await asyncio.sleep(every)
 
     def doctor_line(self) -> DoctorLine:
-        """The doctor's deep-logs row: off as off, or what was shipped and what was lost."""
+        """The doctor's deep-logs row: off as off, or what was shipped and what was lost. It is
+        red only while the last post failed, because lines dropped in an outage stay in the local
+        files, so the count stays named after the post that came back."""
         if self.switch() == OFF:
             return DoctorLine(
                 "deep logs", True, "Telemetry off: [telemetry] send_to is off, so nothing is sent"
             )
         found = telemetry.process()
         stats = found.stats() if found is not None else {}
+        self._read_posts(stats)
         dropped = stats.get("dropped", 0)
         lost = dropped if isinstance(dropped, int) else 0
         return DoctorLine(
             "deep logs",
-            lost == 0,
+            not self.last_post_failed,
             f"Telemetry on to {stats.get('endpoint') or self.switch()}: {self.shipped} app log "
             f"lines and incidents shipped since the host started from {len(self.cursors)} files; "
-            f"{lost} records dropped",
+            f"{lost} records dropped{'; the last post failed' if self.last_post_failed else ''}",
         )
+
+    def _read_posts(self, stats: Mapping[str, JsonValue]) -> None:
+        """The exporter counts posts and keeps no order, so each read compares the counts with
+        the read before: the one that moved says how the last post went. When both moved the
+        post that landed wins, and a later failed post turns the row red."""
+        sent, failed = stats.get("sent", 0), stats.get("failed", 0)
+        if sent != self._posts_sent:
+            self.last_post_failed = False
+        elif failed != self._posts_failed:
+            self.last_post_failed = True
+        self._posts_sent, self._posts_failed = sent, failed
 
     def _files(self) -> dict[str, Path]:
         """Every app volume's JSONL logs, by their path under the home."""

@@ -85,7 +85,7 @@
     "roc_lookback": {"kind": "fixed", "measure": "bars", "range": {"min": "5", "max": "100", "step": "1"}, "default": "20", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "builder_chosen"},
     "min_trend_strength": {
       "kind": "calibrated", "measure": "percent", "range": {"min": "0", "max": "0.0030", "step": "0.0001"}, "default": "0",
-      "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20, "at": "market_day_close"}, "min_count": 20, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@1", "rule_params": {"buckets": "5"}},
+      "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20, "at": "market_day_close"}, "min_count": 20, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@2", "rule_params": {"buckets": "5"}},
       "authority": "motion_inside_range", "origin": "builder_chosen", "applies_to_open_positions": false
     },
     "rsi_period": {"kind": "fixed", "measure": "bars", "range": {"min": "2", "max": "50", "step": "1"}, "default": "14", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention"},

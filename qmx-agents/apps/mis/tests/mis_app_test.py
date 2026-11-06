@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import threading
+import time
 from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -127,6 +128,18 @@ def digest(folder: Path) -> dict[str, str]:
     }
 
 
+def until[T](check: Callable[[], T | None], reason: str) -> T:
+    """Poll `check` until it answers, so a round on its own thread is never waited for by a sleep
+    that guesses how long it takes."""
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        found = check()
+        if found is not None:
+            return found
+        time.sleep(0.25)
+    raise AssertionError(f"within 60 s, {reason}")
+
+
 def test_configured_on_two_markets_it_publishes_each_allowed_reading_from_the_market_root(
     world: World,
 ) -> None:
@@ -182,3 +195,43 @@ def test_stopping_the_mis_changes_no_unit(world: World) -> None:
     assert stopped["status"] == "stopped"
     assert (with_mis["status"], without_mis["status"]) == ("finished", "finished")
     assert (compared["same_trades"], compared["measures"]) == (True, {})
+
+
+def test_a_read_error_in_a_round_leaves_the_thread_alive(world: World) -> None:
+    month = world.market / "series" / "fixture" / "EURUSD" / "bar-m1" / "bid" / "2025-03"
+    open_month = month / "open.parquet"
+    saved = open_month.read_bytes()
+    open_month.unlink()
+    try:
+        world.mis("configure", configure_both(op_id="c09-read-error", settings={"round_s": 1}))
+        # A thread already waiting keeps the cadence it read before the configure; the restart
+        # gives the app a thread that reads the one-second plan.
+        world.runtime.stop("mis")
+        world.runtime.start("mis")
+        error = until(
+            lambda: world.mis("status", {}).get("last_error"),
+            "the read error reached status",
+        )
+    finally:
+        open_month.write_bytes(saved)
+
+    def eurusd_published() -> dict[str, str] | None:
+        markets = cast(list[dict[str, Any]], world.mis("status", {})["markets"])
+        rows: dict[str, dict[str, str]] = {
+            str(row["market_id"]): row["readings"] for row in markets
+        }
+        readings = rows.get("eurusd") or {}
+        fresh = readings and all(health == "fresh" for health in readings.values())
+        return readings if fresh else None
+
+    readings = until(eurusd_published, "the next round published EURUSD's readings")
+    status = world.mis("status", {})
+
+    assert str(error).startswith("FileNotFoundError:")
+    assert sorted(readings) == [
+        "cusum-change-point@1",
+        "efficiency-ratio@1",
+        "hurst-exponent@1",
+        "variance-ratio@1",
+    ]
+    assert status["last_error"] == error
