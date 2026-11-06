@@ -94,6 +94,21 @@ def test_a_stop_fired_while_down_books_at_the_brokers_price(tmp_path: Path) -> N
     runtime.stop()
 
 
+def test_the_brokers_rate_limit_waits_for_the_true_price(tmp_path: Path) -> None:
+    fake = b.FakeCTrader(b.codec(), stop_slip=Decimal("0.00010"), history_limits=1)
+    rig, runtime, at = trading(tmp_path, fake)
+    name = b.sent_entries(rig)[0]
+
+    fake.drop_socket()
+    fire_the_stop(rig)
+    b.play_spots(rig, at, at + 5 * BAR)
+
+    assert venue_of(runtime).closed(name) == VenueClose(FillKind.STOP, Decimal("1.08032"), gap=True)
+    assert fake.requests().count("ProtoOADealListByPositionIdReq") == 2
+    assert runtime.alarms == []
+    runtime.stop()
+
+
 def test_the_reconcile_row_writes_the_brokers_stop_and_size(tmp_path: Path) -> None:
     rig, runtime, at = trading(tmp_path)
     name = b.sent_entries(rig)[0]

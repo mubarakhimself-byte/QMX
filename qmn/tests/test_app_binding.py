@@ -134,6 +134,8 @@ class FakeCTrader:
     stop_slip: Decimal = Decimal(0)
     """How far past its level a stop fills."""
     history_silent: bool = False
+    history_limits: int = 0
+    """How many coming deal requests the broker refuses by its rate limit."""
     deals: dict[int, list[dict[str, object]]] = field(
         default_factory=dict[int, list[dict[str, object]]]
     )
@@ -301,6 +303,10 @@ class FakeCTrader:
 
     def _on_ProtoOADealListByPositionIdReq(self, msg_id: str, body: dict[str, object]) -> None:
         if self.history_silent:
+            return
+        if self.history_limits:
+            self.history_limits -= 1
+            self._error(msg_id, "REQUEST_FREQUENCY_EXCEEDED")
             return
         self._say(
             "ProtoOADealListByPositionIdRes",
