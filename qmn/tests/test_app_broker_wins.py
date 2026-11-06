@@ -150,7 +150,8 @@ def test_a_stop_moved_by_hand_is_read(tmp_path: Path) -> None:
     assert moved == Decimal("1.08122")
     assert [p["stop_at_venue"] for p in shown] == ["1.08122"]
     assert kept == Decimal("1.08122")
-    assert cleared is None
+    assert cleared == Decimal("1.08022")
+    assert rig.fake.amended == [{"stopLoss": Decimal("1.08022")}]
     assert "venue_stop" not in row
     assert runtime.alarms == []
     runtime.stop()

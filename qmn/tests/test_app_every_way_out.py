@@ -165,7 +165,7 @@ def test_a_refused_exit_keeps_going_and_books_the_trade(tmp_path: Path) -> None:
         ("stop", "1.08"),
         ("close", "0.75"),
     ]
-    assert [t.reference for t in closes] == [Decimal("1.06846"), Decimal("1.06846")]
+    assert [t.reference for t in closes] == [Decimal("1.06856"), Decimal("1.06856")]
     node.runtime.stop()
 
 

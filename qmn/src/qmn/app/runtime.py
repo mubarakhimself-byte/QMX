@@ -114,7 +114,7 @@ from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, cleared_by, refused, same_market
-from qmn.app.reconciler import Found, Ours, Reconciler
+from qmn.app.reconciler import Found, Ours, Reconciler, journal_sends
 from qmn.app.stand_down import (
     REPEATED_FAULT_RESTARTS,
     REPEATED_FAULT_WINDOW_NS,
@@ -857,6 +857,10 @@ def _price(value: Decimal, instrument: Instrument) -> Result[Price]:
     return Price.try_create(number, instrument, scale)
 
 
+def _past_entry(side: Side, stop: Decimal, entry: Decimal) -> bool:
+    return (stop - entry) * (1 if side is Side.LONG else -1) > 0
+
+
 class _OrderJournal:
     """The node journal as the journal-before-dispatch gate's sink: one ``order`` row."""
 
@@ -1099,26 +1103,56 @@ class OrderPath:
         for attempt in range(self.retry_max):
             if attempt:
                 self._amend(position, ticket, distance, attempt)
-            deadline = self.clock_ns() + self.confirm_ns
-            while True:
-                if self.venue.client.stop_of(position) is not None:
-                    return True
-                if self.clock_ns() >= deadline:
-                    break
-                self.sleep(PROTECT_POLL_S)
+            if self._shows_stop(position):
+                return True
+        self._escalate(position, ticket.market_id, ticket.side, ticket.reference, self.retry_max)
+        return False
+
+    def restore_stop(
+        self,
+        position: str,
+        market: str,
+        side: Side,
+        stop: Decimal | None,
+        entry: Decimal,
+        record: InstrumentRecord,
+    ) -> None:
+        """Put back a stop the venue no longer holds, at ``stop``, up to ``retry_max`` tries. No
+        level, a level past entry, or a refusal, as when the price is already past the stop, goes
+        straight to the reduce-only close and the protection alarm, so a kill never waits on it."""
+        tries = 0
+        while stop is not None and not _past_entry(side, stop, entry) and tries < self.retry_max:
+            tries += 1
+            if self._move_stop(position, market, side, stop, entry, stop, record) is not None:
+                break
+            if self._shows_stop(position):
+                return
+        self._escalate(position, market, side, entry, tries)
+
+    def _shows_stop(self, position: str) -> bool:
+        deadline = self.clock_ns() + self.confirm_ns
+        while True:
+            if self.venue.client.stop_of(position) is not None:
+                return True
+            if self.clock_ns() >= deadline:
+                return False
+            self.sleep(PROTECT_POLL_S)
+
+    def _escalate(
+        self, position: str, market: str, side: Side, reference: Decimal, tries: int
+    ) -> None:
         self.unprotected.add(position)
-        done = self.close(position, ticket.market_id, ticket.side, ticket.reference, "protection")
+        done = self.close(position, market, side, reference, "protection")
         self._alarm(
             {
                 "alarm": "protection_escalation",
                 "position": position,
-                "market_id": ticket.market_id,
-                "tries": self.retry_max,
+                "market_id": market,
+                "tries": tries,
                 "action": "closed_reduce_only" if isinstance(done, Placed) else "close_refused",
                 "origin": "placeholder",
             }
         )
-        return False
 
     def _alarm(self, alarm: Mapping[str, object]) -> None:
         self.journal.append("protection", alarm, RowFacts(ts_recv=self.clock_ns(), clock_ok=False))
@@ -1237,7 +1271,51 @@ class OrderPath:
         record: InstrumentRecord,
     ) -> Placed | Blocked:
         """Move a held stop the unit tightened; the caller checked that it only tightens, and
-        the amendment's own risk check refuses a wider distance again."""
+        the amendment's own risk check refuses a wider distance again. The venue takes a distance
+        on the loss side, so a stop past entry goes out only once the risk session has signed
+        the distance. The answer is the stop the broker holds, and an alarm says when that is
+        not the one asked for, one tick apart being the venue's rounding."""
+        if _past_entry(side, new_stop, entry):
+            blocked = Blocked(
+                "the new stop is past entry, not on the loss side, so the node did not send it"
+            )
+            self._note(
+                position,
+                f"amend-blocked-{new_stop}",
+                {"step": "amend_blocked", "stop": str(new_stop), "reason": blocked.reason},
+            )
+            return blocked
+        refused = self._move_stop(position, market, side, new_stop, entry, held_stop, record)
+        if refused is not None:
+            return refused
+        at_broker = self.venue.client.stop_of(position)
+        if at_broker is not None and abs(at_broker - new_stop) < Decimal(1).scaleb(-record.digits):
+            return Placed(at_broker)
+        self._alarm(
+            {
+                "alarm": "stop_differs",
+                "position": position,
+                "market_id": market,
+                "asked": str(new_stop),
+                "at_broker": _text(at_broker),
+                "action": "answered_the_brokers_stop",
+            }
+        )
+        if at_broker is None:
+            return Blocked("the venue cannot show the amended stop")
+        return Placed(at_broker)
+
+    def _move_stop(
+        self,
+        position: str,
+        market: str,
+        side: Side,
+        new_stop: Decimal,
+        entry: Decimal,
+        held_stop: Decimal,
+        record: InstrumentRecord,
+    ) -> Blocked | None:
+        """Send the stop to the venue; None when the venue accepted it."""
         instrument = Instrument(VenueId(record.venue), record.symbol)
         gap = _delta(abs(entry - new_stop), instrument)
         first = _delta(abs(entry - held_stop), instrument)
@@ -1269,7 +1347,7 @@ class OrderPath:
         sent = self._journalled(body, ticket)
         if is_refusal(sent) or sent.value.outcome is not SubmissionOutcome.ACCEPTED_BY_VENUE:
             return Blocked("the venue refused the amended stop")
-        return Placed(new_stop)
+        return None
 
 
 # --- one hosted unit ------------------------------------------------------------------------
@@ -2182,6 +2260,37 @@ class Runtime:
             self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units, kept)
         for unit in units:
             unit.adopt(self.reconciler.mine(account))
+        if venue.feed.ready and not self.reconciler.due(account, venue.feed.reconnects, unknown):
+            self._restore_stops(account, units)
+
+    def _restore_stops(self, account: str, units: Sequence[NodeUnit]) -> None:
+        """Put back each stop the venue no longer holds on a position a unit holds, or close it
+        with the alarm, before any bar is driven. It walks every tick and not only at adoption:
+        ``adopt`` runs from a snapshot and skips a name it holds, a unit may compile after the
+        reconcile, and a stop can go during a dropped connection. The level is the entry's send
+        row, the one ``adopt`` gives the handler."""
+        for unit in units:
+            client = unit.orders.venue.client
+            missing = {
+                name: held
+                for name, held in unit.venue_open().items()
+                if name not in unit.orders.unprotected and client.stop_of(name) is None
+            }
+            if not missing:
+                continue
+            read = journal_sends(self.context.journal_root)
+            sends = {} if is_refusal(read) else dict(read.value)
+            sends.update((o.position.position, o.send) for o in self.reconciler.mine(account))
+            for name, (market, side, entry) in missing.items():
+                stop = sends.get(name, {}).get("stop")
+                unit.orders.restore_stop(
+                    name,
+                    market,
+                    side,
+                    None if stop is None else Decimal(str(stop)),
+                    entry,
+                    unit.records[market],
+                )
 
     def _orphans(self, account: str, venue: Venue) -> list[Ours]:
         """The node's own positions the reconcile read open on ``account`` that no hosted unit
