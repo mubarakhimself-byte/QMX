@@ -1,0 +1,22 @@
+
+HEALTHY +0.10R, mixture e-meter  [n=10/day N=1 days=120 paths=200; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  CORE                             2345    1845     693           0.0%   0.0%          0.92   4.69
+  all picks, no e-bars             1147     647     654           0.0%   0.0%          0.68   2.29
+  no e-bars, no level drop         1377     877     628           0.0%   0.0%          0.77   2.75
+  all picks                         606     106     526           0.0%   0.0%          0.26   1.21
+
+WEAK +0.05R, mixture e-meter  [n=10/day N=1 days=120 paths=200; card p10=-3.6R p1=-5.9R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  CORE                              866     366     532           0.0%   0.0%          0.93   1.73
+  all picks, no e-bars              693     193     509           0.0%   0.0%          0.68   1.39
+  no e-bars, no level drop          755     255     485           0.0%   0.0%          0.76   1.51
+  all picks                         526      26     503           0.0%   0.0%          0.12   1.05
+
+HEALTHY +0.10R, oracle e-meter  [n=10/day N=1 days=120 paths=200; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  all picks                         635     135     518           0.0%   0.0%          0.30   1.27
+
+WEAK +0.05R, oracle e-meter  [n=10/day N=1 days=120 paths=200; card p10=-3.6R p1=-5.9R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  all picks                         523      23     503           0.0%   0.0%          0.12   1.05

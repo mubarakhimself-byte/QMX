@@ -1,0 +1,28 @@
+
+HEALTHY +0.10R  [n=10/day N=3 days=120 paths=120; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  sizer alone                     24965   24465   10670           0.0%   0.0%          1.00  49.93
+  +reserve,cost denominator        8303    7803    4133           0.0%   0.0%          1.00  16.61
+  +cohort climb                    6987    6487    4016           0.0%   0.0%          0.98  13.97
+  +own-p1 bench, next window       6813    6313    3638           0.0%   0.0%          0.98  13.63
+  +CUSUM step-down                 3891    3391     595           0.0%   0.0%          0.96   7.78
+  +e-bars as ceiling               1457     957     509           0.0%   0.0%          0.62   2.91
+  +halve at own p10                1540    1040     508           0.0%   0.0%          0.61   3.08
+  +that halve drops a level        1425     925     507           0.0%   0.0%          0.50   2.85
+  +probes,memory,lock               604     104     509           0.0%   0.0%          0.24   1.21
+  +brake half of cushion pair       590      90     507           0.0%   0.0%          0.20   1.18
+  +ratchet 25 %                     598      98     510           0.0%   0.0%          0.22   1.20
+
+WEAK +0.05R  [n=10/day N=3 days=120 paths=120; card p10=-3.6R p1=-5.9R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  sizer alone                      2203    1703    1104           0.8%   0.0%          1.00   4.41
+  +reserve,cost denominator        1582    1082     948           0.0%   0.0%          1.00   3.16
+  +cohort climb                    1371     871     866           0.0%   0.0%          0.98   2.74
+  +own-p1 bench, next window       1490     990     847           0.0%   0.0%          0.98   2.98
+  +CUSUM step-down                  993     493     504           0.0%   0.0%          0.95   1.99
+  +e-bars as ceiling                523      23     500           0.0%   0.0%          0.25   1.05
+  +halve at own p10                 532      32     501           0.0%   0.0%          0.26   1.06
+  +that halve drops a level         533      33     502           0.0%   0.0%          0.22   1.07
+  +probes,memory,lock               525      25     501           0.0%   0.0%          0.12   1.05
+  +brake half of cushion pair       522      22     499           0.0%   0.0%          0.11   1.04
+  +ratchet 25 %                     522      22     502           0.0%   0.0%          0.11   1.04

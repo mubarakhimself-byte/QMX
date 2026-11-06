@@ -309,6 +309,12 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - Next: one fix round by the judge, then architecture versions.
     - Claims for the repair before C-20 are in `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md`.
 
+47. **Review verdict (`funnel/REVIEW.md`, 12 must-fix, 23 should-fix): not a funnel yet, a handbrake with better paperwork.**
+    - First sim of the picks running together, one 10-a-day unit, $500 seed, 120 days, median equity: healthy +0.10R $612 with all picks, $2,259 with a small core; weak +0.05R $525 against $842. The lead reran it and the direction holds. Model numbers only.
+    - Main cause: the evidence ceiling under a baseline already built to survive at zero edge. About 39 cut-only factors, against April's 15.
+    - **One fix round is running with the Fable judge**, on the lead's calls: name the core; take the ceiling out from under the baseline; a portfolio day stop in the first increment; house money stays as a real pair; self-configuring is not silently cut (applier modes against refresh-at-anchors is a fork); real forks replace shapes A, B and C; test the core with fat tails, gaps, lot rounding and correlated units.
+    - Next: architecture versions via the arena.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.

@@ -1,0 +1,49 @@
+
+HEALTHY +0.10R, as believed  [n=10/day N=1 days=120 paths=200; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                             6027    5527    1904           0.5%   0.0%          1.00  12.05
+  CORE                             2259    1759     872           0.0%   0.0%          0.93   4.52
+  PICK                              612     112     519           0.0%   0.0%          0.26   1.22
+  PICK_X5                           560      60     504           0.0%   0.0%          0.26   1.12
+
+WEAK +0.05R, as believed  [n=10/day N=1 days=120 paths=200; card p10=-3.6R p1=-5.9R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                             1160     660     557           7.5%   0.0%          1.00   2.32
+  CORE                              842     342     462           0.0%   0.0%          0.93   1.68
+  PICK                              525      25     500           0.0%   0.0%          0.12   1.05
+  PICK_X5                           500       0     500           0.0%   0.0%          0.06   1.00
+
+THIN +0.03R, as believed  [n=10/day N=1 days=120 paths=200; card p10=-3.6R p1=-5.9R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                              694     194     422          22.0%   0.0%          1.00   1.39
+  CORE                              635     135     429           6.0%   0.0%          0.93   1.27
+  PICK                              514      14     495           0.0%   0.0%          0.09   1.03
+  PICK_X5                           500       0     500           0.0%   0.0%          0.02   1.00
+
+OVERSTATED true +0.03R, card +0.10R  [n=10/day N=1 days=120 paths=200; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                              693     193     423          21.5%   0.0%          1.00   1.39
+  CORE                              512      12     443           0.0%   0.0%          0.84   1.02
+  PICK                              506       6     494           0.0%   0.0%          0.09   1.01
+  PICK_X5                           500       0     500           0.0%   0.0%          0.02   1.00
+
+NO EDGE true 0, card +0.10R  [n=10/day N=1 days=120 paths=200; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                              426     -74     337          61.5%   0.0%          1.00   0.85
+  CORE                              472     -28     434           0.0%   0.0%          0.78   0.94
+  PICK                              499      -1     492           0.0%   0.0%          0.09   1.00
+  PICK_X5                           500       0     500           0.0%   0.0%          0.00   1.00
+
+BLEEDING true -0.05R, card +0.10R  [n=10/day N=1 days=120 paths=200; card p10=-3.2R p1=-5.3R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                              318    -182     305          98.0%   0.0%          1.00   0.64
+  CORE                              454     -46     430           0.0%   0.0%          0.63   0.91
+  PICK                              494      -6     491           0.0%   0.0%          0.08   0.99
+  PICK_X5                           500       0     500           0.0%   0.0%          0.00   1.00
+
+GOOD STREAK +0.03R, +0.30R on days 40-60, +0.03R  [n=10/day N=1 days=120 paths=200; card p10=-3.6R p1=-5.9R s=0.86]
+  arm                           median$   gain$    p10$ P(cushion<50%)  touch size/baseline x seed
+  BARE                             2424    1924     975           9.5%   0.0%          1.00   4.85
+  CORE                             1394     894     815           0.0%   0.0%          0.94   2.79
+  PICK                              551      51     515           0.0%   0.0%          0.23   1.10
+  PICK_X5                           518      18     500           0.0%   0.0%          0.25   1.04
