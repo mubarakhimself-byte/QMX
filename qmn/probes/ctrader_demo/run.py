@@ -65,6 +65,8 @@ TAG: Final = "probe24x"
 """This probe's own node tag, in the node's eight-letter base32 shape, so its orders never read as
 the practice node's."""
 LABEL: Final = f"qmx:{TAG}:demo-probe"
+"""The probe's label, and the head of each mark's own: a mark adds its name, so a count, a close
+and a part close see only the position that mark opened."""
 MARKET: Final = "fx.eurusd"
 SYMBOL: Final = "EURUSD"
 LOTS: Final = Decimal("0.01")
@@ -88,6 +90,11 @@ MARK_MODULES: Final = (
 )
 
 
+def label_for(mark: str) -> str:
+    """One mark's own label, so none of its counts or its closes reaches another mark's position."""
+    return f"{LABEL}-{mark}"
+
+
 def say(ok: bool, mark: str, detail: str = "") -> bool:
     print(f"{'PASS' if ok else 'FAIL'} {mark}" + (f" ({detail})" if detail and not ok else ""))
     sys.stdout.flush()
@@ -104,11 +111,19 @@ def reasons(done: Any) -> str:
 def one_by_one(
     session: Any, chosen: Sequence[Any], cross: Callable[[Any, Any], tuple[bool, str]]
 ) -> int:
-    """Run each mark on one session, in `MARK_MODULES` order, and count the FAILs."""
+    """Run each mark on one session, in `MARK_MODULES` order, under its own label and closing what
+    it opened before the next starts, so no mark counts or closes another mark's position."""
     failures = 0
     for module in chosen:
-        ok, said = cross(module, session)
+        session.label = label_for(module.MARK)
+        session.begin()
+        try:
+            ok, said = cross(module, session)
+        finally:
+            left = session.release()
         failures += not say(ok, module.MARK, said)
+        if left is not None:
+            failures += not say(False, f"{module.MARK} left open", left)
     return failures
 
 
@@ -302,8 +317,17 @@ class Crossing:
     def close_part(self, position: str, *, volume: int = HALF) -> Any:
         """Ask the broker to close part of a position, over the real codec, then read it back."""
         position_id = self.position_id(position)
+        if position_id is None:
+            return None
+        pushed = self.close_at(position_id, volume)
+        if pushed is None or is_refusal(pushed):
+            return pushed
+        return self.read_back()
+
+    def close_at(self, position_id: int, volume: int) -> Any:
+        """Close a position by the broker's id and volume, over the real codec."""
         api = self.venue.api
-        if position_id is None or api is None:
+        if api is None:
             return None
         frame = self.venue.codec.encode(
             "ProtoOAClosePositionReq",
@@ -316,10 +340,33 @@ class Crossing:
         )
         if is_refusal(frame):
             return frame
-        pushed = api.push(frame.value)
-        if is_refusal(pushed):
-            return pushed
-        return self.read_back()
+        return api.push(frame.value)
+
+    def begin(self) -> None:
+        """A mark starts on this session, so a session shared with the marks before it counts only
+        this mark's own orders from here."""
+
+    def mine(self) -> list[tuple[int, int]] | None:
+        """Each position carrying this mark's own label, as the broker's id and volume; None when
+        the session could not be read."""
+        raise NotImplementedError
+
+    def release(self) -> str | None:
+        """Close what this mark opened, so the next mark starts on an account without it. None when
+        nothing of this mark's is left, else what is, so a run that could not clean up after itself
+        never reads green."""
+        open_now = self.mine()
+        if open_now is None:
+            return "the session could not be read back, so nothing of this mark's was closed"
+        for position_id, volume in open_now:
+            self.close_at(position_id, volume)
+        self.read_back()
+        left = self.mine()
+        if left is None:
+            return f"the session could not be read back after the close, so {self.label} is unknown"
+        if left:
+            return f"{len(left)} position(s) still carry {self.label!r} after the close"
+        return None
 
     def position_id(self, position: str) -> int | None:
         """The broker's id for the node's name of a position."""
@@ -339,6 +386,8 @@ class Rehearsal(Crossing):
     fault: bool = False
     observations: dict[str, object] = field(default_factory=dict[str, object])
     ctid: int = 4401
+    heard: int = 0
+    """The order requests the broker had already heard when this mark started."""
 
     def tick(self, ticks: int = 2) -> None:
         binding: Any = cast(Any, importlib.import_module("test_app_binding"))
@@ -364,7 +413,19 @@ class Rehearsal(Crossing):
         )
 
     def entries(self) -> int:
-        return self.fake.requests().count("ProtoOANewOrderReq")
+        """The order requests this mark sent: those the broker heard since it started, so a
+        session shared with the marks before it counts its own and not theirs."""
+        return self.fake.requests().count("ProtoOANewOrderReq") - self.heard
+
+    def begin(self) -> None:
+        self.heard = self.fake.requests().count("ProtoOANewOrderReq")
+
+    def mine(self) -> list[tuple[int, int]]:
+        return [
+            (int(one.position_id), int(one.volume))
+            for one in self.fake.held.values()
+            if one.label == self.label
+        ]
 
     def heal(self) -> None:
         """Reopen the session as the node's feed does on its next tick, with no quotes: the recorded
@@ -387,6 +448,8 @@ class Demo(Crossing):
     _quotes: dict[str, tuple[Decimal, Decimal]] = field(
         default_factory=dict[str, tuple[Decimal, Decimal]]
     )
+    closed_ids: list[int] = field(default_factory=list[int])
+    """The broker's ids for the positions this run closed, newest last."""
 
     def tick(self, ticks: int = 2) -> None:
         time.sleep(0.5)
@@ -441,6 +504,27 @@ class Demo(Crossing):
                 return int(str(cast("dict[str, object]", row).get("positionId")))
         return None
 
+    def mine(self) -> list[tuple[int, int]] | None:
+        api = self.venue.api
+        if api is None:
+            return None
+        listed = api.ask("ProtoOAReconcileReq", {"ctidTraderAccountId": str(self.ctid)})
+        if is_refusal(listed):
+            return None
+        found: dict[int, int] = {}
+        for row in cast("list[Any]", listed.value.body.get("position") or []):
+            held = cast("dict[str, object]", row)
+            trade = cast("dict[str, object]", held.get("tradeData") or {})
+            if trade.get("label") == self.label:
+                found[int(str(held.get("positionId")))] = int(str(trade.get("volume") or 0))
+        return list(found.items())
+
+    def close_at(self, position_id: int, volume: int) -> Any:
+        pushed = super().close_at(position_id, volume)
+        if pushed is not None and not is_refusal(pushed):
+            self.closed_ids.append(position_id)
+        return pushed
+
     def close(self) -> None:
         self.venue.close()
 
@@ -467,10 +551,16 @@ class Demo(Crossing):
         return f"{found.value.name}: {json.dumps(dict(found.value.body), default=str)[:300]}"
 
     def deal_list(self) -> str:
-        """The first page of the last position's deals, with whether more are behind it."""
+        """The first page of the last position's deals, with whether more are behind it. The run
+        closes what each mark opened, so its last position is the last one this run closed."""
         api = self.venue.api
-        position = self.position_id(self.label) if self.held() else None
-        if api is None or position is None:
+        if api is None:
+            return "the run left no position to ask about"
+        if self.closed_ids:
+            position = self.closed_ids[-1]
+        else:
+            position = self.position_id(self.label) if self.held() else None
+        if position is None:
             return "the run left no position to ask about"
         asked = api.ask(
             "ProtoOADealListByPositionIdReq",
