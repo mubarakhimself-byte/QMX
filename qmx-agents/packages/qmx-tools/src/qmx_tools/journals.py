@@ -278,6 +278,13 @@ def _digest(rows: Iterable[JournalRow]) -> list[dict[str, Any]]:
     ]
 
 
+def _minute_named(t_ms: int) -> str:
+    """The minute of a row's write time, in the form a `minute` row's body names its minute
+    (`qmn.app.feed_keeper.Recording`)."""
+    moment = datetime.fromtimestamp(t_ms // MS_PER_MINUTE * 60, tz=UTC)
+    return moment.strftime("%Y-%m-%dT%H:%M:00Z")
+
+
 def _with_context(
     root: Path,
     rows: Sequence[JournalRow],
@@ -285,7 +292,9 @@ def _with_context(
     end_ns: int,
     held_from: HeldFrom | None,
 ) -> list[Any]:
-    minutes: dict[tuple[str, int], JournalRow] = {}
+    """A `minute` row is written when its minute has ended, so it is matched by the minute its
+    body names and never by its write time, which reads as the next minute."""
+    minutes: dict[tuple[str, str], JournalRow] = {}
     widened = _read(
         root,
         "market",
@@ -296,13 +305,14 @@ def _with_context(
         held_from=held_from,
     )
     for row in widened.rows:
-        minutes[str(row.record.get("market_id")), row.t // MS_PER_MINUTE] = row
+        body = cast("Mapping[str, Any]", row.record.get("body", {}))
+        minutes[str(row.record.get("market_id")), str(body.get("minute"))] = row
     answered: list[Any] = []
     for row in rows:
         if row.record.get("kind") not in CONTEXT_KINDS:
             continue
         found = row.concise()
-        minute = minutes.get((str(row.record.get("market_id")), row.t // MS_PER_MINUTE))
+        minute = minutes.get((str(row.record.get("market_id")), _minute_named(row.t)))
         found["market_minute"] = None if minute is None else minute.concise()
         answered.append(found)
     return answered

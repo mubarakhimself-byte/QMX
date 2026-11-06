@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
@@ -65,6 +66,7 @@ session that is silent for three of them is dead."""
 RECORDING_KEPT: Final = 10_000
 """`[node] recording_kept_bars`: the newest bars per market the recorder keeps in memory for
 warm-up, the `local_queue_bound` default (NODE.md section 9)."""
+NS_PER_MINUTE: Final = 60_000_000_000
 
 
 class SessionState(StrEnum):
@@ -168,17 +170,23 @@ def _ohlc(cells: object) -> OHLC:
 
 
 class Recording:
-    """The node's own recording of closed bars: the market journal, read back for warm-up.
+    """The node's own recording of the market: the market journal, read back for warm-up.
 
     Each bar is one ``bar`` row of the market journal, written through Part B's writer as it
     arrives. :meth:`open` reads the newest ``kept`` bars of each market back, so a unit
     deployed after a restart warms up from what this node recorded before it.
+
+    Each minute a market quoted in is one ``minute`` row, written when the minute has ended. Its
+    write time is therefore in the next minute, so its body names the minute it describes, by the
+    node's clock, the clock its unit rows are written by.
     """
 
     def __init__(self, writer: JournalWriter | None, kept: int = RECORDING_KEPT) -> None:
         self._writer = writer
         self._kept = kept
         self._bars: dict[str, deque[QuoteBar]] = {}
+        self._minute = 0
+        self._quoted: dict[str, tuple[Decimal, Decimal]] = {}
 
     @classmethod
     def open(
@@ -186,7 +194,7 @@ class Recording:
     ) -> Recording:
         recording = cls(writer, kept)
         for folder in stream_folders(root):
-            if not folder.name.startswith(f"{JournalStream.MARKET.source}."):
+            if not folder.name.startswith(f"{JournalStream.MARKET.source}.bar."):
                 continue
             lines = read_committed(folder)
             if is_refusal(lines):
@@ -219,6 +227,31 @@ class Recording:
             if is_refusal(written):
                 return written
         self.keep(market, bar)
+        return Ok(None)
+
+    def quote(self, quote: Quote) -> None:
+        """Hold a market's last two-sided quote of this minute for its ``minute`` row."""
+        if self._writer is not None and quote.bid is not None and quote.ask is not None:
+            self._quoted[quote.market_id] = (quote.bid, quote.ask)
+
+    def close_minute(self, now_ns: int) -> Result[None]:
+        """Write the ``minute`` rows of a minute that has ended by ``now_ns``."""
+        minute = now_ns // NS_PER_MINUTE
+        if self._writer is None or minute == self._minute:
+            return Ok(None)
+        ended, self._minute = self._minute, minute
+        quoted, self._quoted = self._quoted, {}
+        name = datetime.fromtimestamp(ended * 60, tz=UTC).strftime("%Y-%m-%dT%H:%M:00Z")
+        for market, (bid, ask) in sorted(quoted.items()):
+            body: dict[str, object] = {
+                "market_id": market,
+                "minute": name,
+                "spread": f"{ask - bid:f}",
+            }
+            facts = RowFacts(ts_recv=now_ns, clock_ok=False, market_id=market)
+            written = self._writer.append("minute", body, facts)
+            if is_refusal(written):
+                return written
         return Ok(None)
 
     def recent(self, market: str, count: int, before_ns: int | None = None) -> tuple[QuoteBar, ...]:
@@ -283,6 +316,9 @@ class FeedKeeper:
         Answers the closed bars this turn brought, after every listener saw each of them.
         """
         now = self.clock_ns()
+        closed = self.recording.close_minute(now)
+        if is_refusal(closed):
+            self.reason = f"a minute could not be recorded ({closed.category.value})"
         if self.state is SessionState.DOWN and not self._open(now):
             return ()
         if self.state is SessionState.CONNECTED:
@@ -308,7 +344,9 @@ class FeedKeeper:
                     if state is BookState.READY:
                         self._books[event.market_id] = (state, _apply(levels, event.levels))
                 case Quote():
-                    self._quotes[event.market_id] = _merge(self._quotes.get(event.market_id), event)
+                    merged = _merge(self._quotes.get(event.market_id), event)
+                    self._quotes[event.market_id] = merged
+                    self.recording.quote(merged)
                 case Bar():
                     recorded = self.recording.add(event.market_id, event.bar)
                     if is_refusal(recorded):
