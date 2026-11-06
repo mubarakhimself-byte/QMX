@@ -69,6 +69,8 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
         "sizer_skip",
         # The node's placement read: a fresh board reads the market in a word it does not favour.
         "not_favoured",
+        # A live journal's text with no code yet, so a new word costs a label and not the journal.
+        "unlisted",
     }
 )
 """Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
