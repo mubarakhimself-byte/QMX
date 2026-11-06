@@ -7,6 +7,7 @@ import importlib.metadata
 import json
 import time
 import uuid
+import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,6 +31,7 @@ from qmx_judge.judge import (
     STUDY_KIND,
     JudgedResult,
     JudgeRefused,
+    Remember,
     judge,
     land_judgement,
     late_spec,
@@ -60,6 +62,7 @@ from qmx_tools.service import (
 from qmx_tools.unit_check import checked
 
 if TYPE_CHECKING:
+    from qmx_control.service import ControlService
     from qmx_library.port import JsonObject, ObjectId, ObjectView
     from qmx_library.store import Store
 
@@ -70,6 +73,19 @@ QUICK_STUDY: Final = "study-quick-"
 """The item prefix of a unit's quick study, the one study written after its results by design."""
 COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "motion", "study")
 """The result fields that make two runs one request, whatever tester ran them."""
+
+
+DEAD_ENDS: Final[weakref.WeakKeyDictionary[ControlService, Remember]] = weakref.WeakKeyDictionary()
+
+
+def attach_dead_ends(control: ControlService, remember: Remember | None) -> None:
+    """Give `backtest_judge_run` on `control`'s home the host's memory, or take it away. The
+    harness builds its own domain context over the same control service, as `attach_node` says, so
+    a door with no host keeps none and its certificate names no row."""
+    if remember is None:
+        DEAD_ENDS.pop(control, None)
+    else:
+        DEAD_ENDS[control] = remember
 
 
 type Opening = tuple[str, int, int, str]
@@ -392,6 +408,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 spec=spec,
                 writer=str(OPERATOR),
                 placeholders=tuple(dict.fromkeys(p for r in judged for p in r.placeholders)),
+                remember=DEAD_ENDS.get(ctx.control),
             )
         except JudgeRefused as refused:
             raise ValueError("; ".join(refused.problems)) from refused
