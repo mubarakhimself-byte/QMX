@@ -764,18 +764,23 @@ def _pull_table(
     trades: Mapping[str, list[Decimal]],
     results: Sequence[JudgedResult],
     family: Sequence[JudgedResult],
+    enough: int,
 ) -> dict[str, list[Decimal]]:
-    """The trades the shrink reads: the judged ones, and for each market they left out the longest
-    record of the same code in `family`. So judging a rerun of the lucky market alone pulls as hard
-    as judging it with the others. Reruns of one market are never added together."""
+    """The trades the shrink reads. A market reads its judged trades when they are `enough` to judge
+    it on, and otherwise the longest record the same code has of it in `family`, so what an agent
+    chooses to judge cannot weaken the pull. Same code means an equal `compiled_fp`, else an equal
+    `unit`, or a record holding every judged trade. Reruns of one market are never added together."""
     table = {market: rs for market, rs in trades.items() if rs}
     code = {r.compiled_fp or r.unit for r in results}
+    judged = {t for r in results for t in r.trades}
     for other in family:
-        if (other.compiled_fp or other.unit) not in code:
+        if (other.compiled_fp or other.unit) not in code and not (
+            judged and judged <= set(other.trades)
+        ):
             continue
         found: dict[str, list[Decimal]] = {}
         for trade in other.trades:
-            if not trades.get(trade.market):
+            if len(trades.get(trade.market, ())) < enough:
                 found.setdefault(trade.market, []).append(trade.r)
         for market, rs in found.items():
             if len(rs) > len(table.get(market, ())):
@@ -828,7 +833,7 @@ def judge(
     traded = {t.market for r in results for t in r.trades}
     markets = sorted(set(named) | traded | {m for r in results for m in r.markets})
     trades = {m: [t.r for r in results for t in r.trades if t.market == m] for m in markets}
-    table = _pull_table(trades, results, family)
+    table = _pull_table(trades, results, family, spec.min_trades)
     k = spec.k if spec.estimator == "fixed" else estimate_k(table, spec.k)
     shrunk = {s.market: s for s in shrink(table, k)}
     per_market: list[MarketVerdict] = []
@@ -843,7 +848,7 @@ def judge(
         outcome = _outcome(len(rs), spec.min_trades, steps)
         per_market.append(
             MarketVerdict(
-                market, found.trades, found.raw_r, found.shrunk_r, found.weight, outcome, steps
+                market, len(rs), found.raw_r, found.shrunk_r, found.weight, outcome, steps
             )
         )
     compiled = sorted({r.compiled_fp for r in results if r.compiled_fp})

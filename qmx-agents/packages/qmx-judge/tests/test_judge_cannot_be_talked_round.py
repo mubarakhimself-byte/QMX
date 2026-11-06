@@ -211,6 +211,59 @@ def test_rerunning_the_lucky_market_alone_keeps_the_others_in_the_pull(tmp_path:
     )
     assert [(m.market, m.weight) for m in other_code.per_market] == [("fx.a", Decimal("0.6"))]
 
+    whole_b = trades_of("fx.b", 4)
+    short_then_long = [
+        JudgedResult.read(f"result-{n}", landed_fields(n, {}, MARCH), rows)
+        for n, rows in ((3, whole_b[:3]), (4, whole_b))
+    ]
+    longest = judge(
+        parse_spec(WRITTEN),
+        study="study-v1",
+        results=[only],
+        tries=tries,
+        family=short_then_long,
+        principal="agent:chat",
+        versions={},
+    )
+    row = longest.per_market[0].fields()
+    assert (row["market"], row["weight"], row["shrunk_r"]) == ("fx.a", "0.8676", "0.3435")
+
+
+def test_a_few_trades_in_each_other_market_do_not_switch_the_pull_off(tmp_path: Path) -> None:
+    world = landed_world(tmp_path)
+    alone = world.land([t for t in world.trades if t["market_id"] == "fx.m02"], markets=["fx.m02"])
+    first_days = [
+        t
+        for t in world.trades
+        if t["market_id"] != "fx.m02" and int(str(t["closed_at"])) < START + 3 * DAY
+    ]
+    pad = world.land(first_days, markets=sorted({str(t["market_id"]) for t in first_days}))
+
+    answer, markets = verdict_of(world, results=[alone, pad])
+
+    assert (markets["fx.m02"]["raw_r"], markets["fx.m02"]["shrunk_r"]) == ("0.2193", "0.0558")
+    assert (markets["fx.m02"]["outcome"], answer["overall"]) == ("fail", "fail")
+    assert (markets["fx.m03"]["trades"], markets["fx.m03"]["outcome"]) == (3, "too_thin")
+    assert "fx.m03 is too thin to judge, 3 trades of the 100 needed" in answer["says"]
+
+
+def test_a_new_version_pays_the_pull_only_if_it_trades_the_same_trades(tmp_path: Path) -> None:
+    world = landed_world(tmp_path)
+    lucky = [t for t in world.trades if t["market_id"] == "fx.m02"]
+    v1 = str(world.store.get(OPERATOR, world.result).fields["unit"])
+    v2 = put(world.store, "note", "unit", {"text": "v, one more sentence"}, head=v1)
+
+    same = world.land(lucky, markets=["fx.m02"], unit=v2)
+    _, markets = verdict_of(world, results=[same])
+    assert (markets["fx.m02"]["shrunk_r"], markets["fx.m02"]["weight"]) == ("0.0558", "0.0000")
+
+    v3 = put(world.store, "note", "unit", {"text": "v, a real change"}, head=v2)
+    one_moved = [{**lucky[0], "r": "1.2345"}, *lucky[1:]]
+    other = world.land(one_moved, markets=["fx.m02"], unit=v3)
+    _, markets = verdict_of(world, results=[other])
+    assert markets["fx.m02"]["weight"] == "0.6000"
+    assert markets["fx.m02"]["shrunk_r"] == markets["fx.m02"]["raw_r"]
+
 
 def test_quick_spec_lands_no_try(tmp_path: Path) -> None:
     world = landed_world(tmp_path)
