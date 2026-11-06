@@ -1,14 +1,17 @@
 """The cTrader demo probes (C-15, `EXTERNAL.md` section 2). Rehearsed now, run on demo at G-DEMO.
 
     uv run --no-sync python qmn/probes/ctrader_demo/run.py --rehearsal
+    uv run --no-sync python qmn/probes/ctrader_demo/run.py --rehearsal --shared
     uv run --no-sync python qmn/probes/ctrader_demo/run.py --rehearsal --fault <mark>
     uv run --no-sync python qmn/probes/ctrader_demo/run.py --plan
     uv run --no-sync python qmn/probes/ctrader_demo/run.py --home <his QMX folder>   # after G-DEMO
 
 Each mark is its own script beside this one and prints one PASS or FAIL line. The rehearsal runs the
 real node code, its real cTrader codec and the harsher fake broker on a throwaway folder, so no
-account and no network is reached. `--fault <mark>` runs the same crossing with that mark's fault
-in: the fake answers worse and the mark must read FAIL.
+account and no network is reached. `--rehearsal` builds a fresh rig per mark; `--rehearsal --shared`
+builds one rig and runs every mark over it, as the demo run has one account for all six, so there
+the marks meet each other's positions. `--fault <mark>` runs the same crossing with that mark's
+fault in: the fake answers worse and the mark must read FAIL.
 
 The demo run reads the trading app's key and the node's own grant from the node's stores, never
 prints either, and asks cTrader's demo broker what only it can answer. It sends demo orders and
@@ -25,7 +28,7 @@ import shutil
 import sys
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -96,6 +99,17 @@ def reasons(done: Any) -> str:
     context: Mapping[str, object] = getattr(done, "context", {})
     code = context.get("code")
     return f"{code}: {done}" if code else str(done)
+
+
+def one_by_one(
+    session: Any, chosen: Sequence[Any], cross: Callable[[Any, Any], tuple[bool, str]]
+) -> int:
+    """Run each mark on one session, in `MARK_MODULES` order, and count the FAILs."""
+    failures = 0
+    for module in chosen:
+        ok, said = cross(module, session)
+        failures += not say(ok, module.MARK, said)
+    return failures
 
 
 def _filled(one: Frame) -> bool:
@@ -541,15 +555,18 @@ class Demo(Crossing):
         )
 
 
-def rehearsal(module: Any, *, fault: bool) -> tuple[Rehearsal, Path]:
-    """A throwaway folder, the real node, its real codec and the fake broker for one mark."""
+def binding_module() -> Any:
+    """The fakes' module, with the tests folder on this interpreter's path the first time."""
     tests = PROBES.parents[1] / "tests"
     if str(tests) not in sys.path:
         sys.path.insert(0, str(tests))
-    binding: Any = cast(Any, importlib.import_module("test_app_binding"))
-    codec = binding.codec()
-    fake = module.broker(codec, fault=fault)
-    root = Path(tempfile.mkdtemp(prefix=f"c15-{module.MARK}-", dir=tempfile.gettempdir()))
+    return cast(Any, importlib.import_module("test_app_binding"))
+
+
+def rigged(fake: Any, *, fault: bool = False) -> tuple[Rehearsal, Path]:
+    """A throwaway folder, the real node, its real codec and `fake` for the broker."""
+    binding: Any = binding_module()
+    root = Path(tempfile.mkdtemp(prefix="c15-probe-", dir=tempfile.gettempdir()))
     try:
         rig = binding.bound_rig(root, broker=fake)
         binding.signed_in(rig)
@@ -560,6 +577,18 @@ def rehearsal(module: Any, *, fault: bool) -> tuple[Rehearsal, Path]:
     except Exception:
         shutil.rmtree(root, ignore_errors=True)
         raise
+
+
+def rehearsal(module: Any, *, fault: bool) -> tuple[Rehearsal, Path]:
+    """A throwaway folder, the real node, its real codec and the fake broker for one mark."""
+    binding: Any = binding_module()
+    return rigged(module.broker(binding.codec(), fault=fault), fault=fault)
+
+
+def shared() -> tuple[Rehearsal, Path]:
+    """One rig for every mark, as the demo run has one account for the marks on it."""
+    binding: Any = binding_module()
+    return rigged(binding.FakeCTrader(binding.codec()))
 
 
 def demo(home: Path, tag: str | None, account: str | None) -> Demo:
@@ -653,9 +682,22 @@ def questions(session: Demo) -> None:
         print(f"FOUND {question}: {found}")
 
 
+def _rehearse(module: Any, session: Any) -> tuple[bool, str]:
+    """One mark's rehearsal half over whichever rig it was handed."""
+    return cast("tuple[bool, str]", module.rehearse(session))
+
+
+def _demo(module: Any, session: Any) -> tuple[bool, str]:
+    """One mark's demo half over the session his account is bound to."""
+    return cast("tuple[bool, str]", module.demo(session))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     parser.add_argument("--rehearsal", action="store_true", help="the fake broker, no account")
+    parser.add_argument(
+        "--shared", action="store_true", help="rehearse every mark over one rig, not one per mark"
+    )
     parser.add_argument("--fault", help="rehearse one mark with its fault in, and expect FAIL")
     parser.add_argument("--plan", action="store_true", help="print the marks; no network")
     parser.add_argument("--home", type=Path, help="his QMX folder, for the demo run")
@@ -666,11 +708,30 @@ def main(argv: list[str] | None = None) -> int:
     if args.fault is not None and not chosen:
         print(f"FAIL no mark is named {args.fault}", file=sys.stderr)
         return 2
+    if args.shared and not args.rehearsal:
+        print(
+            "FAIL setup: --shared rehearses every mark over one rig; name --rehearsal too",
+            file=sys.stderr,
+        )
+        return 2
+    if args.shared and args.fault is not None:
+        print(
+            "FAIL setup: --shared runs every mark, so it cannot run one mark's fault",
+            file=sys.stderr,
+        )
+        return 2
     if args.plan:
         for module in MARK_MODULES:
             print(f"PLAN {module.MARK}: {module.CLAIM}")
         return 0
     if args.rehearsal:
+        if args.shared:
+            run, root = shared()
+            try:
+                return 1 if one_by_one(run, chosen, _rehearse) else 0
+            finally:
+                run.rig.node.stop()
+                shutil.rmtree(root, ignore_errors=True)
         failures = 0
         for module in chosen:
             run, root = rehearsal(module, fault=args.fault is not None)
@@ -685,11 +746,8 @@ def main(argv: list[str] | None = None) -> int:
         print("FAIL setup: name his QMX folder with --home for the demo run", file=sys.stderr)
         return 2
     session = demo(args.home, args.tag, args.account)
-    failures = 0
     try:
-        for module in chosen:
-            ok, said = module.demo(session)
-            failures += not say(ok, module.MARK, said)
+        failures = one_by_one(session, chosen, _demo)
         questions(session)
     finally:
         session.close()
