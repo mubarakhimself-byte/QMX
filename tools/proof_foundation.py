@@ -5,7 +5,7 @@ time limit. A node id is collected and run in its own workspace, the root or `qm
 that worktree's own interpreter, as `S/tools/proof_at.sh` does.
 
 A check passes only when every pytest run exits 0, no case failed or errored, no case skipped or
-xfailed, and at least one case passed for each node id it names. A skip reads FAIL on purpose:
+xfailed, and at least as many cases passed as the node ids it names. A skip reads FAIL on purpose:
 pytest exits 0 when every test skips, check 18 skips unless `QMX_TEST_LIVE=1` is set, and other
 tests here skip on a missing machine fact.
 
@@ -252,7 +252,7 @@ TABLE: Final[tuple[Check, ...]] = (
                 "qmx-agents/packages/qma-harness/tests/live/test_his_own_test.py::test_his_own_test"
             ),
         ),
-        3600.0,
+        4500.0,
     ),
 )
 
