@@ -673,6 +673,7 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("exchange-status", "1.0.0"): "65bd42b6f9d29881ca7d19393598a9fc",
     ("macro-daily-bias", "1.0.0"): "32f669c81be8b9c9a201d20dd9c272ed",
     ("mis", "1.0.0"): "da97997e2a7f1b83f9362a5039930ca9",
+    ("mis", "1.0.1"): "82328c39a5d4d71a3d02a60c58899267",
     ("mql5-articles", "1.0.0"): "dc86e07abe3b8b4442bdc4eeaa758110",
     ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a9",
     ("qmb", "1.0.1"): "7ff074a5c0873da9c6b2267e83464448",
