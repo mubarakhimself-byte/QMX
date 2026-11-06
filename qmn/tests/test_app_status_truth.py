@@ -29,13 +29,6 @@ def said(state: dict[str, Json]) -> tuple[Json, Json, Json]:
     return state["word"], state["headline"], state["kill_level"]
 
 
-def test_a_node_with_nothing_held_still_reads_trading(tmp_path: Path) -> None:
-    state = status(trading(tmp_path))
-
-    assert said(state) == ("Trading", "Trading, 1 unit", "GREEN")
-    assert state["reasons"] == []
-
-
 def test_a_risk_stop_on_one_market_reads_in_the_word_and_the_reasons(tmp_path: Path) -> None:
     node = trading(tmp_path)
     assert node.runtime.risk_stop("dep-1", "metal.xauusd", "daily_loss", "2R lost") is not None

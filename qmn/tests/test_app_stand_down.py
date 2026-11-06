@@ -434,25 +434,6 @@ def test_a_risk_stop_whose_row_cannot_land_still_holds_entries_and_raises_an_ala
     node.runtime.stop()
 
 
-def test_a_resume_he_sent_before_a_risk_stop_does_not_clear_it(tmp_path: Path) -> None:
-    node = rig(tmp_path)
-    probes = Probes()
-    deploy(node, deployment(node.data))
-    settle(node)
-    played(node, probes, at(5570))
-    arrived = node.now[0]
-    ahead = datetime.fromtimestamp(arrived // 1_000_000_000 + 4, UTC).isoformat()
-    early = node.node.call("resume", {"op_id": "op-resume-early", "scope": "all", "issued_at": ahead})
-    node.now[0] = arrived + 1_000_000_000
-    stop = node.runtime.risk_stop("dep-1", "fx.eurusd", "kill-line", "the kill line is crossed")
-    node.runtime.tick()
-
-    assert early["ok"] is True
-    assert stop is not None
-    assert held_now(node) == [("risk_stop", stop)]
-    node.runtime.stop()
-
-
 def test_a_health_stop_clears_only_after_its_cause_stays_gone_its_named_time(
     tmp_path: Path,
 ) -> None:

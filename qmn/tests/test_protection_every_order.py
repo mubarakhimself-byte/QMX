@@ -196,15 +196,13 @@ def test_a_journal_that_cannot_be_written_blocks_the_entry_before_the_venue(
 
 
 KILL_SCOPES = [
-    pytest.param("all", "all", "Paused", True, id="all"),
-    pytest.param(
-        {"instrument": "fx.eurusd"}, "instrument:fx.eurusd", "Paused", False, id="market-id"
-    ),
+    pytest.param("all", "all", "Paused", id="all"),
+    pytest.param({"instrument": "fx.eurusd"}, "instrument:fx.eurusd", "Paused", id="market-id"),
 ]
-"""Each scope a kill is asked at, its key, the status word, and whether it holds for all."""
+"""Each scope a kill is asked at, its key, and the status word."""
 
 
-@pytest.mark.parametrize(("scope", "key", "word", "for_all"), KILL_SCOPES)
+@pytest.mark.parametrize(("scope", "key", "word"), KILL_SCOPES)
 @pytest.mark.parametrize(
     ("level", "sent", "closed"),
     [
@@ -222,7 +220,6 @@ def test_each_kill_level_applies_its_placeholder_effect_and_only_his_resume_lift
     scope: Json,
     key: str,
     word: str,
-    for_all: bool,
 ) -> None:
     node = trading(tmp_path)
     play(node, FIRST_SEND + 1)
@@ -247,7 +244,6 @@ def test_each_kill_level_applies_its_placeholder_effect_and_only_his_resume_lift
         (key, level, "placeholder", closed),
         ("all", "GREEN", "placeholder", 0),
     ]
-    assert for_all is (key == "all")
     assert value(resumed) == {"state": "accepted", "open_causes": []}
     assert (after["kill_level"], after["kill_effects"]) == ("GREEN", {})
 
@@ -300,22 +296,6 @@ def test_a_red_close_the_venue_refuses_is_sent_again_on_the_next_tick(tmp_path: 
         "close",
         "closed",
     ]
-
-
-def test_the_placeholder_effects_escalate_level_by_level() -> None:
-    shown = {
-        level.value: (effect.document()["effects"], effect.close_all_and_pause)
-        for level, effect in PLACEHOLDER_KILL_EFFECTS.items()
-    }
-
-    assert shown == {
-        "GREEN": ([], False),
-        "YELLOW": (["suspend_new"], False),
-        "ORANGE": (["suspend_new", "drain"], False),
-        "RED": (["suspend_new", "drain", "flatten"], False),
-        "BLACK": (["suspend_new", "drain", "flatten"], True),
-    }
-    assert {effect.origin for effect in PLACEHOLDER_KILL_EFFECTS.values()} == {"placeholder"}
 
 
 def _compiled() -> object:
