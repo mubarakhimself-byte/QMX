@@ -2019,7 +2019,7 @@ class QmbRun:
         if isinstance(found, str):
             raise BundleRefused([found])
         bars = None if found is None else self._bars(found, inputs)
-        costs = None if found is None else self._stated_costs(inputs)
+        costs = None if bars is None else self._stated_costs(inputs, bars)
         ticket = self.lander.open(app_id, version, job, inputs, principal)
         if ticket is not None and found is not None and bars is not None:
             laid = self.folder_of(app_id, ticket.run_id) / "in"
@@ -2031,11 +2031,13 @@ class QmbRun:
                 raise BundleRefused([str(error)]) from error
         return ticket
 
-    def _stated_costs(self, inputs: Document) -> StatedCosts | None:
+    def _stated_costs(self, inputs: Document, markets: Collection[str]) -> StatedCosts | None:
         """The cost profile a run is told to pay: the study's `cost_rule` when it names a Library
         object, as a study's `allow_gaps` beats a chat's, else the request's `cost_profile`. A
         `cost_rule` naming no object is words. The object is what `library_save` lands, and
-        anything else is refused before any try."""
+        anything else is refused before any try, as is a profile that charges one of `markets`
+        nothing. Only a `costs` entry counts: funding reaches a market only if its record pays
+        funding, so funding alone can charge nothing while the result names the profile."""
         rule = self._study_fields(inputs).get("cost_rule")
         named = rule if isinstance(rule, str) and self.library.holds(rule) else None
         pin = named or inputs.get("cost_profile")
@@ -2049,9 +2051,21 @@ class QmbRun:
         blob = view.blobs.get("content")
         if said != COST_PROFILE or blob is None:
             raise BundleRefused([f"cost_profile {pin} is a {said}, not a {COST_PROFILE}"])
-        body = cast(dict[str, Any], json.loads(store.read_blob(blob.blob_id)))
-        held = cast(dict[str, Any], body.get("content", body))
-        return StatedCosts(pin, held.get("costs") or {}, held.get("funding") or {})
+        body: object = json.loads(store.read_blob(blob.blob_id))
+        held = cast(dict[str, Any], body).get("content", body) if isinstance(body, dict) else body
+        stated = cast(dict[str, Any], held) if isinstance(held, dict) else {"costs": held}
+        profiles, funding = stated.get("costs") or {}, stated.get("funding") or {}
+        if not (_maps_to(profiles, dict) and _maps_to(funding, str)):
+            raise BundleRefused(
+                [
+                    f"cost_profile {pin} needs costs by market, each an object, and funding by "
+                    "market, each CSV text"
+                ]
+            )
+        missing = [market for market in markets if market not in profiles]
+        if missing:
+            raise BundleRefused([f"cost_profile {pin} names no costs for {', '.join(missing)}"])
+        return StatedCosts(pin, profiles, funding)
 
     def _study_fields(self, inputs: Document) -> Mapping[str, Any]:
         pin = inputs.get("study")
@@ -2234,12 +2248,11 @@ class QmbRun:
     ) -> None:
         """Each market's stated profile and funding where the tester reads them. A stated profile
         measured no fills whatever it says, so the run stays `costs_uncalibrated`."""
+        (root / "costs").mkdir(exist_ok=True)
         for market in bars:
-            if market in costs.profiles:
-                (root / "costs").mkdir(exist_ok=True)
-                (root / "costs" / f"{market}.json").write_text(
-                    json.dumps({**costs.profiles[market], "fills": 0}, indent=2), "utf-8"
-                )
+            (root / "costs" / f"{market}.json").write_text(
+                json.dumps({**costs.profiles[market], "fills": 0}, indent=2), "utf-8"
+            )
             if market in costs.funding:
                 (root / "funding").mkdir(exist_ok=True)
                 (root / "funding" / f"{market}.csv").write_text(costs.funding[market], "utf-8")
@@ -2383,6 +2396,12 @@ def _sources(asked: object, studied: object) -> list[str]:
     if not all(isinstance(source, str) and source for source in named):
         raise BundleRefused(["source names one source in the market store, as text"])
     return list(dict.fromkeys(cast(list[str], named))) or [DEFAULT_SOURCE]
+
+
+def _maps_to(value: object, kind: type) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(entry, kind) for entry in cast(dict[str, object], value).values()
+    )
 
 
 def _asked_markets(traded: Sequence[str], asked: object) -> tuple[str, ...]:

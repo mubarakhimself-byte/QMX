@@ -677,7 +677,7 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("qmb", "1.0.2"): "0bcae551c39204b5cad1128d9bba3163",
     ("qmb", "1.0.3"): "148ef6df97946bd6eb6d91c40a685b41",
     ("qmb", "1.0.4"): "43b0f1317da933c857813ba211e47a7c",
-    ("qmb", "1.0.5"): "49ede0d9c1f5c067e660f81930f9f14d",
+    ("qmb", "1.0.5"): "c6c81219e267351f5d47eaa16dbe8c22",
     ("qmb", "1.0.6"): "ecbf2b7b1ff3393169c209878a7b615b",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
     ("trading-node", "0.1.1"): "2feb6ee2e0d9cf2bd80666e58c175cae",

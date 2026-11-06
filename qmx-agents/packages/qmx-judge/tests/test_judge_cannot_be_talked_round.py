@@ -48,6 +48,8 @@ class World:
     store: Store
     judge_run: Any
     result: str
+    land: Any
+    trades: list[dict[str, object]]
 
 
 def landed_world(root: Path, *, study: JsonObject = WRITTEN) -> World:
@@ -65,10 +67,32 @@ def landed_world(root: Path, *, study: JsonObject = WRITTEN) -> World:
     )
     unit = put(store, "note", "unit", {"text": "v"})
     before = put(store, "study-spec", "study", study)
-    ticket = lander.open("qmb", "0.1.0", "jobs/backtest.py", {"unit": unit, "study": before}, "x")
-    assert ticket is not None
+
+    def land(trades: list[dict[str, object]], **asked: object) -> str:
+        request = {"unit": unit, "study": before, **asked}
+        ticket = lander.open("qmb", "0.1.0", "jobs/backtest.py", request, "x")
+        assert ticket is not None
+        report = json.dumps({"trades": trades}).encode()
+        folder = root / ticket.run_id
+        folder.mkdir(parents=True)
+        (folder / "report.json").write_bytes(report)
+        bundle = parse_bundle(
+            {
+                "run_id": ticket.run_id,
+                "status": "finished",
+                "tester": {"app": "qmb", "version": "0.1.0"},
+                "measures": {"trades": len(trades)},
+                "labels": {"zero_trades": False, "fidelity": "bars"},
+                "files": [
+                    {"slot": "report", "path": "report.json", "fp": fingerprint_bytes(report).value}
+                ],
+                "consumed": [],
+            }
+        )
+        return lander.close(Landing(ticket, bundle, folder))
+
     draw = random.Random(24)  # noqa: S311 - a seeded fixture, not a secret
-    trades = [
+    trades: list[dict[str, object]] = [
         {
             "trade_id": f"t{market}-{day}",
             "market_id": f"fx.m{market:02d}",
@@ -78,25 +102,8 @@ def landed_world(root: Path, *, study: JsonObject = WRITTEN) -> World:
         for market in range(20)
         for day in range(150)
     ]
-    report = json.dumps({"trades": trades}).encode()
-    folder = root / ticket.run_id
-    folder.mkdir(parents=True)
-    (folder / "report.json").write_bytes(report)
-    bundle = parse_bundle(
-        {
-            "run_id": ticket.run_id,
-            "status": "finished",
-            "tester": {"app": "qmb", "version": "0.1.0"},
-            "measures": {"trades": len(trades)},
-            "labels": {"zero_trades": False, "fidelity": "bars"},
-            "files": [
-                {"slot": "report", "path": "report.json", "fp": fingerprint_bytes(report).value}
-            ],
-            "consumed": [],
-        }
-    )
-    result = lander.close(Landing(ticket, bundle, folder))
-    return World(store, domain_functions(context)["backtest"]["backtest_judge_run"], result)
+    judge_run = domain_functions(context)["backtest"]["backtest_judge_run"]
+    return World(store, judge_run, land(trades), land, trades)
 
 
 def put(store: Store, kind: str, item: str, fields: JsonObject, head: str | None = None) -> str:
@@ -110,7 +117,7 @@ def spec_edits(store: Store) -> int:
 
 def verdict_of(world: World, **asked: Any) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     """The answer of the judge door, and the landed verdict's markets by name."""
-    answer = world.judge_run(results=[world.result], **asked)["result"]
+    answer = world.judge_run(**{"results": [world.result], **asked})["result"]
     landed = world.store.get(OPERATOR, answer["verdict_id"]).fields["per_market"]
     return answer, {str(m["market"]): m for m in landed}  # pyright: ignore
 
@@ -165,6 +172,44 @@ def test_a_study_written_after_the_result_counts_a_try(tmp_path: Path) -> None:
     assert (markets["fx.m02"]["shrunk_r"], markets["fx.m02"]["weight"]) == ("0.2193", "1.0000")
     assert (answer["raw_tries"], spec_edits(written_first.store)) == (20, 0)
     assert "written after" not in answer["says"]
+
+
+def test_rerunning_the_lucky_market_alone_keeps_the_others_in_the_pull(tmp_path: Path) -> None:
+    world = landed_world(tmp_path)
+    alone = world.land([t for t in world.trades if t["market_id"] == "fx.m02"], markets=["fx.m02"])
+
+    answer, markets = verdict_of(world, results=[alone])
+
+    assert list(markets) == ["fx.m02"]
+    assert (markets["fx.m02"]["raw_r"], markets["fx.m02"]["shrunk_r"]) == ("0.2193", "0.0558")
+    assert markets["fx.m02"]["weight"] == "0.0000"
+    assert (answer["overall"], answer["raw_tries"], answer["effective_tries"]) == ("fail", 21, 20)
+    assert spec_edits(world.store) == 0
+
+    naming = put(world.store, "study-spec", "study-names", {**WRITTEN, "markets": ["fx.m03"]})
+    _, named = verdict_of(world, results=[alone], study=naming)
+    assert {m: found["outcome"] for m, found in named.items()} == {
+        "fx.m02": "fail",
+        "fx.m03": "no_trades",
+    }
+
+    only = JudgedResult.read("result-1", landed_fields(1, {}, MARCH), trades_of("fx.a", 3))
+    variant = JudgedResult.read(
+        "result-2", {**landed_fields(2, {}, MARCH), "unit": "unit-v2"}, trades_of("fx.b", 4)
+    )
+    tries = [
+        {"kind": "run", "state": "opened", "run_id": run_id(n), "family": "unit-v1"} for n in (1, 2)
+    ]
+    other_code = judge(
+        parse_spec(WRITTEN),
+        study="study-v1",
+        results=[only],
+        tries=tries,
+        family=[variant],
+        principal="agent:chat",
+        versions={},
+    )
+    assert [(m.market, m.weight) for m in other_code.per_market] == [("fx.a", Decimal("0.6"))]
 
 
 def test_quick_spec_lands_no_try(tmp_path: Path) -> None:
@@ -226,10 +271,18 @@ def trades_of(market: str, seed: int) -> list[dict[str, object]]:
     ]
 
 
-def judged_with(cost_rows: dict[str, object]) -> Verdict:
+def judged_with(
+    cost_rows: dict[str, object],
+    *,
+    windows: dict[str, dict[str, str]] | None = None,
+    second_run: dict[str, object] | None = None,
+) -> Verdict:
     """One backtest of two markets beside the robustness run that stressed them, as landed."""
     rows = {
-        name: {market: {**row, "window": MARCH} for market in ("fx.good", "fx.bad")}
+        name: {
+            market: {**row, "window": (windows or {}).get(name, MARCH)}
+            for market in ("fx.good", "fx.bad")
+        }
         for name, row in PASSING.items()
     }
     backtest = JudgedResult.read(
@@ -240,22 +293,26 @@ def judged_with(cost_rows: dict[str, object]) -> Verdict:
     robust = JudgedResult.read(
         "result-2", landed_fields(2, {**rows, "cost_stress": cost_rows}, MARCH), []
     )
+    results = [backtest, robust]
+    if second_run is not None:
+        measures: dict[str, object] = {"cost_stress": second_run}
+        results.append(JudgedResult.read("result-3", landed_fields(3, measures, MARCH), []))
     tries = [
-        {"kind": "run", "state": "opened", "run_id": run_id(n), "family": "unit-v1"} for n in (1, 2)
+        {"kind": "run", "state": "opened", "run_id": r.run_id, "family": "unit-v1"} for r in results
     ]
     return judge(
         parse_spec(WRITTEN),
         study="study-v1",
-        results=[backtest, robust],
+        results=results,
         tries=tries,
         principal="agent:chat",
         versions={},
     )
 
 
-def cost_step(verdict: Verdict, market: str) -> tuple[str, str, str]:
+def cost_step(verdict: Verdict, market: str, name: str = "cost_stress") -> tuple[str, str, str]:
     found = next(m for m in verdict.per_market if m.market == market)
-    step = next(s for s in found.steps if s.rule.name == "cost_stress")
+    step = next(s for s in found.steps if s.rule.name == name)
     return found.outcome, step.outcome, step.detail
 
 
@@ -282,6 +339,32 @@ def test_a_market_that_loses_under_doubled_costs_does_not_pass_on_another() -> N
         "2025-03-01 to 2025-04-01",
     )
 
+    flat = judged_with({"multiplier": "2", "expectancy_r": "0.3", "trades": 5})
+    assert cost_step(flat, "fx.bad") == (
+        "incomplete",
+        "not_run",
+        "no result in the study stressed its costs on fx.bad",
+    )
+
+    worst = judged_with({"fx.good": good, "fx.bad": good}, second_run={"fx.bad": bad})
+    assert cost_step(worst, "fx.bad") == ("fail", "failed", "expectancy -0.1R at 2x costs")
+
     wider = {"start": "2025-01-01", "end": "2025-04-01"}
-    covering = judged_with({"fx.good": good, "fx.bad": {**bad, "window": wider}})
-    assert cost_step(covering, "fx.bad") == ("fail", "failed", "expectancy -0.1R at 2x costs")
+    too_wide = (
+        "incomplete",
+        "not_run",
+        "fx.bad's evidence ran over 2025-01-01 to 2025-04-01, its trades over "
+        "2025-03-01 to 2025-04-01",
+    )
+    wide_cost = judged_with({"fx.good": good, "fx.bad": {**good, "window": wider}})
+    assert cost_step(wide_cost, "fx.bad") == too_wide
+
+    wide_entries = judged_with({"fx.good": good, "fx.bad": good}, windows={"random_entries": wider})
+    assert cost_step(wide_entries, "fx.bad", "random_entries") == too_wide
+
+    wide_walk = judged_with({"fx.good": good, "fx.bad": good}, windows={"walk_forward": wider})
+    assert cost_step(wide_walk, "fx.bad", "walk_forward") == (
+        "pass",
+        "passed",
+        "efficiency 0.7 of 0.5 needed",
+    )
