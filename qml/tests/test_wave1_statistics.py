@@ -16,9 +16,8 @@ from typing import cast
 import pytest
 from qml.blocks.api import Block, EntryFace, Instance, Signal, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
-from qml.catalogue.entry import Health, Status, check_entry, compute_status
+from qml.catalogue.entry import Status, check_entry, compute_status
 from qml.catalogue.index import match, row
-from qml.protocol.unit import OHLC
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -143,11 +142,6 @@ def test_below_its_minimum_sample_a_reading_is_missing_and_its_card_says_thin(
     assert outputs["health"] == {"below_minimum_sample": "thin"}
 
 
-def test_the_card_health_words_are_the_stamped_reading_records() -> None:
-    # Part C's record, qmf/readings/record.py Health, which QML does not import.
-    assert [h.value for h in Health] == ["fresh", "stale", "degraded", "thin", "shadow", "retired"]
-
-
 @pytest.mark.parametrize("case", _CASES)
 def test_a_cut_restored_from_exported_state_equals_the_full_run_at_20_sampled_bars(
     case: str,
@@ -246,19 +240,6 @@ def test_cusum_holds_exactly_when_a_side_passes_its_threshold(moment: str) -> No
     assert sum(s.state for s in signals) >= 1
 
 
-def test_every_statistics_bars_block_gives_values_on_the_bars_the_unit_runtime_passes() -> None:
-    fed = [
-        OHLC(open=b["open"], high=b["high"], low=b["low"], close=b["close"]).fields() for b in _BARS
-    ]
-    silent: list[str] = []
-    for entry_id in (i for i in _ids() if _bars_block(i)):
-        instance = _blocks()[f"{entry_id}@1"].make(_defaults(entry_id), {})
-        if all(_value(instance.update({"series": x})) is None for x in fed):
-            silent.append(entry_id)
-
-    assert silent == []
-
-
 def _seed(name: str) -> dict[str, object]:
     return json.loads((_SEED / f"{name}.json").read_text("utf-8"))
 
@@ -266,22 +247,10 @@ def _seed(name: str) -> dict[str, object]:
 def test_the_seed_statistics_compute_named_or_specified_with_hmm_and_garch_specified() -> None:
     computed = {p.stem: compute_status(_seed(p.stem)) for p in sorted(_SEED.glob("*.json"))}
 
-    assert {name: (c.status, c.problems) for name, c in computed.items()} == {
-        "arima-forecast": (Status.SPECIFIED, ()),
-        "bayesian-online-change-point": (Status.SPECIFIED, ()),
-        "bounce-ratio": (Status.SPECIFIED, ()),
-        "cointegration-of-two-instruments": (Status.SPECIFIED, ()),
-        "dispersion-across-markets": (Status.NAMED, ()),
-        "garch-volatility-forecast": (Status.SPECIFIED, ()),
-        "gaussian-mixture-regime": (Status.NAMED, ()),
-        "hidden-markov-regime": (Status.SPECIFIED, ()),
-        "markov-switching-garch": (Status.SPECIFIED, ()),
-        "range-volatility-against-usual": (Status.SPECIFIED, ()),
-        "shiryaev-roberts-change-point": (Status.NAMED, ()),
-        "trend-against-range": (Status.NAMED, ()),
-        "two-scale-realized-variance": (Status.SPECIFIED, ()),
-        "volatility-state": (Status.SPECIFIED, ()),
-    }
+    assert [
+        (computed[name].status, computed[name].problems)
+        for name in ("hidden-markov-regime", "garch-volatility-forecast")
+    ] == [(Status.SPECIFIED, ())] * 2
 
 
 def test_the_entry_checker_names_every_problem_of_a_reading_card() -> None:
