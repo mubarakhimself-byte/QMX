@@ -4,7 +4,40 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
-**Latest (6 Nov): resumed; read items 41-44 first. Architecture arena running; then cross-judge, pick, graft, verify; then the plain-words explanation.**
+**Latest (6 Nov, afternoon). Read this block first; items 41-50 below hold the detail.**
+
+**The deliverable:** a self-configuring, extensible risk-and-sizing template for the unit that ships through builders. His first message of 3 Nov still stands. Numbers come after: he will argue them with me using the numbers lens and the scenario harness.
+
+**Where we are on the to-do list:** research, take-apart, linking, audit grounding, funnel, review, fix round and the arena are done. **Now: one Fable fold agent is writing `architecture/SPINE.md`, `SYNTHESIS.md`, `handoff/FOR-REPAIR-SOCKET.md`, `fold_sim.py`, and settling `ledger/v1` questions.**
+
+**Next, in order:**
+1. Check and commit the fold.
+2. One independent Opus check, named the last round, then one fix round if needed.
+3. The plain-words explanation for him as an interactive explainer page, with Q1-Q8 and defaults (`funnel/FUNNEL.md` section 6). Include what is on at go-live (5.5) and the weak spots: F1 (the 55% scalper exists only if the cut catches few winners), drift brakes slow at ten units, F12, F22, F23.
+4. Then we cool off. Slices for builders and the QML dictionary expansion wait until he is ready. Then the numbers lens.
+
+**The map, all under `tracker/risk-core/`:**
+- `seeds/`: his words verbatim (M1-M9 1 Nov; M10-M40 3 Nov; M41-M43 6 Nov; later ones are in the session transcript `2928e6ee-...jsonl`) and `SEEDS.md`.
+- `grounding/G1-G12`: G12 is what the audit and repair changed.
+- `research/R1-R9` and `research/papers/text/` (302 papers).
+- `linking/`: `components/` (1,050 parts), `UNIT-IDEA-BANK.md`, `RANKING.md`, briefs.
+- `expansion/X0-X7`: about 510 hybrids.
+- `funnel/`: `FUNNEL.md`, `HYBRID-FATES.md`, `REVIEW.md`, `ledger-merge.yaml`, `working/review/core_sim.py`.
+- `architecture/`: `ARENA-BRIEF.md`, `PICK.md`, `candidate-1..3`, then `SPINE.md`.
+- `ledger/v1/`: 832 variables, 202 core.
+- `handoff/`: `AGENT-DEPARTMENT-SEEDS.md`, `FOR-REPAIR-CLAIMS-BEFORE-C20.md`, `FOR-REPAIR-SOCKET.md`.
+
+**His rules for how we work (also in memory):**
+- Performance with intention, not just safety; the sitting duck fails; "too much machine" fails.
+- Nothing is off limits, but QMA changes are flagged, not designed.
+- Multi-instrument lens everywhere; research is not anchored to dollars or the Book.
+- Fable few and one after another; other agents no set number but no waste; the bar must last about 20 days (40% on Friday 6 Nov).
+- Short replies; he may not read everything.
+- Skills checked by transcript, not by brief.
+- Never mention Firecrawl.
+- Never merge or push unasked. Commits only on `plan/risk-core`.
+
+**Things owed to him:** the repair's deletion claims and socket note need passing to that program; a crypto MCP (Hyperliquid) is a build-session item he noticed was missed; the agents-on-the-node's-demo-account flag (DP33); the build session's lost note is at `D:/QMX-worktrees/unit-ship/RISK-NOTE-2026-11-04.md` (stop-past-entry).
 
 1. Grounding DONE 2026-11-01: G1-G5 in `grounding/` (G5 is the timeline), sims in `grounding/sims/`. Next: find the clean starting point with him, then design by scenarios.
 2. Grounding files land in `grounding/`:
