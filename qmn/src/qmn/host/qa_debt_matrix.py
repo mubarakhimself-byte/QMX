@@ -604,7 +604,7 @@ PERMANENT_BATTERY_ITEMS: Final[tuple[BatteryItem, ...]] = (
     ),
     BatteryItem(
         "failure-register",
-        ("qmn/FAILURES.md", "qmn/tests/test_qmn_failures_gate.py"),
+        ("qmn/src/qmn/observability/FAILURES.md", "qmn/tests/test_qmn_failures_gate.py"),
     ),
     BatteryItem(
         "scenario-gates",
