@@ -523,9 +523,7 @@ def _deployed(world: World) -> tuple[bool | None, str]:
     if state == "refused":
         return False, f"the node reads refused: {row.get('detail')}"
     if state not in SETTLED:
-        return False, (
-            f"the node left {deployment} at {state} for {world.options.trade_s:.0f} s"
-        )
+        return False, (f"the node left {deployment} at {state} for {world.options.trade_s:.0f} s")
     world.deployment = deployment
     return True, f"{deployment} on {market} reads {state}"
 
