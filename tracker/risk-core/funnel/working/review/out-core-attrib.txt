@@ -1,0 +1,44 @@
+
+HEALTHY +0.10R, card +0.10R  [N=1 cost x1.0 lot $0.5 n=10/day days=120 paths=60; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed
+  sizer+reserve                  1659    1023           0.0%   0.0%      0.97        0.0    0.0   0.0
+  +start level from holdout       868     681           0.0%   0.0%      0.46        0.0    0.0   0.0
+  +cohort climb                  1927     835           0.0%   0.0%      0.95        0.0    0.0   0.0
+  +CUSUM step-down               1262     510           0.0%   0.0%      0.93        0.0    0.0   0.0
+  +unit bench p1, retry-lockout     1625     521           0.0%   0.0%      0.92        0.0    0.0   0.0
+  +portfolio day stop            1611     549           0.0%   0.0%      0.90        0.0    0.0   0.0
+  +pair brake-half taper         1450     560           0.0%   0.0%      0.92        0.0    0.0   0.0
+  +dial by proof                 1497     746           0.0%   0.0%      1.04        0.0    0.0   0.0
+
+WEAK +0.05R, card +0.05R  [N=1 cost x1.0 lot $0.5 n=10/day days=120 paths=60; card p10=-3.6R p1=-5.9R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed
+  sizer+reserve                   681     502           3.3%   0.0%      0.96        0.0    0.0   0.0
+  +start level from holdout       545     501           0.0%   0.0%      0.20        0.0    0.0   0.0
+  +cohort climb                   700     467           5.0%   0.0%      0.92        0.0    0.0   0.0
+  +CUSUM step-down                620     439           0.0%   0.0%      0.90        0.0    0.0   0.0
+  +unit bench p1, retry-lockout      778     443           0.0%   0.0%      0.87        0.0    0.0   0.0
+  +portfolio day stop             673     436           0.0%   0.0%      0.88        0.0    0.0   0.0
+  +pair brake-half taper          623     453           0.0%   0.0%      0.88        0.0    0.0   0.0
+  +dial by proof                  603     436           0.0%   0.0%      0.87        0.0    0.0   0.0
+
+HEALTHY +0.10R, card +0.10R  [N=10 cost x1.0 lot $0.5 n=10/day days=120 paths=60; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed
+  sizer+reserve                  6625    3346           0.0%   0.0%      0.93        0.0    0.0   4.0
+  +start level from holdout      1272     993           0.0%   0.0%      0.44        0.0    0.0   9.3
+  +cohort climb                  5217    2945           0.0%   0.0%      0.92        0.0    0.0   8.3
+  +CUSUM step-down               5028    2477           0.0%   0.0%      0.92        0.0    0.0   8.6
+  +unit bench p1, retry-lockout     5651    2856           0.0%   0.0%      0.89        0.0    0.0   8.6
+  +portfolio day stop            4911    2599           0.0%   0.0%      0.89        0.0    0.0   8.8
+  +pair brake-half taper         4561    2069           0.0%   0.0%      0.89        0.0    0.0   8.8
+  +dial by proof                 6130    2341           0.0%   0.0%      0.99        0.0    0.0   9.1
+
+WEAK +0.05R, card +0.05R  [N=10 cost x1.0 lot $0.5 n=10/day days=120 paths=60; card p10=-3.6R p1=-5.9R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed
+  sizer+reserve                  1010     669           0.0%   0.0%      0.88        0.0    0.0   7.7
+  +start level from holdout       552     519           0.0%   0.0%      0.20        0.0    0.0   9.2
+  +cohort climb                   817     483           5.0%   0.0%      0.88        0.0    0.0  10.6
+  +CUSUM step-down                726     430           0.0%   0.0%      0.86        0.0    0.0  10.2
+  +unit bench p1, retry-lockout      724     454           0.0%   0.0%      0.82        0.0    0.0  10.2
+  +portfolio day stop             799     437           0.0%   0.0%      0.83        0.0    0.0  10.6
+  +pair brake-half taper          798     435           0.0%   0.0%      0.82        0.0    0.0  10.6
+  +dial by proof                  698     443           1.7%   0.0%      0.85        0.0    0.0  10.3
