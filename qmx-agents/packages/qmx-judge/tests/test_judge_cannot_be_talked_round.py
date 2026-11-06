@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pytest
 from qmf.core import fingerprint_bytes
 from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
     LanderLibrary,
@@ -130,6 +131,10 @@ def test_a_study_written_after_the_result_counts_a_try(tmp_path: Path) -> None:
     later = put(
         world.store, "study-spec", "study-later", {**WRITTEN, "markets": ["fx.m02"], **TINY_K}
     )
+    with pytest.raises(ValueError, match="is given 2 times"):
+        world.judge_run(results=[world.result, world.result], study=later)
+    assert spec_edits(world.store) == 0
+
     answer, markets = verdict_of(world, study=later)
     again, _ = verdict_of(world, study=later)
 
@@ -277,3 +282,7 @@ def test_a_market_that_loses_under_doubled_costs_does_not_pass_on_another() -> N
         "fx.bad's evidence ran over 2025-02-01 to 2025-03-01, its trades over "
         "2025-03-01 to 2025-04-01",
     )
+
+    wider = {"start": "2025-01-01", "end": "2025-04-01"}
+    covering = judged_with({"fx.good": good, "fx.bad": {**bad, "window": wider}})
+    assert cost_step(covering, "fx.bad") == ("fail", "failed", "expectancy -0.1R at 2x costs")

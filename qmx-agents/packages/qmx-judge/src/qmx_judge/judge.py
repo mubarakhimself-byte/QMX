@@ -603,11 +603,20 @@ def _spans(windows: set[Window | None]) -> str:
     )
 
 
+def _covers(ran: Window | None, traded: Window | None) -> bool:
+    """Whether evidence over `ran` answers for trades over `traded`. It may run wider, as template
+    `b`'s walk-forward does over in-sample and its folds. A window not stated covers only another
+    not stated, because there is nothing to compare."""
+    if ran is None or traded is None:
+        return ran == traded
+    return ran[0] <= traded[0] and traded[1] <= ran[1]
+
+
 def _market_step(
     rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult], market: str
 ) -> Step:
-    """`market`'s step on its own rows, over every window its trades ran. A row over another
-    window answers nothing, and of several rows the worst decides, so a second friendly run
+    """`market`'s step on its own rows, which must cover every window its trades ran. A row that
+    covers none answers nothing, and of several rows the worst decides, so a second friendly run
     cannot hide a failing one."""
     read, absent = _MARKET_EVIDENCE[rule.name]
     rows = [row for r in results if (row := _object(r.evidence.get(rule.name, {}), market))]
@@ -615,13 +624,14 @@ def _market_step(
         return Step(rule, "not_run", f"{absent} on {market}")
     traded = {r.window for r in results if any(t.market == market for t in r.trades)}
     ran = {_window(row) for row in rows}
-    if traded - ran:
+    uncovered = {w for w in traded if not any(_covers(found, w) for found in ran)}
+    if uncovered:
         return Step(
             rule,
             "not_run",
-            f"{market}'s evidence ran over {_spans(ran)}, its trades over {_spans(traded - ran)}",
+            f"{market}'s evidence ran over {_spans(ran)}, its trades over {_spans(uncovered)}",
         )
-    steps = [read(rule, spec, row) for row in rows if _window(row) in traded]
+    steps = [read(rule, spec, row) for row in rows if any(_covers(_window(row), w) for w in traded)]
     return min(steps, key=lambda step: _WORST_FIRST.index(step.outcome))
 
 
