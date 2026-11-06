@@ -4,7 +4,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
-**Latest (6 Nov): resumed; read items 41-44 first. Next: G12, then the Fable funnel.**
+**Latest (6 Nov): resumed; read items 41-44 first. Fable funnel running; then the Opus reviewer, then architecture versions.**
 
 1. Grounding DONE 2026-11-01: G1-G5 in `grounding/` (G5 is the timeline), sims in `grounding/sims/`. Next: find the clean starting point with him, then design by scenarios.
 2. Grounding files land in `grounding/`:
@@ -291,6 +291,16 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **The audit handed this session real items:** SQS placement, kill levels, R and costs, signed stop distance, targets, the sizer wrong on USDJPY, and the exit half of the socket ("agree the socket with it first").
     - **G12 started** (Opus) → `grounding/G12-audit-and-repair-for-risk.md`. It lists those items, keeps the old SQS gate's rule text, marks which G8/G9/G11 facts are stale, and checks the cTrader MCP flag. The funnel waits for it.
     - The build session's heads-up mentioned on 4 Nov never reached this session; G12 looks for it.
+
+45. **G12 done and committed; the Fable funnel judge started** (brief `linking/FUNNEL-BRIEF.md`, output in `funnel/`). G12 findings that matter:
+    - The repair builds plumbing around the risk gaps but none of them: halts unrun, sizer starved, exits unfed, no marked equity, no commission key, no RiskState.
+    - Ignored fields now refuse at compile.
+    - The exit half waits on this session's socket.
+    - The SQS gate text is saved in G12; only C-20 deletes it, after the demo.
+    - The deletion sweep could take the news windows, calendar ingest and SQS replay rule unless this session claims them.
+    - His cTrader MCP ruling: order tools on demo are allowed, and live is refused at launch. This closes X7's flag for demo.
+    - The build session's lost note is at `D:/QMX-worktrees/unit-ship/RISK-NOTE-2026-11-04.md`.
+    **M44: he asked whether more context collection is needed. The lead's answer: no broad research.** The thin spots have no literature and need QMX's own tests in the numbers lens. The judge may do targeted look-ups for one specific fact.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
