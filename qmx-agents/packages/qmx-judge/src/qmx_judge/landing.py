@@ -12,7 +12,7 @@ rows stays one object instead of a row per item.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -216,7 +216,7 @@ def check_job(job: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class GRecord:
-    """A unit's recorded layer G verdict for one compiled fingerprint."""
+    """A unit's recorded layer G verdict for one compiled fingerprint over some markets."""
 
     object_id: str
     safety_passed: bool
@@ -229,8 +229,12 @@ class GRecords(Protocol):
         """The fingerprint `unit` compiles to, or None when the pin names no unit document."""
         ...
 
-    def g_record(self, compiled_fp: str) -> GRecord | None:
-        """The finished layer G `test-report` of that fingerprint, if one landed."""
+    def markets_of(self, unit: str) -> Sequence[str]:
+        """The markets `unit` trades, which a run naming none of them reads."""
+        ...
+
+    def g_record(self, compiled_fp: str, markets: Collection[str]) -> GRecord | None:
+        """The finished layer G verdict of that fingerprint over `markets`, if one saw them."""
         ...
 
 
@@ -381,15 +385,21 @@ class Lander:
     def _behaviour_first(
         self, app_id: str, job: str, request: Mapping[str, object], compiled: str, principal: str
     ) -> None:
-        """Run the unit's behaviour check on the same tester when no G verdict is recorded for
-        `compiled`, then refuse the run unless that verdict's safety half passed."""
+        """Run the unit's behaviour check on the same tester when no G verdict of `compiled` saw
+        the run's markets, then refuse the run unless that verdict's safety half passed. The
+        check runs one motion setting, whatever the run asks: `both` is a backtest's report."""
         first = cast(CheckFirst, self.check_first)
-        found = first.records.g_record(compiled)
+        named = cast("list[str] | None", request.get("markets"))
+        markets = named or first.records.markets_of(str(request["unit"]))
+        found = first.records.g_record(compiled, markets)
         if found is None:
             ran = first.run_job(
-                app_id, check_job(job), {**request, "compiled_fp": compiled}, principal
+                app_id,
+                check_job(job),
+                {**request, "compiled_fp": compiled, "motion": "on"},
+                principal,
             )
-            found = first.records.g_record(compiled)
+            found = first.records.g_record(compiled, markets)
             if found is None:
                 report = self.library.find(str(ran.get("run_id", "")))
                 raise BundleRefused(

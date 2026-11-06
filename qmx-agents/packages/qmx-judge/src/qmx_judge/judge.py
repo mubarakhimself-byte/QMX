@@ -62,6 +62,7 @@ __all__ = [
     "score_forecast",
     "spec_edit",
     "spec_problems",
+    "trade_r",
 ]
 
 JUDGE_VERSION: Final = "1"
@@ -220,6 +221,12 @@ def quick_spec(idea: str | None) -> dict[str, object]:
     }
 
 
+def trade_r(trade: Mapping[str, object]) -> Decimal:
+    """The R the judge reads for a trade: `r`, price money over risk, with no costs in it. Whether
+    R includes costs is the risk session's call, and `net_r` beside it is this one line away."""
+    return Decimal(str(trade["r"]))
+
+
 @dataclass(frozen=True, slots=True)
 class Trade:
     market: str
@@ -247,6 +254,8 @@ class JudgedResult:
     )
     """The chain's evidence from the result's measures: `random_entries`, `cost_stress`,
     `walk_forward`, `pbo`."""
+    costs_uncalibrated: bool = False
+    placeholders: tuple[str, ...] = ()
 
     @classmethod
     def read(
@@ -256,8 +265,7 @@ class JudgedResult:
         labels = _object(fields, "labels")
         measures = _object(fields, "measures")
         found = tuple(
-            Trade(str(t["market_id"]), int(cast(int, t["closed_at"])), Decimal(str(t["r"])))
-            for t in trades
+            Trade(str(t["market_id"]), int(cast(int, t["closed_at"])), trade_r(t)) for t in trades
         )
         evidence = {
             name: cast(Mapping[str, object], measures[name])
@@ -276,6 +284,8 @@ class JudgedResult:
             markets=_texts(fields.get("markets")),
             compiled_fp=compiled if isinstance(compiled, str) else None,
             evidence=evidence,
+            costs_uncalibrated=labels.get("costs_uncalibrated") is True,
+            placeholders=_texts(labels.get("placeholders")),
         )
 
 
@@ -402,6 +412,8 @@ class Verdict:
     versions: Mapping[str, str]
     counted: tuple[str, ...]
     """The labels of every counted try, so the verdict's item names what it was judged on."""
+    costs_uncalibrated: bool = False
+    """A result behind it paid no costs measured from enough real fills."""
 
     def says(self) -> str:
         """The verdict in plain words, with the tries behind it."""
@@ -411,7 +423,14 @@ class Verdict:
         markets = "; ".join(m.says(self.min_trades) for m in self.per_market)
         raw = _count(self.raw_tries, "try", "tries")
         tries = f"Behind it: {raw}, {self.effective_tries} effective."
-        return " ".join(part for part in (head, f"{markets}." if markets else "", tries) if part)
+        costs = (
+            "These results are costs uncalibrated: their money paid no costs measured from real "
+            "fills."
+            if self.costs_uncalibrated
+            else ""
+        )
+        parts = (head, f"{markets}." if markets else "", costs, tries)
+        return " ".join(part for part in parts if part)
 
     def fields(self) -> dict[str, object]:
         found: dict[str, object] = {
@@ -429,6 +448,8 @@ class Verdict:
         }
         if self.compiled_fp is not None:
             found["compiled_fp"] = self.compiled_fp
+        if self.costs_uncalibrated:
+            found["costs_uncalibrated"] = True
         return found
 
     @property
@@ -739,6 +760,7 @@ def judge(
         min_trades=spec.min_trades,
         versions={**versions, "judge": judge_version, "tester": testers[0]},
         counted=tuple(c.label for c in counted),
+        costs_uncalibrated=any(r.costs_uncalibrated for r in results),
     )
 
 
