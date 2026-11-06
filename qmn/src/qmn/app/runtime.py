@@ -2845,6 +2845,14 @@ class Runtime:
             hosted.phase, hosted.detail = Phase.REFUSED, "the loop driver refused the unit"
             return
         hosted.unit, hosted.loop = unit, loop.value
+        if not live:
+            rebuilt = paper_lane.restored(self.context.journal_root, deployment.deployment_id)
+            if is_refusal(rebuilt):
+                hosted.phase = Phase.REFUSED
+                hosted.detail = "the paper lane's journal could not be read"
+                return
+            cast("paper_lane.PaperAccount", unit.orders.venue.client).adopt(rebuilt.value)
+            unit.adopt(rebuilt.value)
         hosted.phase = Phase.WARMING
         recorded = [
             Bar(market, bar)
