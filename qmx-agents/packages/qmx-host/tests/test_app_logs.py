@@ -5,13 +5,14 @@ agent's note is stored redacted."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
 import sqlite3
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import closing
+from contextlib import closing, contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
@@ -19,6 +20,7 @@ from typing import Any, cast
 import pytest
 from qma.telemetry import OFF, THIS_PC
 from qmx_control.service import ControlService, NoteInput
+from qmx_engine import telemetry
 from qmx_engine.ledger.inbox_table import INCIDENTS
 from qmx_engine.telemetry import Telemetry
 
@@ -42,10 +44,9 @@ class Taken:
         return found
 
 
-@pytest.fixture
-def stub() -> Iterator[tuple[str, Taken]]:
+@contextmanager
+def serving(taken: Taken, port: int = 0) -> Iterator[str]:
     """An OTLP/HTTP endpoint on the loopback that keeps every post."""
-    taken = Taken()
 
     class Answer(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -59,13 +60,20 @@ def stub() -> Iterator[tuple[str, Taken]]:
             self.end_headers()
             self.wfile.write(b"{}")
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Answer)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Answer)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        yield f"http://127.0.0.1:{server.server_address[1]}", taken
+        yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.fixture
+def stub() -> Iterator[tuple[str, Taken]]:
+    taken = Taken()
+    with serving(taken) as endpoint:
+        yield endpoint, taken
 
 
 def exporter(endpoint: str, home: Path) -> Telemetry:
@@ -241,6 +249,124 @@ def test_a_non_finite_number_arrives_as_text_and_the_sender_keeps_sending(
     assert fields["qmx.ok"] == 1.5
     stats = sender.stats()
     assert (stats["sent"], stats["dropped"], stats["failed"]) == (2, 0, 0)
+
+
+def test_a_200000_deep_line_ships_as_text_and_the_next_line_ships(
+    tmp_path: Path, stub: tuple[str, Taken]
+) -> None:
+    endpoint, taken = stub
+    sender = exporter(endpoint, tmp_path)
+    deep = "[" * 200_000 + "]" * 200_000
+    deep_in_a_field = '{"message": "too deep to walk", "n": ' + "[" * 3_000 + "]" * 3_000 + "}"
+    app_log(tmp_path, "fake-app", deep, deep_in_a_field, {"message": "the next line"})
+    shipper = AppLogs(tmp_path, exporter=lambda: sender, switch=lambda: THIS_PC)
+
+    assert shipper.tick() == 3
+    sender.close()
+
+    assert [r["body"]["stringValue"] for r in taken.logs()] == [
+        deep,
+        deep_in_a_field,
+        "the next line",
+    ]
+    assert AppLogs(tmp_path, exporter=lambda: sender, switch=lambda: THIS_PC).tick() == 0
+
+
+def test_a_breaker_line_reads_as_an_error(tmp_path: Path, stub: tuple[str, Taken]) -> None:
+    endpoint, taken = stub
+    sender = exporter(endpoint, tmp_path)
+    app_log(
+        tmp_path,
+        "fake-app",
+        {"at": "2026-11-01T10:00:00+00:00", "event": "breaker_open", "reason": "errors"},
+        {"at": "2026-11-01T10:00:01+00:00", "event": "installed", "version": "1.0.0"},
+        {"at": "2026-11-01T10:00:02+00:00", "event": "stderr", "message": "a warning it printed"},
+        name="supervisor.jsonl",
+    )
+    shipper = AppLogs(tmp_path, exporter=lambda: sender, switch=lambda: THIS_PC)
+
+    assert shipper.tick() == 3
+    sender.close()
+
+    assert [(r["severityText"], r["body"]["stringValue"]) for r in taken.logs()] == [
+        ("ERROR", "breaker_open"),
+        ("INFO", "installed"),
+        ("INFO", "a warning it printed"),
+    ]
+    fields = attributes(taken.logs()[0])
+    assert (fields["qmx.event"], fields["qmx.reason"]) == ("breaker_open", "errors")
+
+
+def test_outage_then_recovery_leaves_the_doctor_green_with_the_count(tmp_path: Path) -> None:
+    with closing(socket.socket()) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = int(sock.getsockname()[1])
+    endpoint = f"http://127.0.0.1:{port}"
+    telemetry.reset()
+    sender = telemetry.configure(endpoint, state=tmp_path / "logs" / "telemetry.json")
+    shipper = AppLogs(tmp_path, switch=lambda: THIS_PC)
+    taken = Taken()
+    try:
+        app_log(tmp_path, "fake-app", {"message": "during the outage"})
+        assert shipper.tick() == 1
+        sender.flush()
+
+        down = shipper.doctor_line()
+        assert (down.name, down.ok, down.detail) == (
+            "deep logs",
+            False,
+            f"Telemetry on to {endpoint}: 1 app log lines and incidents shipped since the host "
+            "started from 1 files; 1 records dropped; the last post failed",
+        )
+
+        with serving(taken, port):
+            app_log(tmp_path, "fake-app", {"message": "after the outage"})
+            assert shipper.tick() == 1
+            sender.flush()
+            back = shipper.doctor_line()
+
+        assert (back.name, back.ok, back.detail) == (
+            "deep logs",
+            True,
+            f"Telemetry on to {endpoint}: 2 app log lines and incidents shipped since the host "
+            "started from 1 files; 1 records dropped",
+        )
+        assert [r["body"]["stringValue"] for r in taken.logs()] == ["after the outage"]
+    finally:
+        telemetry.reset()
+
+
+def test_a_pass_that_raises_does_not_end_the_shipper(
+    tmp_path: Path, stub: tuple[str, Taken], capsys: pytest.CaptureFixture[str]
+) -> None:
+    endpoint, taken = stub
+    sender = exporter(endpoint, tmp_path)
+    passes: list[int] = []
+
+    def fails_once() -> Telemetry:
+        passes.append(1)
+        if len(passes) == 1:
+            raise RuntimeError("the first pass broke")
+        return sender
+
+    app_log(tmp_path, "fake-app", {"message": "still ships"})
+    shipper = AppLogs(tmp_path, exporter=fails_once, switch=lambda: THIS_PC)
+
+    async def run_until_shipped() -> None:
+        running = asyncio.create_task(shipper.run())
+        deadline = time.monotonic() + 10.0
+        while shipper.shipped == 0 and not running.done() and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        alive = not running.done()
+        running.cancel()
+        await asyncio.gather(running, return_exceptions=True)
+        assert alive, "the shipping task is still running after the pass that raised"
+
+    asyncio.run(run_until_shipped())
+    sender.close()
+
+    assert [r["body"]["stringValue"] for r in taken.logs()] == ["still ships"]
+    assert "app logs: a shipping pass was skipped: the first pass broke" in capsys.readouterr().err
 
 
 def test_an_open_incident_is_exported_once_until_it_changes(

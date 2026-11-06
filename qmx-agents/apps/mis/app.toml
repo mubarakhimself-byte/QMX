@@ -1,6 +1,6 @@
 id = "mis"
 name = "MIS"
-version = "1.0.0"
+version = "1.0.1"
 risk = "shows"
 kind = "headless"
 

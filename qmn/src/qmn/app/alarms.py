@@ -39,7 +39,7 @@ from qmb.data.gap_check import OpenTime, open_time
 from qmf.core import Ok, Result, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 
-from qmn.app.operations import Target
+from qmn.app.operations import ALARMS_OFF, Target
 from qmn.app.runtime import deployment_records, parse_deployment
 from qmn.app.store import Json, Store
 from qmn.observability.alerts import (
@@ -697,17 +697,18 @@ def attach(
     liveness_interval_ns: int = LIVENESS_INTERVAL_NS,
 ) -> Senders:
     """The senders the keys document turns on, over the node's ``store``. A keys document or
-    register that cannot be read turns the senders off with one stderr line; it never stops
-    the node."""
+    register that cannot be read turns the senders off with one stderr line and a ``status``
+    reason; it never stops the node. Senders built clean clear an earlier reason."""
     try:
         named = Destinations.from_keys(keys_text)
     except ValueError as error:
-        return _off(str(error))
+        return _off(store, str(error), clock_ns())
     senders = Senders()
     if named.ntfy_topic_url is not None:
         loaded = Ok(allow_list) if allow_list is not None else load_alert_allow_list()
         if is_refusal(loaded):
-            return _off(f"the failure register did not load ({loaded.category.value})")
+            why = f"the failure register did not load ({loaded.category.value})"
+            return _off(store, why, clock_ns())
         publisher = AlertPublisher(loaded.value, NtfyChannel(named.ntfy_topic_url, node_tag, send))
         senders.push = PushSender(
             lambda: View.read(store), publisher, open_at, clock_ns, store=store, pass_s=pass_s
@@ -720,11 +721,24 @@ def attach(
             sink=HealthchecksSink(named.healthchecks_ping_url, send),
         )
         if is_refusal(heartbeat):
-            return _off(f"the liveness heartbeat refused ({heartbeat.category.value})")
+            why = f"the liveness heartbeat refused ({heartbeat.category.value})"
+            return _off(store, why, clock_ns())
         senders.liveness = LivenessSender(heartbeat.value, steady_ns)
+    _keep_off(store, None, clock_ns())
     return senders
 
 
-def _off(reason: str) -> Senders:
+def _off(store: Store, reason: str, now_ns: int) -> Senders:
     print(json.dumps({"event": "alarms_off", "reason": reason}), file=sys.stderr)
+    _keep_off(store, reason, now_ns)
     return Senders()
+
+
+def _keep_off(store: Store, reason: str | None, now_ns: int) -> None:
+    try:
+        store.observe(ALARMS_OFF, reason, now_ns)
+    except Exception as error:  # a busy store never stops the node or a key rotation
+        print(
+            json.dumps({"event": "alarms_off_unkept", "error": type(error).__name__}),
+            file=sys.stderr,
+        )

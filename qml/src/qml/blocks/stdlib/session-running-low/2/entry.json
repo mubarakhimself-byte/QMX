@@ -1,0 +1,85 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "session-running-low",
+  "version": 2,
+  "family": "session",
+  "aliases": [],
+  "same_word_as": [
+    "session-low@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The lowest low of the current session so far. Each bar carries its close time in nanoseconds UTC as time; a session opens at session_start seconds into its clock's day and lasts until the next one opens.",
+  "boundaries": "One session per local day of its clock; bars without a time are missing. session_start is a second of clock's day: clock 0 is UTC, 1 is London and 2 is New York, so a session opens at the market's own time on both sides of a clock change.",
+  "recognition": "A break of the session's high or low is a common breakout level.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "qml/catalogue-seed/stats-2026-08-26/market-structure-and-location/locations-and-structure.md#session-low Definition",
+      "quote": "The lowest price traded within a defined trading session up to the current moment.",
+      "dated": "2026-08-26"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "clock": {
+      "measure": "category",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:ee1127ae539ee96b08531de22ba7d73555bdd7d710eb15c4941aa03fb64d5f82",
+  "tests": "on clock 0 its values equal version 1's over its golden bars, in qml/tests/test_session_clock.py"
+}

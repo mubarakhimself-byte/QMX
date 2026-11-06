@@ -1,0 +1,367 @@
+"""`value-above@1` and the slot rule it needs: a value that only feeds is no condition, a slot left
+with none holds, and a binding that can neither hold nor feed refuses with a pointer."""
+
+# pyright: reportPrivateUsage=false
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+from qml.blocks.api import Signal
+from qml.catalogue.loader import Loaded, LockEntry, block_fingerprint, load
+from qml.check import check
+from qml.compile import CompiledUnit, compile_unit
+from test_compile_dummy import (
+    _context,
+    _document,
+    _drive,
+    _entries,
+    _host,
+    _instants,
+    _slice,
+    _surfaces,
+    adx_above,
+)
+
+Document = dict[str, Any]
+Edit = Callable[[Document], Document]
+
+_FOLDER = (
+    Path(__file__).resolve().parents[1] / "src" / "qml" / "blocks" / "stdlib" / "value-above" / "1"
+)
+_ADX = {
+    "name": "adx",
+    "block": "adx@1",
+    "params": {"period": {"value": "14"}},
+    "inputs": {"series": "m15"},
+}
+
+
+def _make(level: str, below: str = "0") -> Any:
+    source = (_FOLDER / "block.py").read_bytes()
+    lock = [LockEntry("value-above", 1, block_fingerprint(source).value)]
+    loaded = load(lock, {"value-above@1": source})
+    assert isinstance(loaded, Loaded), loaded
+    return loaded.blocks["value-above@1"].make(
+        {"level": Decimal(level), "below": Decimal(below)}, {"series": "x"}
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "level", "below", "holds"),
+    [
+        ("25.01", "25", "0", True),
+        ("25", "25", "0", False),
+        ("24.99", "25", "0", False),
+        ("24.99", "25", "1", True),
+        ("25", "25", "1", False),
+        ("25.01", "25", "1", False),
+        ("-3", "-5", "0", True),
+        ("-7", "-5", "1", True),
+    ],
+)
+def test_it_compares_a_value_with_its_level(
+    value: str, level: str, below: str, holds: bool
+) -> None:
+    answer = _make(level, below).update({"series": Decimal(value)})
+
+    assert answer == Signal(state=holds, value=Decimal(value))
+
+
+def test_it_reads_a_level_that_moves_and_answers_nothing_for_a_missing_value() -> None:
+    above = _make("25")
+
+    assert above.update({"series": Decimal(30), "level": Decimal(35)}) == Signal(
+        state=False, value=Decimal(30)
+    )
+    assert above.update({"series": None}) is None
+
+
+def test_its_below_setting_takes_only_0_or_1() -> None:
+    with pytest.raises(ValueError, match=r"below is 0 for above, 1 for below"):
+        _make("25", "2")
+
+
+def test_its_entry_pins_its_source() -> None:
+    entry = json.loads((_FOLDER / "entry.json").read_text("utf-8"))
+
+    assert entry["fingerprint"] == block_fingerprint((_FOLDER / "block.py").read_bytes()).value
+    assert (entry["output"]["type"], entry["mirroring"]) == ("event", "supported")
+    assert [(p["port"], p["stream_kind"]) for p in entry["inputs"]] == [("series", "series")]
+    assert {name: spec["measure"] for name, spec in entry["parameters"].items()} == {
+        "level": "ratio",
+        "below": "category",
+    }
+
+
+def _slots(document: Document) -> list[dict[str, Any]]:
+    return [document["logic"][side]["slots"] for side in ("long", "short")]
+
+
+def _feeder_alone_in(slot: str, kind: str, k: int | None = None) -> Document:
+    """ADX alone in a slot of its own, read by `value-above` in the context slot after it."""
+    document = cast("Document", adx_above("1"))
+    combiner: Document = {"kind": kind, "when_inputs_absent": "no_signal"}
+    if k is not None:
+        combiner["k"] = k
+    for slots in _slots(document):
+        context = slots["context"]["bindings"]
+        context[:] = [b for b in context if b["name"] != "adx"]
+        rest = dict(slots)
+        slots.clear()
+        slots[slot] = {"role": "context", "combiner": combiner, "bindings": [dict(_ADX)]}
+        slots.update(rest)
+    return document
+
+
+@pytest.mark.parametrize(("kind", "k"), [("all", None), ("any", None), ("k_of_n", 1)])
+def test_a_slot_left_with_no_conditions_holds_under_every_combiner(
+    kind: str, k: int | None
+) -> None:
+    bars = _slice()
+    built = compile_unit(_feeder_alone_in("gauge", kind, k), _context())
+    assert isinstance(built, CompiledUnit), built
+
+    steps = _drive(_host(built, _surfaces(bars)), _instants(bars))
+
+    assert len(_entries(steps)) == 25
+
+
+def _near_misses(document: Document) -> set[str]:
+    bars = _slice()
+    built = compile_unit(document, _context())
+    assert isinstance(built, CompiledUnit), built
+    steps = _drive(_host(built, _surfaces(bars)), _instants(bars))
+    return {row.reason for s in steps for row in s.decisions if row.reason.startswith("near miss")}
+
+
+def test_only_a_trigger_slot_with_a_condition_writes_a_near_miss_row() -> None:
+    only_feeders = _feeder_alone_in("gauge", "all")
+    for slots in _slots(only_feeders):
+        slots["gauge"]["role"] = "trigger"
+        slots["trigger"]["role"] = "confirmation"
+    only_feeders["numbers"]["adx_level"]["default"] = "99"
+
+    assert _near_misses(only_feeders) == set()
+    assert "near miss, context: does not hold" in _near_misses(cast("Document", adx_above("99")))
+
+
+def _with_binding(document: Document, slot: str, binding: Document) -> Document:
+    document["logic"]["long"]["slots"][slot]["bindings"].append(binding)
+    return document
+
+
+def _lone(block: str, params: Document | None = None, inputs: Document | None = None) -> Edit:
+    def edit(document: Document) -> Document:
+        return _with_binding(
+            document,
+            "context",
+            {
+                "name": "probe",
+                "block": block,
+                "params": params or {},
+                "inputs": {"series": "m15"} if inputs is None else inputs,
+            },
+        )
+
+    return edit
+
+
+_NOT_READ = "/logic/long/slots/context/bindings/2"
+_PERIOD = {"period": {"value": "14"}}
+
+
+@pytest.mark.parametrize(
+    ("edit", "says"),
+    [
+        pytest.param(
+            _lone("adx@1", {"period": {"value": "14"}}),
+            "Bind value-above@1",
+            id="a value nothing reads",
+        ),
+        pytest.param(
+            _lone("lbma-gold-auction-clock@1", {"auction": {"value": "0"}}),
+            "Bind value-above@1",
+            id="a clock nothing reads",
+        ),
+        pytest.param(
+            _lone("parabolic-sar@1", {"step": {"value": "0.02"}, "maximum": {"value": "0.2"}}),
+            "Bind value-above@1",
+            id="a price level nothing reads",
+        ),
+        pytest.param(
+            _lone("time-exit-bars@1", {"bars": {"value": "48"}}, {}),
+            "Put it in /exit_set",
+            id="an exit in a slot",
+        ),
+        pytest.param(
+            _lone("rsi-series@1", _PERIOD),
+            "series port takes one value, and m15 is a whole bar. Feed it m15.close",
+            id="a value port fed a whole bar",
+        ),
+        pytest.param(
+            _lone("rsi-series@1", _PERIOD, {"series": "m15."}),
+            "series port takes one value, and m15. is a whole bar. Feed it m15.close",
+            id="a value port fed a whole bar with a bare dot",
+        ),
+        pytest.param(
+            _lone("value-above@1", {"level": {"value": "1"}, "below": {"value": "0"}}),
+            "series port takes one value, and m15 is a whole bar. Feed it m15.close",
+            id="a comparator fed a whole bar",
+        ),
+        pytest.param(
+            _lone("adx@1", _PERIOD, {"series": "m15.close"}),
+            "series port takes a whole bar, and m15.close is not one. Feed it m15",
+            id="a whole bar port fed one value",
+        ),
+        pytest.param(
+            _lone("adx@1", _PERIOD, {"series": "trend"}),
+            "series port takes a whole bar, and trend is not one. Feed it m15",
+            id="a whole bar port fed a binding",
+        ),
+        pytest.param(
+            _lone("account-daily-loss-halt@1", {"limit": {"value": "0.05"}}, {}),
+            "reads its account port equity",
+            id="a halt on account facts",
+        ),
+        pytest.param(
+            _lone("losing-days-halt@1", {"days": {"value": "3"}}, {}),
+            "reads its trades port",
+            id="a halt on the unit's trades",
+        ),
+    ],
+)
+def test_a_binding_that_can_neither_hold_nor_feed_refuses_with_a_pointer(
+    edit: Edit, says: str
+) -> None:
+    document = edit(cast("Document", _document()))
+
+    problems = compile_unit(document, _context())
+    checked = check(document, _context())
+
+    assert isinstance(problems, tuple), "it compiled"
+    assert [(p.kind, p.where) for p in problems] == [("binding_not_read", _NOT_READ)]
+    assert says in problems[0].message
+    assert [e.where for e in checked.errors] == [(_NOT_READ,)]
+    assert checked.errors[0].message.startswith("binding_not_read: ")
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(
+            _lone("account-daily-loss-halt@1", {"limit": {"value": "0.05"}}, {}), id="a halt"
+        ),
+        pytest.param(_lone("time-exit-bars@1", {"bars": {"value": "48"}}, {}), id="an exit"),
+    ],
+)
+def test_a_block_a_later_binding_reads_still_refuses_because_it_never_feeds_a_value(
+    edit: Edit,
+) -> None:
+    document = edit(cast("Document", _document()))
+    _with_binding(
+        document,
+        "context",
+        {
+            "name": "strong",
+            "block": "value-above@1",
+            "params": {"level": {"value": "1"}, "below": {"value": "0"}},
+            "inputs": {"series": "probe"},
+        },
+    )
+
+    problems = compile_unit(document, _context())
+
+    assert isinstance(problems, tuple), "it compiled"
+    assert [(p.kind, p.where) for p in problems] == [("binding_not_read", _NOT_READ)]
+
+
+@pytest.mark.parametrize(
+    ("block", "ref", "hint", "nearest"),
+    [
+        pytest.param(
+            "adx@1",
+            "m16",
+            "feed the whole bar by its stream's name, such as m15",
+            ("m15",),
+            id="a whole bar port",
+        ),
+        pytest.param(
+            "rsi-series@1",
+            "trnd",
+            "feed one value such as m15.close, or a binding written before this one",
+            ("trend",),
+            id="a value port",
+        ),
+    ],
+)
+def test_a_feed_that_does_not_exist_is_told_the_shape_its_port_wants(
+    block: str, ref: str, hint: str, nearest: tuple[str, ...]
+) -> None:
+    document = _lone(block, _PERIOD, {"series": ref})(cast("Document", _document()))
+
+    checked = check(document, _context())
+
+    assert [(p.kind.value, p.hint, p.nearest) for p in checked.errors if p.layer == "B"] == [
+        ("unknown_input", hint, nearest)
+    ]
+
+
+def test_a_value_only_a_derived_number_reads_feeds_and_does_not_refuse() -> None:
+    document = _with_binding(cast("Document", _document()), "context", dict(_ADX))
+    document["numbers"]["rsi_low"]["motion"]["source"] = "adx"
+
+    built = compile_unit(document, _context())
+
+    assert isinstance(built, CompiledUnit), built
+    long_side = next(s for s in built.plan.sides if s.side.value == "long")
+    assert [slot.feeders for slot in long_side.slots if slot.name == "context"] == [
+        frozenset({"adx"})
+    ]
+
+
+def test_k_above_the_conditions_a_slot_is_left_with_refuses() -> None:
+    document = cast("Document", adx_above("1"))
+    for slots in _slots(document):
+        slots["context"]["combiner"] = {"kind": "k_of_n", "k": 4, "when_inputs_absent": "no_signal"}
+
+    problems = compile_unit(document, _context())
+
+    assert isinstance(problems, tuple), "it compiled"
+    assert [(p.kind, p.where) for p in problems] == [
+        ("combiner_not_built", "/logic/long/slots/context/combiner/k"),
+        ("combiner_not_built", "/logic/short/slots/context/combiner/k"),
+    ]
+
+
+def test_a_clock_block_reads_the_bars_time_and_gates_through_value_above() -> None:
+    """Only after the nearest London gold auction: the block reads seconds from it, off the bar's
+    time, and `value-above` compares them. Without time, the clock answers nothing."""
+    document = cast("Document", _document())
+    for slots in _slots(document):
+        slots["context"]["bindings"] += [
+            {
+                "name": "clock",
+                "block": "lbma-gold-auction-clock@1",
+                "params": {"auction": {"value": "0"}},
+                "inputs": {"series": "m15"},
+            },
+            {
+                "name": "after_it",
+                "block": "value-above@1",
+                "params": {"level": {"value": "0"}, "below": {"value": "0"}},
+                "inputs": {"series": "clock"},
+            },
+        ]
+    bars = _slice()
+    built = compile_unit(document, _context())
+    assert isinstance(built, CompiledUnit), built
+
+    steps = _drive(_host(built, _surfaces(bars)), _instants(bars))
+
+    assert len(_entries(steps)) == 10
