@@ -6,9 +6,12 @@ session, as a restart's reconcile does; the demo run does the same on his demo a
 FAIL line.
 """
 
+# pyright: reportUnknownMemberType=false
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Final
+import importlib
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from qmf.core import is_refusal
 from qmf.venue.commands import SubmissionOutcome
@@ -23,7 +26,7 @@ if TYPE_CHECKING:
 
 def broker(codec: Any, *, fault: bool) -> Any:
     """The fake broker, or one whose fill carries a label with no node tag on it."""
-    import test_app_binding as binding  # noqa: PLC0415 - the tests are found by path
+    binding: Any = cast(Any, importlib.import_module("test_app_binding"))
 
     class Untagged(binding.FakeCTrader):
         def _on_ProtoOANewOrderReq(self, msg_id: str, body: dict[str, object]) -> None:

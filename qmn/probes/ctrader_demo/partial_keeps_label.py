@@ -5,10 +5,13 @@ The rehearsal asks the fake broker through the real codec for half the position 
 back through the node; the demo run asks cTrader's demo broker. One PASS or FAIL line.
 """
 
+# pyright: reportUnknownMemberType=false
+
 from __future__ import annotations
 
+import importlib
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from qmf.core import is_refusal
 from qmf.venue.commands import SubmissionOutcome
@@ -25,7 +28,7 @@ if TYPE_CHECKING:
 def broker(codec: Any, *, fault: bool) -> Any:
     """The fake broker, or an older one that closes the whole position whatever volume it is
     asked for."""
-    import test_app_binding as binding  # noqa: PLC0415 - the tests are found by path
+    binding: Any = cast(Any, importlib.import_module("test_app_binding"))
 
     class WholePositionClose(binding.FakeCTrader):
         def _on_ProtoOAClosePositionReq(self, msg_id: str, body: dict[str, object]) -> None:

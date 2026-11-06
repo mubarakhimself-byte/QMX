@@ -8,9 +8,10 @@ One PASS or FAIL line.
 
 from __future__ import annotations
 
+import importlib
 import json
 import time
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from qmf.core import is_refusal
 from qmn.app.grants import Grant, Grants, TokenEndpoint, registration
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
 def broker(codec: Any, *, fault: bool) -> Any:
     """The fake broker as it is; this mark's fault is in the token endpoint, not here."""
-    import test_app_binding as binding  # noqa: PLC0415 - the tests are found by path
+    binding: Any = cast(Any, importlib.import_module("test_app_binding"))
 
     return binding.FakeCTrader(codec)
 
@@ -54,7 +55,7 @@ class _Refusing:
 
 def rehearse(run: Any) -> tuple[bool, str]:
     """The node's own refresher over the rig's grant store and token endpoint."""
-    import test_app_binding as binding  # noqa: PLC0415 - the tests are found by path
+    binding: Any = cast(Any, importlib.import_module("test_app_binding"))
 
     app = registration(binding.KEYS)
     if app is None:

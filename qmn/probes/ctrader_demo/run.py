@@ -18,12 +18,14 @@ closes what it opened. It waits for his sign-in (G-DEMO).
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -44,7 +46,7 @@ from qmn.app.grants import Grant, Grants, Registration, TokenEndpoint, grant_sto
 from qmn.app.runtime import Ticket
 from qmn.app.server import DEFINITIONS
 from qmn.venue import order_tags
-from qmn.venue.ctrader_account import DEMO_HOST, Codec, CTraderVenue, FramedWire
+from qmn.venue.ctrader_account import DEMO_HOST, Codec, CTraderVenue, Frame, FramedWire
 
 PROBES: Final = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROBES))
@@ -89,9 +91,25 @@ def say(ok: bool, mark: str, detail: str = "") -> bool:
 
 def reasons(done: Any) -> str:
     """A refusal's own words, for a line that has to say why."""
-    context = getattr(done, "context", {})
-    code = context.get("code") if isinstance(context, dict) else None
+    context: Mapping[str, object] = getattr(done, "context", {})
+    code = context.get("code")
     return f"{code}: {done}" if code else str(done)
+
+
+def _filled(one: Frame) -> bool:
+    """A frame is the answer to one order: its fill, or the broker's refusal."""
+    return one.name == "ProtoOAOrderErrorEvent" or (
+        one.name == "ProtoOAExecutionEvent"
+        and one.body.get("executionType") in {"ORDER_FILLED", "ORDER_PARTIAL_FILL"}
+    )
+
+
+def _spot(one: Frame) -> bool:
+    return one.name == "ProtoOASpotEvent"
+
+
+def _answered(one: Frame) -> bool:
+    return one.name in {"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent", "ProtoOAErrorRes"}
 
 
 class Crossing:
@@ -124,9 +142,12 @@ class Crossing:
         gap = PriceDelta.try_create(STOP_POINTS, symbol.instrument, symbol.digits)
         size = Quantity.try_create(1, "lot", 2)
         tags = order_tags(client_order_id, self.label if label is None else label)
-        for built in (gap, size, tags):
-            if isinstance(built, TypedRefusal):
-                return built
+        if (
+            isinstance(gap, TypedRefusal)
+            or isinstance(size, TypedRefusal)
+            or isinstance(tags, TypedRefusal)
+        ):
+            return next(built for built in (gap, size, tags) if isinstance(built, TypedRefusal))
         params = OrderParameters.try_create(
             OrderType.MARKET,
             TimeInForce.IMMEDIATE_OR_CANCEL,
@@ -151,10 +172,14 @@ class Crossing:
         read = self.read_back()
         if not hasattr(read, "value"):
             return []
-        return list(cast(Any, read.value).positions)
+        return list(read.value.positions)
 
     def broker_positions(self) -> list[tuple[str | None, Decimal, Decimal | None]]:
         """The broker's own rows: each open position's label, its size in lots and its stop."""
+        raise NotImplementedError
+
+    def refresh(self) -> tuple[bool, str]:
+        """The TN-05 drill on this session's account: only a demo run has a store to refresh."""
         raise NotImplementedError
 
     def adopted(self, name: str) -> Any:
@@ -188,15 +213,7 @@ class Crossing:
         api = self.venue.api
         if api is None:
             return None
-        return api.wait(
-            lambda one: (
-                one.name == "ProtoOAOrderErrorEvent"
-                or (
-                    one.name == "ProtoOAExecutionEvent"
-                    and one.body.get("executionType") in {"ORDER_FILLED", "ORDER_PARTIAL_FILL"}
-                )
-            )
-        )
+        return api.wait(_filled)
 
     def push_order(self, client_order_id: str, *, volume: int = WHOLE) -> Any:
         """One market order down the wire, over the real codec, without waiting for the answer."""
@@ -224,19 +241,23 @@ class Crossing:
     def duplicate(self, client_order_id: str) -> str:
         """Send one client order id twice and say what the broker did with the second."""
         first = self.order(client_order_id)
-        if first is None or is_refusal(first):
-            return (
-                f"no answer to the first order ({reasons(first) if is_refusal(first) else 'none'})"
-            )
-        if first.value is None or first.value.name == "ProtoOAOrderErrorEvent":
+        if first is None:
+            return "no answer to the first order"
+        if is_refusal(first):
+            return f"no answer to the first order ({reasons(first)})"
+        opened = first.value
+        if opened is None or opened.name == "ProtoOAOrderErrorEvent":
             return "no answer to the first order"
         second = self.order(client_order_id)
+        if second is None:
+            return "no answer to the second order"
         if is_refusal(second):
             return f"the wire refused the second order ({reasons(second)})"
-        if second.value is None:
+        answer = second.value
+        if answer is None:
             return "no answer to the second order"
-        if second.value.name == "ProtoOAOrderErrorEvent":
-            return f"refused by the broker ({second.value.body.get('errorCode')})"
+        if answer.name == "ProtoOAOrderErrorEvent":
+            return f"refused by the broker ({answer.body.get('errorCode')})"
         return "accepted, and the broker filled a second order"
 
     def close_part(self, position: str, *, volume: int = HALF) -> Any:
@@ -281,8 +302,7 @@ class Rehearsal(Crossing):
     ctid: int = 4401
 
     def tick(self, ticks: int = 2) -> None:
-        import test_app_binding as binding  # noqa: PLC0415 - the tests are found by path
-
+        binding: Any = cast(Any, importlib.import_module("test_app_binding"))
         binding.tick_quotes(self.rig, ticks)
 
     def price(self, side: str = "buy") -> Decimal:
@@ -354,7 +374,7 @@ class Demo(Crossing):
             raise SystemExit(
                 f"FAIL setup: cTrader refused the spot subscription ({reasons(asked)})"
             )
-        found = api.wait(lambda one: one.name == "ProtoOASpotEvent")
+        found = api.wait(_spot)
         if is_refusal(found) or found.value is None:
             raise SystemExit("FAIL setup: cTrader sent no spot")
         body = found.value.body
@@ -400,11 +420,7 @@ class Demo(Crossing):
         pushed = api.push(frame.value)
         if is_refusal(pushed):
             return f"the wire refused the request ({reasons(pushed)})"
-        found = api.wait(
-            lambda one: (
-                one.name in {"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent", "ProtoOAErrorRes"}
-            )
-        )
+        found = api.wait(_answered)
         if is_refusal(found):
             return f"the session refused the read ({reasons(found)})"
         if found.value is None:
@@ -500,8 +516,7 @@ def rehearsal(module: Any, *, fault: bool) -> tuple[Rehearsal, Path]:
     tests = PROBES.parents[1] / "tests"
     if str(tests) not in sys.path:
         sys.path.insert(0, str(tests))
-    import test_app_binding as binding  # noqa: PLC0415 - the tests are found by path
-
+    binding: Any = cast(Any, importlib.import_module("test_app_binding"))
     codec = binding.codec()
     fake = module.broker(codec, fault=fault)
     root = Path(tempfile.mkdtemp(prefix=f"c15-{module.MARK}-", dir=tempfile.gettempdir()))
@@ -510,7 +525,7 @@ def rehearsal(module: Any, *, fault: bool) -> tuple[Rehearsal, Path]:
         binding.signed_in(rig)
         binding.bind(rig)
         binding.tick_quotes(rig)
-        venue = cast("CTraderVenue", binding.runtime(rig).venues[binding.ACCOUNT].client)
+        venue = binding.runtime(rig).venues[binding.ACCOUNT].client
         return Rehearsal(rig=rig, venue=venue, fake=fake, fault=fault), root
     except Exception:
         shutil.rmtree(root, ignore_errors=True)
@@ -523,8 +538,7 @@ def demo(home: Path, tag: str | None, account: str | None) -> Demo:
     node_tag = tag or str(cast("dict[str, object]", passport["identity"])["tag"])
     keys = os.environ.get("NODE_KEYS")
     if keys is None:
-        import keyring  # noqa: PLC0415 - only the demo run reads the key store
-
+        keyring: Any = cast(Any, importlib.import_module("keyring"))
         keys = cast("str | None", keyring.get_password(KEYS, KEYS.split("/", 1)[1]))
     app = registration(keys)
     if app is None:
@@ -551,7 +565,7 @@ def demo(home: Path, tag: str | None, account: str | None) -> Demo:
         credentials=lambda: (
             app.client_id,
             app.client_secret.reveal(),
-            cast("Any", holder["grant"]).tokens.access.reveal(),
+            holder["grant"].tokens.access.reveal(),
         ),
         clock_ns=time.time_ns,
         steady_ns=time.monotonic_ns,
