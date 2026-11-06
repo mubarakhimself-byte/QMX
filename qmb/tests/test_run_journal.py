@@ -348,7 +348,9 @@ def test_a_qmb_run_with_an_unlisted_reason_fails_at_close(
     closed = journal.close()
 
     assert isinstance(closed, TypedRefusal)
-    assert closed.context["reason"] == "a decision's reason has no code in the journal's closed list"
+    assert (
+        closed.context["reason"] == "a decision's reason has no code in the journal's closed list"
+    )
     assert closed.context["text"] == "a word no table holds"
 
 

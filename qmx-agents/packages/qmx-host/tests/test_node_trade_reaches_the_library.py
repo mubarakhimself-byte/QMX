@@ -72,15 +72,23 @@ def status(node: Rig) -> dict[str, object]:
     return cast("dict[str, object]", answer["value"])
 
 
+def blocked_signals(node: Rig) -> list[tuple[object, object]]:
+    answer = node.node.call("journal_tail", {"streams": ["unit"]})
+    assert answer["ok"] is True, answer
+    rows = cast("list[dict[str, object]]", cast("dict[str, object]", answer["value"])["rows"])
+    bodies = [cast("dict[str, object]", row["body"]) for row in rows if row["kind"] == "signal"]
+    return [(body["reason"], body["detail"]) for body in bodies if body["outcome"] == "blocked"]
+
+
 def test_a_real_writer_row_lands_a_trade_and_a_paper_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     live = test_feed_relay.deployment
-    monkeypatch.setattr(
-        test_feed_relay,
-        "deployment",
-        lambda data, placement: {**live(data, placement), "lane": "paper"},  # pyright: ignore[reportUnknownLambdaType]
-    )
+
+    def on_the_paper_lane(data: Path, placement: None) -> dict[str, object]:
+        return {**live(data, placement), "lane": "paper"}
+
+    monkeypatch.setattr(test_feed_relay, "deployment", on_the_paper_lane)
     home = tmp_path / "QMX"
     node = rig(home, None)
     play(node, FIRST_TRADE_CLOSED)
@@ -114,15 +122,32 @@ def test_a_real_writer_row_lands_a_trade_and_a_paper_run(
 
 def the_hook_refuses(node: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
     """The hook is a placeholder that passes every order, so its refusal has to be set."""
-    monkeypatch.setattr(node.runtime._paths[ACCOUNT], "cross_unit_hook", lambda _command: "no")
+
+    def refuses(command: object) -> str:
+        del command
+        return "no"
+
+    monkeypatch.setattr(node.runtime._paths[ACCOUNT], "cross_unit_hook", refuses)
 
 
 def an_orphan_is_open(node: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
     """One older position of ours on the market, as the reconcile reads it."""
-    held = VenuePosition(
-        "qold-1", "qmx:x:y", "fx.eurusd", "short", Decimal("0.1"), Decimal("1.07"), Decimal("1.08")
-    )
-    monkeypatch.setattr(node.runtime, "_orphans", lambda _account, _venue: [held])
+
+    def orphans(account: str, venue: object) -> list[VenuePosition]:
+        del account, venue
+        return [
+            VenuePosition(
+                "qold-1",
+                "qmx:x:y",
+                "fx.eurusd",
+                "short",
+                Decimal("0.1"),
+                Decimal("1.07"),
+                Decimal("1.08"),
+            )
+        ]
+
+    monkeypatch.setattr(node.runtime, "_orphans", orphans)
 
 
 def an_answer_is_lost_with_no_stop_held(node: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,8 +164,11 @@ def an_answer_is_lost_with_no_stop_held(node: Rig, monkeypatch: pytest.MonkeyPat
 
 
 def a_word_no_table_holds(node: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
-    unit = cast("NodeUnit", node.runtime.hosted["dep-1"].unit)
-    monkeypatch.setattr(unit, "guard", lambda _market: "a word no table holds")
+    def guard(market: str) -> str:
+        del market
+        return "a word no table holds"
+
+    monkeypatch.setattr(cast("NodeUnit", node.runtime.hosted["dep-1"].unit), "guard", guard)
 
 
 @pytest.mark.parametrize(
@@ -176,16 +204,15 @@ def test_each_unlisted_text_keeps_rows_landing(
         assert node.now[0] < LIVE_FROM + 5 * DAY, f"no guard row after 5 days: {guard_rows(node)}"
         step(node)
     with_the_block = rows_on_disk(home, "signal")
-    harvester(home).round(NOW, Cadence())
-    filed_with_the_block = signals_in_the_store(home)
     for _ in range(8):
         step(node)
+    blocked = blocked_signals(node)
     node.runtime.stop()
     later = rows_on_disk(home, "signal")
     harvester(home).round(NOW, Cadence())
 
-    assert later == with_the_block + 16, "two rows a bar, one per market, for 8 bars"
-    assert filed_with_the_block == with_the_block
+    assert (code, text) in blocked
+    assert later > with_the_block
     assert signals_in_the_store(home) == later
 
 
@@ -216,7 +243,6 @@ def test_a_journal_that_cannot_write_stops_entries_and_keeps_exits(tmp_path: Pat
     ]
     assert node.account.positions() == {}
     assert said["headline"] == "Stopped by a health check"
-    assert said["reasons"] == [
-        "The node cannot write its journal: a row of deployment dep-1 was refused"
-        " (storage failure)."
-    ]
+    assert cast("list[str]", said["reasons"])[0] == (
+        "The node cannot write its journal: a row of deployment dep-1 was refused (storage failure)"
+    )

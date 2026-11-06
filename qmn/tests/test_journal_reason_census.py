@@ -31,9 +31,7 @@ def words(node: ast.expr | None) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
-        return "".join(
-            part.value if isinstance(part, ast.Constant) else "X" for part in node.values
-        )
+        return "".join(words(part) or "X" for part in node.values)
     return None
 
 
@@ -49,10 +47,9 @@ def written_texts() -> dict[str, str]:
                 if name in WRITES_A_REASON and text is not None:
                     found.setdefault(text, f"{path.name}:{node.lineno}")
             if isinstance(node, ast.FunctionDef) and node.name in ANSWERS_WITH_A_REASON:
-                for inner in ast.walk(node):
-                    text = words(inner.value) if isinstance(inner, ast.Return) else None
-                    if text is not None:
-                        found.setdefault(text, f"{path.name}:{inner.lineno}")  # pyright: ignore[reportAttributeAccessIssue]
+                for answer in ast.walk(node):
+                    if isinstance(answer, ast.Return) and (text := words(answer.value)) is not None:
+                        found.setdefault(text, f"{path.name}:{answer.lineno}")
     for row in TABLE.values():
         found.setdefault(f"{row.blocks} (X)", f"stand_down.py TABLE {row.kind.value}")
     for text in _STAND_DOWN.values():
@@ -63,7 +60,9 @@ def written_texts() -> dict[str, str]:
 def test_every_text_the_node_can_write_has_a_code() -> None:
     found = written_texts()
 
-    no_code = {text: where for text, where in found.items() if _reason_code("blocked", text) is None}
+    no_code = {
+        text: where for text, where in found.items() if _reason_code("blocked", text) is None
+    }
 
     assert no_code == {}
     assert len(found) >= 40, "the walk has stopped finding the node's texts"

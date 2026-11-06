@@ -65,9 +65,16 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("venue cannot", "health_stop"),
     ("widens the stop", "stop_wrong_side"),
     ("does not favour", "not_favoured"),
+    ("cross-unit hook", "cross_unit_hook"),
+    ("could not be built", "health_stop"),
+    ("no unit holds", "health_stop"),
+    ("does not hold this order's stop", "health_stop"),
 )
 """The reason code of each reason text QML's hosted unit, the handler and the trading node's
 order path write, first match wins."""
+
+UNLISTED_REASON: Final[str] = "unlisted"
+"""A live journal's code for a text the table has none for. The row's ``detail`` keeps the words."""
 
 _OUTCOME_CODES: Final[Mapping[str, str]] = MappingProxyType(
     {
@@ -126,12 +133,19 @@ class RunJournal:
     """The journal port of one run: the handler appends, the runner sets the slice instant."""
 
     def __init__(
-        self, writer: JournalWriter, clock: _ReplayClock, compiled: CompiledUnit, run_id: str
+        self,
+        writer: JournalWriter,
+        clock: _ReplayClock,
+        compiled: CompiledUnit,
+        run_id: str,
+        account: str | None = None,
     ) -> None:
         self._writer = writer
         self._clock = clock
         self._compiled = compiled
         self._run_id = run_id
+        self._account = account
+        self._live = account is not None
         self._venues = {m.market_id: r.venue for m, r in compiled.plan.markets}
         self._pins = {
             (side.side.value, binding.name): binding.pin
@@ -179,16 +193,24 @@ class RunJournal:
         role: str,
         build: str,
         boot_epoch_id: str,
+        account: str,
     ) -> Result[RunJournal]:
         """A trading host's unit journal: one fsynced line under ``root`` per row, as it is
         made, in the host's own world (the trading node, Part C slice C-12a). ``scope_id`` is
-        the deployment id; the rows keep the shapes a QMB run writes."""
+        the deployment id; the rows keep the shapes a QMB run writes and name ``account``. A
+        text with no code costs a label, never the journal, and a row the writer refuses
+        leaves the later rows still tried, with ``write_failure`` set."""
         scope = WriterScope(JournalStream.UNIT, compiled.unit.unit_id, world, machine, role, build)
         clock = _ReplayClock()
         writer = JournalWriter.open(root, scope, clock=clock, boot_epoch_id=boot_epoch_id)
         if is_refusal(writer):
             return writer
-        return Ok(cls(writer.value, clock, compiled, scope_id))
+        return Ok(cls(writer.value, clock, compiled, scope_id, account))
+
+    @property
+    def write_failure(self) -> TypedRefusal | None:
+        """The last row the writer refused, or None while every row has landed."""
+        return self._refused
 
     def at(self, instant: Instant) -> None:
         """The replay instant every row until the next call is written at."""
@@ -252,11 +274,12 @@ class RunJournal:
             unit_version=self._compiled.document_fingerprint.value,
             market_id=market_id,
             venue=None if market_id is None else self._venues.get(market_id),
+            account=self._account,
             run_id=self._run_id,
         )
 
     def _write(self, kind: str, body: Mapping[str, object], facts: RowFacts) -> None:
-        if self._refused is not None:
+        if self._refused is not None and not self._live:
             return
         receipt = self._writer.append(kind, body, facts)
         if is_refusal(receipt):
@@ -299,18 +322,23 @@ class RunJournal:
             "numbers_in_force": {name: str(v) for name, v in row.numbers_in_force.items()},
         }
         code = _reason_code(row.outcome, row.reason)
+        if code is None and row.outcome == "skipped":
+            code = self._unlisted(row.row_id, row.reason)
+            if code is None:
+                return
         if code is not None:
             body["reason"] = code
-        elif row.outcome == "skipped":
-            self._refuse(row.row_id, row.reason)
-            return
         facts = self._facts(row.market_id)
         if row.outcome == "taken":
             self._pending[row.row_id] = _Pending(body, facts)
             return
         self._write("signal", body, facts)
 
-    def _refuse(self, row_id: str, text: str) -> None:
+    def _unlisted(self, row_id: str, text: str) -> str | None:
+        """The code of a text the table has none for. A live journal answers ``unlisted``. A
+        QMB run answers None and fails at ``close()``, because that protects evidence."""
+        if self._live:
+            return UNLISTED_REASON
         if self._refused is None:
             self._refused = invalid(
                 "reason",
@@ -318,6 +346,7 @@ class RunJournal:
                 row_id=row_id,
                 text=text,
             )
+        return None
 
     def _calibration(self, row: CalibrationRow) -> None:
         body: dict[str, object] = {
@@ -371,9 +400,10 @@ class RunJournal:
         self._write("fill", body, self._facts(fill.market_id))
 
     def _skip(self, skip: Skip) -> None:
-        code = _reason_code("blocked", skip.reason)
+        code = _reason_code("blocked", skip.reason) or self._unlisted(
+            skip.decision_row_id, skip.reason
+        )
         if code is None:
-            self._refuse(skip.decision_row_id, skip.reason)
             return
         pending = self._pending.pop(skip.decision_row_id, None)
         if pending is not None:

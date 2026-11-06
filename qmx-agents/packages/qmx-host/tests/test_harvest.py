@@ -5,6 +5,8 @@ history, written by the real writer library. Rounds of the real harvester file t
 real market-data door; the store, the Library and the stream files are read back.
 """
 
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -44,7 +46,9 @@ COMPILED = cast(
         unit=SimpleNamespace(unit_id="dummy"),
         document_fingerprint=SimpleNamespace(value="v1"),
         plan=SimpleNamespace(
-            markets=[(SimpleNamespace(market_id="fx.eurusd"), SimpleNamespace(venue="conformance"))],
+            markets=[
+                (SimpleNamespace(market_id="fx.eurusd"), SimpleNamespace(venue="conformance"))
+            ],
             sides=[],
         ),
     ),
@@ -123,7 +127,9 @@ class Volume:
         )
         assert self.journal.write_failure is None
 
-    def trade_with_no_r(self, trade_id: str, opened: datetime, closed: datetime, money: str) -> None:
+    def trade_with_no_r(
+        self, trade_id: str, opened: datetime, closed: datetime, money: str
+    ) -> None:
         """The real writer always states R, so this row is the test's own, for the reader's
         `r_missing` branch. Its account and envelope are the real writer's facts."""
         self.clock.at(closed)

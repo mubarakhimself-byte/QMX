@@ -35,7 +35,9 @@ COMPILED = cast(
         unit=SimpleNamespace(unit_id="dummy"),
         document_fingerprint=SimpleNamespace(value="v1"),
         plan=SimpleNamespace(
-            markets=[(SimpleNamespace(market_id="fx.eurusd"), SimpleNamespace(venue="conformance"))],
+            markets=[
+                (SimpleNamespace(market_id="fx.eurusd"), SimpleNamespace(venue="conformance"))
+            ],
             sides=[],
         ),
     ),
