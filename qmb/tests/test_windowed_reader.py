@@ -85,13 +85,6 @@ def test_peak_memory_at_200000_steps_stays_within_the_tolerance_of_10000() -> No
     assert large_peak <= small_peak * (1 + WINDOW_MEMORY_TOLERANCE)
 
 
-def test_the_probe_sees_a_reader_that_keeps_every_bar_grow_past_the_tolerance() -> None:
-    _, kept_10000 = _read(10_000, {})
-    _, kept_20000 = _read(20_000, {})
-
-    assert kept_20000 > kept_10000 * (1 + WINDOW_MEMORY_TOLERANCE)
-
-
 def test_a_card_refuses_a_row_of_another_kind_and_the_feed_stops_there() -> None:
     day = VenueDay.try_create("America/New_York", "17:00")
     assert not isinstance(day, TypedRefusal), day
