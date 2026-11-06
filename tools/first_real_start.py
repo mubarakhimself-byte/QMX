@@ -1,11 +1,14 @@
-"""The first real start on his own QMX folder, as one command he runs (Part C slice C-14, OP-02).
+"""The first real start on his own QMX folder, as one command he runs (Part C slices C-14 and R24).
 
     uv run python tools/first_real_start.py
 
-It sets the practice node up through the running host, signs in on cTrader's own demo page, makes
-one test trade, lands the passport and the records, deploys the dummy unit on the market he names,
-and finds the node's journal rows in This PC's store. It prints one PASS or FAIL line per fact and
-exits non-zero on any FAIL. Running it again converges: every step checks what is in place first.
+Its job is to prove that this machine's node is ready to receive a unit, on his real folder. It sets
+the practice node up through the running host, signs in on cTrader's own demo page, makes one test
+trade, lands the passport and the records, and finds the node's journal rows in This PC's store. A
+unit reaches a node by passing the judge and his click, and this script does not make that happen:
+with no unit named it prints one plain line saying no unit has passed the judge yet, so nothing was
+deployed, and that is not a failure. It prints one PASS or FAIL line per fact and exits non-zero on
+any FAIL. Running it again converges: every step checks what is in place first.
 
 It talks only to the host's REST, with the bearer from Credential Manager, and imports nothing from
 `qmx-agents`, because the root env holds none of it. Only the trading node sends an order, and the
@@ -53,7 +56,8 @@ LABEL: Final = "qmx-home.toml"
 PASSPORT: Final = "data/trading-node-passport.json"
 RECEIVER: Final = ("127.0.0.1", 47613)
 """The node's sign-in redirect (`qmn.app.grants.REDIRECT`), where cTrader sends the one code."""
-DUMMY: Final = "dummy-trend-pullback"
+PLAIN_NO_UNIT: Final = "no unit has passed the judge yet, so nothing was deployed"
+"""The deploy step with no unit named: a fact about the node, never a verdict."""
 TEST_TRADE: Final = "demo test trade with its stop placed, observed and closed"
 SELF_TEST_CHECKS: Final = (
     "broker session",
@@ -81,10 +85,13 @@ Json: TypeAlias = dict[str, Any]
 @dataclass(frozen=True, slots=True)
 class Line:
     check: str
-    ok: bool
+    ok: bool | None
+    """None is a plain note about the node, not a verdict on it."""
     said: str
 
     def __str__(self) -> str:
+        if self.ok is None:
+            return self.said
         return f"{'PASS' if self.ok else 'FAIL'} {self.check}: {self.said}"
 
 
@@ -107,6 +114,8 @@ class Options:
     session_s: float = 120.0
     trade_s: float = 120.0
     sign_in_s: float = 300.0
+    unit: str | None = None
+    """The unit id he names once one has passed the judge; none means the node alone is proved."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,37 +451,40 @@ def _passport(world: World) -> tuple[bool, str]:
     return True, f"{len(SELF_TEST_CHECKS)} self-test checks ok, clock band {band}; {records}"
 
 
-def _dummy_version(world: World) -> str | None:
-    """The dummy unit's newest version the Library holds."""
-    found = world.host.rest("GET", "/api/library", query={"query": DUMMY, "limit": "100"})
+def _unit_version(world: World, unit_id: str) -> str | None:
+    """The newest version of the unit he named that the Library holds."""
+    found = world.host.rest("GET", "/api/library", query={"query": unit_id, "limit": "100"})
     body = found.body
     rows = cast("list[Json]", body) if found.ok and isinstance(body, list) else []
     units = [
         row
         for row in rows
         if row.get("kind") == "unit"
-        and cast(Json, row.get("content") or {}).get("unit_id") == DUMMY
+        and cast(Json, row.get("content") or {}).get("unit_id") == unit_id
     ]
     units.sort(key=lambda row: int(row.get("version") or 0))
     return str(units[-1]["id"]) if units else None
 
 
-def _deployed(world: World) -> tuple[bool, str]:
-    """His click on the market he named, checked on the node's own `deployments` read: the link
-    settles a refused queued deploy silently, so the promote answer proves nothing."""
+def _deployed(world: World) -> tuple[bool | None, str]:
+    """His click on the market he named, read once on the node's own `deployments` answer. With no
+    unit named, nothing is deployed: the node is only proved ready to receive one, and that is not
+    a failure."""
+    market, unit = world.options.market, world.options.unit
+    if unit is None:
+        return None, PLAIN_NO_UNIT
     if not world.session:
         return False, "no deploy was asked, because the demo session is not ready"
-    version = _dummy_version(world)
+    version = _unit_version(world, unit)
     if version is None:
-        return False, f"the Library holds no {DUMMY} unit"
-    market = world.options.market
+        return False, f"the Library holds no {unit} unit"
     click = world.host.rest(
         "POST",
         "/api/units/promote",
         body={
             "schema_version": "qmx.units.promote/1",
             "op_id": f"first-start-{market}",
-            "unit": {"id": DUMMY, "version": version},
+            "unit": {"id": unit, "version": version},
             "market_id": market,
             "to": "paper",
             "node": {"tag": world.tag},
@@ -534,16 +546,17 @@ def _trade_rows(world: World) -> tuple[bool, str]:
     return False, f"the test trade's rows did not reach the store in {limit:.0f} s"
 
 
-CHECKS: Final[tuple[tuple[str, Callable[[World], tuple[bool, str]]], ...]] = (
+CHECKS: Final[tuple[tuple[str, Callable[[World], tuple[bool | None, str]]], ...]] = (
     ("folder found", _folder),
     ("practice node Ready", _ready),
     ("demo session ready", _session),
     ("test trade with its stop placed, seen and closed", _trade),
     ("passport landed", _passport),
-    ("dummy unit deployed on the chosen market", _deployed),
+    ("unit deployed on the chosen market", _deployed),
     ("node journal rows in This PC's store", _journal),
     ("test trade rows in This PC's store", _trade_rows),
 )
+"""One step, one line: `(bool, said)` is a verdict and `(None, said)` is a plain note."""
 
 
 # --- real mode's two gates: his landed code, and Credential Manager ---
@@ -712,7 +725,7 @@ def run_checks(world: World) -> int:
     failed = 0
     for name, check in CHECKS:
         ok, said = check(world)
-        failed += not ok
+        failed += ok is False
         print(Line(name, ok, said), flush=True)
     print(f"METRIC seconds end to end: {world.monotonic() - began:.1f}", flush=True)
     return 1 if failed else 0
@@ -759,6 +772,7 @@ def main(
         args.session_s,
         args.trade_s,
         args.sign_in_s,
+        None,
     )
     if args.rehearsal:
         refused = rehearsal_refusal(home, args.store)
