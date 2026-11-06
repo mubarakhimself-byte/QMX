@@ -2095,6 +2095,9 @@ class Runtime:
         self.reconciler = Reconciler(
             journal, context.journal_root, context.standing().tag, clock_ns, self.alarms.append
         )
+        # Imported here: alarms reads this module's deployment records at import time.
+        from qmn.app.alarms import market_hours  # noqa: PLC0415
+
         self.stand_downs = StandDowns(
             journal,
             journal_root=context.journal_root,
@@ -2104,6 +2107,7 @@ class Runtime:
             clock_ns=clock_ns,
             free_bytes=lambda: shutil.disk_usage(context.data).free,
             on_alarm=self.alarms.append,
+            market_open=market_hours(context.store),
         )
         self._paper_journal: JournalWriter | None = None
         waiting = restored(context.journal_root)
