@@ -9,6 +9,7 @@ his act.
 import json
 import sys
 
+
 def judged(value):
     if isinstance(value, dict):
         if isinstance(value.get("verdict"), dict):
