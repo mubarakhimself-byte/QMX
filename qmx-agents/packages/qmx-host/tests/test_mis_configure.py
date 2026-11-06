@@ -9,15 +9,16 @@ the document, and the MIS parses it, reads the store and publishes.
 
 from __future__ import annotations
 
+import importlib
 import json
 import random
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from qmf.core import is_refusal
@@ -32,7 +33,8 @@ from qmx_host.venue_records import land, records_of
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "apps" / "mis"))
 
-import mis_core  # noqa: E402  # pyright: ignore[reportMissingImports]
+mis_core: Any = importlib.import_module("mis_core")
+"""The app's own core, loaded from its folder as the supervisor's bootstrap loads it."""
 
 MONTHS = ((2025, 1), (2025, 2), (2025, 3))
 """Three whole months of one-minute bars, enough for the day-tier reading's 1,000 H1 bars."""
@@ -95,13 +97,12 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
         assert not is_refusal(door), door
         volume = home / "apps" / "mis"
         write_facts(volume)
-        mis = mis_core.Mis(volume, market, clock=time.time_ns, boot="r18")
-        job = MisConfigure(
-            lambda operation, given: mis.call(operation, given),
-            store,
-            door.value,
-            every_s=86_400,
-        )
+        mis: Any = mis_core.Mis(volume, market, clock=time.time_ns, boot="r18")
+
+        def call(operation: str, given: Mapping[str, object]) -> Mapping[str, object]:
+            return cast("Mapping[str, object]", mis.call(operation, given))
+
+        job = MisConfigure(call, store, door.value, every_s=86_400)
         try:
             yield Rig(store, door.value, mis, job)
         finally:
@@ -110,15 +111,14 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
 
 def test_a_market_with_bars_under_a_source_is_configured_and_publishes(rig: Rig) -> None:
     attempt = rig.job.round()
+    published = rig.mis.call("round", {})["value"]["published"]
 
     assert attempt.answer == {"ok": True, "value": {"configured": 2, "refused": []}}
     assert {market.market_id: market.source for market in attempt.named} == {
         "eurusd": "dukascopy",
         "gold": None,
     }
-    assert [
-        (row["market_id"], row["reading"]) for row in rig.mis.call("round", {})["value"]["published"]
-    ] == [
+    assert [(row["market_id"], row["reading"]) for row in published] == [
         ("eurusd", "cusum-change-point@1"),
         ("eurusd", "efficiency-ratio@1"),
         ("eurusd", "variance-ratio@1"),

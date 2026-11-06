@@ -205,15 +205,18 @@ def test_a_read_error_in_a_round_leaves_the_thread_alive(world: World) -> None:
     try:
         world.mis("configure", configure_both(op_id="c09-read-error", settings={"round_s": 1}))
         error = until(
-            lambda: cast(dict[str, Any], world.mis("status", {})).get("last_error"),
+            lambda: world.mis("status", {}).get("last_error"),
             "the read error reached status",
         )
     finally:
         open_month.write_bytes(saved)
 
     def eurusd_published() -> dict[str, str] | None:
-        rows = {row["market_id"]: row["readings"] for row in world.mis("status", {})["markets"]}
-        readings = cast(dict[str, str], rows.get("eurusd") or {})
+        markets = cast(list[dict[str, Any]], world.mis("status", {})["markets"])
+        rows: dict[str, dict[str, str]] = {
+            str(row["market_id"]): row["readings"] for row in markets
+        }
+        readings = rows.get("eurusd") or {}
         fresh = readings and all(health == "fresh" for health in readings.values())
         return readings if fresh else None
 

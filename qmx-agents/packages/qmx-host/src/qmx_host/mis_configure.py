@@ -225,7 +225,9 @@ def _read(fields: Mapping[str, object]) -> tuple[str, str, JsonObject] | None:
     klass = fields.get("class")
     digits = fields.get("digits")
     data_levels = fields.get("data_levels")
-    held = cast("Mapping[str, object]", data_levels) if isinstance(data_levels, dict) else {}
+    held: Mapping[str, object] = (
+        cast("Mapping[str, object]", data_levels) if isinstance(data_levels, dict) else {}
+    )
     levels = held.get("levels")
     if (
         not isinstance(market_id, str)
@@ -248,7 +250,7 @@ def _read(fields: Mapping[str, object]) -> tuple[str, str, JsonObject] | None:
         "symbol": symbol,
         "class": klass,
         "digits": digits,
-        "data_levels": {"levels": cast("list[object]", levels)},
+        "data_levels": {"levels": cast("list[JsonValue]", levels)},
     }
     pip = fields.get("pip")
     size = cast("Mapping[str, object]", pip).get("size") if isinstance(pip, dict) else None
