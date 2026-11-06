@@ -685,15 +685,6 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("qmb", "1.0.7"): "32c53b83ee77ab46304ef81d610a429c",
     ("qmb", "1.0.8"): "22a4ec01c8fcd1881d77ad9aac031f32",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
-<<<<<<< HEAD
-    ("trading-node", "0.1.1"): "2feb6ee2e0d9cf2bd80666e58c175cae",
-    ("trading-node", "0.1.2"): "2ecec90e00d3c17cffdc3ffffa49242c",
-    ("trading-node", "0.1.3"): "71e37db09841e68f226bc896d5cb82b1",
-    ("trading-node", "0.1.4"): "df7a96d184e1a90856b511fd8f12a038",
-    ("trading-node", "0.1.5"): "c0d6763240096886de9225ae33f3684c",
-    ("trading-node", "0.1.6"): "3a014611d3fb4c1c9557b9d03952e736",
-    ("trading-node", "0.1.7"): "ce5297b0c2a5dc38cdcdb8851e2872fd",
-=======
     ("trading-node", "0.1.1"): "54d22aff076ea337daad3de7bc19ed75",
     ("trading-node", "0.1.2"): "f41dc6c9d0f206bbae525b7aebde6a0e",
     ("trading-node", "0.1.3"): "427dec7882d57dfda282a09abd4a13e2",
@@ -703,10 +694,10 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("trading-node", "0.1.7"): "0c1bb2b76ed9f865e0afd59d062f0d6c",
     ("trading-node", "0.1.8"): "117b0c977d94293302fad6071345cda9",
     ("trading-node", "0.1.12"): "72b4e90bafddf1d73a6f958571472737",
+    ("trading-node", "0.1.13"): "adc8900e4a2a7ab83ca3cbd7fbc7d924",
     ("trading-node", "0.1.11"): "d802fa04e15a7bfc517b732dc12f7b2e",
     ("trading-node", "0.1.10"): "dd71b14d3f679fd6c809c9564a92a6ba",
     ("trading-node", "0.1.9"): "c1c01a4f5513f17a7ed72ccbb740f7a9",
->>>>>>> a6d9f517
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
@@ -803,6 +794,7 @@ def test_no_shipped_app_or_template_takes_a_core_name() -> None:
         "app Backtest_Result takes the core kind backtest-result",
         "template backtest_run takes the catalog row backtest_run",
     ]
+
 
 
 
