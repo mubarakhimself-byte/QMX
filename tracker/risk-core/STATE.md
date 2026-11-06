@@ -302,6 +302,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - The build session's lost note is at `D:/QMX-worktrees/unit-ship/RISK-NOTE-2026-11-04.md`.
     **M44: he asked whether more context collection is needed. The lead's answer: no broad research.** The thin spots have no literature and need QMX's own tests in the numbers lens. The judge may do targeted look-ups for one specific fact.
 
+46. **Funnel done and committed (`funnel/`).**
+    - 34 decision points; 510 fates (462 picked, 8 merged, 34 later, 6 dropped); 23 flaws found (4 unresolved); shapes A, B and C; 7 questions, each with a default.
+    - The lead's worry: 462 of 510 picked may not be a real funnel. The operator called an old version "too much machine", and the foundation-first rule asks for a small core.
+    - **An independent Opus reviewer is running** (`funnel/REVIEW.md`). It attacks size, performance, fidelity to his words, missed flaws, evidence and code reality.
+    - Next: one fix round by the judge, then architecture versions.
+    - Claims for the repair before C-20 are in `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md`.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
