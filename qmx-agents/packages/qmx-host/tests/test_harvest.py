@@ -235,10 +235,10 @@ def test_a_closed_month_files_once_and_the_open_month_of_bars_grows_in_one_file(
     volume.signal(OPEN_MONTH + timedelta(hours=8), "open-0")
     harvest = harvester(volume.home)
 
-    first, _ = harvest.round(NOW, Cadence())
+    first = harvest.round(NOW, Cadence())
     after_first = volume.store.state(key(BARS, OPEN_MONTH))
     volume.add_bars(60)
-    second, _ = harvest.round(NOW + timedelta(seconds=60), Cadence())
+    second = harvest.round(NOW + timedelta(seconds=60), Cadence())
     bars = volume.store.state(key(BARS, OPEN_MONTH))
     closed = volume.store.state(key(SIGNALS, CLOSED_MONTH))
     opened = volume.store.state(key(SIGNALS, OPEN_MONTH))
@@ -263,9 +263,9 @@ def test_ticks_wait_for_their_cadence_while_bars_keep_theirs(volume: Volume) -> 
     harvest.round(NOW, Cadence())
     volume.add_ticks(10)
     volume.add_bars(10)
-    minute_on, _ = harvest.round(NOW + timedelta(seconds=60), Cadence())
+    minute_on = harvest.round(NOW + timedelta(seconds=60), Cadence())
     ticks_then = volume.store.state(key(TICKS, OPEN_MONTH))
-    hour_on, _ = harvest.round(NOW + timedelta(seconds=3_600), Cadence())
+    hour_on = harvest.round(NOW + timedelta(seconds=3_600), Cadence())
     ticks = volume.store.state(key(TICKS, OPEN_MONTH))
     bars = volume.store.state(key(BARS, OPEN_MONTH))
 
@@ -281,8 +281,8 @@ def test_an_unchanged_stream_is_skipped_by_its_fingerprint(volume: Volume) -> No
     volume.signal(OPEN_MONTH + timedelta(hours=8), "open-0")
     harvest = harvester(volume.home)
 
-    first, _ = harvest.round(NOW, Cadence())
-    second, _ = harvest.round(NOW + timedelta(seconds=60), Cadence())
+    first = harvest.round(NOW, Cadence())
+    second = harvest.round(NOW + timedelta(seconds=60), Cadence())
     bars = volume.store.state(key(BARS, OPEN_MONTH))
 
     assert bars is not None
@@ -302,7 +302,7 @@ def test_a_round_leaves_every_stream_file_byte_for_byte_with_a_line_in_flight(
         file.write(b'{"series": "in flight')
     before = volume.stream_bytes()
 
-    counts, _ = harvester(volume.home).round(NOW, Cadence())
+    counts = harvester(volume.home).round(NOW, Cadence())
 
     assert counts.refusals == ()
     assert volume.stream_bytes() == before
