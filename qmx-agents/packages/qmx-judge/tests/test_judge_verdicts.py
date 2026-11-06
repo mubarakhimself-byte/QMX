@@ -44,7 +44,7 @@ SPEC = parse_spec(
         "preset": "shipped",
     }
 )
-EVIDENCE: Mapping[str, Mapping[str, object]] = {
+PASSING_ROWS: Mapping[str, Mapping[str, object]] = {
     "random_entries": {"edge_ratio": "1.4", "p": "0.01"},
     "cost_stress": {"multiplier": "1.5", "expectancy_r": "0.2"},
     "walk_forward": {"efficiency": "0.7"},
@@ -60,7 +60,7 @@ def result(
     n: int,
     trades: Mapping[str, list[Decimal]],
     *,
-    evidence: Mapping[str, Mapping[str, object]] = EVIDENCE,
+    evidence: Mapping[str, Mapping[str, object]] | None = None,
     zero: bool = False,
     result_id: str | None = None,
     first_day: int = 0,
@@ -80,7 +80,11 @@ def result(
         trades=() if zero else found,
         markets=tuple(sorted(trades)),
         compiled_fp="fp1:sha256:unit",
-        evidence=evidence,
+        evidence={
+            name: {market: row for market in trades} for name, row in PASSING_ROWS.items()
+        }
+        if evidence is None
+        else evidence,
     )
 
 
@@ -352,7 +356,7 @@ def test_the_judge_block_decides_by_script_what_the_judge_decides() -> None:
                 "status": "finished",
                 "unit": lucky.unit,
                 "tester": {"app": "qmb", "version": "0.1.0"},
-                "measures": {name: dict(found) for name, found in EVIDENCE.items()},
+                "measures": {name: dict(found) for name, found in lucky.evidence.items()},
             },
             "trades": [
                 {"market_id": t.market, "closed_at": t.closed_at, "r": str(t.r)}

@@ -5,8 +5,12 @@ Every market a result traded, or the spec names, is judged by one rule: its mean
 toward the unit's whole result (`shrink`), and the chain runs cheapest first, each step saying
 what it can and cannot fail on (MIS-11). The last step deflates the market's Sharpe by the
 family's effective tries, so the best of many markets or variants does not pass on luck. A market
-with no trades never passes (QB-15). A step whose evidence no result carries is `not_run`, and a
-verdict with a step not run is `incomplete`, never a pass: the judge passes only what it checked.
+with no trades never passes (QB-15). A step whose evidence no result carries for that market, over
+the window its trades ran, is `not_run`, and a verdict with a step not run is `incomplete`, never a
+pass: the judge passes only what it checked.
+
+A study version made after the results' first try was written knowing them. The door counts it as
+a try, and it judges with the `spread` estimator and `FALLBACK_K`, whatever k it names (`late_spec`).
 
 A verdict records the judge, checker and tester versions (WF-12), and its item is named by its
 inputs, so judging the same results again finds the same verdict and a new judge version lands a
@@ -19,7 +23,7 @@ import math
 import random
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from statistics import NormalDist
 from typing import Final, Literal, cast
@@ -56,6 +60,7 @@ __all__ = [
     "deflated_sharpe",
     "judge",
     "land_judgement",
+    "late_spec",
     "parse_spec",
     "proposal_card",
     "quick_spec",
@@ -65,7 +70,7 @@ __all__ = [
     "trade_r",
 ]
 
-JUDGE_VERSION: Final = "1"
+JUDGE_VERSION: Final = "2"
 STUDY_KIND: Final = "study-spec"
 VERDICT_KIND: Final = "verdict"
 BASELINE_KIND: Final = "baseline-card"
@@ -87,6 +92,8 @@ type Overall = Literal["pass", "fail", "too_thin", "no_trades", "incomplete"]
 type StepOutcome = Literal["passed", "failed", "not_run"]
 type Origin = Literal["written", "quick"]
 type Estimator = Literal["spread", "fixed"]
+type Window = tuple[str, str]
+"""A run's start and end dates."""
 
 
 class JudgeRefused(ValueError):
@@ -112,7 +119,7 @@ class StudySpec:
     origin: Origin
     claim: Claim | None
     markets: tuple[str, ...] | None
-    """None is `admitted`: every market the unit's results traded or named."""
+    """None is `admitted`. A list adds markets to the ones the results traded and drops none."""
     preset: Preset
     estimator: Estimator
     k: Decimal
@@ -120,6 +127,8 @@ class StudySpec:
     min_trades: int
     seed: int
     fields: Mapping[str, object] = field(default_factory=dict[str, object])
+    written_late: bool = False
+    """Made after the results' first try, so its own k is not used (`late_spec`)."""
 
 
 def _decimal(value: object) -> Decimal | None:
@@ -141,6 +150,13 @@ def _texts(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return tuple(str(item) for item in cast(list[object], value) if isinstance(item, str))
+
+
+def _window(fields: Mapping[str, object]) -> Window | None:
+    """The dates of `fields`' window, the part of its text a run is cut from."""
+    found = _object(fields, "window")
+    start, end = found.get("start"), found.get("end")
+    return (start[:10], end[:10]) if isinstance(start, str) and isinstance(end, str) else None
 
 
 def spec_problems(fields: Mapping[str, object]) -> list[str]:
@@ -207,6 +223,12 @@ def parse_spec(fields: Mapping[str, object]) -> StudySpec:
     )
 
 
+def late_spec(spec: StudySpec) -> StudySpec:
+    """The spec a study version made after the results' first try judges under. A tiny k leaves
+    every weight near 1, which switches the luckiest-market pull off, so its k is not used."""
+    return replace(spec, estimator="spread", k=FALLBACK_K, written_late=True)
+
+
 def quick_spec(idea: str | None) -> dict[str, object]:
     """The implicit spec of a run asked without one, marked `quick`: the shipped preset over
     every admitted market, its claim the unit's own claim card idea."""
@@ -252,10 +274,12 @@ class JudgedResult:
     evidence: Mapping[str, Mapping[str, object]] = field(
         default_factory=dict[str, Mapping[str, object]]
     )
-    """The chain's evidence from the result's measures: `random_entries`, `cost_stress`,
-    `walk_forward`, `pbo`."""
+    """The chain's evidence from the result's measures. `random_entries`, `cost_stress` and
+    `walk_forward` are tables keyed by market, each row with its window. `pbo` answers for the
+    family, so it is one entry."""
     costs_uncalibrated: bool = False
     placeholders: tuple[str, ...] = ()
+    window: Window | None = None
 
     @classmethod
     def read(
@@ -286,6 +310,7 @@ class JudgedResult:
             evidence=evidence,
             costs_uncalibrated=labels.get("costs_uncalibrated") is True,
             placeholders=_texts(labels.get("placeholders")),
+            window=_window(fields),
         )
 
 
@@ -414,6 +439,8 @@ class Verdict:
     """The labels of every counted try, so the verdict's item names what it was judged on."""
     costs_uncalibrated: bool = False
     """A result behind it paid no costs measured from enough real fills."""
+    written_late: bool = False
+    """Its study version was made after the results' first try."""
 
     def says(self) -> str:
         """The verdict in plain words, with the tries behind it."""
@@ -429,7 +456,13 @@ class Verdict:
             if self.costs_uncalibrated
             else ""
         )
-        parts = (head, f"{markets}." if markets else "", costs, tries)
+        late = (
+            "This study was written after these results' first try, so it counted as a try and "
+            "its own k was not used."
+            if self.written_late
+            else ""
+        )
+        parts = (head, f"{markets}." if markets else "", costs, late, tries)
         return " ".join(part for part in parts if part)
 
     def fields(self) -> dict[str, object]:
@@ -450,6 +483,8 @@ class Verdict:
             found["compiled_fp"] = self.compiled_fp
         if self.costs_uncalibrated:
             found["costs_uncalibrated"] = True
+        if self.written_late:
+            found["written_late"] = True
         return found
 
     @property
@@ -514,20 +549,13 @@ def _moments(rs: Sequence[float]) -> tuple[float, float, float]:
     return sd, skew, kurt
 
 
-def _evidence(results: Sequence[JudgedResult], name: str) -> Mapping[str, object] | None:
-    return next((r.evidence[name] for r in results if name in r.evidence), None)
-
-
 def _claim(rule: StepRule, spec: StudySpec) -> Step:
     if spec.claim is not None and spec.claim.edge.strip():
         return Step(rule, "passed", f"claims {spec.claim.edge.strip()}")
     return Step(rule, "failed", "the study names no claim")
 
 
-def _random_entries(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "random_entries")
-    if found is None:
-        return Step(rule, "not_run", "no result in the study ran random entries")
+def _random_entries(rule: StepRule, spec: StudySpec, found: Mapping[str, object]) -> Step:
     ratio, p = _decimal(found.get("edge_ratio")), _decimal(found.get("p"))
     if ratio is None or p is None:
         return Step(rule, "failed", "random_entries carries no edge_ratio and p as text")
@@ -536,10 +564,7 @@ def _random_entries(rule: StepRule, spec: StudySpec, results: Sequence[JudgedRes
     return Step(rule, "passed" if good else "failed", detail)
 
 
-def _cost_stress(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "cost_stress")
-    if found is None:
-        return Step(rule, "not_run", "no result in the study stressed its costs")
+def _cost_stress(rule: StepRule, spec: StudySpec, found: Mapping[str, object]) -> Step:
     multiplier, expectancy = _decimal(found.get("multiplier")), _decimal(found.get("expectancy_r"))
     if multiplier is None or expectancy is None:
         return Step(rule, "failed", "cost_stress carries no multiplier and expectancy_r as text")
@@ -550,16 +575,53 @@ def _cost_stress(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult
     return Step(rule, "passed" if expectancy > 0 else "failed", detail)
 
 
-def _walk_forward(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "walk_forward")
-    if found is None:
-        return Step(rule, "not_run", "no walk-forward result in the study")
+def _walk_forward(rule: StepRule, spec: StudySpec, found: Mapping[str, object]) -> Step:
     efficiency = _decimal(found.get("efficiency"))
     if efficiency is None:
         return Step(rule, "failed", "walk_forward carries no efficiency as text")
     need = spec.preset.walk_forward_efficiency
     good = efficiency >= need
     return Step(rule, "passed" if good else "failed", f"efficiency {efficiency} of {need} needed")
+
+
+_MARKET_EVIDENCE: Final[
+    Mapping[str, tuple[Callable[[StepRule, StudySpec, Mapping[str, object]], Step], str]]
+] = {
+    "random_entries": (_random_entries, "no result in the study ran random entries"),
+    "cost_stress": (_cost_stress, "no result in the study stressed its costs"),
+    "walk_forward": (_walk_forward, "no result in the study walked forward"),
+}
+"""The steps a market answers on its own evidence: each one's reader, and its words for no row."""
+_WORST_FIRST: Final[tuple[StepOutcome, ...]] = ("failed", "not_run", "passed")
+
+
+def _spans(windows: set[Window | None]) -> str:
+    return ", ".join(
+        "no stated window" if window is None else f"{window[0]} to {window[1]}"
+        for window in sorted(windows, key=str)
+    )
+
+
+def _market_step(
+    rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult], market: str
+) -> Step:
+    """`market`'s step on its own rows, over every window its trades ran. A row over another
+    window answers nothing, and of several rows the worst decides, so a second friendly run
+    cannot hide a failing one."""
+    read, absent = _MARKET_EVIDENCE[rule.name]
+    rows = [row for r in results if (row := _object(r.evidence.get(rule.name, {}), market))]
+    if not rows:
+        return Step(rule, "not_run", f"{absent} on {market}")
+    traded = {r.window for r in results if any(t.market == market for t in r.trades)}
+    ran = {_window(row) for row in rows}
+    if traded - ran:
+        return Step(
+            rule,
+            "not_run",
+            f"{market}'s evidence ran over {_spans(ran)}, its trades over {_spans(traded - ran)}",
+        )
+    steps = [read(rule, spec, row) for row in rows if _window(row) in traded]
+    return min(steps, key=lambda step: _WORST_FIRST.index(step.outcome))
 
 
 def _monte_carlo(rule: StepRule, spec: StudySpec, rs: Sequence[float]) -> Step:
@@ -572,7 +634,7 @@ def _monte_carlo(rule: StepRule, spec: StudySpec, rs: Sequence[float]) -> Step:
 
 
 def _pbo(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "pbo")
+    found = next((r.evidence["pbo"] for r in results if "pbo" in r.evidence), None)
     if found is None:
         return Step(rule, "not_run", "no result in the study measured the family's PBO")
     value = _decimal(found.get("value"))
@@ -726,7 +788,7 @@ def judge(
     tried = max(effective_tries(counted, threshold), 1)
     named = spec.markets if spec.markets is not None else ()
     traded = {t.market for r in results for t in r.trades}
-    markets = sorted(set(named) or (traded | {m for r in results for m in r.markets}))
+    markets = sorted(set(named) | traded | {m for r in results for m in r.markets})
     trades = {m: [t.r for r in results for t in r.trades if t.market == m] for m in markets}
     k = spec.k if spec.estimator == "fixed" else estimate_k(trades, spec.k)
     shrunk = {s.market: s for s in shrink(trades, k)}
@@ -761,6 +823,7 @@ def judge(
         versions={**versions, "judge": judge_version, "tester": testers[0]},
         counted=tuple(c.label for c in counted),
         costs_uncalibrated=any(r.costs_uncalibrated for r in results),
+        written_late=spec.written_late,
     )
 
 
@@ -776,12 +839,8 @@ def _chain(
         match rule.name:
             case "claim":
                 steps.append(_claim(rule, spec))
-            case "random_entries":
-                steps.append(_random_entries(rule, spec, results))
-            case "cost_stress":
-                steps.append(_cost_stress(rule, spec, results))
-            case "walk_forward":
-                steps.append(_walk_forward(rule, spec, results))
+            case "random_entries" | "cost_stress" | "walk_forward":
+                steps.append(_market_step(rule, spec, results, shrunk.market))
             case "monte_carlo":
                 steps.append(_monte_carlo(rule, spec, rs))
             case "pbo":
