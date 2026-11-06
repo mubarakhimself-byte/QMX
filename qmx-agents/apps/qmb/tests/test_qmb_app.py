@@ -208,7 +208,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.4"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.5"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1

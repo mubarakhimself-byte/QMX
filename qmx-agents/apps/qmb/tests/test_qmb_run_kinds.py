@@ -277,32 +277,62 @@ def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> N
 
     folds = counted(world, walk["run_id"])
     assert [r["run_id"].rsplit("/", 1)[1] for r in folds] == ["fold-1", "fold-2", "fold-3"]
-    assert walk["measures"]["walk_forward"]["efficiency"] == "0.0000"
+    assert {m: row["efficiency"] for m, row in walk["measures"]["walk_forward"].items()} == {
+        "fx.eurusd": "0.0000"
+    }
     assert [(f["pick"], f["out_of_sample_trades"]) for f in report(world, walked)["folds"]] == [
         (None, 0),
         (None, 0),
         ("cell-02", 4),
     ]
-    assert robust["measures"]["cost_stress"]["multiplier"] == "1.5"
+    assert report(world, walked)["walk_forward_unmeasured"] == (
+        "no fold had a candidate with an in-sample Sharpe to pick on metal.xauusd"
+    )
     assert robust["measures"]["random_entries"] == {
-        "edge_ratio": "0.4833",
-        "p": "0.6667",
-        "trades": 8,
-        "horizon_bars": 20,
-        "resamples": 50,
+        "fx.eurusd": {
+            "edge_ratio": "0.4048",
+            "p": "0.7059",
+            "trades": 6,
+            "horizon_bars": 20,
+            "resamples": 50,
+            "window": MARCH["window"],
+        },
+        "metal.xauusd": {
+            "edge_ratio": "1.0572",
+            "p": "0.7255",
+            "trades": 2,
+            "horizon_bars": 20,
+            "resamples": 50,
+            "window": MARCH["window"],
+        },
     }
     assert robust["measures"]["cost_stress"] == {
-        "multiplier": "1.5",
-        "expectancy_r": "-0.3059",
-        "base_expectancy_r": "-0.2825",
-        "trades": 8,
+        "fx.eurusd": {
+            "multiplier": "1.5",
+            "expectancy_r": "-0.5657",
+            "base_expectancy_r": "-0.5435",
+            "trades": 6,
+            "window": MARCH["window"],
+        },
+        "metal.xauusd": {
+            "multiplier": "1.5",
+            "expectancy_r": "0.4733",
+            "base_expectancy_r": "0.5006",
+            "trades": 2,
+            "window": MARCH["window"],
+        },
     }
     assert counted(world, robust["run_id"]) == []
-    judged = fields(world.store, verdict["result"]["verdict_id"])["per_market"][0]
-    assert [(s["name"], s["outcome"], s["detail"]) for s in judged["steps"]][1:4] == [
-        ("random_entries", "failed", "entry edge ratio 0.4833 at p 0.6667"),
-        ("cost_stress", "failed", "expectancy -0.3059R at 1.5x costs"),
+    eurusd, xauusd = fields(world.store, verdict["result"]["verdict_id"])["per_market"]
+    assert [(s["name"], s["outcome"], s["detail"]) for s in eurusd["steps"]][1:4] == [
+        ("random_entries", "failed", "entry edge ratio 0.4048 at p 0.7059"),
+        ("cost_stress", "failed", "expectancy -0.5657R at 1.5x costs"),
         ("walk_forward", "failed", "efficiency 0.0000 of 0.5 needed"),
+    ]
+    assert [(s["name"], s["outcome"], s["detail"]) for s in xauusd["steps"]][1:4] == [
+        ("random_entries", "failed", "entry edge ratio 1.0572 at p 0.7255"),
+        ("cost_stress", "passed", "expectancy 0.4733R at 1.5x costs"),
+        ("walk_forward", "not_run", "no result in the study walked forward on metal.xauusd"),
     ]
 
 
@@ -323,9 +353,11 @@ def test_one_random_entry_set_is_too_few_to_measure_a_p(world: World) -> None:
     stressed, robust = job(world, "robustness", resamples=1)
 
     assert "random_entries" not in robust["measures"]
-    assert report(world, stressed)["unmeasured"]["random_entries"] == (
-        "robustness: horizon_bars is a whole number above zero and resamples one of 20 or more"
-    )
+    reason = "robustness: horizon_bars is a whole number above zero and resamples one of 20 or more"
+    assert report(world, stressed)["unmeasured"]["random_entries"] == {
+        "fx.eurusd": reason,
+        "metal.xauusd": reason,
+    }
 
 
 def test_an_optimize_run_counts_every_candidate_and_measures_its_pbo(world: World) -> None:

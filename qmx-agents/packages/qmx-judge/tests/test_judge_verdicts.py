@@ -70,6 +70,7 @@ def result(
         for market, rs in sorted(trades.items())
         for day, r in enumerate(rs)
     )
+    rows = {name: dict.fromkeys(trades, row) for name, row in PASSING_ROWS.items()}
     return JudgedResult(
         result_id=result_id or f"result-{n}",
         run_id=run_id(n),
@@ -80,11 +81,7 @@ def result(
         trades=() if zero else found,
         markets=tuple(sorted(trades)),
         compiled_fp="fp1:sha256:unit",
-        evidence={
-            name: {market: row for market in trades} for name, row in PASSING_ROWS.items()
-        }
-        if evidence is None
-        else evidence,
+        evidence=rows if evidence is None else evidence,
     )
 
 

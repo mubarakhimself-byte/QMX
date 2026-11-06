@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from qmf.core import fingerprint_bytes
-from qmx_host.host import LanderLibrary, register_checkers  # pyright: ignore[reportMissingTypeStubs]
+from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
+    LanderLibrary,
+    register_checkers,
+)
 from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import MAIN, Principal
 from qmx_library.store import Store

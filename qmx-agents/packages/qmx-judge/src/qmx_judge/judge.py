@@ -10,7 +10,8 @@ the window its trades ran, is `not_run`, and a verdict with a step not run is `i
 pass: the judge passes only what it checked.
 
 A study version made after the results' first try was written knowing them. The door counts it as
-a try, and it judges with the `spread` estimator and `FALLBACK_K`, whatever k it names (`late_spec`).
+a try, and it judges with the `spread` estimator and `FALLBACK_K`, whatever k it names
+(`late_spec`).
 
 A verdict records the judge, checker and tester versions (WF-12), and its item is named by its
 inputs, so judging the same results again finds the same verdict and a new judge version lands a
