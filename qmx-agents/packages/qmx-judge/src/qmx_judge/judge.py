@@ -766,25 +766,31 @@ def _pull_table(
     family: Sequence[JudgedResult],
     enough: int,
 ) -> dict[str, list[Decimal]]:
-    """The trades the shrink reads. A market reads its judged trades when they are `enough` to judge
-    it on, and otherwise the longest record the same code has of it in `family`, so what an agent
-    chooses to judge cannot weaken the pull. Same code means an equal `compiled_fp`, else an equal
-    `unit`, or a record holding every judged trade. Reruns of one market are never added together."""
+    """The trades the shrink reads, so that what an agent chooses to judge cannot weaken the pull.
+    A market reads the longest record the same code has of it in `family`. Its judged trades stand
+    only when they are `enough` to judge it on and are not a slice of that record from this tester.
+    Same code means an equal `compiled_fp`, else an equal `unit`, or a record holding every judged
+    trade. Reruns of one market are never added together."""
     table = {market: rs for market, rs in trades.items() if rs}
     code = {r.compiled_fp or r.unit for r in results}
-    judged = {t for r in results for t in r.trades}
+    testers = {r.tester for r in results}
+    judged = [t for r in results for t in r.trades]
     for other in family:
         if (other.compiled_fp or other.unit) not in code and not (
-            judged and judged <= set(other.trades)
+            judged and set(judged) <= set(other.trades)
         ):
             continue
-        found: dict[str, list[Decimal]] = {}
+        held: dict[str, list[Trade]] = {}
         for trade in other.trades:
-            if len(trades.get(trade.market, ())) < enough:
-                found.setdefault(trade.market, []).append(trade.r)
-        for market, rs in found.items():
-            if len(rs) > len(table.get(market, ())):
-                table[market] = rs
+            held.setdefault(trade.market, []).append(trade)
+        for market, rows in held.items():
+            low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
+            a_slice = other.tester in testers and all(
+                low <= t.closed_at <= high for t in judged if t.market == market
+            )
+            thin = len(trades.get(market, ())) < enough
+            if (thin or a_slice) and len(rows) > len(table.get(market, ())):
+                table[market] = [t.r for t in rows]
     return table
 
 

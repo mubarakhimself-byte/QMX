@@ -246,6 +246,64 @@ def test_a_few_trades_in_each_other_market_do_not_switch_the_pull_off(tmp_path: 
     assert (markets["fx.m03"]["trades"], markets["fx.m03"]["outcome"]) == (3, "too_thin")
     assert "fx.m03 is too thin to judge, 3 trades of the 100 needed" in answer["says"]
 
+    after_the_record = [
+        {**t, "closed_at": int(str(t["closed_at"])) + 150 * DAY} for t in first_days
+    ]
+    outside = world.land(
+        after_the_record, markets=sorted({str(t["market_id"]) for t in first_days})
+    )
+    _, markets = verdict_of(world, results=[alone, outside])
+    assert markets["fx.m02"]["shrunk_r"] == "0.0558"
+
+
+def test_the_best_slice_of_a_record_reads_the_record_and_a_later_run_reads_its_own(
+    tmp_path: Path,
+) -> None:
+    world = landed_world(tmp_path)
+    alone = world.land([t for t in world.trades if t["market_id"] == "fx.m02"], markets=["fx.m02"])
+    others = sorted({str(t["market_id"]) for t in world.trades} - {"fx.m02"})
+    best_hundred = [
+        t
+        for market in others
+        for t in sorted(
+            (t for t in world.trades if t["market_id"] == market),
+            key=lambda t: -float(str(t["r"])),
+        )[:100]
+    ]
+    picked = world.land(best_hundred, markets=others)
+
+    answer, markets = verdict_of(world, results=[alone, picked])
+
+    assert (markets["fx.m02"]["raw_r"], markets["fx.m02"]["shrunk_r"]) == ("0.2193", "0.0558")
+    assert (markets["fx.m03"]["trades"], answer["overall"]) == (100, "fail")
+
+    later = world.land(
+        [
+            {
+                **t,
+                "closed_at": int(str(t["closed_at"])) + 150 * DAY,
+                "r": f"{-float(str(t['r'])):.4f}",
+            }
+            for t in world.trades
+        ]
+    )
+    _, markets = verdict_of(world, results=[later])
+    assert markets["fx.m02"]["raw_r"] == "-0.2193"
+
+    whole_a = trades_of("fx.a", 3)
+    only = JudgedResult.read("result-1", landed_fields(1, {}, MARCH), whole_a)
+    old_tester = {**landed_fields(2, {}, MARCH), "tester": {"app": "qmb", "version": "0.9.0"}}
+    verdict = judge(
+        parse_spec(WRITTEN),
+        study="study-v1",
+        results=[only],
+        tries=[{"kind": "run", "state": "opened", "run_id": run_id(1), "family": "unit-v1"}],
+        family=[JudgedResult.read("result-2", old_tester, whole_a * 2)],
+        principal="agent:chat",
+        versions={},
+    )
+    assert verdict.per_market[0].fields()["weight"] == "0.6000"
+
 
 def test_a_new_version_pays_the_pull_only_if_it_trades_the_same_trades(tmp_path: Path) -> None:
     world = landed_world(tmp_path)
