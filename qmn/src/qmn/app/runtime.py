@@ -508,7 +508,11 @@ def unit_symbols(deployment: Deployment) -> dict[str, str]:
         entry = cast("Mapping[str, object]", item)
         market = entry.get("market_id")
         reference = entry.get("instrument_ref")
-        symbol = reference.get("symbol") if isinstance(reference, Mapping) else None
+        symbol = (
+            cast("Mapping[str, object]", reference).get("symbol")
+            if isinstance(reference, Mapping)
+            else None
+        )
         if isinstance(market, str) and isinstance(symbol, str):
             found[market] = symbol
     return found
@@ -2891,6 +2895,7 @@ class Runtime:
                 and other.account_id == deployment.account_id
                 and other.lane == "live"
                 and unit is not None
+                and (hosted.phase is not Phase.STOPPED or unit.venue_open())
             ):
                 shared = sorted(set(unit.traded) & set(deployment.markets))
                 if shared:
