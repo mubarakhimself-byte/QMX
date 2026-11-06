@@ -40,6 +40,7 @@ from qmn.app.runtime import Blocked, Phase, Placed, Runtime, Ticket
 from qmn.app.server import DEFINITIONS, CTraderDoor, Node, open_node
 from qmn.app.store import Json, Store
 from qmn.venue import order_tags
+from qmn.venue.conformance import submit_not_ready_refusal
 from qmn.venue.ctrader_account import Codec, CTraderVenue, Wire
 
 KEYS = json.dumps(
@@ -124,9 +125,27 @@ class FakeCTrader:
         default_factory=dict[int, tuple[Decimal, Decimal]]
     )
     opened: int = 0
+    refuse_sockets: int = 0
+    """How many coming connects the broker refuses."""
+    stop_on_later_event: bool = False
+    """A fill carries no stop, and the stop follows on its own event."""
+    close_error: str | None = None
+    """A close is answered by this ``ProtoOAErrorRes``, not an order error."""
+    stop_slip: Decimal = Decimal(0)
+    """How far past its level a stop fills."""
+    history_silent: bool = False
+    deals: dict[int, list[dict[str, object]]] = field(
+        default_factory=dict[int, list[dict[str, object]]]
+    )
+    trendbars: dict[int, list[dict[str, object]]] = field(
+        default_factory=dict[int, list[dict[str, object]]]
+    )
+    """The ``ProtoOATrendbar`` rows the broker answers for each symbol."""
     _out: list[bytes] = field(default_factory=list[bytes])
     _next: int = 9000
     _open: bool = False
+    _dropped: bool = False
+    _at_ms: int = 1_742_500_000_000
 
     SYMBOLS: ClassVar[dict[str, tuple[int, int, int, int]]] = {
         "EURUSD": (1, 5, 4, 10_000_000),
@@ -135,12 +154,24 @@ class FakeCTrader:
 
     def connect(self) -> Result[Wire]:
         self.opened += 1
+        if self.refuse_sockets:
+            self.refuse_sockets -= 1
+            return submit_not_ready_refusal()
         self._open = True
+        self._dropped = False
         return Ok(self)
+
+    def drop_socket(self) -> None:
+        """The connection is cut: the wire refuses, and what the broker says is lost until the
+        next connect."""
+        self._dropped = True
+        self._out.clear()
 
     # --- the wire ---
 
     def send(self, envelope: bytes, /) -> Result[None]:
+        if self._dropped:
+            return submit_not_ready_refusal()
         frame = self.codec.decode(envelope)
         assert not isinstance(frame, TypedRefusal), frame
         name, body = frame.value.name, dict(frame.value.body)
@@ -151,12 +182,16 @@ class FakeCTrader:
         return Ok(None)
 
     def receive(self, wait_s: float, /) -> Result[bytes | None]:
+        if self._dropped:
+            return submit_not_ready_refusal()
         return Ok(self._out.pop(0) if self._out else None)
 
     def close(self) -> None:
         self._open = False
 
     def _say(self, name: str, values: Mapping[str, object], msg_id: str = "") -> None:
+        if self._dropped:
+            return
         encoded = self.codec.encode(name, values, msg_id)
         assert not isinstance(encoded, TypedRefusal), encoded
         self._out.append(encoded.value)
@@ -264,6 +299,49 @@ class FakeCTrader:
             msg_id,
         )
 
+    def _on_ProtoOADealListByPositionIdReq(self, msg_id: str, body: dict[str, object]) -> None:
+        if self.history_silent:
+            return
+        self._say(
+            "ProtoOADealListByPositionIdRes",
+            {
+                "ctidTraderAccountId": CTID,
+                "deal": self.deals.get(int(str(body["positionId"])), []),
+                "hasMore": False,
+            },
+            msg_id,
+        )
+
+    def _on_ProtoOADealListReq(self, msg_id: str, body: dict[str, object]) -> None:
+        if self.history_silent:
+            return
+        start, end = int(str(body["fromTimestamp"])), int(str(body["toTimestamp"]))
+        found = [
+            deal
+            for deals in self.deals.values()
+            for deal in deals
+            if start <= cast(int, deal["executionTimestamp"]) <= end
+        ]
+        self._say(
+            "ProtoOADealListRes",
+            {"ctidTraderAccountId": CTID, "deal": found, "hasMore": False},
+            msg_id,
+        )
+
+    def _on_ProtoOAGetTrendbarsReq(self, msg_id: str, body: dict[str, object]) -> None:
+        symbol = int(str(body["symbolId"]))
+        self._say(
+            "ProtoOAGetTrendbarsRes",
+            {
+                "ctidTraderAccountId": CTID,
+                "period": body["period"],
+                "symbolId": symbol,
+                "trendbar": self.trendbars.get(symbol, []),
+                "hasMore": False,
+            },
+            msg_id,
+        )
+
     def _on_ProtoOANewOrderReq(self, msg_id: str, body: dict[str, object]) -> None:
         symbol = int(str(body["symbolId"]))
         side = str(body["tradeSide"])
@@ -303,13 +381,22 @@ class FakeCTrader:
                 "positionId": held.position_id,
             }
         ]
+        self.deals[held.position_id] = [self._deal(held, price, held.position_id)]
         if self.lose_answers:
             self.lose_answers -= 1
             return
+        later = held.stop if self.stop_on_later_event else None
+        if later is not None:
+            held.stop = None
         for kind in ("ORDER_ACCEPTED", "ORDER_FILLED"):
             self._execution(kind, held, "POSITION_STATUS_OPEN", price, "MARKET", msg_id)
+        if later is not None:
+            self.move_stop(held, later)
 
     def _on_ProtoOAClosePositionReq(self, msg_id: str, body: dict[str, object]) -> None:
+        if self.close_error is not None:
+            self._error(msg_id, self.close_error)
+            return
         held = self.held.pop(int(str(body["positionId"])), None)
         if held is None:
             self._say(
@@ -353,6 +440,9 @@ class FakeCTrader:
         held.stop = levels.get("stopLoss", held.stop)
         held.target = levels.get("takeProfit", held.target)
         self.amended.append(levels)
+        self._replaced(held, msg_id)
+
+    def _replaced(self, held: Held, msg_id: str) -> None:
         self._say(
             "ProtoOAExecutionEvent",
             {
@@ -370,10 +460,29 @@ class FakeCTrader:
 
     # --- what the broker says on its own ---
 
+    def move_stop(self, held: Held, stop: Decimal | None) -> None:
+        """The stop moves outside the node, such as by his hand in cTrader."""
+        held.stop = stop
+        self._replaced(held, "")
+
+    def fire_stop(self, held: Held) -> None:
+        del self.held[held.position_id]
+        slip = -self.stop_slip if held.side == "BUY" else self.stop_slip
+        self._execution(
+            "ORDER_FILLED",
+            held,
+            "POSITION_STATUS_CLOSED",
+            cast(Decimal, held.stop) + slip,
+            "STOP_LOSS_TAKE_PROFIT",
+            "",
+            closing=True,
+        )
+
     def quote(self, symbol: str, bid: Decimal, ask: Decimal, at_ms: int) -> None:
         """A spot on ``symbol``; a held stop the quote crosses fires at the stop."""
         ident = self.SYMBOLS[symbol][0]
         self.quotes[ident] = (bid, ask)
+        self._at_ms = at_ms
         for held in [h for h in self.held.values() if h.symbol_id == ident and h.stop is not None]:
             crossed = (
                 bid <= cast(Decimal, held.stop)
@@ -381,16 +490,7 @@ class FakeCTrader:
                 else ask >= cast(Decimal, held.stop)
             )
             if crossed:
-                del self.held[held.position_id]
-                self._execution(
-                    "ORDER_FILLED",
-                    held,
-                    "POSITION_STATUS_CLOSED",
-                    cast(Decimal, held.stop),
-                    "STOP_LOSS_TAKE_PROFIT",
-                    "",
-                    closing=True,
-                )
+                self.fire_stop(held)
         self._say(
             "ProtoOASpotEvent",
             {
@@ -421,6 +521,21 @@ class FakeCTrader:
             position["takeProfit"] = float(held.target)
         return position
 
+    def _deal(self, held: Held, price: Decimal, ident: int) -> dict[str, object]:
+        return {
+            "dealId": ident,
+            "orderId": ident,
+            "positionId": held.position_id,
+            "volume": held.volume,
+            "filledVolume": held.volume,
+            "symbolId": held.symbol_id,
+            "createTimestamp": self._at_ms,
+            "executionTimestamp": self._at_ms,
+            "executionPrice": float(price),
+            "tradeSide": held.side,
+            "dealStatus": "FILLED",
+        }
+
     def _execution(
         self,
         kind: str,
@@ -434,36 +549,40 @@ class FakeCTrader:
     ) -> None:
         self._next += 1
         trade = {"symbolId": held.symbol_id, "volume": held.volume, "tradeSide": held.side}
+        order: dict[str, object] = {
+            "orderId": self._next,
+            "tradeData": trade,
+            "orderType": order_type,
+            "orderStatus": "ORDER_STATUS_FILLED"
+            if kind == "ORDER_FILLED"
+            else "ORDER_STATUS_ACCEPTED",
+            "clientOrderId": "" if closing else held.client_order_id,
+            "closingOrder": closing,
+            "positionId": held.position_id,
+        }
+        deal = self._deal(held, price, self._next)
+        if closing:
+            self.orders.setdefault(held.position_id, []).append(order)
+            self.deals.setdefault(held.position_id, []).append(
+                {
+                    **deal,
+                    "closePositionDetail": {
+                        "entryPrice": float(held.price),
+                        "grossProfit": 0,
+                        "swap": 0,
+                        "commission": 0,
+                        "balance": 1_000_000,
+                    },
+                }
+            )
         self._say(
             "ProtoOAExecutionEvent",
             {
                 "ctidTraderAccountId": CTID,
                 "executionType": kind,
                 "position": self._position(held, status),
-                "order": {
-                    "orderId": self._next,
-                    "tradeData": trade,
-                    "orderType": order_type,
-                    "orderStatus": "ORDER_STATUS_FILLED"
-                    if kind == "ORDER_FILLED"
-                    else "ORDER_STATUS_ACCEPTED",
-                    "clientOrderId": "" if closing else held.client_order_id,
-                    "closingOrder": closing,
-                    "positionId": held.position_id,
-                },
-                "deal": {
-                    "dealId": self._next,
-                    "orderId": self._next,
-                    "positionId": held.position_id,
-                    "volume": held.volume,
-                    "filledVolume": held.volume,
-                    "symbolId": held.symbol_id,
-                    "createTimestamp": 1_742_500_000_000,
-                    "executionTimestamp": 1_742_500_000_000,
-                    "executionPrice": float(price),
-                    "tradeSide": held.side,
-                    "dealStatus": "FILLED",
-                },
+                "order": order,
+                "deal": deal,
             },
             msg_id,
         )
