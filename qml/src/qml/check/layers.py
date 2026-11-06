@@ -17,7 +17,7 @@ from typing import Final, cast
 
 from qmf.core.refusal import is_refusal
 
-from qml.blocks.api import EntryFace, FaceProblem, OutputType, parse_entry
+from qml.blocks.api import EntryFace, FaceProblem, Mirroring, OutputType, parse_entry
 from qml.catalogue.loader import block_fingerprint
 from qml.check.result import (
     AGENT_BANNED_ATTRIBUTES,
@@ -46,7 +46,7 @@ from qml.unit.model import (
 )
 from qml.unit.parse import Problem, ProblemKind
 
-__all__ = ["Found", "check_block", "check_layers"]
+__all__ = ["TRADED_SIDES", "Found", "check_block", "check_layers"]
 
 _PLACEHOLDER: Final = "placeholder"  # mock-data-scan: allow (the risk session's origin label)
 _AGENT: Final = "agent"
@@ -275,13 +275,16 @@ def _binding(
         if stream in streams and part in _BAR_FIELDS:
             continue
         if ref not in use.earlier:
+            takes_a_bar = port in ports and ports[port].stream_kind == "bars"
             found.error(
                 "B",
                 ProblemKind.UNKNOWN_INPUT,
                 where,
                 f"{ref} is neither a stream field nor an earlier binding",
-                "feed a stream such as m15.close, or a binding written before this one",
-                _nearest(ref, list(use.earlier)),
+                "feed the whole bar by its stream's name, such as m15"
+                if takes_a_bar
+                else "feed one value such as m15.close, or a binding written before this one",
+                _nearest(ref, list(streams if takes_a_bar else use.earlier)),
             )
     for port in face.inputs:
         if port.stream_kind in _BOUND_PORT_KINDS and port.port not in use.binding.inputs:
@@ -394,6 +397,18 @@ def _shape_refs(unit: Unit, faces: Mapping[str, EntryFace], found: Found) -> Non
                     f"the {side} side mirrors {given.mirror_of.value}, which states no slots",
                     "mirror the other side, and write that side's slots",
                 )
+                continue
+            for slot in other.slots.values():
+                for binding in slot.bindings:
+                    face = faces.get(str(binding.block))
+                    if face is not None and face.mirroring is not Mirroring.SUPPORTED:
+                        found.error(
+                            "B",
+                            ProblemKind.BAD_MIRROR,
+                            _at("/logic", side, "mirror_of"),
+                            f"the {side} side mirrors {binding.block}, which has no mirror image",
+                            "state both sides",
+                        )
     for side, slots in _sides(unit):
         for slot_name, slot in slots.items():
             _combiner(slot, _at("/logic", side.value, "slots", slot_name, "combiner"), found)
@@ -459,6 +474,24 @@ def _percent_looks_whole(unit: Unit, found: Found) -> None:
                 f"{default * 100}% and its range reaches {span.max * 100}%",
                 'if you meant whole percents, divide by 100: one percent is "0.01"',
             )
+
+
+def _cadence_at(unit: Unit, found: Found) -> None:
+    """Warn on an ``at`` beside ``every_closed_trades``: the count runs and the ``at`` does not. A
+    lone ``at`` is the compiler's refusal, because the number would move on the default count and
+    the ``at`` would not run."""
+    for name, spec in unit.numbers.items():
+        cadence = spec.motion.cadence
+        if cadence is None or cadence.at is None or cadence.every_closed_trades is None:
+            continue
+        found.warning(
+            "C",
+            ProblemKind.CADENCE_NOT_BUILT,
+            _at("/numbers", name, "motion", "cadence", "at"),
+            f"{name} moves every {cadence.every_closed_trades} closed trades, and its "
+            f"{cadence.at.value} does not run yet",
+            "drop the at, or read the number as moving on the count alone",
+        )
 
 
 # --- layer D: data levels and calendars ------------------------------------------------
@@ -546,11 +579,13 @@ def _data(
 
 # --- layer E: completeness ---------------------------------------------------------------
 
-_NEEDED: Final[Mapping[Direction, tuple[Side, ...]]] = {
+TRADED_SIDES: Final[Mapping[Direction, tuple[Side, ...]]] = {
     Direction.LONG: (Side.LONG,),
     Direction.SHORT: (Side.SHORT,),
     Direction.BOTH: (Side.LONG, Side.SHORT),
 }
+"""The sides a unit's ``direction`` trades. Layer E wants them stated and the compiler builds only
+them."""
 
 
 def _side_slots(unit: Unit, side: Side) -> Mapping[str, Slot] | None:
@@ -565,7 +600,7 @@ def _complete(unit: Unit, bound: Sequence[tuple[_Use, EntryFace]], found: Found)
         found.error(
             "E", ProblemKind.NO_MARKET, "/markets", "the unit trades no market", "add a market"
         )
-    needed = _NEEDED[unit.direction]
+    needed = TRADED_SIDES[unit.direction]
     for side in (Side.LONG, Side.SHORT):
         given = unit.logic.long if side is Side.LONG else unit.logic.short
         where = _at("/logic", side.value)
@@ -824,6 +859,7 @@ def check_layers(
     found.errors.extend(numbers.errors)
     found.warnings.extend(numbers.warnings)
     _percent_looks_whole(unit, found)
+    _cadence_at(unit, found)
     _data(unit, bound, records, found)
     _complete(unit, bound, found)
     _code(unit, faces, sources, found)

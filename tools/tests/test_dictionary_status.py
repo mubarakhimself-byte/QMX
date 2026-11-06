@@ -33,7 +33,7 @@ def test_qmls_blocks_compute_implemented(capsys: pytest.CaptureFixture[str]) -> 
     code = _script().main([])
 
     lines = capsys.readouterr().out.splitlines()
-    pins = sorted(f"{p.parent.parent.name}@1" for p in _STDLIB.glob("*/1/entry.json"))
+    pins = sorted(f"{p.parent.parent.name}@{p.parent.name}" for p in _STDLIB.glob("*/*/entry.json"))
     assert code == 0
     assert lines == [f"{pin} implemented" for pin in pins]
     assert {

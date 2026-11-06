@@ -309,7 +309,7 @@ class Promoter:
         """Refuse a move Part A's `fold` refuses, before anything reaches the node."""
         mine = [seen.sequence for seen in known if seen.writer == self.lifecycle.writer_id]
         stamped = dataclasses.replace(event, sequence=max(mine, default=-1) + 1)
-        folded = fold([*known, stamped], auto_paper=self.lifecycle.auto_paper())
+        folded = fold([*known, stamped])
         for rejected in folded.rejected:
             if rejected.event.event_id == event.event_id:
                 raise Refused(
@@ -337,7 +337,7 @@ class Promoter:
                 "Name the node's tag and the account id.",
                 status=400,
             )
-        current = fold(known, auto_paper=self.lifecycle.auto_paper()).state(click.key)
+        current = fold(known).state(click.key)
         if current is State.STOPPED:
             raise Refused(
                 "illegal_move",
@@ -412,7 +412,7 @@ class Promoter:
         """Park or retire: record the move, then ask the node to withdraw each deployment his
         clicks put on this market. A market already parked or retired records nothing and asks
         the withdraw again, so a second click finishes a withdraw the node did not answer."""
-        folded = fold(known, auto_paper=self.lifecycle.auto_paper())
+        folded = fold(known)
         current = folded.state(click.key)
         moves = [applied for applied in folded.applied if applied.key == click.key]
         made = event_id(digest)

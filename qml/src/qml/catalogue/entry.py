@@ -32,6 +32,7 @@ from qmf.core.refusal import is_refusal
 
 from qml.blocks.api import (
     ENTRY_SCHEMA,
+    Block,
     FaceProblem,
     Instance,
     Mirroring,
@@ -64,7 +65,7 @@ __all__ = [
     "corpus_problems",
 ]
 
-CHECKER_VERSION: Final[str] = "qml.entry/1 r2"
+CHECKER_VERSION: Final[str] = "qml.entry/1 r3"
 """Bumped by any change that alters a verdict, so a stored status names the checker it met."""
 
 GOLDEN_RELATIVE: Final[Decimal] = Decimal("1e-9")
@@ -74,6 +75,10 @@ GOLDEN_ABSOLUTE: Final[Decimal] = Decimal("1e-12")
 CUT_SAMPLES: Final[int] = 5
 """Starting default: the instants of a golden series where the value from data cut there is
 compared with the value from the full series (QML-01)."""
+
+SETTLE_TOLERANCE: Final[Decimal] = Decimal("1e-9")
+"""Starting default: how near a cold start must come to a long run when the entry records no
+settle length of its own. It is the tolerance ``ema@1`` records (QML-03)."""
 
 
 class Status(StrEnum):
@@ -128,6 +133,12 @@ class ComponentType(StrEnum):
 
 
 _SPECIFIED: Final = ("inputs", "output", "parameters", "warm_up", "transfer", "mirroring")
+_OWN_PROOF: Final = frozenset({EntryOrigin.AGENT, EntryOrigin.HUMAN})
+"""The origins an entry must carry its own proof for. QML's own blocks are held by QML's tests."""
+_SETTLE_REACH: Final = 30
+"""The bars a settle check's long run runs past ``declared``, so the cold run starts later."""
+_WALK_FLOOR: Final = Decimal(50)
+_WICK: Final = Decimal("0.05")
 _TRANSFER_NEEDS_SOURCE: Final = frozenset({Transfer.NATIVE, Transfer.DIRECT})
 _ID: Final = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _PIN: Final = re.compile(r"^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$")
@@ -146,6 +157,13 @@ class EntryProblem:
 
     def as_json(self) -> dict[str, str]:
         return {"where": self.where, "message": self.message, "hint": self.hint}
+
+
+_CODE_STOPPED: Final = EntryProblem(
+    "/code",
+    "this entry's code stopped its own check, by an exit or a raise no check can read",
+    "a block returns a value or raises an ordinary error; remove the exit",
+)
 
 
 @dataclass(slots=True)
@@ -389,9 +407,17 @@ def _golden(value: object, where: str, found: _Found) -> None:
 
 def _settle(value: object, where: str, found: _Found) -> None:
     if _object(value, where, found):
-        bars = cast("Mapping[str, object]", value).get("bars")
+        raw = cast("Mapping[str, object]", value)
+        bars = raw.get("bars")
         if isinstance(bars, bool) or not isinstance(bars, int) or bars < 1:
             found.add(f"{where}/bars", "bars is a whole number of at least 1", "")
+        scales_by, params = raw.get("scales_by"), raw.get("params")
+        if scales_by is not None and (
+            not isinstance(params, Mapping) or scales_by not in cast("Mapping[str, object]", params)
+        ):
+            found.add(
+                f"{where}/scales_by", f"scales_by is one of its params, not {scales_by!r}", ""
+            )
 
 
 def _any_object(value: object, where: str, found: _Found) -> None:
@@ -594,11 +620,12 @@ def _rules(raw: Mapping[str, object], found: _Found) -> None:
                 seen.setdefault(key, i)
 
 
-def check_entry(raw: Mapping[str, object]) -> tuple[EntryProblem, ...]:
+def check_entry(raw: Mapping[str, object], source: bytes | None = None) -> tuple[EntryProblem, ...]:
     """Every problem of one entry, in field order: a field of the wrong shape, a word outside
     the vocabulary, a claim with no evidence. An entry that lacks a field every entry names is
     one problem listing them, and its claims are checked once those are written. An empty
-    answer lets the entry save."""
+    answer lets the entry save. Given its code, an entry that shape passes also answers for a
+    block that has not settled by its declared length (QML-03)."""
     found = _Found()
     lacking = [name for name in _REQUIRED if raw.get(name) is None]
     if lacking:
@@ -611,6 +638,8 @@ def check_entry(raw: Mapping[str, object]) -> tuple[EntryProblem, ...]:
             check(value, f"/{name}", found)
     if not lacking:
         _rules(raw, found)
+    if source is not None and not found.problems:
+        found.problems.extend(_settle_problems(raw, source))
     return tuple(found.problems)
 
 
@@ -755,7 +784,7 @@ def _golden_problems(
             ]
             cuts = [len(closes) * k // (CUT_SAMPLES + 1) for k in range(1, CUT_SAMPLES + 1)]
             unequal = [c for c in cuts if run(closes[: c + 1])[-1] != full[c]]
-        except (KeyError, TypeError, ValueError, ArithmeticError) as error:
+        except Exception as error:
             problems.append(EntryProblem("/golden", f"{name} does not run: {error}", ""))
             continue
         if misses:
@@ -777,6 +806,111 @@ def _golden_problems(
                 )
             )
     return problems
+
+
+def _loaded(raw: Mapping[str, object], source: bytes) -> Block | list[EntryProblem]:
+    """The block ``source`` loads as, after layer F's scan, or why it does not."""
+    pin = f"{raw.get('entry_id')}@{raw.get('version')}"
+    scan = check_block(pin, str(raw.get("origin")), source, "/code")
+    problems = [EntryProblem("/code", p.message, p.hint) for p in scan.errors]
+    if problems:
+        return problems
+    loaded = load(
+        [
+            LockEntry(
+                str(raw.get("entry_id")),
+                cast("int", raw.get("version")),
+                block_fingerprint(source).value,
+            )
+        ],
+        {pin: source},
+    )
+    if isinstance(loaded, tuple):
+        return [EntryProblem("/code", p.message, p.hint) for p in loaded]
+    return loaded.blocks[pin]
+
+
+def _walk(bars: int) -> dict[str, object]:
+    """A fixed seeded walk of closes and whole bars, so a settle check answers the same anywhere."""
+    state, price = 20_261_106, Decimal(100)
+    closes: list[Decimal] = []
+    whole: list[dict[str, object]] = []
+    for i in range(bars):
+        state = (state * 1_103_515_245 + 12_345) % 2**31
+        move = Decimal((state >> 16) % 2_001 - 1_000) / 10_000
+        before, price = price, max(price + move, _WALK_FLOOR)
+        closes.append(price)
+        whole.append(
+            {
+                "time": (i + 1) * 60 * 10**9,
+                "open": before,
+                "high": max(before, price) + _WICK,
+                "low": min(before, price) - _WICK,
+                "close": price,
+                "volume": Decimal(1),
+            }
+        )
+    return {"close": closes, "bars": whole}
+
+
+def _settle_problems(raw: Mapping[str, object], source: bytes) -> list[EntryProblem]:
+    """A block of an origin QML's tests do not hold that a cold start ``declared`` bars back still
+    disagrees with a longer run. ``declared`` is its recorded length, or its warm-up when it records
+    none, so a recursive block that declares nothing answers too. A block that does not load, does
+    not read a series or bars, or raises on this walk answers nothing here: without a golden run
+    it earns no more than specified, and a golden run says it does not run, unless it raises only
+    past that run's last bar, which earns implemented."""
+    if raw.get("origin") not in _OWN_PROOF:
+        return []
+    try:
+        block, face = _loaded(raw, source), parse_entry(json.dumps(raw).encode("utf-8"))
+    except UnicodeDecodeError:
+        return []
+    if isinstance(block, list) or isinstance(face, FaceProblem):
+        return []
+    settle = face.settle
+    params = {**_defaults(raw), **(settle.params if settle is not None else {})}
+    tolerance = settle.tolerance if settle is not None else SETTLE_TOLERANCE
+
+    def last(series: Sequence[object], port: str) -> Decimal | None:
+        instance = block.make(params, {})
+        answer: Decimal | None = None
+        for x in series:
+            answer = _value(instance.update({port: x}))
+        return answer
+
+    try:
+        declared = settle.bars if settle is not None else block.make(params, {}).warm_up_bars
+        port, series = _feed(raw, _walk(declared + _SETTLE_REACH))
+        if not port:
+            return []
+        starts = range(_SETTLE_REACH // 3, _SETTLE_REACH, _SETTLE_REACH // 3)
+        settled = all(
+            _agree(
+                last(series[start : start + declared], port),
+                last(series[: start + declared], port),
+                tolerance,
+            )
+            for start in starts
+        )
+    except Exception:
+        return []
+    if settled:
+        return []
+    return [
+        EntryProblem(
+            "/settle_bars" if settle is None else "/settle_bars/bars",
+            f"{raw.get('entry_id')}@{raw.get('version')} has not settled by bar {declared}: a run "
+            f"started there differs from a long run by more than {tolerance}",
+            "record as settle_bars the bars after which a cold start agrees with a long run",
+        )
+    ]
+
+
+def _agree(cold: Decimal | None, long_run: Decimal | None, tolerance: Decimal) -> bool:
+    if cold is None or long_run is None:
+        return cold is None and long_run is None
+    return abs(cold - long_run) <= tolerance * abs(long_run)
 
 
 def _implementation(
@@ -801,20 +935,13 @@ def _implementation(
     face = parse_entry(json.dumps(raw).encode("utf-8"))
     if isinstance(face, FaceProblem):
         return [EntryProblem(face.where, face.message, "the compiler reads this face")], []
-    scan = check_block(pin, str(raw.get("origin")), source, "/code")
-    problems = [EntryProblem("/code", p.message, p.hint) for p in scan.errors]
-    if problems:
-        return problems, []
-    loaded = load(
-        [LockEntry(str(raw.get("entry_id")), cast("int", raw.get("version")), actual)],
-        {pin: source},
-    )
-    if isinstance(loaded, tuple):
-        return [EntryProblem("/code", p.message, p.hint) for p in loaded], []
-    block = loaded.blocks[pin]
+    block = _loaded(raw, source)
+    if isinstance(block, list):
+        return block, []
     declared = raw.get("golden")
     if not isinstance(declared, Mapping):
-        return [], []
+        needs = raw.get("origin") in _OWN_PROOF
+        return [], ["implementation: golden cases for its cut-against-full run"] if needs else []
     if golden is None:
         return [], ["implementation: the golden cases its entry names"]
     return _golden_problems(raw, lambda params: block.make(params, {}), golden), []
@@ -826,8 +953,22 @@ def compute_status(
     """The status ``raw`` has earned: its own checks, then its machine face, then its code
     (``source``, the bytes of ``block.py``) against its fingerprint, layer F's scan, the loader
     and, when the entry names golden cases, those cases (``golden``, the decoded cases file) and
-    the cut-against-full check over them."""
-    problems = list(check_entry(raw))
+    the cut-against-full check over them.
+
+    Every door that runs an entry's code runs it here, inside a long-lived process, and layer F
+    lets that code raise anything, an exit included, with a name and words that raise when read.
+    So none of it leaves, and it answers refused in fixed words. With no ``source`` no entry's
+    code ran, and whatever rose is not the entry's. An endless loop is not stopped here."""
+    try:
+        return _earned(raw, source, golden)
+    except BaseException:
+        if source is None:
+            raise
+        return Computed(None, (_CODE_STOPPED,), (), "")
+
+
+def _earned(raw: Mapping[str, object], source: bytes | None, golden: object) -> Computed:
+    problems = list(check_entry(raw, source))
     try:
         printed = None if source is None else block_fingerprint(source).value
     except UnicodeDecodeError:

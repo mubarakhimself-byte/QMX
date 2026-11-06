@@ -76,5 +76,13 @@
   "golden": {
     "reference": "talib.MINUS_DI 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "28"
+    },
+    "bars": 580,
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }
