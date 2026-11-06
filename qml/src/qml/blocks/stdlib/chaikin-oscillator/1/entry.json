@@ -98,5 +98,14 @@
   "golden": {
     "reference": "talib.ADOSC 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "fast": "3",
+      "slow": "20"
+    },
+    "bars": 280,
+    "tolerance": "1e-9",
+    "scales_by": "slow"
   }
 }

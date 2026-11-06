@@ -60,5 +60,10 @@
   "golden": {
     "reference": "Heikin-Ashi recursion in numpy, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {},
+    "bars": 22,
+    "tolerance": "1e-9"
   }
 }
