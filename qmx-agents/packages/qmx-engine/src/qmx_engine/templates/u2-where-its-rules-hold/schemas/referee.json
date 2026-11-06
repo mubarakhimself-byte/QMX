@@ -4,7 +4,7 @@
   "properties": {
     "verdict": {
       "type": "object",
-      "required": ["verdict_id", "overall", "says", "raw_tries", "effective_tries", "result_ids", "per_market"],
+      "required": ["verdict_id", "overall", "says", "raw_tries", "effective_tries", "result_ids", "cards", "per_market"],
       "properties": {
         "verdict_id": {"type": "string"},
         "overall": {"enum": ["pass", "fail", "too_thin", "no_trades", "incomplete"]},

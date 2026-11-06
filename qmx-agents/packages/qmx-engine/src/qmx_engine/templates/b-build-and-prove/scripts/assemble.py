@@ -1,9 +1,10 @@
 """The scorecard of one idea: how far it got, the core's verdict, and what waits for his click.
 
 Its inputs are told apart by shape: the sealed spec (`memo_key`), `Ready to test?`'s answer
-(`recorded`), the referee step's `verdict`, the paper card or dead end (`dead_end`), the writer's
-`summary`, and the lineage child's output, nested as `outputs.<node>.main`. A refused spec ends
-at stage `spec` with its problems, a unit
+(`recorded`), the stored verdict (`cards`), the paper card or dead end (`dead_end`), the writer's
+`summary`, and the lineage child's output, nested as `outputs.<node>.main`. The proposal and the
+certificate are the core's own, read from the Library. A refused spec ends at stage `spec` with
+its problems, a unit
 that is not ready at stage `unit` with why, and a judged unit at stage `verdict` with the
 verdict's own words.
 """
@@ -24,7 +25,8 @@ given = json.load(sys.stdin)["in"]
 rows = [v for v in (given if isinstance(given, list) else [given]) if isinstance(v, dict)]
 sealed = next(r for r in rows if "memo_key" in r)
 ready = next((r for r in rows if "recorded" in r), None)
-verdict = next((r["verdict"] for r in rows if isinstance(r.get("verdict"), dict)), None)
+stored = next((r for r in rows if "cards" in r), {"verdict": None, "cards": {}})
+verdict = stored["verdict"]
 card = next((r for r in rows if "dead_end" in r), {"card": None, "dead_end": None})
 prose = next((r for r in rows if "summary" in r), {"summary": ""})
 if not sealed["ok"]:
@@ -46,8 +48,8 @@ print(
             "judge": verdict,
             "card": card["card"],
             "dead_end": card["dead_end"],
-            "proposal": None,
-            "certificate": None,
+            "proposal": stored["cards"].get("proposal-card"),
+            "certificate": stored["cards"].get("death-certificate"),
             "lineage": (child(rows, "lineage") or {}).get("chain"),
             "summary": prose["summary"],
         }

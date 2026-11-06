@@ -1,58 +1,60 @@
 {
   "fail": {
-    "backtest": {
-      "app_id": "qmb",
-      "job": "jobs/backtest.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-fail-backtest",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-fail-backtest",
-          "status": "finished"
+    "verdict": {
+      "unit": "unit-object-fixture",
+      "overall": "fail",
+      "says": "Did not hold by the shipped preset. fx.eurusd fails the cost stress: expectancy -0.04R at 1.5x costs; metal.xauusd fails the cost stress: expectancy -0.02R at 1.5x costs. Behind it: 2 tries, 2 effective.",
+      "raw_tries": 2,
+      "effective_tries": 2,
+      "results": ["result-fixture-backtest", "result-fixture-robustness"],
+      "per_market": [
+        {
+          "market": "fx.eurusd",
+          "outcome": "fail",
+          "trades": 141,
+          "steps": [{"name": "random_entries", "outcome": "passed"}, {"name": "cost_stress", "outcome": "failed"}]
+        },
+        {
+          "market": "metal.xauusd",
+          "outcome": "fail",
+          "trades": 169,
+          "steps": [{"name": "random_entries", "outcome": "passed"}, {"name": "cost_stress", "outcome": "failed"}]
         }
-      }
+      ]
     },
-    "robustness": {
-      "app_id": "qmb",
-      "job": "jobs/robustness.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-fail-robustness",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-fail-robustness",
-          "status": "finished"
-        }
-      }
+    "death-certificate": {
+      "unit": "unit-object-fixture",
+      "verdict": "verdict-fixture-fail",
+      "cause": "costs",
+      "classifier_version": "1"
     }
   },
   "pass": {
-    "backtest": {
-      "app_id": "qmb",
-      "job": "jobs/backtest.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-pass-backtest",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-pass-backtest",
-          "status": "finished"
-        }
-      }
+    "verdict": {
+      "unit": "unit-object-fixture",
+      "overall": "pass",
+      "says": "Holds by the shipped preset. fx.eurusd passes on 141 trades at 0.18R shrunk; metal.xauusd passes on 169 trades at 0.21R shrunk. Behind it: 2 tries, 2 effective.",
+      "raw_tries": 2,
+      "effective_tries": 2,
+      "results": ["result-fixture-backtest", "result-fixture-robustness"],
+      "per_market": [
+        {"market": "fx.eurusd", "outcome": "pass", "trades": 141, "steps": []},
+        {"market": "metal.xauusd", "outcome": "pass", "trades": 169, "steps": []}
+      ]
     },
-    "robustness": {
-      "app_id": "qmb",
-      "job": "jobs/robustness.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-pass-robustness",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-pass-robustness",
-          "status": "finished"
-        }
-      }
+    "baseline-card": {
+      "unit": "unit-object-fixture",
+      "verdict": "verdict-fixture-pass"
+    },
+    "proposal-card": {
+      "subject": "unit-object-fixture",
+      "ask": "paper",
+      "evidence": ["verdict-fixture-pass", "result-fixture-backtest", "result-fixture-robustness"],
+      "verdict": "verdict-fixture-pass",
+      "tries": 2,
+      "preset": "shipped",
+      "placeholders": [],
+      "made_by": "agent:referee-fixture"
     }
   }
 }

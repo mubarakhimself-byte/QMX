@@ -163,12 +163,6 @@ def artifacts(home: Path, type_: str) -> list[Stored]:
     return [s for s in landed(home) if s.kind == "artifact" and s.fields["type"] == type_]
 
 
-def body(home: Path, stored: Stored) -> str:
-    assert stored.blob is not None
-    with LibraryFake.open(home) as library:
-        return library.get_artifact(stored.blob).decode("utf-8")
-
-
 def test_a_proposal_lands_as_one_card_on_the_runs_own_ref_and_moves_nothing(
     tmp_path: Path,
 ) -> None:

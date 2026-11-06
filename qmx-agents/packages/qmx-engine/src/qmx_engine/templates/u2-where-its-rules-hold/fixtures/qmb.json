@@ -1,30 +1,30 @@
 {
   "recorded": {
-    "sweep": {
-      "app_id": "qmb",
-      "job": "jobs/sweep.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-recorded-sweep",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-recorded-sweep",
-          "status": "finished"
-        }
-      }
+    "verdict": {
+      "unit": "unit-object-fixture",
+      "overall": "pass",
+      "says": "Holds by the shipped preset. fx.eurusd fails the try-corrected: the shrunk expectancy does not clear its bar; fx.gbpusd passes on 112 trades at 0.16R shrunk. Behind it: 4 tries, 4 effective.",
+      "raw_tries": 4,
+      "effective_tries": 4,
+      "results": ["result-fixture-sweep", "result-fixture-whatif"],
+      "per_market": [
+        {"market": "fx.eurusd", "outcome": "fail", "trades": 88, "steps": [{"name": "try_corrected", "outcome": "failed"}]},
+        {"market": "fx.gbpusd", "outcome": "pass", "trades": 112, "steps": []}
+      ]
     },
-    "whatif": {
-      "app_id": "qmb",
-      "job": "jobs/whatif.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-recorded-whatif",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-recorded-whatif",
-          "status": "finished"
-        }
-      }
+    "baseline-card": {
+      "unit": "unit-object-fixture",
+      "verdict": "verdict-fixture-contexts"
+    },
+    "proposal-card": {
+      "subject": "unit-object-fixture",
+      "ask": "paper",
+      "evidence": ["verdict-fixture-contexts", "result-fixture-sweep", "result-fixture-whatif"],
+      "verdict": "verdict-fixture-contexts",
+      "tries": 4,
+      "preset": "shipped",
+      "placeholders": [],
+      "made_by": "agent:referee-fixture"
     }
   }
 }

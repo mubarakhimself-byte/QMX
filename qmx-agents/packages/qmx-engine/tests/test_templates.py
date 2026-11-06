@@ -283,7 +283,6 @@ def answers(
         "Label the sampled items the way you would label": recorded(CRYSTALLISE, "sample.json"),
         "You turn his one-line trading idea": recorded(B, "claim.json"),
         "You build one QMX trading unit": recorded(B, "build.json"),
-        "You ask QMX's referee": recorded(B, "referee-fail.json"),
         "You are the writer of QMX's build-and-prove scorecard": recorded(B, "summary.json"),
         "You draft dictionary entries": recorded(U3, "drafts.json"),
     } | (planted or {})
@@ -954,26 +953,24 @@ def test_b_turns_a_sentence_into_a_verdict_and_a_death_certificate(home: Path) -
         "problem_set": card["check"]["problem_set"],
     }
     assert card["judge"]["overall"] == "fail"
-    assert card["certificate"] == {
+    assert {key: value for key, value in card["certificate"].items() if key != "object_id"} == {
         "unit": "unit-object-fixture",
         "verdict": "verdict-fixture-fail",
-        "cause": "behaviour",
+        "cause": "costs",
         "classifier_version": "1",
     }
-    assert card["explanation"].startswith("The unit's edge did not survive its costs")
+    assert card["dead_end"]["verdict"] == "fail"
     assert card["proposal"] is None
     assert [s["stage"] for s in card["lineage"]] == ["unit", "result"]
-    assert "propose" not in ran
-    assert {"backtest", "robustness"}.isdisjoint(ran)
+    assert "paper" not in ran
+    assert {"backtest", "robustness", "referee"}.isdisjoint(ran)
 
 
 def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home: Path) -> None:
-    report, card, ran = scorecard(
-        home, "pass", {"You ask QMX's referee": recorded(B, "referee-pass.json")}
-    )
+    report, card, ran = scorecard(home, "pass")
 
     assert report.status == "passed", report.reason
-    assert card["proposal"] == {
+    assert {key: value for key, value in card["proposal"].items() if key != "object_id"} == {
         "subject": "unit-object-fixture",
         "ask": "paper",
         "evidence": [
@@ -982,13 +979,14 @@ def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home
             "result-fixture-robustness",
         ],
         "verdict": "verdict-fixture-pass",
-        "tries": {"raw": 2, "effective": 2},
-        "why": json.loads(recorded(B, "referee-pass.json"))["verdict"]["says"],
-        "cost": {"qmb_runs": 2},
-        "made_by": card["proposal"]["made_by"],
+        "tries": 2,
+        "preset": "shipped",
+        "placeholders": [],
+        "made_by": "agent:referee-fixture",
     }
+    assert card["card"]["kind"] == "start paper trial"
     assert card["certificate"] is None
-    assert "certify" not in ran
+    assert "dead" not in ran
 
 
 def test_b_tests_nothing_when_the_check_step_had_to_fix_the_saved_unit(home: Path) -> None:
@@ -1024,14 +1022,19 @@ def finished_output(home: Path, report: Any, node_id: str) -> Any:
 
 
 def test_the_referee_step_is_one_brief_and_one_schema_in_every_template_that_asks_it() -> None:
-    for name in ("prompts/referee.md", "schemas/referee.json"):
+    for name in (
+        "prompts/referee.md",
+        "schemas/referee.json",
+        "scripts/hand.py",
+        "scripts/stored.py",
+        "scripts/recorded.py",
+    ):
         copies = {(folder / name).read_bytes() for folder in (B, U1, U2)}
         assert len(copies) == 1, name
 
 
 def test_run_on_every_market_gives_one_row_per_market_under_one_verdict(home: Path) -> None:
-    port = answers(planted={"You ask QMX's referee": recorded(U1, "referee.json")})
-    with fake_service(home, harness=port) as svc:
+    with fake_service(home, harness=answers()) as svc:
         item = svc.drafts.put(U1.name, Bundle.read(U1), 0, caller=OPERATOR).item
         inputs = {**cast(dict[str, Any], find("run-a-unit-on-every-market").test_inputs)}
         inputs["markets"] = ["fx.eurusd", "metal.xauusd", "fx.usdjpy"]
@@ -1048,8 +1051,7 @@ def test_run_on_every_market_gives_one_row_per_market_under_one_verdict(home: Pa
 
 
 def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home: Path) -> None:
-    port = answers(planted={"You ask QMX's referee": recorded(U2, "referee.json")})
-    with fake_service(home, harness=port) as svc:
+    with fake_service(home, harness=answers()) as svc:
         item = svc.drafts.put(U2.name, Bundle.read(U2), 0, caller=OPERATOR).item
         inputs = find("where-a-failed-unit-still-holds").test_inputs
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
@@ -1061,15 +1063,17 @@ def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home:
         ["fx.eurusd"],
         [{"from": 7, "to": 16}],
     )
-    assert {k: out["card"][k] for k in ("subject", "ask", "evidence", "placeholders", "why")} == {
+    assert {k: out["card"][k] for k in ("subject", "ask", "placeholders", "why")} == {
         "subject": "unit-object-fixture",
         "ask": "admit_market",
-        "evidence": ["verdict-fixture-contexts", "result-fixture-sweep", "result-fixture-whatif"],
         "placeholders": {"markets": ["fx.gbpusd"]},
         "why": "the rules hold on fx.gbpusd, with the sessions 7:00 to 16:00 UTC tried and "
-        "counted. Did not hold everywhere. fx.gbpusd holds; fx.eurusd fails the try-corrected "
-        "step. Behind it: 4 tries, 4 effective.",
+        "counted. Holds by the shipped preset. fx.eurusd fails the try-corrected: the shrunk "
+        "expectancy does not clear its bar; fx.gbpusd passes on 112 trades at 0.16R shrunk. "
+        "Behind it: 4 tries, 4 effective.",
     }
+    assert out["card"]["evidence"][0] == out["verdict"]["verdict_id"]
+    assert out["card"]["evidence"][2:] == ["result-fixture-sweep", "result-fixture-whatif"]
 
 
 def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(home: Path) -> None:
@@ -1318,6 +1322,16 @@ def real_u1(
     return real_run(world, U1, inputs, answers(referee=the_real_referee(world, change)))
 
 
+def refusal(world: World, report: Any, node_id: str) -> str:
+    """Why `node_id` failed the run, in the words the run's record keeps."""
+    with Reader.open(world.control.home) as reader:
+        return next(
+            str(e.data["message"])
+            for e in reader.events(report.run_id)
+            if e.kind == "node_failed" and e.data.get("node_id") == node_id
+        )
+
+
 def papers_on_main(world: World, verdict: str) -> list[dict[str, Any]]:
     return [
         dict(world.store.get(OPERATOR, found).fields)
@@ -1326,9 +1340,13 @@ def papers_on_main(world: World, verdict: str) -> list[dict[str, Any]]:
     ]
 
 
-def artifacts_on_the_run(world: World, run_id: str) -> list[str]:
-    views = (world.store.get(OPERATOR, o) for _, o in world.store.heads_on(f"refs/runs/{run_id}"))
-    return sorted(str(view.fields["type"]) for view in views if view.kind == "artifact")
+def papers_a_run_landed(world: World) -> list[str]:
+    """A second paper is an artifact a template's step lands on its run's ref, or a child's."""
+    return [
+        found
+        for kind in ("death-certificate", "proposal-card")
+        for found in world.store.with_field("artifact", "type", kind)
+    ]
 
 
 def judge_one_sweep(world: World) -> dict[str, Any]:
@@ -1359,7 +1377,7 @@ def test_b_real_qmb_real_referee_real_scorecard(
     assert card["certificate"]["verdict"] == card["judge"]["verdict_id"]
     assert card["proposal"] is None
     assert [p["cause"] for p in papers_on_main(world, card["judge"]["verdict_id"])] == ["no_signal"]
-    assert artifacts_on_the_run(world, report.run_id) == ["lineage"]
+    assert papers_a_run_landed(world) == []
     assert [c["toolsets"] for c in port.chats if ":build:" in str(c["title"])] == [
         ("unit", "blocks", "memory")
     ]
@@ -1374,14 +1392,14 @@ def test_a_real_sweep_reaches_the_same_one_paper(
     table = finished["table"]["main"]
     assert [(m["market"], m["outcome"], m["trades"]) for m in table["markets"]] == [
         ("fx.eurusd", "fail", 6),
-        ("metal.xauusd", "incomplete", 2),
+        ("metal.xauusd", "fail", 2),
     ]
     assert table["unjudged"] == []
     assert table["verdict"]["overall"] == "fail"
     assert [p["cause"] for p in papers_on_main(world, table["verdict"]["verdict_id"])] == [
         "no_signal"
     ]
-    assert artifacts_on_the_run(world, report.run_id) == []
+    assert papers_a_run_landed(world) == []
 
 
 def test_a_failed_cost_step_lands_cause_costs(world: World, judged_on_a_small_record: None) -> None:
@@ -1447,9 +1465,8 @@ def test_a_forged_id_naming_another_units_verdict_is_refused(
     report, finished = real_u1(world, lambda said: {**said, "verdict_id": theirs, "cards": {}})
 
     assert report.status == "failed"
-    assert report.reason == (
-        f"node stored failed: qmx_failure: the verdict {theirs} judged another-unit, and this run "
-        f"tested {world.dummy}"
+    assert refusal(world, report, "stored") == (
+        f"the verdict {theirs} judged another-unit, and this run tested {world.dummy}"
     )
     assert "table" not in finished
 
@@ -1458,6 +1475,7 @@ def test_a_true_verdict_of_an_earlier_run_is_refused(
     world: World, judged_on_a_small_record: None
 ) -> None:
     earlier = judge_one_sweep(world)
+    its_results = world.store.get(OPERATOR, earlier["verdict_id"]).fields["results"]
 
     report, finished = real_u1(
         world,
@@ -1465,13 +1483,14 @@ def test_a_true_verdict_of_an_earlier_run_is_refused(
             **said,
             "verdict_id": earlier["verdict_id"],
             "cards": earlier["cards"],
-            "result_ids": said["result_ids"],
+            "result_ids": its_results,
         },
     )
 
     assert report.status == "failed"
-    assert report.reason is not None
-    assert "judged other results than the referee named" in report.reason
+    assert refusal(world, report, "stored") == (
+        f"the verdict {earlier['verdict_id']} judged other runs than this run's"
+    )
     assert "table" not in finished
 
 

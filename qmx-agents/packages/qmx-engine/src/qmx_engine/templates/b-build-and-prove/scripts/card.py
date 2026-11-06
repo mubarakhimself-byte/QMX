@@ -1,26 +1,14 @@
 """Funnel stage 12: a passing verdict gets a "start paper trial?" card for his click, with the
 demo-only minimal risk profile (fixed small r, tighten-only). A `fail` or `no_trades` verdict, the
 two the judge certifies dead, becomes a dead-end row with the judge's outcome, its plain words and
-the tries behind it, kept for R6. `incomplete` and `too_thin` get neither: the verdict waits. The
-`judge` block's, decided by script; the block hands on its child's outputs nested, so the verdict
-is found by its key. Nothing starts here; the trial is his act.
+the tries behind it, kept for R6. `incomplete` and `too_thin` get neither: the verdict waits. Its
+input is the stored verdict the rule routed. Nothing starts here; the trial is his act.
 """
 
 import json
 import sys
 
-
-def judged(value):
-    if isinstance(value, dict):
-        if isinstance(value.get("verdict"), dict):
-            return value["verdict"]
-        value = list(value.values())
-    if isinstance(value, list):
-        return next((found for v in value if (found := judged(v)) is not None), None)
-    return None
-
-
-verdict = judged(json.load(sys.stdin)["in"])
+verdict = json.load(sys.stdin)["in"]["verdict"]
 if verdict["overall"] == "pass":
     card = {
         "kind": "start paper trial",
