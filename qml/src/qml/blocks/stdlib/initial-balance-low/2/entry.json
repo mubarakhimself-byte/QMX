@@ -1,0 +1,103 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "initial-balance-low",
+  "version": 2,
+  "family": "market-profile",
+  "aliases": [
+    "IB low",
+    "initial balance bottom"
+  ],
+  "same_word_as": [
+    "opening-range@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The low of the bars that close within the first ib_seconds of the session, given once that window is complete.",
+  "boundaries": "Missing until the first bar that closes at or after the window's end, and for the whole session when no bar closed inside the window. Bars without a time are missing. session_start is a second of clock's day: clock 0 is UTC, 1 is London and 2 is New York, so a session opens at the market's own time on both sides of a clock change.",
+  "recognition": "A break of the initial balance low starts a selling range extension.",
+  "eligible_roles": [
+    "context",
+    "location",
+    "trigger",
+    "exit"
+  ],
+  "class_meanings": {
+    "fx": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "perp": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "spot_crypto": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact."
+  },
+  "sources": [
+    {
+      "source_ref": "http://www.aspenres.com/Documents/AspenGraphics4.0/Using_Market_profile.htm (read 2026-11-02)",
+      "quote": "first hour of trading, creates what is called the initial balance",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "ib_seconds": {
+      "measure": "seconds",
+      "default": "3600",
+      "origin": "source_stated",
+      "range": {
+        "min": "60",
+        "max": "86340",
+        "step": "60"
+      }
+    },
+    "clock": {
+      "measure": "category",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "native",
+    "perp": "adapted",
+    "spot_crypto": "adapted",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "max_rows",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:9a3258847372e92818d28b3c87bde989a4c4da00f4943e307c5bf242badf8b37",
+  "tests": "on clock 0 its values equal version 1's over its golden bars, in qml/tests/test_session_clock.py"
+}

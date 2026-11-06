@@ -1085,8 +1085,9 @@ def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(hom
     out = finished_output(home, report, "check")
     requests = finished_output(home, report, "match")["library_written"]
     assert report.status == "passed", report.reason
-    assert out["matched"] == [{"sentence": "Wait for the EMA to turn up", "entry": "ema@1"}]
+    assert out["matched"] == []
     assert out["append_requests"] == [
+        "Wait for the EMA to turn up",
         "Time the turn with the smoothed close fixture",
         "Enter when the Wolfe wave completes its fifth point",
     ]
@@ -1096,7 +1097,7 @@ def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(hom
     assert [(r["pin"], r["problems"][0]["message"]) for r in out["refused"]] == [
         ("wolfe-wave@1", "the entry has no schema, component_type, origin, definition")
     ]
-    assert [w["refused"] for w in requests] == [None, None]
+    assert [w["refused"] for w in requests] == [None, None, None]
     assert [w["refused"] for w in out["library_written"]] == [None]
 
 

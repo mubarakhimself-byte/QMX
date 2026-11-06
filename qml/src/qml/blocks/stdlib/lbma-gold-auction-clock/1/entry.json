@@ -12,7 +12,7 @@
   "origin": "qml",
   "component_type": "calendar",
   "definition": "Seconds from the nearest LBMA Gold Price auction, at 10:30 and 15:00 London time on London weekdays: the bar's close less the auction time, negative before it and positive after.",
-  "boundaries": "London time follows its daylight-saving rule, so the auctions move in UTC twice a year. UK bank holidays are not modelled. auction 1 keeps the 10:30 auction, 2 the 15:00 auction and 0 both. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "boundaries": "London time follows its daylight-saving rule, so the auctions move in UTC twice a year. UK bank holidays are not modelled. auction 1 keeps the 10:30 auction, 2 the 15:00 auction and 0 both. Bars without a time are missing. QML's unit runtime passes each bar its close time, so inside a unit this value reads from the first bar. As a lone slot binding it holds nothing: bind value-above to it to gate on the seconds.",
   "recognition": "A gold unit stands aside in the minutes around the London fix.",
   "eligible_roles": [
     "context",

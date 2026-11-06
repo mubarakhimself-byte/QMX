@@ -14,11 +14,12 @@ from qmf.core.refusal import is_refusal
 from qml.catalogue.entry import Status, compute_status, corpus_problems
 from qml.catalogue.loader import block_fingerprint
 from qml.check import CheckResult, check, check_block
+from qml.check.layers import check_layers
 from qml.compile import CompileContext, CompiledUnit
 from qml.door import compile as door_compile
 from qml.door import explain, find, new
 from qml.numbers import parse_record
-from qml.unit.parse import ProblemKind
+from qml.unit.parse import ProblemKind, parse
 from test_compile_dummy import _context, _document
 
 _QML = Path(__file__).resolve().parents[1]
@@ -65,6 +66,7 @@ def test_the_dummy_checks_with_zero_errors_and_only_its_known_warnings() -> None
                 "/numbers/rsi_high/origin",
             ),
         ),
+        ("cadence_not_built", "C", ("/numbers/min_trend_strength/motion/cadence/at",)),
         ("placeholder", "E", ("/exit_set/0", "/exit_set/1", "/exit_set/2", "/sizer")),
         (
             "placeholder",
@@ -156,7 +158,7 @@ def test_every_problem_of_every_layer_comes_back_at_once() -> None:
     result = check(document, _context())
 
     assert [p.layer for p in result.errors] == ["B", "C", "E"]
-    assert result.to_json()["counts"] == {"errors": 3, "warnings": 4}
+    assert result.to_json()["counts"] == {"errors": 3, "warnings": 5}
 
 
 def test_the_same_problem_set_twice_reports_no_progress() -> None:
@@ -234,10 +236,15 @@ def _session(calendar_ref: str) -> dict[str, object]:
 def test_a_session_on_either_market_calendar_is_not_an_error() -> None:
     document = _document()
     document["sessions"] = [_session("fx-24x5@1"), _session("metals-24x5@1")]
+    context = _context()
+    unit = parse(document).unit
+    assert unit is not None
 
-    result = check(document, _context())
+    found = check_layers(
+        unit, entries=context.entries, sources=context.sources, records=context.records
+    )
 
-    assert result.errors == ()
+    assert found.errors == []
 
 
 def test_a_session_on_a_calendar_no_market_holds_is_one_error() -> None:
@@ -432,7 +439,7 @@ def test_explain_names_what_the_unit_trades_and_its_check_counts() -> None:
         "Trend pullback (dummy): buy pullbacks in an uptrend, sell rallies in a downtrend",
         "trades both on fx.eurusd, metal.xauusd",
     )
-    assert lines[-1] == "check: 0 errors, 4 warnings"
+    assert lines[-1] == "check: 0 errors, 5 warnings"
 
 
 # --- the corpus gate ----------------------------------------------------------------------
