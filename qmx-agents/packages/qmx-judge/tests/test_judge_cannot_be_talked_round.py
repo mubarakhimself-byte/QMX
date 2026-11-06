@@ -48,7 +48,6 @@ class World:
     store: Store
     judge_run: Any
     result: str
-    before: str
 
 
 def landed_world(root: Path, *, study: JsonObject = WRITTEN) -> World:
@@ -97,7 +96,7 @@ def landed_world(root: Path, *, study: JsonObject = WRITTEN) -> World:
         }
     )
     result = lander.close(Landing(ticket, bundle, folder))
-    return World(store, domain_functions(context)["backtest"]["backtest_judge_run"], result, before)
+    return World(store, domain_functions(context)["backtest"]["backtest_judge_run"], result)
 
 
 def put(store: Store, kind: str, item: str, fields: JsonObject, head: str | None = None) -> str:
