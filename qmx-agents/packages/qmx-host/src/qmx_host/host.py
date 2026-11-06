@@ -203,6 +203,7 @@ from qmx_host.market_data import (
     Placement,
     market_router,
 )
+from qmx_host.mis_configure import MisConfigure, mis_call
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.promote import Promoter, harvested_calibrations, promote_router
@@ -998,10 +999,11 @@ def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
     return store.put(OPERATOR_READ, draft, on=MAIN, expected_head=None).object_id
 
 
-def enable_apps(home: Path, runtime: Supervisor) -> None:
+def enable_apps(home: Path, runtime: Supervisor, started: threading.Event | None = None) -> None:
     """The first start's one click, kept at every start: the first-party apps enabled in this
     folder, QMB first, are installed if missing and started beside the host, which does not wait
-    for their environments."""
+    for their environments. `started` is set however they come out, so a job that asks them
+    something after they start waits for this pass and never for a guess."""
     try:
         enabled = enable_first_party(home, runtime)
     except (AppError, OSError, ValueError) as refused:
@@ -1009,9 +1011,12 @@ def enable_apps(home: Path, runtime: Supervisor) -> None:
             f"apps: the first-party apps did not start, again next start: {refused}",
             file=sys.stderr,
         )
-        return
-    if enabled:
-        print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
+    else:
+        if enabled:
+            print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
+    finally:
+        if started is not None:
+            started.set()
 
 
 def close_stranded_runs(home: Path, run: QmbRun) -> None:
@@ -1239,8 +1244,12 @@ async def serve(
                 )
                 runtime.attach_landers(registered)
                 close_stranded_runs(runtime.home, cast(QmbRun, registered[QMB_RUN]))
+                apps_started = threading.Event()
                 threading.Thread(
-                    target=enable_apps, args=(home, runtime), name="qmx-first-apps", daemon=True
+                    target=enable_apps,
+                    args=(home, runtime, apps_started),
+                    name="qmx-first-apps",
+                    daemon=True,
                 ).start()
                 harness.doctor_from(lambda: library_line(store))
                 backups = Backups(
@@ -1258,6 +1267,17 @@ async def serve(
                         store,
                         every_s=refresh_s(node_settings),
                         markets=record_markets(node_settings),
+                    )
+                    if role == "pc"
+                    else None
+                )
+                mis_configure = (
+                    MisConfigure(
+                        mis_call(runtime),
+                        store,
+                        door if isinstance(door, MarketDoor) else None,
+                        every_s=refresh_s(node_settings),
+                        started=apps_started,
                     )
                     if role == "pc"
                     else None
@@ -1378,6 +1398,8 @@ async def serve(
                         harvesting = [] if records is None else [asyncio.create_task(records.run())]
                         if venue_records is not None:
                             harvesting.append(asyncio.create_task(venue_records.run()))
+                        if mis_configure is not None:
+                            harvesting.append(asyncio.create_task(mis_configure.run()))
                         # Uvicorn logs no started line for a socket it was handed.
                         address, _ = sock.getsockname()
                         print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
