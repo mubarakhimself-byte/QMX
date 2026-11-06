@@ -55,6 +55,7 @@ def test_a_fresh_node_reads_ready_with_no_units_and_no_venue_set_up(tmp_path: Pa
     assert node.call("units", {}) == {"ok": True, "value": []}
     assert node.call("positions", {}) == {"ok": True, "value": []}
     assert node.call("deployments", {}) == {"ok": True, "value": []}
+    assert value(node.call("flatten", {"scope": "all"})) == {"state": "accepted", "positions": 0}
 
 
 def test_a_direct_call_gets_an_op_id_and_a_repeated_op_id_answers_its_first_answer(

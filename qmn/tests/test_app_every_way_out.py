@@ -137,15 +137,24 @@ def test_a_flatten_held_across_a_restart_with_the_session_down_waits_and_ends_fl
     held_while_down = len(rig.fake.held)
     runtime.stop()
 
+    not_bound = b.bound_rig(tmp_path, broker=rig.fake, at=rig.now[0])
+    b.compiled(b.runtime(not_bound))
+    b.play_spots(not_bound, at + 2 * BAR, at + 3 * BAR)
+    venues_with_no_grant = dict(b.runtime(not_bound).venues)
+    rows_with_no_grant = flatten_rows(not_bound)
+    stopped(not_bound)
+
     again = b.bound_rig(tmp_path, grant=rig.grants.held, broker=rig.fake, at=rig.now[0])
     b.compiled(b.runtime(again))
-    b.play_spots(again, at + 2 * BAR, at + 3 * BAR)
+    b.play_spots(again, at + 3 * BAR, at + 4 * BAR)
     rows_while_down = flatten_rows(again)
     rig.fake.refuse_sockets = 0
-    b.play_spots(again, at + 3 * BAR, at + 6 * BAR)
+    b.play_spots(again, at + 4 * BAR, at + 7 * BAR)
 
     assert b.value(answer) == {"state": "accepted", "positions": 1}
     assert held_while_down == 1
+    assert venues_with_no_grant == {}
+    assert rows_with_no_grant == []
     assert rows_while_down == []
     assert rig.fake.held == {}
     assert flatten_rows(again) == [{"op_id": "op-flat", "scope": "all", "positions_closed": 1}]
