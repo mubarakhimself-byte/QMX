@@ -208,7 +208,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.3"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.4"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -322,6 +322,7 @@ def test_a_failing_safety_verdict_refuses_the_run_with_its_report(world: World) 
             "check": "qml-g/1",
             "status": "finished",
             "compiled_fingerprint": compiled,
+            "behaviour": {"slice": {"market_ids": ["fx.eurusd", "metal.xauusd"]}},
             "safety": {"verdict": "fail"},
         },
     )
@@ -675,7 +676,7 @@ def test_a_fresh_home_with_ticks_in_the_store_lands_a_result(fresh: World) -> No
     assert landed["labels"]["datasets"] == ["dukascopy/GBPUSD/ticks/-"]
     assert (landed["fidelity"], landed["labels"]["fixture_records"]) == ("quotes", [])
     assert not (laid / "bars").exists()
-    assert json.loads((laid / "data" / "fx.gbpusd" / "card.json").read_text("utf-8"))["scale"] == 5
+    assert not (laid / "data").exists()
     assert fills
     assert {Decimal(fill["quantity"]) % Decimal("0.05") for fill in fills} == {Decimal(0)}
 
@@ -710,9 +711,7 @@ def test_a_month_of_bid_and_ask_bars_is_read_before_its_ticks(fresh: World) -> N
     answer = fresh.backtest["backtest_run"](unit=unit, **GAPS)["result"]
 
     landed = fields(fresh.store, answer["result_id"])
-    laid = run_folder(fresh, answer["run_id"]) / "in" / "data" / "fx.eurgbp"
     assert answer["status"] == "finished"
-    assert json.loads((laid / "card.json").read_text("utf-8"))["kind"] == "bar-m1"
     assert landed["labels"]["datasets"] == [
         "dukascopy/EURGBP/bar-m1/bid",
         "dukascopy/EURGBP/bar-m1/ask",
@@ -789,7 +788,9 @@ def test_a_sealed_month_is_refused_and_no_sealed_file_sits_in_a_run_folder(fresh
     assert tries_after_the_refusal == before
     assert sealed_files == []
     assert unsealed["status"] == "finished"
-    assert [path.parent.name for path in runs.rglob(f"{fingerprint}.parquet")] == ["ticks", "ticks"]
+    assert fields(fresh.store, unsealed["result_id"])["labels"]["datasets"] == [
+        "dukascopy/AUDUSD/ticks/-"
+    ]
 
 
 def test_one_market_of_a_two_market_unit_lands_naming_that_market(fresh: World) -> None:
@@ -803,7 +804,7 @@ def test_one_market_of_a_two_market_unit_lands_naming_that_market(fresh: World) 
     laid = run_folder(fresh, answer["run_id"]) / "in"
     assert (answer["status"], landed["markets"]) == ("finished", ["fx.eurusd"])
     assert landed["measures"]["trades"] == 6
-    assert [folder.name for folder in (laid / "data").iterdir()] == ["fx.eurusd"]
+    assert landed["labels"]["datasets"] == ["dukascopy/EURUSD/ticks/-"]
     assert json.loads((laid / "request.json").read_text("utf-8"))["markets"] == ["fx.eurusd"]
     assert {t["market_id"] for t in report(fresh.store, answer["result_id"])["trades"]} == {
         "fx.eurusd"
@@ -871,6 +872,7 @@ def test_a_copy_that_fails_after_the_try_opened_closes_that_try(fresh: World) ->
             "check": "qml-g/1",
             "status": "finished",
             "compiled_fingerprint": compiled,
+            "behaviour": {"slice": {"market_ids": ["fx.usdcad"]}},
             "safety": {"verdict": "pass"},
         },
     )
