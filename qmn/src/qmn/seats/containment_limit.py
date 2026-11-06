@@ -422,7 +422,7 @@ def v1_containment_documentation_report(
         root / "docs" / "components" / "qml.md",
         root / "docs" / "components" / "trading-node.md",
         root / "docs" / "lenses" / "ops" / "incident-playbook.md",
-        root / "qmn" / "FAILURES.md",
+        root / "qmn" / "src" / "qmn" / "observability" / "FAILURES.md",
         root / "docs" / "gap-report.md",
     )
     required = (

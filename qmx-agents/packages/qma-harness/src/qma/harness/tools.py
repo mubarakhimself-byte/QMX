@@ -1115,6 +1115,8 @@ def server_config(
                 "a stored credential goes only to an HTTPS url (plain HTTP on the loopback) with "
                 "no user, password, query or fragment"
             )
+        if venue is None:
+            raise ValueError("a row with a stored credential names its venue")
         token = (secret(ref) or "").strip()
         if not token or any(char.isspace() for char in token):
             raise NotOffered(f"{ref} holds no single token in Credential Manager; paste one")

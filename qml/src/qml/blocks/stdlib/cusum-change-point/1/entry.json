@@ -157,5 +157,16 @@
   "golden": {
     "reference": "NIST tabular CUSUM formula, numpy 2.5.4",
     "cases": "qml/tests/golden/statistics/reference.json"
+  },
+  "settle_bars": {
+    "params": {
+      "window": "100",
+      "drift": "0.5",
+      "threshold": "5",
+      "moment": "1"
+    },
+    "bars": 204,
+    "tolerance": "1e-9",
+    "scales_by": "window"
   }
 }

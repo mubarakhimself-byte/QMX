@@ -78,11 +78,11 @@ def month() -> Month:
         folder = root / "run"
         (folder / "records").mkdir(parents=True)
         (folder / "unit.json").write_text(json.dumps(dummy_document()), "utf-8")
-        for block in (p for p in STDLIB.iterdir() if (p / "1" / "block.py").is_file()):
-            pin = folder / "blocks" / f"{block.name}@1"
+        for block in STDLIB.glob("*/*/block.py"):
+            pin = folder / "blocks" / f"{block.parent.parent.name}@{block.parent.name}"
             pin.mkdir(parents=True)
             for name in ("block.py", "entry.json"):
-                shutil.copyfile(block / "1" / name, pin / name)
+                shutil.copyfile(block.with_name(name), pin / name)
         for market, symbol in MARKETS.items():
             shutil.copyfile(RECORDS / f"{symbol}.json", folder / "records" / f"{market}.json")
             (folder / "bars" / market).mkdir(parents=True)
@@ -112,22 +112,26 @@ def month() -> Month:
 def dummy_document() -> dict[str, object]:
     document = cast("dict[str, object]", json.loads(DUMMY.read_text("utf-8")))
     pins: list[dict[str, object]] = []
-    for folder in sorted(p for p in STDLIB.iterdir() if (p / "1" / "entry.json").is_file()):
-        face = parse_entry((folder / "1" / "entry.json").read_bytes())
+    for entry in sorted(STDLIB.glob("*/*/entry.json")):
+        face = parse_entry(entry.read_bytes())
         assert isinstance(face, EntryFace), face
-        pins.append({"entry_id": face.entry_id, "version": 1, "fingerprint": face.fingerprint})
+        pins.append(
+            {"entry_id": face.entry_id, "version": face.version, "fingerprint": face.fingerprint}
+        )
     document["pins"] = pins
     return document
 
 
 def block_files() -> list[tuple[str, str, int, str, bytes]]:
     found: list[tuple[str, str, int, str, bytes]] = []
-    for block in sorted(p for p in STDLIB.iterdir() if (p / "1" / "block.py").is_file()):
-        face = parse_entry((block / "1" / "entry.json").read_bytes())
+    for block in sorted(STDLIB.glob("*/*/block.py")):
+        face = parse_entry(block.with_name("entry.json").read_bytes())
         assert isinstance(face, EntryFace), face
         for name, kind in (("block.py", "block"), ("entry.json", "entry")):
-            path = f"blocks/{face.entry_id}@1/{name}"
-            found.append((face.entry_id, kind, 1, path, (block / "1" / name).read_bytes()))
+            path = f"blocks/{face.pin}/{name}"
+            found.append(
+                (face.entry_id, kind, face.version, path, block.with_name(name).read_bytes())
+            )
     return found
 
 

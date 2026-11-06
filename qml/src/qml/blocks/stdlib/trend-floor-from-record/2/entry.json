@@ -1,0 +1,104 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "trend-floor-from-record",
+  "version": 2,
+  "family": "motion",
+  "aliases": [
+    "trend strength floor"
+  ],
+  "origin": "qml",
+  "component_type": "motion",
+  "definition": "Moves a trend-strength floor one step toward the shrunk lowest bucket edge above which the unit's own closed trades, by the size of their stamped strength on either side, kept a mean R of at least zero.",
+  "boundaries": "Moves only inside the number's range, a step at a time, after enough closed trades.",
+  "recognition": "The floor rises when the unit's weak-trend trades lose and falls back when they pay.",
+  "eligible_roles": [],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-118",
+      "quote": "one calibrated number (`min_trend_strength`, moved at the market's day close or every 20 closed trades, once 20 have closed, by a rule from its own trades shrunk toward its default)",
+      "dated": "2026-11-01"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "trades",
+      "stream_kind": "trades",
+      "measure": null,
+      "data_level": null
+    },
+    {
+      "port": "current",
+      "stream_kind": "number",
+      "measure": "percent",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "percent"
+  },
+  "parameters": {
+    "buckets": {
+      "measure": "count",
+      "default": "5",
+      "origin": "builder_chosen"
+    },
+    "min_count": {
+      "measure": "count",
+      "default": "20",
+      "origin": "builder_chosen"
+    },
+    "shrink_k": {
+      "measure": "count",
+      "default": "100",
+      "origin": "builder_chosen"
+    },
+    "step_limit": {
+      "measure": "count",
+      "default": "1",
+      "origin": "builder_chosen"
+    },
+    "min": {
+      "measure": "percent",
+      "default": "0",
+      "origin": "builder_chosen"
+    },
+    "max": {
+      "measure": "percent",
+      "default": "0.0030",
+      "origin": "builder_chosen"
+    },
+    "step": {
+      "measure": "percent",
+      "default": "0.0001",
+      "origin": "builder_chosen"
+    },
+    "default": {
+      "measure": "percent",
+      "default": "0",
+      "origin": "builder_chosen"
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:482ffaa3bbc5d392d595b66655dfe7967ed1a4a86981f32a90a171062905ae96"
+}

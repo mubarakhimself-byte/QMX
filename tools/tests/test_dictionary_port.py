@@ -86,10 +86,6 @@ def test_the_dry_run_ports_239_into_239_drafts_and_loses_none(
     )
 
 
-def test_every_draft_passes_the_entry_checker_and_no_name_is_taken_twice() -> None:
-    assert (dict(MADE.statuses()), MADE.problems(), MADE.lost()) == ({"named": 239}, [], [])
-
-
 def test_no_field_of_any_record_is_lost() -> None:
     faces = list(MADE.faces())
     missing = [

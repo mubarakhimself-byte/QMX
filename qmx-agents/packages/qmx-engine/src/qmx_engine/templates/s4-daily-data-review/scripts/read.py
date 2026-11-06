@@ -8,9 +8,11 @@ each with its dataset card from the door, whose partitions carry their months, f
 fingerprints and gaps. For the day's journals it reads, through `journal_query`, the market
 journal's `offset` rows (one source's price against another's) and every unit, market and node
 row stamped `clock_ok = false`, counted per stream and machine. Each series' entry links its card
-(`card:<series>`) and the partition fingerprints it read, so the note points at what it counted.
-It lands the review as one `data-review` artifact. A machine with no price series and no journal
-rows that day is quiet and asks no model.
+(`card:<series>`), so the note points at what it counted.
+It lands the review as one `data-review` artifact, which alone keeps each series' months, open
+months, gaps per month and partition fingerprints. The writer gets their counts, because every
+month of every series would cost it a large prompt each morning. A machine with no price series
+and no journal rows that day is quiet and asks no model.
 """
 
 import importlib.util
@@ -75,7 +77,18 @@ offset_rows = Counter(str(row.get("market_id")) for row in offsets["rows"])
 findings = {
     "day": day,
     "window": window,
-    "series": series,
+    "series": [
+        {
+            "series": s["series"],
+            "card": s["card"],
+            "months": len(s["months"]),
+            "unfrozen": len(s["unfrozen"]),
+            "gaps": sum(s["gaps"].values()),
+            "rows": s["rows"],
+            "sealed": s["sealed"],
+        }
+        for s in series
+    ],
     "series_with_gaps": sum(1 for s in series if s["gaps"]),
     "gaps": sum(n for s in series for n in s["gaps"].values()),
     "clock_flags": dict(sorted(flags.items())),
@@ -91,9 +104,10 @@ if quiet:
         "flagged or names an offset. Nothing to review.",
         "receipts": ["read"],
     }
+kept = findings | {"series": series}
 bodies = Path(os.environ["QMX_WORK"]) / "library"
 bodies.mkdir(parents=True, exist_ok=True)
-(bodies / "findings.json").write_text(json.dumps(findings, sort_keys=True), encoding="utf-8")
+(bodies / "findings.json").write_text(json.dumps(kept, sort_keys=True), encoding="utf-8")
 print(
     json.dumps(
         {
@@ -109,7 +123,7 @@ print(
                     "op": "put_artifact",
                     "type": "data-review",
                     "body": "library/findings.json",
-                    "metadata": findings,
+                    "metadata": kept,
                     "intent_key": f"data-review|{day}",
                 }
             ],

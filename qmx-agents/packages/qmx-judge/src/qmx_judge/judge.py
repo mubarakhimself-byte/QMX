@@ -607,11 +607,12 @@ def _spans(windows: set[Window | None]) -> str:
     )
 
 
-def _covers(ran: Window | None, traded: Window | None) -> bool:
-    """Whether evidence over `ran` answers for trades over `traded`. It may run wider, as template
-    `b`'s walk-forward does over in-sample and its folds. A window not stated covers only another
-    not stated, because there is nothing to compare."""
-    if ran is None or traded is None:
+def _covers(rule: StepRule, ran: Window | None, traded: Window | None) -> bool:
+    """Whether evidence over `ran` answers for trades over `traded`. Only walk-forward may run
+    wider, as template `b`'s does over in-sample and its folds. A wider cost stress or random
+    entries would read mostly other trades, so it answers for nothing but its own window. A window
+    not stated covers only another not stated, because there is nothing to compare."""
+    if ran is None or traded is None or rule.name != "walk_forward":
         return ran == traded
     return ran[0] <= traded[0] and traded[1] <= ran[1]
 
@@ -628,14 +629,16 @@ def _market_step(
         return Step(rule, "not_run", f"{absent} on {market}")
     traded = {r.window for r in results if any(t.market == market for t in r.trades)}
     ran = {_window(row) for row in rows}
-    uncovered = {w for w in traded if not any(_covers(found, w) for found in ran)}
+    uncovered = {w for w in traded if not any(_covers(rule, found, w) for found in ran)}
     if uncovered:
         return Step(
             rule,
             "not_run",
             f"{market}'s evidence ran over {_spans(ran)}, its trades over {_spans(uncovered)}",
         )
-    steps = [read(rule, spec, row) for row in rows if any(_covers(_window(row), w) for w in traded)]
+    steps = [
+        read(rule, spec, row) for row in rows if any(_covers(rule, _window(row), w) for w in traded)
+    ]
     return min(steps, key=lambda step: _WORST_FIRST.index(step.outcome))
 
 
@@ -761,6 +764,57 @@ def _pooled_twice(results: Sequence[JudgedResult]) -> list[str]:
     return problems
 
 
+def _same_trades(judged: Sequence[Trade], other: Sequence[Trade]) -> bool:
+    """Whether `other` holds exactly `judged` inside each judged market's first-to-last close. A
+    version cut to a stretch or a market still holds, and a filter, which leaves a gap, does not."""
+    mine: dict[str, list[Trade]] = {}
+    for trade in judged:
+        mine.setdefault(trade.market, []).append(trade)
+    held: dict[str, list[Trade]] = {}
+    for trade in other:
+        held.setdefault(trade.market, []).append(trade)
+    for market, rows in mine.items():
+        low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
+        run = {t for t in held.get(market, []) if low <= t.closed_at <= high}
+        if run != set(rows):
+            return False
+    return True
+
+
+def _pull_table(
+    trades: Mapping[str, list[Decimal]],
+    results: Sequence[JudgedResult],
+    family: Sequence[JudgedResult],
+    enough: int,
+) -> dict[str, list[Decimal]]:
+    """The trades the shrink reads, so that what an agent chooses to judge cannot weaken the pull.
+    A market reads the longest record the same code has of it in `family`. Its judged trades stand
+    only when they are `enough` to judge it on and overlap no longer record from this tester.
+    Same code means an equal `compiled_fp`, else an equal `unit`, or a record holding exactly the
+    judged trades inside each judged market's span. Reruns are never added together."""
+    table = {market: rs for market, rs in trades.items() if rs}
+    code = {r.compiled_fp or r.unit for r in results}
+    testers = {r.tester for r in results}
+    judged = [t for r in results for t in r.trades]
+    for other in family:
+        if (other.compiled_fp or other.unit) not in code and not (
+            judged and _same_trades(judged, other.trades)
+        ):
+            continue
+        held: dict[str, list[Trade]] = {}
+        for trade in other.trades:
+            held.setdefault(trade.market, []).append(trade)
+        for market, rows in held.items():
+            low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
+            overlaps = other.tester in testers and any(
+                low <= t.closed_at <= high for t in judged if t.market == market
+            )
+            thin = len(trades.get(market, ())) < enough
+            if (thin or overlaps) and len(rows) > len(table.get(market, ())):
+                table[market] = [t.r for t in rows]
+    return table
+
+
 def judge(
     spec: StudySpec,
     *,
@@ -774,8 +828,9 @@ def judge(
 ) -> Verdict:
     """The verdict on `results` under `spec`. `tries` are the fields of every `try` item of the
     results' families; `family` are other landed results of those families, whose daily R lets
-    the clustering find how many of their tries were really different. `versions` names the
-    checker version; the verdict adds the judge's and the tester's."""
+    the clustering find how many of their tries were really different, and whose other markets
+    stay in the shrink (`_pull_table`). `versions` names the checker version; the verdict adds the
+    judge's and the tester's."""
     opened = {str(t.get("run_id")) for t in tries if t.get("state") == "opened"}
     problems = [] if results else ["the judge needs one landed result at least"]
     problems += [
@@ -805,21 +860,28 @@ def judge(
     traded = {t.market for r in results for t in r.trades}
     markets = sorted(set(named) | traded | {m for r in results for m in r.markets})
     trades = {m: [t.r for r in results for t in r.trades if t.market == m] for m in markets}
-    k = spec.k if spec.estimator == "fixed" else estimate_k(trades, spec.k)
-    shrunk = {s.market: s for s in shrink(trades, k)}
+    table = _pull_table(trades, results, family, spec.min_trades)
+    k = spec.k if spec.estimator == "fixed" else estimate_k(table, spec.k)
+    shrunk = {s.market: s for s in shrink(table, k)}
     per_market: list[MarketVerdict] = []
     for market in markets:
         rs = [float(r) for r in trades[market]]
-        found = shrunk.get(market)
+        found = shrunk.get(market) if rs else None
         if found is None:
             zero = Decimal(0)
             per_market.append(MarketVerdict(market, 0, zero, zero, zero, "no_trades", ()))
             continue
+        if table[market] is not trades[market]:
+            # A market reading another run's record cannot read above what its own trades earned.
+            found = replace(
+                found,
+                shrunk_r=min(found.shrunk_r, sum(trades[market]) / len(trades[market])),
+            )
         steps = _chain(spec, results, found, rs, tried)
         outcome = _outcome(len(rs), spec.min_trades, steps)
         per_market.append(
             MarketVerdict(
-                market, found.trades, found.raw_r, found.shrunk_r, found.weight, outcome, steps
+                market, len(rs), found.raw_r, found.shrunk_r, found.weight, outcome, steps
             )
         )
     compiled = sorted({r.compiled_fp for r in results if r.compiled_fp})

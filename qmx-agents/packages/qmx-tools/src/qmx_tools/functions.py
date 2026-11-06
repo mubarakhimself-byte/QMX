@@ -19,7 +19,14 @@ import qml
 from qmf.core import Instant, fingerprint, is_refusal
 from qmf.data.journal_writer import key_token
 from qmf.data.series import STATE_NAME, SeriesKey, SeriesStore
-from qml.catalogue.entry import ENTRY_SCHEMA, Computed, compute_status, corpus_problems
+from qml.catalogue.entry import (
+    ENTRY_SCHEMA,
+    Computed,
+    EntryProblem,
+    alias_key,
+    compute_status,
+    corpus_problems,
+)
 from qml.catalogue.index import find as find_rows
 from qml.catalogue.index import match as match_text
 from qml.catalogue.index import row as index_row
@@ -73,6 +80,8 @@ QUICK_STUDY: Final = "study-quick-"
 """The item prefix of a unit's quick study, the one study written after its results by design."""
 COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "motion", "study")
 """The result fields that make two runs one request, whatever tester ran them."""
+ADDED_TRADE_FIELDS: Final = frozenset({"mae_r", "mfe_r", "cash", "net_r"})
+"""Row fields QMB 1.0.4 added. An older result or another tester's row may not hold them."""
 
 
 DEAD_ENDS: Final[weakref.WeakKeyDictionary[ControlService, Remember]] = weakref.WeakKeyDictionary()
@@ -225,11 +234,12 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         `markets` narrows it to some of the unit's markets. It reads the market store's months
         under `source`, the study's when left out, else `dukascopy`, and a missing month is
         refused by name before anything starts. A hole in the bars longer than
-        `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true; left out, the study's
-        `allow_gaps` decides. `motion` both runs the unit with its calibrated numbers moving and
-        held, and reports both. `cost_profile` pins a library_save of kind `cost-profile`,
+        `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true, and a study that states
+        `allow_gaps` beats this one. `motion` both runs the unit with its calibrated numbers moving
+        and held, and reports both. `cost_profile` pins a library_save of kind `cost-profile`,
         `{"costs": {market: qmx.qmb.cost-profile/1}, "funding": {market: "timestamp,rate" CSV}}`:
-        net money pays it and R does not, and the study's `cost_rule` beats it."""
+        net money pays it and R does not, and the study's `cost_rule` beats it. `costs` must name
+        every market of the run by its market id, such as `fx.eurusd`, or nothing starts."""
         asked = {
             "unit": unit,
             "window": window,
@@ -317,7 +327,8 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         """Compare two landed results trade by trade (the parity diff): each trade only one made,
         each trade both made whose prices, size, money or R differ, and the measures that
         differ. Trades pair by market, opening time and their order among trades opened on
-        that market at that time, so two testers' names never matter."""
+        that market at that time, so two testers' names never matter. `mae_r`, `mfe_r`, `cash`
+        and `net_r` compare only when both rows hold them."""
         (first, mine), (second, theirs) = _result(left), _result(right)
         ours, other = _by_opening(left, mine), _by_opening(right, theirs)
         rows: list[dict[str, Any]] = []
@@ -329,7 +340,11 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 continue
             differs = {
                 name: [a.get(name), b.get(name)]
-                for name in sorted((a.keys() | b.keys()) - {"trade_id"})
+                for name in sorted(
+                    (a.keys() | b.keys())
+                    - {"trade_id"}
+                    - (ADDED_TRADE_FIELDS - (a.keys() & b.keys()))
+                )
                 if a.get(name) != b.get(name)
             }
             if differs:
@@ -920,7 +935,7 @@ def _qml_entries() -> tuple[_Held, ...]:
     return tuple(held)
 
 
-def _entry_items(store: Store) -> list[str]:
+def entry_items(store: Store) -> list[str]:
     """Every Library item that ever held an entry marked `qmx.entry/1`."""
     return sorted(
         {
@@ -933,7 +948,7 @@ def _entry_items(store: Store) -> list[str]:
 def _library_entries(store: Store) -> list[_Held]:
     """The Library's entries on `main`, each with the status its last status run wrote."""
     held: list[_Held] = []
-    for item in _entry_items(store):
+    for item in entry_items(store):
         head = store.head(item, MAIN)
         if head is None:
             continue
@@ -952,30 +967,93 @@ def _library_entries(store: Store) -> list[_Held]:
     return held
 
 
-def write_entry_statuses(store: Store) -> list[tuple[str, str, Computed]]:
-    """Compute the status of each Library entry at its `main` and draft heads from its code
-    and its `golden` blob, and write it on that object as its `status` annotation. Returns
-    `(item, ref, computed)` per object, `main` first. Rerunning writes the same values."""
+def write_entry_status(store: Store, item: str) -> list[tuple[str, str, Computed]]:
+    """Compute one Library entry's status at its `main` and draft heads from its code and its
+    `golden` blob, and write it on that object as its `status` annotation. Returns
+    `(item, ref, computed)` per object, `main` first. A head that already holds the same value
+    writes nothing, because an annotation is a log row and a rerun must not grow that log."""
     written: list[tuple[str, str, Computed]] = []
-    for item in _entry_items(store):
-        seen: set[str] = set()
-        for ref in (MAIN, drafts_ref(item)):
-            head = store.head(item, ref)
-            if head is None or head[0] in seen:
-                continue
-            seen.add(head[0])
-            view = store.get(store.engine, head[0])
-            if view.kind != "component":
-                continue
-            code, golden = view.blobs.get("code"), view.blobs.get("golden")
-            computed = compute_status(
-                entry_face(view.fields),
-                None if code is None else store.read_blob(code.blob_id),
-                None if golden is None else json.loads(store.read_blob(golden.blob_id)),
-            )
-            store.annotate(store.engine, head[0], {"status": json_value(computed.annotation())})
-            written.append((item, ref, computed))
+    seen: set[str] = set()
+    for ref in (MAIN, drafts_ref(item)):
+        head = store.head(item, ref)
+        if head is None or head[0] in seen:
+            continue
+        seen.add(head[0])
+        view = store.get(store.engine, head[0])
+        face = entry_face(view.fields)
+        if view.kind != "component" or face.get("schema") != ENTRY_SCHEMA:
+            continue
+        code, golden = view.blobs.get("code"), view.blobs.get("golden")
+        computed = compute_status(
+            face,
+            None if code is None else store.read_blob(code.blob_id),
+            None if golden is None else json.loads(store.read_blob(golden.blob_id)),
+        )
+        mark = json_value(computed.annotation())
+        if view.annotations.get("status") != mark:
+            store.annotate(store.engine, head[0], {"status": mark})
+        written.append((item, ref, computed))
     return written
+
+
+def write_entry_statuses(store: Store) -> list[tuple[str, str, Computed]]:
+    """`write_entry_status` for every Library entry. Rerunning writes nothing new."""
+    return [row for item in entry_items(store) for row in write_entry_status(store, item)]
+
+
+@cache
+def _own_faces() -> tuple[dict[str, object], ...]:
+    """QML's own entries as their files hold them, read once per process."""
+    return tuple(
+        cast("dict[str, object]", json.loads((version / "entry.json").read_text("utf-8")))
+        for folder in STDLIB.iterdir()
+        for version in folder.iterdir()
+        if (version / "entry.json").is_file()
+    )
+
+
+def _library_names(store: Store) -> list[dict[str, object]]:
+    """The `entry_id`, version and aliases of every Library entry at a head. One query holding only
+    these fields, because a save runs this and opening every object would cost it dearly."""
+    rows = store.catalog.db.execute(
+        "SELECT DISTINCT json_extract(o.fields, '$.entry.entry_id'), "
+        "json_extract(o.fields, '$.entry.version'), "
+        "CASE json_type(o.fields, '$.entry.aliases') "
+        "WHEN 'array' THEN json_extract(o.fields, '$.entry.aliases') END "
+        "FROM heads h JOIN objects o ON o.object_id = h.head "
+        "WHERE o.kind = 'component' AND json_extract(o.fields, '$.entry.schema') = ?",
+        (ENTRY_SCHEMA,),
+    )
+    return [
+        {"entry_id": entry_id, "version": version, "aliases": json.loads(aliases or "[]")}
+        for entry_id, version, aliases in rows
+    ]
+
+
+def _name_keys(entry: Mapping[str, object]) -> set[str]:
+    aliases = entry.get("aliases")
+    given = cast("list[object]", aliases) if isinstance(aliases, list) else []
+    names = [entry.get("entry_id"), *given]
+    return {alias_key(name) for name in names if isinstance(name, str)}
+
+
+def entry_clashes(store: Store, fields: Mapping[str, object]) -> tuple[EntryProblem, ...]:
+    """What saving this entry would break across the whole dictionary: a name another entry holds,
+    or a pin QML's own files hold with other words. A new version of one entry shares its names with
+    the old one, so it clashes with nothing. Only QML's files answer for a pin, because a checker is
+    not told the item, and a Library head at this pin may be this item's own last save."""
+    entry = entry_face(fields)
+    pin = f"{entry.get('entry_id')}@{entry.get('version')}"
+    own = _own_faces()
+    keys = _name_keys(entry)
+    others = [
+        held
+        for held in (*own, *_library_names(store))
+        if held.get("entry_id") != entry.get("entry_id") and keys & _name_keys(held)
+    ]
+    same_pin = [held for held in own if f"{held.get('entry_id')}@{held.get('version')}" == pin]
+    found = corpus_problems([*same_pin, *others, entry])
+    return tuple(p for p in found if p.where == pin or p.where.startswith(f"{pin}/"))
 
 
 def block_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]]]:

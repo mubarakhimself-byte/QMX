@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
@@ -65,6 +66,7 @@ session that is silent for three of them is dead."""
 RECORDING_KEPT: Final = 10_000
 """`[node] recording_kept_bars`: the newest bars per market the recorder keeps in memory for
 warm-up, the `local_queue_bound` default (NODE.md section 9)."""
+NS_PER_MINUTE: Final = 60_000_000_000
 
 
 class SessionState(StrEnum):
@@ -168,11 +170,15 @@ def _ohlc(cells: object) -> OHLC:
 
 
 class Recording:
-    """The node's own recording of closed bars: the market journal, read back for warm-up.
+    """The node's own recording of the market: the market journal, read back for warm-up.
 
     Each bar is one ``bar`` row of the market journal, written through Part B's writer as it
     arrives. :meth:`open` reads the newest ``kept`` bars of each market back, so a unit
     deployed after a restart warms up from what this node recorded before it.
+
+    Each minute a market quoted in is one ``minute`` row, written when the minute has ended. Its
+    write time is therefore in the next minute, so its body names the minute it describes, by the
+    node's clock, the clock its unit rows are written by.
     """
 
     def __init__(self, writer: JournalWriter | None, kept: int = RECORDING_KEPT) -> None:
@@ -186,7 +192,7 @@ class Recording:
     ) -> Recording:
         recording = cls(writer, kept)
         for folder in stream_folders(root):
-            if not folder.name.startswith(f"{JournalStream.MARKET.source}."):
+            if not folder.name.startswith(f"{JournalStream.MARKET.source}.bar."):
                 continue
             lines = read_committed(folder)
             if is_refusal(lines):
@@ -219,6 +225,27 @@ class Recording:
             if is_refusal(written):
                 return written
         self.keep(market, bar)
+        return Ok(None)
+
+    def add_minute(self, start_ns: int, closes: Sequence[Quote], now_ns: int) -> Result[None]:
+        """Write the ``minute`` row of each market's last quote in the minute from ``start_ns``,
+        which has ended. A market with one side still unknown has no spread, so it has no row."""
+        if self._writer is None or not closes:
+            return Ok(None)
+        moment = datetime.fromtimestamp(start_ns // 1_000_000_000, tz=UTC)
+        name = moment.strftime("%Y-%m-%dT%H:%M:00Z")
+        for close in closes:
+            if close.bid is None or close.ask is None:
+                continue
+            body: dict[str, object] = {
+                "market_id": close.market_id,
+                "minute": name,
+                "spread": f"{close.ask - close.bid:f}",
+            }
+            facts = RowFacts(ts_recv=now_ns, clock_ok=False, market_id=close.market_id)
+            written = self._writer.append("minute", body, facts)
+            if is_refusal(written):
+                return written
         return Ok(None)
 
     def recent(self, market: str, count: int, before_ns: int | None = None) -> tuple[QuoteBar, ...]:
@@ -258,6 +285,8 @@ class FeedKeeper:
     _quotes: dict[str, Quote] = field(default_factory=dict[str, Quote])
     _listeners: list[Callable[[Bar], None]] = field(default_factory=list[Callable[[Bar], None]])
     _opened: bool = False
+    _minute_ends: int = 0
+    _minute_began: dict[str, Quote] = field(default_factory=dict[str, Quote])
 
     @property
     def ready(self) -> bool:
@@ -283,6 +312,8 @@ class FeedKeeper:
         Answers the closed bars this turn brought, after every listener saw each of them.
         """
         now = self.clock_ns()
+        if now >= self._minute_ends:
+            self._close_minute(now)
         if self.state is SessionState.DOWN and not self._open(now):
             return ()
         if self.state is SessionState.CONNECTED:
@@ -322,6 +353,20 @@ class FeedKeeper:
         """Drop the session now, so the next pump opens it again: a deployment that added a
         market widens through this, the reconnect path the reconcile already resets."""
         self._drop(reason)
+
+    def _close_minute(self, now: int) -> None:
+        """A quote is a new object each time, so a market quoted in this minute holds a different
+        one than when the minute began. That costs the feed path nothing per quote."""
+        closes = [
+            quote
+            for market, quote in sorted(self._quotes.items())
+            if quote is not self._minute_began.get(market)
+        ]
+        written = self.recording.add_minute(self._minute_ends - NS_PER_MINUTE, closes, now)
+        if is_refusal(written):
+            self.reason = f"a minute could not be recorded ({written.category.value})"
+        self._minute_ends = (now // NS_PER_MINUTE + 1) * NS_PER_MINUTE
+        self._minute_began = dict(self._quotes)
 
     def _open(self, now: int) -> bool:
         if self._opened:

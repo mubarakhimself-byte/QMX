@@ -161,7 +161,12 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
-from qmx_tools.functions import attach_dead_ends
+from qmx_tools.functions import (
+    attach_dead_ends,
+    entry_clashes,
+    entry_items,
+    write_entry_status,
+)
 from qmx_tools.gather import check_unit, entry_problems, gather
 from qmx_tools.service import attach_node
 from uvicorn.config import STARTUP_FAILURE
@@ -198,6 +203,7 @@ from qmx_host.market_data import (
     Placement,
     market_router,
 )
+from qmx_host.mis_configure import MisConfigure, mis_call
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.promote import Promoter, harvested_calibrations, promote_router
@@ -250,6 +256,7 @@ classes share the name `LibraryRefused`, one per side of the engine's Library po
 UNIT_CHECKER: Final = "qml.unit/1"
 STUDY_CHECKER: Final = "qmx.study-spec/1"
 ENTRY_CHECKER: Final = "qml.entry/1"
+ENTRY_KIND: Final = "component"
 CHECK_FAILED: Final = "check_failed"
 
 
@@ -763,13 +770,15 @@ class HostStore(Store):
     """On the server only: which store is primary right now."""
     lifecycle: LifecycleWriter | None = None
     """This PC's lifecycle writer, which records the judge's move when a verdict lands."""
+    closing: bool = False
+    """Set once the store begins to close, so the status pass's thread stops and says nothing."""
 
     def put(
         self, who: Principal, draft: Draft, *, on: str, expected_head: ObjectId | None
     ) -> Commit:
         commit = super().put(who, draft, on=on, expected_head=expected_head)
-        if on == MAIN and commit.object_id != commit.prev_head:
-            self._landed(who, commit.object_id)
+        if commit.object_id != commit.prev_head:
+            self._landed(who, commit.item, on, commit.object_id)
         return commit
 
     def merge(
@@ -777,20 +786,30 @@ class HostStore(Store):
     ) -> MergeResult:
         merged = super().merge(who, item, from_ref=from_ref, into=into, strategy=strategy)
         if into == MAIN and merged.outcome in ("fast-forward", "merged"):
-            self._landed(who, merged.object_id)
+            self._landed(who, item, MAIN, merged.object_id)
         return merged
 
     def close(self) -> None:
-        if self.lifecycle is not None:
-            self.lifecycle.close()
-        super().close()
+        """Under the mutex, because closing the one connection mid-statement on another thread
+        kills the process. No block's code runs under it, so a stuck pass does not hold this up."""
+        with self._mutex:
+            self.closing = True
+            if self.lifecycle is not None:
+                self.lifecycle.close()
+            super().close()
 
-    def _landed(self, who: Principal, object_id: ObjectId) -> None:
-        """What the host owes once a record reaches `main`, after its put has committed (a
-        checker runs inside the put and cannot write): a verdict's judge moves, and a study
-        spec's `spec_edit` try when a result exists against an earlier version of it."""
-        kind = str(self._require(object_id)[2])
-        if kind == VERDICT_KIND and self.lifecycle is not None:
+    def _landed(self, who: Principal, item: str, ref: str, object_id: ObjectId) -> None:
+        """What the host owes once a save has committed (a checker runs inside the put and cannot
+        write): a dictionary entry's status on whichever ref it saved to, and once a record reaches
+        `main`, a verdict's judge moves and a study spec's `spec_edit` try when a result exists
+        against an earlier version of it."""
+        with self._mutex:
+            kind = str(self._require(object_id)[2])
+        if kind == ENTRY_KIND:
+            land_entry_status(self, item)
+        elif ref != MAIN:
+            return
+        elif kind == VERDICT_KIND and self.lifecycle is not None:
             record_judge_moves(self, self.lifecycle, object_id)
         elif kind == STUDY_KIND:
             land_spec_edit(self, who, object_id)
@@ -853,18 +872,33 @@ def unit_problems(store: Store) -> Checker:
     return checked
 
 
-def entry_check(fields: JsonObject) -> list[Problem]:
+def entry_check(store: Store) -> Checker:
     """`qml.entry/1`, the put check of a `component` marked `qmx.entry/1`: its face reads as
-    QML's entry. QML names a face problem by its place in the face, under `/entry` here."""
-    return [
-        Problem(
-            p.message,
-            (p.where if p.where == "/component_type" else f"/entry{p.where}".rstrip("/"),),
-            CHECK_FAILED,
-            "entry/face",
-        )
-        for p in entry_problems(fields)
-    ]
+    QML's entry, and it takes no name or pin another entry holds. QML names a face problem by its
+    place in the face and a clash by the pin before that place, both under `/entry` here."""
+
+    def checked(fields: JsonObject) -> list[Problem]:
+        faces = [
+            Problem(
+                p.message,
+                (p.where if p.where == "/component_type" else f"/entry{p.where}".rstrip("/"),),
+                CHECK_FAILED,
+                "entry/face",
+            )
+            for p in entry_problems(fields)
+        ]
+        clashes = [
+            Problem(
+                p.message,
+                (f"/entry/{p.where.partition('/')[2]}".rstrip("/"),),
+                CHECK_FAILED,
+                "entry/clash",
+            )
+            for p in entry_clashes(store, fields)
+        ]
+        return [*faces, *clashes]
+
+    return checked
 
 
 def study_check(fields: JsonObject) -> list[Problem]:
@@ -877,7 +911,7 @@ def study_check(fields: JsonObject) -> list[Problem]:
 def register_checkers(store: Store) -> None:
     """The checkers the Library's kind files name, registered at composition (Part A AD-112)."""
     store.register_checker(UNIT_CHECKER, unit_problems(store))
-    store.register_checker(ENTRY_CHECKER, entry_check)
+    store.register_checker(ENTRY_CHECKER, entry_check(store))
     store.register_checker(STUDY_CHECKER, study_check)
 
 
@@ -885,14 +919,9 @@ JOURNALS: Final = "journals"
 """This PC's journal root, where the host's own streams append (Part B AD-209)."""
 
 
-def lifecycle_writer(home: Path, control: ControlService, machine: str) -> LifecycleWriter:
-    """This PC's one lifecycle writer, reading `[units] lifecycle.auto_paper` at each move."""
-
-    def auto_paper() -> bool:
-        units = cast(dict[str, object], control.settings_get("units"))
-        return cast(dict[str, object], units.get("lifecycle") or {}).get("auto_paper") is True
-
-    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}", auto_paper)
+def lifecycle_writer(home: Path, machine: str) -> LifecycleWriter:
+    """This PC's one lifecycle writer."""
+    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}")
 
 
 def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -> list[str]:
@@ -909,6 +938,29 @@ def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -
     except MoveRefused as refused:
         print(f"lifecycle: {verdict_id} moved nothing: {refused}", file=sys.stderr)
         return []
+
+
+def land_entry_status(store: HostStore, item: str) -> None:
+    """One saved entry's status. A status that fails to compute or write is printed: the save has
+    committed and stands, and the next start's pass tries again. An entry refused is named too.
+    It runs the entry's own code, and `compute_status` keeps anything that code raises. Nothing is
+    printed once the store is closing, because `start` shows the log's last line as the reason."""
+    try:
+        written = write_entry_status(store, item)
+    except Exception as refused:
+        if not store.closing:
+            print(
+                f"library: the status of {item} was not written: "
+                f"{type(refused).__name__}: {refused}",
+                file=sys.stderr,
+            )
+        return
+    for _, _, computed in written:
+        if computed.status is None and not store.closing:
+            print(
+                f"library: the status of {item} is refused: {computed.problems[0].message}",
+                file=sys.stderr,
+            )
 
 
 def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
@@ -947,10 +999,11 @@ def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
     return store.put(OPERATOR_READ, draft, on=MAIN, expected_head=None).object_id
 
 
-def enable_apps(home: Path, runtime: Supervisor) -> None:
+def enable_apps(home: Path, runtime: Supervisor, started: threading.Event | None = None) -> None:
     """The first start's one click, kept at every start: the first-party apps enabled in this
     folder, QMB first, are installed if missing and started beside the host, which does not wait
-    for their environments."""
+    for their environments. `started` is set however they come out, so a job that asks them
+    something after they start waits for this pass and never for a guess."""
     try:
         enabled = enable_first_party(home, runtime)
     except (AppError, OSError, ValueError) as refused:
@@ -958,9 +1011,12 @@ def enable_apps(home: Path, runtime: Supervisor) -> None:
             f"apps: the first-party apps did not start, again next start: {refused}",
             file=sys.stderr,
         )
-        return
-    if enabled:
-        print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
+    else:
+        if enabled:
+            print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
+    finally:
+        if started is not None:
+            started.set()
 
 
 def close_stranded_runs(home: Path, run: QmbRun) -> None:
@@ -1014,6 +1070,35 @@ def land_dictionary_wave(store: Store) -> None:
         print(
             f"library: the dictionary's first wave waits in the Library: {family}", file=sys.stderr
         )
+
+
+def land_dictionary_statuses(store: HostStore) -> threading.Thread:
+    """Every Library entry's status at each PC start, because a store an older checker wrote or a
+    save whose status failed reads true only after this. A head already true writes nothing. One
+    entry at a time, so one that raises names itself and costs only its own status.
+
+    On a daemon thread, and the start does not wait for it, because a thread cannot be stopped and
+    an entry's code can loop forever. Such an entry costs this thread, a core, and the status of
+    every item sorted after it, this start and each next one. Nothing reads a status during a
+    start, and until the pass reaches an entry its page reads the status last written. It stops at
+    the next entry once the store is closing, and the next start's pass does the rest."""
+
+    def run() -> None:
+        try:
+            for item in entry_items(store):
+                if store.closing:
+                    return
+                land_entry_status(store, item)
+        except (LibraryRefused, OSError, ValueError, sqlite3.Error) as refused:
+            if not store.closing:
+                print(
+                    f"library: the dictionary's statuses were not written: {refused}",
+                    file=sys.stderr,
+                )
+
+    running = threading.Thread(target=run, name="qmx-entry-statuses", daemon=True)
+    running.start()
+    return running
 
 
 def library_line(store: Store) -> DoctorLine:
@@ -1144,9 +1229,10 @@ async def serve(
                 if not serving:
                     land_first_unit(store)
                 if role == "pc":
-                    store.lifecycle = lifecycle_writer(home, control, name)
+                    store.lifecycle = lifecycle_writer(home, name)
                     land_ported_dictionary(store)
                     land_dictionary_wave(store)
+                    land_dictionary_statuses(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
                 registered = landers(
@@ -1158,8 +1244,12 @@ async def serve(
                 )
                 runtime.attach_landers(registered)
                 close_stranded_runs(runtime.home, cast(QmbRun, registered[QMB_RUN]))
+                apps_started = threading.Event()
                 threading.Thread(
-                    target=enable_apps, args=(home, runtime), name="qmx-first-apps", daemon=True
+                    target=enable_apps,
+                    args=(home, runtime, apps_started),
+                    name="qmx-first-apps",
+                    daemon=True,
                 ).start()
                 harness.doctor_from(lambda: library_line(store))
                 backups = Backups(
@@ -1177,6 +1267,17 @@ async def serve(
                         store,
                         every_s=refresh_s(node_settings),
                         markets=record_markets(node_settings),
+                    )
+                    if role == "pc"
+                    else None
+                )
+                mis_configure = (
+                    MisConfigure(
+                        mis_call(runtime),
+                        store,
+                        door if isinstance(door, MarketDoor) else None,
+                        every_s=refresh_s(node_settings),
+                        started=apps_started,
                     )
                     if role == "pc"
                     else None
@@ -1297,6 +1398,8 @@ async def serve(
                         harvesting = [] if records is None else [asyncio.create_task(records.run())]
                         if venue_records is not None:
                             harvesting.append(asyncio.create_task(venue_records.run()))
+                        if mis_configure is not None:
+                            harvesting.append(asyncio.create_task(mis_configure.run()))
                         # Uvicorn logs no started line for a socket it was handed.
                         address, _ = sock.getsockname()
                         print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
@@ -2019,7 +2122,7 @@ class QmbRun:
         if isinstance(found, str):
             raise BundleRefused([found])
         bars = None if found is None else self._bars(found, inputs)
-        costs = None if found is None else self._stated_costs(inputs)
+        costs = None if bars is None else self._stated_costs(inputs, bars)
         ticket = self.lander.open(app_id, version, job, inputs, principal)
         if ticket is not None and found is not None and bars is not None:
             laid = self.folder_of(app_id, ticket.run_id) / "in"
@@ -2031,11 +2134,13 @@ class QmbRun:
                 raise BundleRefused([str(error)]) from error
         return ticket
 
-    def _stated_costs(self, inputs: Document) -> StatedCosts | None:
+    def _stated_costs(self, inputs: Document, markets: Collection[str]) -> StatedCosts | None:
         """The cost profile a run is told to pay: the study's `cost_rule` when it names a Library
         object, as a study's `allow_gaps` beats a chat's, else the request's `cost_profile`. A
         `cost_rule` naming no object is words. The object is what `library_save` lands, and
-        anything else is refused before any try."""
+        anything else is refused before any try, as is a profile that charges one of `markets`
+        nothing. Only a `costs` entry counts: funding reaches a market only if its record pays
+        funding, so funding alone can charge nothing while the result names the profile."""
         rule = self._study_fields(inputs).get("cost_rule")
         named = rule if isinstance(rule, str) and self.library.holds(rule) else None
         pin = named or inputs.get("cost_profile")
@@ -2049,9 +2154,21 @@ class QmbRun:
         blob = view.blobs.get("content")
         if said != COST_PROFILE or blob is None:
             raise BundleRefused([f"cost_profile {pin} is a {said}, not a {COST_PROFILE}"])
-        body = cast(dict[str, Any], json.loads(store.read_blob(blob.blob_id)))
-        held = cast(dict[str, Any], body.get("content", body))
-        return StatedCosts(pin, held.get("costs") or {}, held.get("funding") or {})
+        body: object = json.loads(store.read_blob(blob.blob_id))
+        held = cast(dict[str, Any], body).get("content", body) if isinstance(body, dict) else body
+        stated = cast(dict[str, Any], held) if isinstance(held, dict) else {"costs": held}
+        profiles, funding = stated.get("costs") or {}, stated.get("funding") or {}
+        if not (_maps_to(profiles, dict) and _maps_to(funding, str)):
+            raise BundleRefused(
+                [
+                    f"cost_profile {pin} needs costs by market, each an object, and funding by "
+                    "market, each CSV text"
+                ]
+            )
+        missing = [market for market in markets if market not in profiles]
+        if missing:
+            raise BundleRefused([f"cost_profile {pin} names no costs for {', '.join(missing)}"])
+        return StatedCosts(pin, profiles, funding)
 
     def _study_fields(self, inputs: Document) -> Mapping[str, Any]:
         pin = inputs.get("study")
@@ -2234,12 +2351,11 @@ class QmbRun:
     ) -> None:
         """Each market's stated profile and funding where the tester reads them. A stated profile
         measured no fills whatever it says, so the run stays `costs_uncalibrated`."""
+        (root / "costs").mkdir(exist_ok=True)
         for market in bars:
-            if market in costs.profiles:
-                (root / "costs").mkdir(exist_ok=True)
-                (root / "costs" / f"{market}.json").write_text(
-                    json.dumps({**costs.profiles[market], "fills": 0}, indent=2), "utf-8"
-                )
+            (root / "costs" / f"{market}.json").write_text(
+                json.dumps({**costs.profiles[market], "fills": 0}, indent=2), "utf-8"
+            )
             if market in costs.funding:
                 (root / "funding").mkdir(exist_ok=True)
                 (root / "funding" / f"{market}.csv").write_text(costs.funding[market], "utf-8")
@@ -2383,6 +2499,12 @@ def _sources(asked: object, studied: object) -> list[str]:
     if not all(isinstance(source, str) and source for source in named):
         raise BundleRefused(["source names one source in the market store, as text"])
     return list(dict.fromkeys(cast(list[str], named))) or [DEFAULT_SOURCE]
+
+
+def _maps_to(value: object, kind: type) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(entry, kind) for entry in cast(dict[str, object], value).values()
+    )
 
 
 def _asked_markets(traded: Sequence[str], asked: object) -> tuple[str, ...]:

@@ -1,5 +1,5 @@
 {
-  "description": "After a Write or Edit of a unit document (a JSON object whose schema is qmx.unit/<n>), run the QMX unit checker and hand a failing result back to the agent. The hook opens no Library, so it says nothing when an error is one only the Library can settle (a market's instrument record or a pin to a Library block); the unit_check row still checks those. Every other file passes untouched.",
+  "description": "After a Write or Edit of a unit document (a JSON object whose schema is qmx.unit/<n>), run the QMX unit checker and hand a failing result back to the agent. The hook opens no Library, so it leaves out what only the Library can settle (a market's instrument record or a pin to a Library block) and tells the agent every other error, whichever market it picked; the unit_check row still checks those. Every other file passes untouched.",
   "hooks": {
     "PostToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -c \"\nimport json, sys\nfrom pathlib import Path\nevent = json.load(sys.stdin)\npath = Path(str(event.get('tool_input', {}).get('file_path', '')))\ntry:\n    document = json.loads(path.read_text('utf-8'))\nexcept (OSError, ValueError):\n    sys.exit(0)\nif not (isinstance(document, dict) and str(document.get('schema', '')).startswith('qmx.unit/')):\n    sys.exit(0)\nfrom qmx_tools.unit_check import checked\nresult = checked(None, document)\nlibrary_settles = {'no_record', 'no_pip', 'calendar_not_held', 'data_level_missing', 'pin_unresolved'}\nif result['verdict'] != 'pass' and not library_settles & {p['kind'] for p in result['errors']}:\n    found = {key: result[key] for key in ('verdict', 'counts', 'errors', 'warnings', 'problem_set')}\n    told = 'QMX unit check of ' + path.name + ' failed. Fix every error, then save the file again. ' + json.dumps(found)\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PostToolUse', 'additionalContext': told}}))\n\"",
+            "command": "python -c \"\nimport json, sys\nfrom pathlib import Path\nevent = json.load(sys.stdin)\npath = Path(str(event.get('tool_input', {}).get('file_path', '')))\ntry:\n    document = json.loads(path.read_text('utf-8'))\nexcept (OSError, ValueError):\n    sys.exit(0)\nif not (isinstance(document, dict) and str(document.get('schema', '')).startswith('qmx.unit/')):\n    sys.exit(0)\nfrom qmx_tools.unit_check import offline_checked\nresult = offline_checked(document)\nif result['verdict'] != 'pass':\n    found = {key: result[key] for key in ('verdict', 'counts', 'errors', 'warnings', 'problem_set')}\n    told = 'QMX unit check of ' + path.name + ' failed. Fix every error, then save the file again. ' + json.dumps(found)\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PostToolUse', 'additionalContext': told}}))\n\"",
             "timeout": 8
           }
         ]

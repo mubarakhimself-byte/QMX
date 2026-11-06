@@ -4,7 +4,7 @@ The slow lane's daily data review (STATE midday ruling 44, Part B `workflows.md`
 
 ## Steps
 
-1. `Count the day's gaps, clock flags and offsets` (`scripts/read.py`) reads every price series the market-data door holds and its card from the door: the months, the months not yet frozen, the gaps each month's freeze recorded, and the partition fingerprints. Through `journal_query` it counts the day's unit, market and node rows stamped `clock_ok = false`, per stream and machine, and the market journal's `offset` rows per market. It lands the review as one `data-review` artifact.
+1. `Count the day's gaps, clock flags and offsets` (`scripts/read.py`) reads every price series the market-data door holds and its card from the door: the months, the months not yet frozen, the gaps each month's freeze recorded, and the partition fingerprints. Through `journal_query` it counts the day's unit, market and node rows stamped `clock_ok = false`, per stream and machine, and the market journal's `offset` rows per market. It lands the review as one `data-review` artifact, the only place each series' months, open months, gaps per month and fingerprints stay. The writer gets their counts.
 2. `Nothing held?` lands the script's own note when the machine holds no series and no flagged or offset row: zero tokens.
 3. `Write the data note` (role `writer`) writes one paragraph from the counts and cites `read`.
 4. `Check every number's receipt` (the shared `receipts-grader` block, carried in `receipts-grader/`) fails the run on any number the read step did not print.

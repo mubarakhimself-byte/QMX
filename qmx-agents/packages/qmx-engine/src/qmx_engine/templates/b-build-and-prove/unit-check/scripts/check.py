@@ -2,10 +2,10 @@
 
 Its input is `{"in": ...}`. The first check gets `{"unit": <document>}`. Each later check gets the
 round's value, `{"unit", "round", "check", "stop", "why"}`, and the fix step's `{"unit": ...}`.
-It checks the newest document with the row's own function, `qmx_tools.unit_check.checked`, and
-passes the last result's `problem_set`, so a fix that brings the same problems back reads
-`no_progress` and the loop stops (Part A AG-11). A script never opens the Library, so the check
-runs against QML's own blocks, as the row's command does.
+It checks the newest document with `qmx_tools.unit_check.offline_checked`, the row's own check with
+no Library, and passes the last result's `problem_set`, so a fix that brings the same problems back
+reads `no_progress` and the loop stops (Part A AG-11). A script never opens the Library, so what
+only the Library can settle is a note on the result, not an error to spend a fix round on.
 
 It prints the next round's value. `stop` is true once the unit passes or makes no progress, and
 `why` says which.
@@ -14,7 +14,7 @@ It prints the next round's value. `stop` is true once the unit passes or makes n
 import json
 import sys
 
-from qmx_tools.unit_check import checked
+from qmx_tools.unit_check import offline_checked
 
 FAILURE = "[QMX_FAILURE]"
 
@@ -29,7 +29,7 @@ if held is None and fixed is None:
 document = (fixed or held)["unit"]
 previous = None if held is None else (held.get("check") or {}).get("problem_set")
 number = 0 if held is None else held["round"] + 1
-result = checked(None, document, previous)
+result = offline_checked(document, previous)
 errors = result["counts"]["errors"]
 why = None
 if result["verdict"] == "pass":

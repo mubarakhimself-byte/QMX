@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
 from qmf.core import TypedRefusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld
+from qmf.data.journal_reader import JournalLine, read_committed
 from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmn.app.feed_keeper import (
     Bar,
@@ -15,6 +17,7 @@ from qmn.app.feed_keeper import (
     BookView,
     FeedKeeper,
     Level,
+    Quote,
     RecordedSource,
     Recording,
     SessionState,
@@ -156,3 +159,41 @@ def test_the_recorded_bars_are_what_a_restarted_node_warms_up_from(tmp_path: Pat
     assert reopened.recent("fx.eurusd", 10) == tuple(bars)
     assert reopened.recent("fx.eurusd", 2) == tuple(bars[1:])
     assert reopened.recent("metal.xauusd", 10) == ()
+
+
+def test_a_minute_row_holds_the_spread_at_its_close(tmp_path: Path) -> None:
+    eight = int(datetime(2025, 1, 2, 8, tzinfo=UTC).timestamp()) * SECOND
+    now = [eight]
+    scope = WriterScope(
+        JournalStream.MARKET, "ctrader.demo", JournalWorld.DEMO, "pc", "node", "0.1.0"
+    )
+    writer = JournalWriter.open(tmp_path, scope, clock=lambda: now[0], boot_epoch_id="b1")
+    assert not isinstance(writer, TypedRefusal), writer
+    source = RecordedSource([])
+    feed = FeedKeeper(
+        "ctrader", "demo", source, ("fx.eurusd",), lambda: now[0], Recording(writer.value)
+    )
+
+    def turn(second: int, bid: str | None, ask: str | None) -> None:
+        now[0] = eight + second * SECOND
+        side = "both" if bid and ask else ("bid" if bid else "ask")
+        price = (Decimal(bid) if bid else None, Decimal(ask) if ask else None)
+        source.play([Quote("fx.eurusd", now[0], price[0], price[1], side)])
+        feed.pump()
+
+    turn(10, "1.08000", "1.08020")
+    turn(59, None, "1.08012")
+    turn(61, "1.08000", "1.08090")
+    writer.value.close()
+    [folder] = tmp_path.glob("journal-market.minute.*")
+    lines = read_committed(folder)
+    assert not isinstance(lines, TypedRefusal), lines
+    rows = [line for line in lines.value if isinstance(line, JournalLine)]
+
+    assert [(row.t, row.record["market_id"], row.record["body"]) for row in rows] == [
+        (
+            1_735_804_861_000,
+            "fx.eurusd",
+            {"market_id": "fx.eurusd", "minute": "2025-01-02T08:00:00Z", "spread": "0.00012"},
+        )
+    ]

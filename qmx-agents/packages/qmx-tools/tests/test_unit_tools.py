@@ -136,7 +136,7 @@ def test_explain_reads_a_saved_unit_in_plain_lines(context: DomainContext) -> No
     lines = unit["unit_explain"](item=made["item"])["lines"]
 
     assert lines[1] == "trades both on fx.eurusd, metal.xauusd"
-    assert lines[-1] == "check: 0 errors, 4 warnings"
+    assert lines[-1] == "check: 0 errors, 5 warnings"
 
 
 def run(document: Path) -> subprocess.CompletedProcess[str]:

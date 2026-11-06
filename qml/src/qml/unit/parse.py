@@ -63,6 +63,7 @@ class ProblemKind(StrEnum):
     UNSETTLED_ORIGIN = "unsettled_origin"
     MEASURE_MISMATCH = "measure_mismatch"
     PERCENT_LOOKS_WHOLE = "percent_looks_whole"
+    CADENCE_NOT_BUILT = "cadence_not_built"
     # Layer B, the references (qml.check)
     PIN_UNRESOLVED = "pin_unresolved"
     PIN_FINGERPRINT = "pin_fingerprint"

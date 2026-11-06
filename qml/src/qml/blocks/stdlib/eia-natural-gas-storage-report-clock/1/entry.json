@@ -13,7 +13,7 @@
   "origin": "qml",
   "component_type": "calendar",
   "definition": "Seconds from the nearest EIA Weekly Natural Gas Storage Report, Thursday 10:30 New York time, negative before it and positive after.",
-  "boundaries": "New York time follows its daylight-saving rule. Holiday moves are not modelled. It is a fixed clock, not the report's numbers. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "boundaries": "New York time follows its daylight-saving rule. Holiday moves are not modelled. It is a fixed clock, not the report's numbers. Bars without a time are missing. QML's unit runtime passes each bar its close time, so inside a unit this value reads from the first bar. As a lone slot binding it holds nothing: bind value-above to it to gate on the seconds.",
   "recognition": "Gas units go flat before the Thursday storage report.",
   "eligible_roles": [
     "context",
