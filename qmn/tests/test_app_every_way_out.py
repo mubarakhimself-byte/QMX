@@ -20,7 +20,7 @@ from qmf.venue.commands import CommandKind
 from qml.unit.model import Side
 from qmn.app import runtime as node_runtime
 from qmn.app.attribution import OrderState, VenueOrder, VenuePosition
-from qmn.app.runtime import Blocked, NodeUnit, Placed
+from qmn.app.runtime import Blocked, Deployment, NodeUnit, Placed
 from qmn.app.store import Json
 from test_app_broker_wins import BAR, ENTRY_WINDOW, entries, restarted, trading, unit_rows
 from test_protection_every_order import node_rows, refusing
@@ -53,13 +53,17 @@ def stopped(rig: b.Bound) -> None:
     b.runtime(rig).stop()
 
 
+def will_not_compile(_deployment: Deployment, _folder: Path) -> str:
+    return "the unit did not compile: a block changed"
+
+
 def test_red_closes_a_position_no_unit_holds(tmp_path: Path) -> None:
     rig, runtime, _ = trading(tmp_path)
     rig.fake.held[7777] = hand_opened()
     runtime.stop()
 
     again = b.bound_rig(tmp_path, grant=rig.grants.held, broker=rig.fake, at=rig.now[0])
-    b.runtime(again).compile = lambda _d, _f: "the unit did not compile: a block changed"
+    b.runtime(again).compile = will_not_compile
     b.tick_quotes(again, 4)
     phase = b.runtime(again).hosted["dep-1"].phase.value
     killed = again.node.call("kill", {"op_id": "op-red", "level": "RED", "scope": "all"})
@@ -277,7 +281,7 @@ def test_a_stop_lost_across_a_reconnect_is_put_back(tmp_path: Path) -> None:
 
     assert held.stop == Decimal("1.08022")
     assert rig.fake.amended == [{"stopLoss": Decimal("1.08022")}]
-    assert list(cast("dict[int, b.Held]", rig.fake.held)) == [held.position_id]
+    assert list(rig.fake.held) == [held.position_id]
     assert unit_of(rig).orders.venue.client.stop_of(name) == Decimal("1.08022")
     assert runtime.alarms == []
     runtime.stop()
