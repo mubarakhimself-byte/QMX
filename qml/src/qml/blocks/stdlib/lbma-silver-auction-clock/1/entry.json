@@ -11,7 +11,7 @@
   "origin": "qml",
   "component_type": "calendar",
   "definition": "Seconds from the nearest LBMA Silver Price auction, at 12:00 London time on London weekdays, negative before it and positive after.",
-  "boundaries": "London time follows its daylight-saving rule. UK bank holidays are not modelled. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "boundaries": "London time follows its daylight-saving rule. UK bank holidays are not modelled. Bars without a time are missing. QML's unit runtime passes each bar its close time, so inside a unit this value reads from the first bar. As a lone slot binding it holds nothing: bind value-above to it to gate on the seconds.",
   "recognition": "A silver unit stands aside around the noon auction.",
   "eligible_roles": [
     "context",

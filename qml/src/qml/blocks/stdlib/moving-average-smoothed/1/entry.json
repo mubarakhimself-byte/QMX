@@ -78,5 +78,13 @@
   "golden": {
     "reference": "MetaQuotes SMMA formula, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "28"
+    },
+    "bars": 476,
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }

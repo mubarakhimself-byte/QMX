@@ -116,10 +116,21 @@ def test_a_plan_launch_sets_only_the_plan_home_and_the_launcher_inputs(home: Qmx
         "CLAUDE_AGENT_SDK_CLIENT_APP": "QMA",
         **windows,
         "CLAUDE_CONFIG_DIR": str(home.root / "claude"),
+        "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
         "QMA_CHAT_ID": CHAT,
         "QMA_PROC_DIR": str(home.root.parent / "cache" / "run" / "procs"),
         "QMA_CAP": "Local\\qma-cap",
     }
+
+
+def test_the_cli_path_starts_with_the_host_interpreter(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATH", "D:/elsewhere")
+
+    env = launch_env(PlanLaunch(), home=home, session_id=CHAT, cap="c")
+
+    assert env["PATH"].split(os.pathsep) == [str(Path(sys.executable).parent), "D:/elsewhere"]
 
 
 def telemetry_names(home: QmxHome, send_to: str) -> dict[str, str]:
@@ -298,6 +309,7 @@ def test_a_relayed_launch_carries_the_relay_and_its_grant_never_a_key(home: QmxH
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "a/h",
         "ANTHROPIC_DEFAULT_FABLE_MODEL": "a/f",
         "NO_PROXY": "127.0.0.1,localhost",
+        "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
         "QMA_CHAT_ID": CHAT,
         "QMA_PROC_DIR": str(home.root.parent / "cache" / "run" / "procs"),
         "QMA_CAP": "c",

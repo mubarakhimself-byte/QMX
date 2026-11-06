@@ -5,7 +5,8 @@ Its input is the run's `source` (`title`, `text`, and `url` and `date` when it h
 own matcher, `qml.catalogue.index.match`, reads every sentence against every entry's names. Each
 unmatched sentence lands as one `append-request` artifact on the run's own ref, keyed by the
 source and the sentence, so a rerun lands nothing twice. It prints the matches, the append
-requests and the source, for the agent step to draft entries from.
+requests and the source, and under `sources` the source and its unmatched sentences for the
+`marked-sources` block, which is all the agent step reads of them.
 """
 
 import hashlib
@@ -57,6 +58,13 @@ print(
             "source": source,
             "sentences": report["sentences"],
             "append_requests": report["append_requests"],
+            "sources": [
+                source,
+                {
+                    "title": "the sentences no entry states",
+                    "text": "\n".join(r["sentence"] for r in report["append_requests"]),
+                },
+            ],
             "library": writes,
         }
     )

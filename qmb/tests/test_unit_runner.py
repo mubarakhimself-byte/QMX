@@ -42,10 +42,12 @@ CORPUS = _QML / "tests" / "corpus"
 def dummy_document() -> dict[str, object]:
     document = cast("dict[str, object]", json.loads(_DUMMY.read_text("utf-8")))
     pins: list[dict[str, object]] = []
-    for folder in sorted(p for p in _STDLIB.iterdir() if (p / "1" / "entry.json").is_file()):
-        face = parse_entry((folder / "1" / "entry.json").read_bytes())
+    for entry in sorted(_STDLIB.glob("*/*/entry.json")):
+        face = parse_entry(entry.read_bytes())
         assert isinstance(face, EntryFace), face
-        pins.append({"entry_id": face.entry_id, "version": 1, "fingerprint": face.fingerprint})
+        pins.append(
+            {"entry_id": face.entry_id, "version": face.version, "fingerprint": face.fingerprint}
+        )
     document["pins"] = pins
     return document
 
@@ -61,11 +63,11 @@ def make_run_folder(
     folder = root / "run"
     folder.mkdir()
     (folder / "unit.json").write_text(json.dumps(document or dummy_document()), "utf-8")
-    for block in (p for p in _STDLIB.iterdir() if (p / "1" / "block.py").is_file()):
-        pin = folder / "blocks" / f"{block.name}@1"
+    for block in _STDLIB.glob("*/*/block.py"):
+        pin = folder / "blocks" / f"{block.parent.parent.name}@{block.parent.name}"
         pin.mkdir(parents=True)
-        shutil.copyfile(block / "1" / "block.py", pin / "block.py")
-        shutil.copyfile(block / "1" / "entry.json", pin / "entry.json")
+        shutil.copyfile(block, pin / "block.py")
+        shutil.copyfile(block.with_name("entry.json"), pin / "entry.json")
     (folder / "records").mkdir()
     for market, symbol in _MARKETS.items():
         shutil.copyfile(

@@ -79,6 +79,7 @@
       "period": "100"
     },
     "bars": 900,
-    "tolerance": "1e-9"
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }
