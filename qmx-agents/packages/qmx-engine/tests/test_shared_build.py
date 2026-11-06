@@ -1,9 +1,9 @@
 """The shared pieces the build-and-prove templates call (Part B AD-213, B18a): the unit-check
-step, the proposal card, the death certificate, the lineage writer and the conveyor.
+step, the proposal card, the lineage writer and the conveyor.
 
 Each block runs on the real `Engine` from its own folder under `_shared/`. A model step is planted
-through the engine's `executors=` seam, so the fix and the explanation are fixed answers and every
-gate is the block's own script.
+through the engine's `executors=` seam, so the fix is a fixed answer and every gate is the block's
+own script.
 """
 
 from __future__ import annotations
@@ -203,76 +203,6 @@ def test_a_proposal_missing_its_ask_and_evidence_names_both_and_lands_nothing(
     assert "ask 'promote' is not one of paper, live" in outcome.reason
     assert "evidence lists no Library object id" in outcome.reason
     assert artifacts(home, "proposal-card") == []
-
-
-FAILED_VERDICT: dict[str, Any] = {
-    "item": "verdict-0f3a",
-    "says": "Fail by the shipped preset. fx.eurusd fails the cost stress: expectancy -0.04R at "
-    "2x costs. Behind it: 3 tries, 2 effective.",
-    "verdict": {
-        "unit": "unit-gold-pullback",
-        "overall": "fail",
-        "per_market": [
-            {
-                "market": "fx.eurusd",
-                "outcome": "fail",
-                "steps": [
-                    {"name": "claim", "outcome": "passed"},
-                    {"name": "random_entries", "outcome": "passed"},
-                    {"name": "cost_stress", "outcome": "failed"},
-                    {"name": "walk_forward", "outcome": "failed"},
-                ],
-            }
-        ],
-    },
-}
-
-
-def test_a_failed_unit_lands_one_death_certificate_carrying_its_dead_end_row(
-    tmp_path: Path,
-) -> None:
-    home = qmx_home(tmp_path)
-    judged = {"run_id": "judge-run", "outputs": {"judge": {"main": FAILED_VERDICT}}}
-
-    outcome, events = run_block(
-        "death-certificate",
-        home,
-        judged,
-        llm=lambda _job, _value: {"explanation": "Costs ate the edge at twice the spread."},
-    )
-
-    [certificate] = artifacts(home, "death-certificate")
-    dead_end = {
-        "tag": "dead_end",
-        "intent_key": "unit-gold-pullback",
-        "when_to_use": "before building unit-gold-pullback again or a unit with the same rules",
-        "content": f"unit-gold-pullback died of costs. {FAILED_VERDICT['says']}",
-        "refs": ["unit-gold-pullback", "verdict-0f3a"],
-    }
-    assert outcome.status == "passed"
-    assert metadata(certificate) == {
-        "unit": "unit-gold-pullback",
-        "verdict": "verdict-0f3a",
-        "cause": "costs",
-        "classifier_version": "1",
-        "dead_end": dead_end,
-    }
-    assert body(home, certificate) == "Costs ate the edge at twice the spread."
-    assert output(events, "land")["dead_end"] == dead_end
-
-
-def test_a_passing_verdict_gets_no_death_certificate(tmp_path: Path) -> None:
-    home = qmx_home(tmp_path)
-    passed = {**FAILED_VERDICT, "verdict": {**FAILED_VERDICT["verdict"], "overall": "pass"}}
-
-    outcome, _ = run_block("death-certificate", home, passed, llm=lambda _j, _v: {})
-
-    assert (outcome.status, outcome.reason) == (
-        "failed",
-        "node classify failed: qmx_failure: verdict-0f3a is pass; only a failed unit gets a "
-        "death certificate",
-    )
-    assert artifacts(home, "death-certificate") == []
 
 
 def seeded(home: Path, names: tuple[str, ...]) -> dict[str, str]:

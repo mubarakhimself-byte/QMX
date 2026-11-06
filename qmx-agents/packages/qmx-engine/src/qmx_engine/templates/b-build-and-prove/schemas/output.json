@@ -1,7 +1,7 @@
 {
   "type": "object",
   "required": ["stage_reached", "verdict", "spec", "memo_key", "unit", "check", "judge", "card",
-               "dead_end", "proposal", "certificate", "explanation", "lineage", "summary"],
+               "dead_end", "proposal", "certificate", "lineage", "summary"],
   "x-prose": ["summary"],
   "properties": {
     "stage_reached": {"enum": ["spec", "unit", "verdict"]},
@@ -15,7 +15,6 @@
     "dead_end": {"type": ["object", "null"]},
     "proposal": {"type": ["object", "null"]},
     "certificate": {"type": ["object", "null"]},
-    "explanation": {"type": ["string", "null"]},
     "lineage": {"type": ["array", "null"]},
     "summary": {"type": "string"}
   }

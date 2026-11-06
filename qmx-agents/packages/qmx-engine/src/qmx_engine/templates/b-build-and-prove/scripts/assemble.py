@@ -2,8 +2,8 @@
 
 Its inputs are told apart by shape: the sealed spec (`memo_key`), `Ready to test?`'s answer
 (`recorded`), the referee step's `verdict`, the paper card or dead end (`dead_end`), the writer's
-`summary`, and the children's outputs, nested as `outputs.<node>.main`: the proposal card, the
-death certificate and the lineage. A refused spec ends at stage `spec` with its problems, a unit
+`summary`, and the lineage child's output, nested as `outputs.<node>.main`. A refused spec ends
+at stage `spec` with its problems, a unit
 that is not ready at stage `unit` with why, and a judged unit at stage `verdict` with the
 verdict's own words.
 """
@@ -34,7 +34,6 @@ elif ready is None or not ready["ok"]:
     says = "could not test: " + (ready["why"] if ready else "no unit was built")
 else:
     stage, says = "verdict", verdict["says"]
-certificate = child(rows, "land")
 print(
     json.dumps(
         {
@@ -47,9 +46,8 @@ print(
             "judge": verdict,
             "card": card["card"],
             "dead_end": card["dead_end"],
-            "proposal": (child(rows, "card") or {}).get("card"),
-            "certificate": None if certificate is None else certificate["certificate"],
-            "explanation": None if certificate is None else certificate["explanation"],
+            "proposal": None,
+            "certificate": None,
             "lineage": (child(rows, "lineage") or {}).get("chain"),
             "summary": prose["summary"],
         }

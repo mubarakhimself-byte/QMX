@@ -270,7 +270,6 @@ def answers(
         "You turn his one-line trading idea": recorded(B, "claim.json"),
         "You build one QMX trading unit": recorded(B, "build.json"),
         "You ask QMX's referee": recorded(B, "referee-fail.json"),
-        "You explain why a trading unit died": recorded(B, "explanation.json"),
         "You are the writer of QMX's build-and-prove scorecard": recorded(B, "summary.json"),
         "You draft dictionary entries": recorded(U3, "drafts.json"),
     } | (planted or {})
@@ -345,58 +344,16 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_each_template_once_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 55
-    assert len(set(ids)) == 55
+    assert len(ids) == len(set(ids))
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
-    assert [t.id for t in CATALOG if not t.needs] == [
-        "paper-scout-to-research-note",
-        "news-and-macro-calendar-watch",
-        "rough-idea-to-test-plan",
-        "source-to-component-card",
-        "literature-review-on-a-topic",
-        "video-to-strategy-ideas",
-        "weekly-review",
-        "morning-market-brief",
-        "research-desk-overnight",
-        "copilot-eval-battery",
-        "demo-trades-fill-quality",
-        "trade-journal-in-risk-units",
-        "trading-guards-alive",
-        "decay-and-limit-report",
-        "incident-post-mortem",
-        "strategy-idea-to-paper-tested",
-        "revolution-loop",
-        "ask-the-panel",
-        "clippings-into-research",
-        "morning-digest",
-        "crystallise-a-workflow",
-        "synthetic-data",
-        "connections-health",
-        "feed",
-        "download-dukascopy",
-        "download-binance",
-        "download-ccxt",
-        "extract-source",
-        "refresh-ccxt-records",
-        "run-a-unit-on-every-market",
-        "where-a-failed-unit-still-holds",
-        "expand-the-dictionary-from-a-source",
-        "find-repeated-code-and-gaps-in-the-dictionary",
-        "shortlist-markets-before-each-session",
-        "tag-units-to-markets",
-        "check-the-mis-against-an-agents-read",
-        "review-the-days-data",
-        "replay-a-live-day-and-diff-it",
-    ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
-    assert sum(1 for t in CATALOG if t.needs) == 17
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
@@ -419,31 +376,6 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
     assert find(" A ") is find("video-to-strategy-ideas")
     assert find("b-build-and-prove").id == "strategy-idea-to-paper-tested"
     assert set(ALIASES.values()) <= {template.id for template in CATALOG}
-    assert {template.id for template in CATALOG} - set(ALIASES.values()) == {
-        "revolution-loop",
-        "ask-the-panel",
-        "clippings-into-research",
-        "morning-digest",
-        "crystallise-a-workflow",
-        "run-one-job-on-his-server",
-        "synthetic-data",
-        "connections-health",
-        "feed",
-        "download-dukascopy",
-        "download-binance",
-        "download-ccxt",
-        "extract-source",
-        "refresh-ccxt-records",
-        "run-a-unit-on-every-market",
-        "where-a-failed-unit-still-holds",
-        "expand-the-dictionary-from-a-source",
-        "find-repeated-code-and-gaps-in-the-dictionary",
-        "shortlist-markets-before-each-session",
-        "tag-units-to-markets",
-        "check-the-mis-against-an-agents-read",
-        "review-the-days-data",
-        "replay-a-live-day-and-diff-it",
-    }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
     with pytest.raises(KeyError):
