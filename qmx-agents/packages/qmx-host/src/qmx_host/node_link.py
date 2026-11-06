@@ -666,8 +666,8 @@ def _with_refused(
     operation: str, answer: JsonValue, refused: Sequence[Change], wanted: JsonValue
 ) -> JsonValue:
     """The node's rows, then a row for each deploy it refused. A deployment the node holds reads
-    as the node has it, since an ask that timed out files as refused and may have reached it. A
-    node here answers its envelope and a node elsewhere its value, and each keeps its shape."""
+    as the node has it, so a refused row is added only for a deployment the node does not show.
+    A node here answers its envelope and a node elsewhere its value, and each keeps its shape."""
     enveloped = isinstance(answer, dict)
     if enveloped and cast(Document, answer).get("ok") is not True:
         return answer
