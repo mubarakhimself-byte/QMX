@@ -704,8 +704,12 @@ def test_his_own_test() -> None:
                 last_check.get("verdict"),
             )
 
-            item = str(payload(results.get(calls[min(news)][1], "")).get("item") or "")
-            result_id = str(payload(results.get(calls[min(runs)][1], "")).get("result_id") or "")
+            last_new = max(index for index in news if index < before_run[-1])
+            item = str(payload(results.get(calls[last_new][1], "")).get("item") or "")
+            judged_from = [index for index in runs if index < min(judges)]
+            result_id = str(
+                payload(results.get(calls[judged_from[-1]][1], "")).get("result_id") or ""
+            )
             verdict_id = str(
                 payload(results.get(calls[min(judges)][1], "")).get("verdict_id") or ""
             )
