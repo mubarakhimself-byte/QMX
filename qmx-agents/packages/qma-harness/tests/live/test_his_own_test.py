@@ -4,9 +4,10 @@ Check 18 of the foundation proof. It runs through a real host on a scratch QMX f
 host's chat routes, on `haiku`, and it is opt-in with `QMX_TEST_LIVE=1` so the package suite never
 starts a host or a model.
 
-What it does, in order. It takes the engine lane lock, makes a throwaway QMX folder with the
-first-start card so QMB is enabled and `[qmb] bars` stays empty, makes the plan login one junction,
-and lands EURUSD for March 2025 through the shipped `download-dukascopy` template. If that refuses,
+What it does, in order. It takes the engine lane lock, makes a fresh QMX folder with the first-start
+card so QMB is enabled and `[qmb] bars` stays empty, keeps the last run's folder and `serve.log`
+beside it under a stamp instead of deleting them, makes the plan login one junction, and lands
+EURUSD for March 2025 through the shipped `download-dukascopy` template. If that refuses,
 times out, or `QMX_TEST_SAVED_MONTH=1` is set, it lands the saved March m15 pair through the real
 market door instead and says so. Then it starts `python -m qmx_host serve` with the throwaway file
 keyring, opens one chat on `haiku`, sends the sentence below, answers every ask as the operator
@@ -25,7 +26,7 @@ The script is the one R09 proved at `S/evidence/r09/december_real.py` and the ti
 R08 proved at `S/proofs/ground-qmb/bridge.py`. From `qmx-agents/` on This PC, with the agents venv
 and the engine lane lock free:
 
-    QMX_TEST_LIVE=1 uv run --no-sync pytest -p no:xdist -s \\
+    QMX_TEST_LIVE=1 uv run --no-sync pytest -n 0 -s \\
         packages/qma-harness/tests/live/test_his_own_test.py
 
 On another host set `QMX_REPAIR_SHIP`, `QMX_LANE_LOCK`, `QMX_R14_LOGIN` and `QMX_SAVED_DATA`.
@@ -37,7 +38,6 @@ import csv
 import json
 import os
 import secrets
-import shutil
 import socket
 import subprocess
 import sys
@@ -77,6 +77,7 @@ HOST_LIMIT_S: Final = 600.0
 DATA_LIMIT_S: Final = 1500.0
 TURN_LIMIT_S: Final = 1500.0
 POLL_S: Final = 2.0
+LIBRARY_WAIT_S: Final = 120.0
 BOUND: Final = {"adx@1", "value-above@1"}
 TOOL_NAMES: Final = (
     "blocks_find",
@@ -89,13 +90,22 @@ TOOL_NAMES: Final = (
 
 
 class Log:
-    """One PASS or FAIL line per step, then one verdict, as the lane log reads them."""
+    """One PASS or FAIL line per step, then one verdict, as the lane log reads them.
+
+    Each line is appended to `said.log` beside the folder as well, because `-s` under an xdist
+    worker attaches no stdout to the failure report and every printed line was lost that way.
+    """
 
     def __init__(self) -> None:
         self.failed: list[str] = []
+        self.path = FOLDER.parent / "said.log"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def __call__(self, line: str) -> None:
-        print(line.encode("ascii", "backslashreplace").decode(), flush=True)
+        clean = line.encode("ascii", "backslashreplace").decode()
+        print(clean, flush=True)
+        with self.path.open("a", encoding="utf-8") as handle:
+            print(clean, file=handle)
 
     def check(self, name: str, ok: bool, seen: object) -> None:
         self(f"{'PASS' if ok else 'FAIL'} {name}: {seen}")
@@ -179,6 +189,16 @@ def remove_junction(link: Path) -> None:
     )
 
 
+def keep_last(folder: Path) -> None:
+    """Keep the last run's folder and serve.log beside the new one, stamped, never deleted."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    if folder.exists():
+        folder.rename(folder.with_name(f"{folder.name}-{stamp}"))
+    log = folder.parent / "serve.log"
+    if log.exists():
+        log.rename(folder.parent / f"serve-{stamp}.log")
+
+
 def make_folder() -> Path:
     """A new QMX folder with the first-start card and the guard's keep list."""
     from qmx_home import resolve
@@ -186,12 +206,9 @@ def make_folder() -> Path:
     folder = FOLDER
     assert folder.is_relative_to(S / "homes"), folder
     remove_junction(folder / "data" / "claude")
-    shutil.rmtree(folder, ignore_errors=True)
+    keep_last(folder)
     if folder.exists():
-        raise AssertionError(
-            f"{folder} could not be removed; a stale folder would poison the check"
-        )
-    (folder.parent / "serve.log").unlink(missing_ok=True)
+        raise AssertionError(f"{folder} still holds files; a stale folder would poison the check")
     layout = resolve(folder, create=True, drives=[])
     home = layout.home
     (home / "first-party.json").write_text(json.dumps({"enable": ["qmb", "mis"]}), "utf-8")
@@ -509,6 +526,19 @@ def messages(entry: dict[str, Any]) -> list[dict[str, Any]]:
     return [part for part in map(obj, parts) if part is not None]
 
 
+def tool_short(name: str) -> str:
+    """The SDK's `mcp__qmx_<toolset>__<op>` as `<toolset>_<op>`, the name `TOOL_NAMES` holds.
+
+    `qma.harness.tools.tool_name` writes the wire form and `ToolDef.name` the short one, so the
+    journal's names have to come back through here before any order list is built.
+    """
+    prefix = "mcp__qmx_"
+    if not name.startswith(prefix):
+        return name
+    toolset, separator, op = name.removeprefix(prefix).partition("__")
+    return f"{toolset}_{op}" if separator else name
+
+
 def tool_calls(rows: Sequence[dict[str, Any]]) -> list[tuple[str, str, dict[str, Any]]]:
     calls: list[tuple[str, str, dict[str, Any]]] = []
     for entry in rows:
@@ -595,6 +625,27 @@ def follow(http: Http, chat: str, folder: Path, said: Log) -> str:
     raise AssertionError(f"the chat's turn did not end in {TURN_LIMIT_S:.0f} s")
 
 
+def open_library(folder: Path) -> Store:
+    """The run's Library, waiting for the stopped host's apps to let go of the writer lock.
+
+    `stop_host` kills the host, and a process it started can still hold `writer.lock` for a
+    moment after the kill, so one open right after it reads `another process writes the Library`
+    on a run whose store is in fact complete.
+    """
+    from qmx_engine.ledger import redact
+    from qmx_library.port import LibraryRefused
+    from qmx_library.store import Store
+
+    deadline = time.monotonic() + LIBRARY_WAIT_S  # ambient-scan: allow - a bounded lock wait
+    while True:
+        try:
+            return Store.open(folder / "data" / "library", redactor=redact)
+        except LibraryRefused as refused:
+            if refused.code != "storage_failure" or time.monotonic() > deadline:
+                raise
+            time.sleep(POLL_S)
+
+
 def check_draft(store: Store, item: str, said: Log) -> None:
     from qmx_library.principal import Principal, drafts_ref
 
@@ -676,7 +727,7 @@ def test_his_own_test() -> None:
             rows = entries(path)
             calls = tool_calls(rows)
             results = tool_results(rows)
-            names = [name for name, _, _ in calls]
+            names = [tool_short(name) for name, _, _ in calls]
             said(f"INFO tools: {names}")
 
             positions = {
@@ -691,7 +742,7 @@ def test_his_own_test() -> None:
             said.check("journal: unit_check was called", bool(checks), checks)
             said.check("journal: backtest_run was called", bool(runs), runs)
             said.check("journal: backtest_judge_run was called", bool(judges), judges)
-            assert blocks_seen and news and checks and runs and judges
+            assert blocks_seen and news and checks and runs and judges, (path, names)
             said.check(
                 "journal: blocks, unit_new and unit_check come in order",
                 min(blocks_seen) < min(news) < min(checks),
@@ -705,11 +756,12 @@ def test_his_own_test() -> None:
                 names,
             )
             assert before_run
-            last_check = payload(results.get(calls[before_run[-1]][1], ""))
+            last_answer = results.get(calls[before_run[-1]][1], "")
+            last_check = payload(last_answer)
             said.check(
                 "journal: the last unit_check before the run passed",
                 last_check.get("verdict") == "pass",
-                last_check.get("verdict"),
+                last_check.get("verdict") or last_answer[:200],
             )
 
             last_new = max(index for index in news if index < before_run[-1])
@@ -726,10 +778,7 @@ def test_his_own_test() -> None:
             said.check("journal: the judge answered a verdict", bool(verdict_id), verdict_id)
             assert item and result_id and verdict_id
 
-            from qmx_engine.ledger import redact
-            from qmx_library.store import Store
-
-            with Store.open(folder / "data" / "library", redactor=redact) as store:
+            with open_library(folder) as store:
                 check_draft(store, item, said)
                 check_result(store, result_id, said)
                 check_verdict(store, verdict_id, last, said)
