@@ -1,0 +1,28 @@
+
+COST  [n=10/day, days=120, paths=200, card +0.05R, cost 1x->1.5x on day 40 (cost event)]
+  arm             median$    p10$  lag days $ lag/cushion size/base  touch
+  live                626     477       -1.05       -0.5%      0.98   0.0%
+  at_anchor           633     473       -2.80       -1.4%      0.98   0.0%
+  never               465     394       -8.91       -4.5%      0.74   0.0%
+  (a) live minus (b) at_anchor on the lag days: +1.76 $ = +0.88% of the starting cushion
+
+COST  [n=40/day, days=120, paths=200, card +0.05R, cost 1x->1.5x on day 40 (cost event)]
+  arm             median$    p10$  lag days $ lag/cushion size/base  touch
+  live                739     546       -0.11       -0.1%      0.83   0.0%
+  at_anchor           751     557       -6.74       -3.4%      0.83   0.0%
+  never               591     470      -11.43       -5.7%      0.48   0.0%
+  (a) live minus (b) at_anchor on the lag days: +6.63 $ = +3.31% of the starting cushion
+
+DECAY  [n=10/day, days=120, paths=200, card +0.05R, cost 1x->1.5x on day 40 (cost event)]
+  arm             median$    p10$  lag days $ lag/cushion size/base  touch
+  live                591     445        0.00        0.0%      0.82   0.0%
+  at_anchor           591     445        0.00        0.0%      0.82   0.0%
+  never               591     445        0.00        0.0%      0.82   0.0%
+  (a) live minus (b) at_anchor on the lag days: +0.00 $ = +0.00% of the starting cushion
+
+DECAY  [n=40/day, days=120, paths=200, card +0.05R, cost 1x->1.5x on day 40 (cost event)]
+  arm             median$    p10$  lag days $ lag/cushion size/base  touch
+  live               1219     728        0.00        0.0%      0.61   0.0%
+  at_anchor          1219     728        0.00        0.0%      0.61   0.0%
+  never              1219     728        0.00        0.0%      0.61   0.0%
+  (a) live minus (b) at_anchor on the lag days: +0.00 $ = +0.00% of the starting cushion

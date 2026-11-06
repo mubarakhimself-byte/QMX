@@ -1,0 +1,79 @@
+1. Two-stage == one rank table: 0 mismatches in 20000 random control states; 3383 draws had an accelerator >1 while braking, none raised size.
+
+2a. HEALTHY +0.10R, card +0.10R  [card p1=-5.9R over 1 day(s); start level 0.5]
+  day cushion$  base$ | unit: level bench lock | guard: taper stop  lot |  size$  binding
+    0    200.0   4.61 |        0.50    no 1.00 |         1.00   no 0.43 |   2.00  level>lot_round; state ACTIVE
+    2  clean cohort: level -> 0.75 (ACTIVE)
+    4  clean cohort: level -> 1.0 (ACTIVE)
+    5    231.3   5.33 |        1.00    no 1.00 |         1.00   no 0.94 |   5.00  level>lot_round; state ACTIVE
+   10    217.8   5.02 |        1.00    no 1.00 |         1.00   no 1.00 |   5.00  level>lot_round; state ACTIVE
+   13  CUSUM warning #1 at trade 134: level -> 0.75 (REDUCING, cause drift_warning)
+   17  clean cohort: level -> 1.0 (ACTIVE)
+   20    209.1   4.82 |        1.00    no 1.00 |         1.00   no 0.93 |   4.50  level>lot_round; state ACTIVE
+   29  BENCH: own running loss -8.0R <= p1 -5.9R -> no new entries until day 30 (unit scope)
+   30    210.6   4.85 |        1.00    no 1.00 |         1.00   no 0.93 |   4.50  level>lot_round; state ACTIVE
+   31  CUSUM warning #2 at trade 312: level -> 0.75 (REDUCING, cause drift_warning)
+   32  unit in paper (cause: drift_warning x2 inside 500 trades, or bench #3 inside 40 days)
+  end equity $507; cushion $207; level 0.75
+
+2b. WEAK +0.05R, card +0.05R  [card p1=-5.9R over 1 day(s); start level 0.25]
+  day cushion$  base$ | unit: level bench lock | guard: taper stop  lot |  size$  binding
+    0    200.0   4.63 |        0.25    no 1.00 |         1.00   no 0.22 |   1.00  level>lot_round; state ACTIVE
+    2  clean cohort: level -> 0.5 (ACTIVE)
+    4  clean cohort: level -> 0.75 (ACTIVE)
+    5    214.9   4.97 |        0.75    no 1.00 |         1.00   no 0.70 |   3.50  level>lot_round; state ACTIVE
+    7  clean cohort: level -> 1.0 (ACTIVE)
+   10    181.7   4.20 |        1.00    no 1.00 |         1.00   no 0.95 |   4.00  level>lot_round; state ACTIVE
+   13  CUSUM warning #1 at trade 133: level -> 0.75 (REDUCING, cause drift_warning)
+   17  clean cohort: level -> 1.0 (ACTIVE)
+   20    166.7   3.86 |        1.00    no 1.00 |         1.00   no 0.91 |   3.50  level>lot_round; state ACTIVE
+   30    163.7   3.79 |        1.00    no 1.00 |         1.00   no 0.92 |   3.50  level>lot_round; state ACTIVE
+   31  CUSUM warning #2 at trade 313: level -> 0.75 (REDUCING, cause drift_warning)
+   32  unit in paper (cause: drift_warning x2 inside 500 trades, or bench #3 inside 40 days)
+  end equity $460; cushion $160; level 0.75
+
+2c. BLEEDING true -0.05R, card +0.10R  [card p1=-5.9R over 1 day(s); start level 0.5]
+  day cushion$  base$ | unit: level bench lock | guard: taper stop  lot |  size$  binding
+    0    200.0   4.61 |        0.50    no 1.00 |         1.00   no 0.43 |   2.00  level>lot_round; state ACTIVE
+    2  clean cohort: level -> 0.75 (ACTIVE)
+    4  clean cohort: level -> 1.0 (ACTIVE)
+    5    206.0   4.74 |        1.00    no 1.00 |         1.00   no 0.95 |   4.50  level>lot_round; state ACTIVE
+    5  BENCH: own running loss -6.0R <= p1 -5.9R -> no new entries until day 6 (unit scope)
+   10    157.8   3.64 |        1.00    no 1.00 |         1.00   no 0.96 |   3.50  level>lot_round; state ACTIVE
+   10  CUSUM warning #1 at trade 109: level -> 0.75 (REDUCING, cause drift_warning)
+   12  BENCH #2 inside 20 days -> locked one level lower (0.5) for 20 days
+   14  CUSUM warning #2 at trade 143: level -> 0.25 (REDUCING, cause drift_warning)
+   15  unit in paper (cause: drift_warning x2 inside 500 trades, or bench #3 inside 40 days)
+  end equity $424; cushion $124; level 0.25
+
+2d. How often the drift rules send a unit to paper (N=1, one-unit model, 120 days):
+  HEALTHY +0.10R, card +0.10R            to paper inside 120 days:  42.0% of 200 paths; median day 67
+  WEAK +0.05R, card +0.05R               to paper inside 120 days:  41.0% of 200 paths; median day 69
+  OVERSTATED true +0.03R, card +0.10R    to paper inside 120 days:  95.5% of 200 paths; median day 43
+  BLEEDING true -0.05R, card +0.10R      to paper inside 120 days: 100.0% of 200 paths; median day 23
+
+Choke budget (core_sim CORE arm = the two stages' product; healthy must stay >= 0.75 of base)
+
+HEALTHY +0.10R, card +0.10R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  CORE (unit stage x guard stage)     1332     549           0.0%   0.0%      0.92        0.0    0.0   0.0   0.0
+
+WEAK +0.05R, card +0.05R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.6R p1=-5.9R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  CORE (unit stage x guard stage)      694     471           0.0%   0.0%      0.86        0.0    0.0   0.0   0.0
+
+BLEEDING true -0.05R, card +0.10R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  CORE (unit stage x guard stage)      442     427           0.0%   0.0%      0.69        0.0    0.0   0.0   0.0
+
+HEALTHY +0.10R, card +0.10R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  CORE (unit stage x guard stage)     4900    2657           0.0%   0.0%      0.89        0.0    0.0   9.1   0.0
+
+WEAK +0.05R, card +0.05R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.6R p1=-5.9R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  CORE (unit stage x guard stage)      774     458           0.0%   0.0%      0.84        0.0    0.0  10.2   0.0
+
+BLEEDING true -0.05R, card +0.10R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  CORE (unit stage x guard stage)      413     387          20.0%   0.0%      0.73        0.0    0.0   9.5   0.0

@@ -1,0 +1,64 @@
+
+HEALTHY +0.10R, card +0.10R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve             1716    1133           0.0%   0.0%      0.97        0.0    0.0   0.0   0.0
+  CORE                           1367     481           0.0%   0.0%      0.88        0.0    0.0   0.0   0.0
+  CORE+dial by proof             1499     505           0.0%   0.0%      0.99        0.0    0.0   0.0   0.0
+  CORE+e-bars (M2 check)          806     529           0.0%   0.0%      0.48        0.0    0.0   0.0   0.0
+  OLD PICKS (review's)            545     522           0.0%   0.0%      0.22        0.0   30.0   0.0   5.2
+
+WEAK +0.05R, card +0.05R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.6R p1=-5.9R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve              718     521           3.3%   0.0%      0.96        0.0    0.0   0.0   0.0
+  CORE                            675     453           0.0%   0.0%      0.87        0.0    0.0   0.0   0.0
+  CORE+dial by proof              585     458           3.3%   0.0%      0.91        0.0    0.0   0.0   0.0
+  CORE+e-bars (M2 check)          539     498           0.0%   0.0%      0.23        0.0    0.0   0.0   0.0
+  OLD PICKS (review's)            536     497           0.0%   0.0%      0.19        0.0   21.9   0.0   9.5
+
+OVERSTATED true +0.03R, card +0.10R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve              532     400          16.7%   0.0%      0.94        0.0    0.0   0.0   0.0
+  CORE                            484     436           0.0%   0.0%      0.81        0.0    0.0   0.0   0.0
+  CORE+dial by proof              492     443           0.0%   0.0%      0.84        0.0    0.0   0.0   0.0
+  CORE+e-bars (M2 check)          496     479           0.0%   0.0%      0.32        0.0    0.0   0.0   0.0
+  OLD PICKS (review's)            507     484           0.0%   0.0%      0.18        0.0   18.1   0.0   9.5
+
+BLEEDING true -0.05R, card +0.10R  [N=1 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve              336     322          93.3%   0.0%      0.83        0.0    2.8   0.0   0.0
+  CORE                            442     431           0.0%   0.0%      0.71        0.0    0.0   0.0   0.0
+  CORE+dial by proof              437     426           0.0%   0.0%      0.73        0.0    0.0   0.0   0.0
+  CORE+e-bars (M2 check)          472     467           0.0%   0.0%      0.32        0.0    0.0   0.0   0.0
+  OLD PICKS (review's)            484     477           0.0%   0.0%      0.19        0.0   22.7   0.0   6.8
+
+HEALTHY +0.10R, card +0.10R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve             6498    4110           0.0%   0.0%      0.93        0.0    0.0   4.1   0.0
+  CORE                           5257    2260           0.0%   0.0%      0.89        0.0    0.0   8.4   0.0
+  CORE+dial by proof             7351    2415           0.0%   0.0%      0.98        0.0    0.0   8.9   0.0
+  CORE+e-bars (M2 check)         1186     901           0.0%   0.0%      0.48        0.0    0.0  15.8   0.0
+  OLD PICKS (review's)            548     531           0.0%   0.0%      0.23        0.0   28.5   9.1   5.2
+
+WEAK +0.05R, card +0.05R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.6R p1=-5.9R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve             1023     652           0.0%   0.0%      0.88        0.0    0.0   7.1   0.0
+  CORE                            874     451           0.0%   0.0%      0.84        0.0    0.0  10.2   0.0
+  CORE+dial by proof              856     442           0.0%   0.0%      0.86        0.0    0.0  10.3   0.0
+  CORE+e-bars (M2 check)          530     490           0.0%   0.0%      0.20        0.0    0.0   9.0   0.0
+  OLD PICKS (review's)            516     494           0.0%   0.0%      0.18        0.0   19.2   9.0  11.6
+
+OVERSTATED true +0.03R, card +0.10R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve              675     497           6.7%   0.0%      0.89        0.0    0.0  11.8   0.0
+  CORE                            651     421          10.0%   0.0%      0.82        0.0    0.0  13.3   0.0
+  CORE+dial by proof              603     427           3.3%   0.0%      0.82        0.0    0.0  13.1   0.0
+  CORE+e-bars (M2 check)          533     467           0.0%   0.0%      0.42        0.0    0.0  18.9   0.0
+  OLD PICKS (review's)            505     489           0.0%   0.0%      0.18        0.0   18.8   9.0   8.8
+
+BLEEDING true -0.05R, card +0.10R  [N=10 cost x1.0 lot $0.5 kstop=2.5 n=10/day days=120 paths=30; card p10=-3.3R p1=-5.3R; tails+gaps on]
+  arm                         median$    p10$ P(cushion<50%)  touch size/base stops/100d  dark%  shed  lift
+  BARE sizer+reserve              332     321         100.0%   0.0%      0.87        0.0    2.4  12.4   0.0
+  CORE                            404     391          36.7%   0.0%      0.74        0.0    0.0   9.9   0.0
+  CORE+dial by proof              410     386          33.3%   0.0%      0.75        0.0    0.0   9.3   0.0
+  CORE+e-bars (M2 check)          430     420           0.0%   0.0%      0.41        0.0    0.0  17.2   0.0
+  OLD PICKS (review's)            489     480           0.0%   0.0%      0.19        0.0   13.3   9.0   8.3
