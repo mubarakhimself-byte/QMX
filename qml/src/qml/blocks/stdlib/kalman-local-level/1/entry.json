@@ -130,5 +130,12 @@
   "golden": {
     "reference": "statsmodels 0.15.0 UnobservedComponents, exact diffuse",
     "cases": "qml/tests/golden/statistics/reference.json"
+  },
+  "settle_bars": {
+    "params": {
+      "signal_to_noise": "0.01"
+    },
+    "bars": 155,
+    "tolerance": "1e-9"
   }
 }
