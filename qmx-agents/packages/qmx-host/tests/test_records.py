@@ -15,6 +15,7 @@ import shutil
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,22 +23,33 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import JsonValue
-from qmf.core import is_refusal
+from qmb.execution.fill import FillKind
+from qmb.host.unit_handler import UnitTrade
+from qmb.results.journal import RunJournal
+from qmf.core import Instant, is_refusal
+from qmf.data import journal_writer
+from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.series import SeriesKey
+from qmf.data.store.engines.jsonl import jsonl_opener
 from qmf.data.store.engines.typed import TypedWriter
+from qml.unit.model import Side
 from qmx_apps.supervisor import Supervisor
 from qmx_engine.ledger import redact
 from qmx_engine.service.forward import PASS_HEADER, mint_host_pass
+from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, Principal
 from qmx_library.store import Store
 from test_backups_service import Clock as BackupClock
 from test_backups_service import folder, service
+from test_harvest import CLOSED_MONTH, COMPILED, OPEN_MONTH, Volume, harvester, volume, writer
 
 from qmx_host.host_route import ANSWERS, Answering, Answers, host_router
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_host.node_link import SCHEMA, NodeLink, Place, Post, Unreachable
-from qmx_host.records import Cadence, Fetch, Harvester, Pull, Records
+from qmx_host.records import Cadence, Fetch, Harvester, Projection, Pull, Records
+
+__all__ = ["volume"]
 
 FAR, DOWN = "ldn-1", "fra-2"
 SERIES = f"recorder/EURUSD/bar-m1/{FAR}"
@@ -617,3 +629,190 @@ def test_a_node_whose_round_raises_is_named_and_the_other_node_still_comes_home(
         ),
     )
     assert (reached.node, reached.reached, reached.partitions) == (FAR, True, 4)
+
+
+@pytest.fixture
+def one_row_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every journal line opens a new rotation file, so a test reads which rows a round opened."""
+    monkeypatch.setattr(journal_writer, "jsonl_opener", lambda: jsonl_opener(1))
+
+
+def into_paper(home: Path, volume: Volume, at: datetime) -> None:
+    """This PC's real lifecycle row, so a lane's start does not depend on the rows it is handed."""
+    host = writer(home / "journals", JournalStream.UNIT, "dummy", volume.clock)
+    volume.clock.at(at)
+    body = {
+        "schema": "qmx.lifecycle/1",
+        "event_id": "move-paper",
+        "unit_id": "dummy",
+        "version_ref": "v1",
+        "compiled_fingerprint": "fp1-dummy",
+        "market_id": "fx.eurusd",
+        "from": "tested",
+        "to": "paper",
+        "by": {"kind": "his_click", "principal": "operator"},
+        "reason": "his click",
+        "at": at.isoformat(),
+    }
+    facts = RowFacts(ts_recv=volume.clock.ns, clock_ok=True, unit_id="dummy", market_id="fx.eurusd")
+    assert not is_refusal(host.append("lifecycle", body, facts))
+    host.close()
+
+
+def paper_scores(store: Store) -> list[tuple[object, object, object]]:
+    views = [store.get(OPERATOR, object_id) for _item, object_id in store.heads_on(MAIN)]
+    return [
+        (view.fields["trades"], view.fields["record_r"], view.fields["sequential_score"])
+        for view in views
+        if view.kind == "paper-run"
+    ]
+
+
+def test_a_second_and_third_round_score_the_same_paper_run(
+    one_row_files: None,
+    volume: Volume,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    into_paper(volume.home, volume, CLOSED_MONTH)
+    span = CLOSED_MONTH + timedelta(days=20)
+    volume.trade("old1", CLOSED_MONTH, CLOSED_MONTH + timedelta(hours=1), r="1.0")
+    volume.trade("old2", CLOSED_MONTH, CLOSED_MONTH + timedelta(hours=2), r="1.0")
+    volume.trade("span", span, OPEN_MONTH + timedelta(hours=1), r="1.0")
+    opened: list[str] = []
+    read_bytes = Path.read_bytes
+
+    def counted(path: Path) -> bytes:
+        if path.parent.name.startswith("journal-unit.trade."):
+            opened.append(path.name)
+        return read_bytes(path)
+
+    with Store.open(tmp_path / "library", redactor=redact) as store:
+        now = [OPEN_MONTH + timedelta(days=10)]
+        job = Records(
+            harvester(volume.home),
+            Cadence,
+            clock=lambda: now[0],
+            projection=Projection(store, volume.home / "records"),
+            store=store,
+        )
+        first = job.round()
+        after_first = paper_scores(store)
+        volume.trade("new", OPEN_MONTH + timedelta(hours=2), OPEN_MONTH + timedelta(hours=3), r="1.0")
+        now[0] += timedelta(hours=1)
+        monkeypatch.setattr(Path, "read_bytes", counted)
+        second = job.round()
+        monkeypatch.undo()
+        after_second = paper_scores(store)
+        volume.signal(OPEN_MONTH + timedelta(hours=4), "later")
+        now[0] += timedelta(hours=1)
+        third = job.round()
+        after_third = paper_scores(store)
+
+    open_key = f"journal-unit/dummy/trade/paper.this-pc/{month(OPEN_MONTH)}"
+    assert (first.trades, first.paper_runs, first.refusals) == (3, 1, ())
+    assert after_first == [(3, "3.0", "1.323379")]
+    assert [text for text in second.committed if "/trade/" in text] == [open_key]
+    assert (second.trades, second.paper_runs, second.refusals) == (1, 1, ())
+    assert after_second == [(4, "4.0", "1.464255")]
+    assert (third.trades, third.paper_runs, third.refusals) == (0, 0, ())
+    assert after_third == [(4, "4.0", "1.464255")]
+    assert opened == ["000002.jsonl", "000003.jsonl"]
+
+
+def test_a_pulled_trade_lands_a_library_item(tmp_path: Path, far: Far) -> None:
+    closed = CLOSED[-1] + timedelta(hours=9)
+    written = RunJournal.open_live(
+        far.root / "apps" / "trading-node" / "data" / "journal",
+        COMPILED,
+        scope_id="dep-1",
+        world=JournalWorld.PAPER,
+        machine=FAR,
+        role="node",
+        build="b",
+        boot_epoch_id="b1",
+        account="demo-1",
+    )
+    assert not is_refusal(written)
+    written.value.at(Instant(int(closed.timestamp()) * 1_000_000_000))
+    written.value.append(
+        UnitTrade(
+            "t1",
+            "fx.eurusd",
+            Side.LONG,
+            Instant(int(CLOSED[-1].timestamp()) * 1_000_000_000),
+            Instant(int(closed.timestamp()) * 1_000_000_000),
+            Decimal("1.08000"),
+            Decimal("1.08300"),
+            Decimal("1.07900"),
+            Decimal("0.10"),
+            FillKind.CLOSE,
+            Decimal("30.00"),
+            Decimal("1.5"),
+        )
+    )
+    written.value.close()
+    Harvester(
+        lambda: (far.root / "apps" / "trading-node" / "data" / "journal",),
+        far.door,
+        far.root / "records",
+        journals_open=False,
+    ).round(NOW, Cadence())
+    records = tmp_path / "pc" / "records"
+    now = [NOW]
+    with Store.open(tmp_path / "library", redactor=redact) as store:
+        job = Records(
+            Harvester(lambda: (), pc_door(tmp_path), records, journals_open=True),
+            Cadence,
+            clock=lambda: now[0],
+            projection=Projection(store, records),
+            store=store,
+            pull=pull(tmp_path, far),
+        )
+        first = job.round()
+        now[0] = NOW + timedelta(seconds=300)
+        again = job.round()
+        views = [store.get(OPERATOR, object_id) for _item, object_id in store.heads_on(MAIN)]
+
+    trades = [view.fields for view in views if view.kind == "trade"]
+    papers = [view.fields for view in views if view.kind == "paper-run"]
+    assert (first.trades, first.paper_runs, again.trades, again.paper_runs) == (1, 1, 0, 0)
+    assert [(t["account"], t["machine"], t["net_result"], t["world"]) for t in trades] == [
+        ("demo-1", FAR, 3000, "paper")
+    ]
+    assert [(p["node"], p["trades"], p["record_r"]) for p in papers] == [(FAR, 1, "1.5")]
+
+
+def test_a_key_whose_projection_failed_is_told_again(
+    volume: Volume, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    volume.trade("t1", CLOSED_MONTH, CLOSED_MONTH + timedelta(hours=1), r="1.0")
+    with Store.open(tmp_path / "library", redactor=redact) as store:
+        now = [OPEN_MONTH + timedelta(days=10)]
+        job = Records(
+            harvester(volume.home),
+            Cadence,
+            clock=lambda: now[0],
+            projection=Projection(store, volume.home / "records"),
+            store=store,
+        )
+        real_put = store.put
+
+        def refused(who: Principal, draft: Draft, **kwargs: Any) -> object:
+            if draft.kind in ("trade", "paper-run"):
+                raise LibraryRefused("busy", "the Library refused this write")
+            return real_put(who, draft, **kwargs)
+
+        monkeypatch.setattr(store, "put", refused)
+        cut = job.round()
+        monkeypatch.setattr(store, "put", real_put)
+        now[0] += timedelta(hours=1)
+        told_again = job.round()
+        now[0] += timedelta(hours=1)
+        after = job.round()
+        scores = paper_scores(store)
+
+    assert (cut.trades, cut.paper_runs) == (0, 0)
+    assert (told_again.partitions, told_again.trades, told_again.paper_runs) == (0, 1, 1)
+    assert (after.trades, after.paper_runs) == (0, 0)
+    assert scores == [(1, "1.0", "1.093750")]

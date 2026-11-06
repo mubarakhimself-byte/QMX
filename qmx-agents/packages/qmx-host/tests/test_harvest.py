@@ -86,7 +86,7 @@ class Volume:
     def store(self) -> SeriesStore:
         return SeriesStore(self.home / "market" / "series")
 
-    def signal(self, at: datetime, row_id: str, *, backfilled: bool = False) -> None:
+    def signal(self, at: datetime, row_id: str, *, backfilled: bool = False, pad: str = "") -> None:
         self.clock.at(at)
         body: dict[str, object] = {
             "row_id": row_id,
@@ -95,6 +95,8 @@ class Volume:
             "outcome": "skipped",
             "reason": "spread_wide",
         }
+        if pad:
+            body["pad"] = pad
         facts = RowFacts(
             ts_recv=self.clock.ns,
             clock_ok=True,
@@ -304,6 +306,34 @@ def test_a_round_leaves_every_stream_file_byte_for_byte_with_a_line_in_flight(
 
     assert counts.refusals == ()
     assert volume.stream_bytes() == before
+
+
+def test_a_round_reads_only_from_the_unfrozen_file(
+    volume: Volume, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    three_mib = "x" * (3 * 1024 * 1024)
+    for n in range(3):
+        volume.signal(CLOSED_MONTH + timedelta(days=2, minutes=n), f"closed-{n}", pad=three_mib)
+    harvest = harvester(volume.home)
+    harvest.round(NOW, Cadence())
+    volume.signal(OPEN_MONTH + timedelta(hours=8), "open-0")
+    opened: list[str] = []
+    read_bytes = Path.read_bytes
+
+    def counted(path: Path) -> bytes:
+        if path.parent.name.startswith("journal-unit.signal."):
+            opened.append(path.name)
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", counted)
+    harvest.round(NOW + timedelta(seconds=60), Cadence())
+    monkeypatch.undo()
+    closed = volume.store.state(key(SIGNALS, CLOSED_MONTH))
+    fresh = volume.store.state(key(SIGNALS, OPEN_MONTH))
+
+    assert closed is not None and fresh is not None
+    assert (closed.rows, closed.frozen, fresh.rows, fresh.frozen) == (3, True, 1, False)
+    assert opened == ["000001.jsonl"]
 
 
 def test_a_reprojected_trade_lands_nothing_new_and_one_without_initial_risk_says_so(
