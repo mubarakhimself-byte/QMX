@@ -74,6 +74,7 @@ type SettingsSection = Literal[
     "records",
     "journals",
     "apps",
+    "node",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -327,6 +328,7 @@ QMB_DEFAULTS: Final[Document] = {
     "default_tester": "qmb@1.0.0",
     "equity": "10000.00",
     "execution_target": {"role": "paper-validation", "venue_id": "qmb", "account_id": "backtest"},
+    "g_slice_bars": 5000,
     "g_slice_margin": "0.20",
     "gap_bars_refuse": 3,
     "window_memory_tolerance": "0.10",
@@ -334,9 +336,10 @@ QMB_DEFAULTS: Final[Document] = {
 """`[qmb]` with every default (Part B `qmb.md` section 8): `backtest_run` waits 240 s for a run
 before it answers the run id, below the prompt cache's five minutes; `bars` names the folder of
 dukascopy-node's CSV pairs, empty for the market store's `bars/`; a backtest trades 10,000 of the
-account's money on a backtest target that is no account; the behaviour check's slice is the
-warm-up and 20% more; the windowed reader's peak memory at 200,000 steps stays within 10% of its
-peak at 10,000; a run's costs count as calibrated from 50 of QMX's own fills; a hole of more than
+account's money on a backtest target that is no account; the behaviour check needs the warm-up and
+20% more and reads up to 5,000 bars a market; the windowed reader's peak memory at 200,000 steps
+stays within 10% of its peak at 10,000; a run's costs count as calibrated from 50 of QMX's own
+fills; a hole of more than
 3 bars of the unit's stream in open time fails a run unless its study allows gaps. The default
 tester is the shipped QMB, and it moves only to a tester whose conformance check passed."""
 
@@ -356,6 +359,31 @@ server runs every 300 s and fetches open bars and readings hourly and ticks dail
 JOURNALS_DEFAULTS: Final[Document] = {"settle_days": 1}
 """`[journals]` with its harvest default: a journal month closes a day after it ends, for late rows
 from a machine whose clock was off."""
+
+NODE_DEFAULTS: Final[Document] = {
+    "record_markets": [
+        {
+            "symbol": "EURUSD",
+            "market_id": "eurusd",
+            "klass": "fx",
+            "calendar_ref": "fx-24x5@1",
+            "zone": "America/New_York",
+            "day_boundary": "17:00",
+        },
+        {
+            "symbol": "XAUUSD",
+            "market_id": "gold",
+            "klass": "metal",
+            "calendar_ref": "metals-24x5@1",
+            "zone": "America/New_York",
+            "day_boundary": "17:00",
+        },
+    ],
+    "records_refresh_s": 86_400,
+}
+"""`[node]` with every default: the markets whose instrument records land from the node's cTrader
+read, starting at the dummy's two, and how often that read runs again, starting at one day. A row
+holds a market's symbol and what cTrader does not state about it, each as text."""
 
 CTRADER_MCP: Final[Document] = {"credential_ref": "qmx/ctrader-mcp", "venue": "ctrader"}
 """The `[mcp_servers] ctrader` row's fixed keys (C-36): cTrader's Remote MCP, shipped off. He
@@ -433,28 +461,41 @@ UNITS_DEFAULTS: Final[Document] = {
         ),
         _identity_row("title_change", "none", False, False),
     ],
-    "lifecycle": {"auto_paper": False},
 }
 """`[units]` with every default (Part A AD-115): which edit makes a new version or a new unit, as
-one table QML reads as data, and tested to paper waits for his click (`auto_paper` off)."""
+one table QML reads as data."""
 
 
 def _check_units(values: Document) -> None:
-    """Refuse an identity table QML cannot read, or an `auto_paper` that is not true or false."""
+    """Refuse an identity table QML cannot read."""
     from qml.identity import IdentityTableError, parse_table  # noqa: PLC0415
 
     try:
         parse_table(_merged(UNITS_DEFAULTS, values)["identity_table"])
     except IdentityTableError as error:
         raise ControlError("invalid_units", str(error)) from error
-    lifecycle = values.get("lifecycle", {})
-    auto = (
-        cast("dict[str, object]", lifecycle).get("auto_paper", False)
-        if isinstance(lifecycle, dict)
-        else None
+
+
+def _check_node(values: Document) -> None:
+    """Refuse a `[node]` row that is not its six facts as text, or a refresh that is no positive
+    number of seconds, before it is saved."""
+    rows = values.get("record_markets", [])
+    keys = cast("list[dict[str, str]]", NODE_DEFAULTS["record_markets"])[0].keys()
+    good = isinstance(rows, list) and all(
+        isinstance(row, dict)
+        and row.keys() == keys
+        and all(isinstance(fact, str) and fact for fact in row.values())
+        for row in rows
     )
-    if not isinstance(auto, bool):
-        raise ControlError("invalid_units", "[units.lifecycle] auto_paper is true or false")
+    if not good:
+        raise ControlError(
+            "invalid_settings", f"[node] record_markets rows each hold {', '.join(keys)} as text."
+        )
+    every = values.get("records_refresh_s", 1)
+    if isinstance(every, bool) or not isinstance(every, int | float) or every <= 0:
+        raise ControlError(
+            "invalid_settings", "[node] records_refresh_s is a positive number of seconds."
+        )
 
 
 def _check_telemetry(values: Document, engine: Document) -> None:
@@ -1106,6 +1147,8 @@ class ControlService:
                 values = _merged(JOURNALS_DEFAULTS, values)
             if section == "apps":
                 values = _merged(APPS_DEFAULTS, values)
+            if section == "node":
+                values = _merged(NODE_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:
@@ -1276,6 +1319,8 @@ class ControlService:
             _check_units(values)
         if section == "qmb":
             self._check_default_tester(values)
+        if section == "node":
+            _check_node(values)
         if section == "backup":
             _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
         elif section in ("brokers", "connections"):

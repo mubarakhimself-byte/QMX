@@ -328,3 +328,37 @@ def test_the_pc_serves_the_final_look_when_library_primary_is_pc(tmp_path: Path)
         SERIES, start_ns=FEB, end_ns=MAR, purpose=Purpose.FINAL_LOOK, into=tmp_path / "attempt"
     )
     assert _times(looked) == [(FEB + DAY) // 1_000_000]
+
+
+def test_a_door_says_which_months_a_holdout_seals_and_materialise_still_copies(
+    tmp_path: Path,
+) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    fingerprints = _value(door.read(SERIES, start_ns=FEB, end_ns=MAR)).fingerprints
+    seal = {"boundary": "2026-02", "months": 12}
+
+    answered = door.sealed_months(["2026-01", "2026-02"], holdout=seal, run="study@2026")
+    copied = door.materialise(fingerprints, into=tmp_path / "attempt", holdout=seal, run="other")
+    unsealed = door.sealed_months(["2026-01", "2026-02"], holdout="off")
+    second = door.sealed_months(["2026-02"], holdout="off", run="study@2026")
+
+    assert _value(answered) == ("2026-02",)
+    assert len(_value(copied)) == 1
+    assert _value(unsealed) == ()
+    assert isinstance(second, TypedRefusal)
+    assert second.context["field"] == "holdout"
+
+
+def test_a_series_keeps_the_scale_it_stated(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+
+    before = door.price_scale(SERIES)
+    stated = door.state_scale(SERIES, 3)
+    again = door.state_scale(SERIES, 5)
+
+    assert before is None
+    assert is_ok(stated)
+    assert is_ok(again)
+    assert door.price_scale(SERIES) == 5
+    assert door.price_scale("dukascopy/XAUUSD/ticks/-") is None

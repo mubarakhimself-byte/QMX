@@ -31,7 +31,6 @@ from qmx_judge.judge import (
     parse_spec,
 )
 from qmx_judge.landing import Stored
-from qmx_judge.tries import Counted, effective_tries
 
 DAY = 86_400 * 10**9
 START = 1_735_689_600 * 10**9
@@ -45,7 +44,7 @@ SPEC = parse_spec(
         "preset": "shipped",
     }
 )
-EVIDENCE: Mapping[str, Mapping[str, object]] = {
+PASSING_ROWS: Mapping[str, Mapping[str, object]] = {
     "random_entries": {"edge_ratio": "1.4", "p": "0.01"},
     "cost_stress": {"multiplier": "1.5", "expectancy_r": "0.2"},
     "walk_forward": {"efficiency": "0.7"},
@@ -61,7 +60,7 @@ def result(
     n: int,
     trades: Mapping[str, list[Decimal]],
     *,
-    evidence: Mapping[str, Mapping[str, object]] = EVIDENCE,
+    evidence: Mapping[str, Mapping[str, object]] | None = None,
     zero: bool = False,
     result_id: str | None = None,
     first_day: int = 0,
@@ -71,6 +70,7 @@ def result(
         for market, rs in sorted(trades.items())
         for day, r in enumerate(rs)
     )
+    rows = {name: dict.fromkeys(trades, row) for name, row in PASSING_ROWS.items()}
     return JudgedResult(
         result_id=result_id or f"result-{n}",
         run_id=run_id(n),
@@ -81,7 +81,7 @@ def result(
         trades=() if zero else found,
         markets=tuple(sorted(trades)),
         compiled_fp="fp1:sha256:unit",
-        evidence=evidence,
+        evidence=rows if evidence is None else evidence,
     )
 
 
@@ -234,12 +234,6 @@ def variants(seed: int) -> list[dict[str, float]]:
     return [{f"d{d:03d}": value for d, value in zip(days, row, strict=True)} for row in rows]
 
 
-def test_51_variants_cluster_to_11_effective_tries() -> None:
-    streams = variants(11)
-
-    assert effective_tries([Counted(f"v{i}", s) for i, s in enumerate(streams)], 0.5) == 11
-
-
 def test_the_verdict_counts_51_variants_of_one_family_as_11_tries() -> None:
     family = [
         result(n, {"fx.eurusd": [Decimal(f"{v:.4f}") for v in stream.values()]})
@@ -359,7 +353,7 @@ def test_the_judge_block_decides_by_script_what_the_judge_decides() -> None:
                 "status": "finished",
                 "unit": lucky.unit,
                 "tester": {"app": "qmb", "version": "0.1.0"},
-                "measures": {name: dict(found) for name, found in EVIDENCE.items()},
+                "measures": {name: dict(found) for name, found in lucky.evidence.items()},
             },
             "trades": [
                 {"market_id": t.market, "closed_at": t.closed_at, "r": str(t.r)}

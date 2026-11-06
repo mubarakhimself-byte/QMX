@@ -73,7 +73,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         run_id,
         "finished",
         measures={"day": str(day), "matched": diff.matched, "differs": len(diff.decisions)},
-        labels={"fidelity": "bars", "matches": not diff.decisions},
+        labels={
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+            "matches": not diff.decisions,
+        },
         files=[tester.write(folder, "report.json", {"day": str(day), **found}), *files],
         versions={"qmb": tester.TESTER["version"]},
     )

@@ -450,6 +450,7 @@ def test_a_risk_session_sizer_that_is_not_a_placeholder_meets_the_sizer_contract
 def _capped() -> dict[str, object]:
     document = _document()
     exits = cast("list[object]", document["exit_set"])
+    del cast("dict[str, object]", document["numbers"])["time_out_bars"]
     exits[2] = {
         "name": "cap",
         "scope": "position",

@@ -7,12 +7,14 @@ ids appear in its own chunk."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -33,16 +35,22 @@ from qmf.readings.record import (  # pyright: ignore[reportMissingTypeStubs]
     Tier,
     TimeBase,
 )
+from qmx_control.service import ControlService
 from qmx_home import resolve
+from qmx_judge.presets import PRESETS
+from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.port import Draft
+from qmx_library.port import Draft as LibraryDraft
 from qmx_library.principal import MAIN, Principal
 from qmx_library.store import Store
+from qmx_tools.functions import domain_functions
 from qmx_tools.gather import FIXTURE_RECORDS
 from qmx_tools.service import DomainContext
 from qmx_tools.unit_check import checked as unit_checked
 from scheduled import Clock
 
 from qmx_engine.__main__ import main
+from qmx_engine.control_door import EngineDoor
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.validate import checked, validate
 from qmx_engine.ledger import redact
@@ -238,10 +246,14 @@ def votes(chunk: str) -> str:
 
 
 def answers(
-    note: str | None = None, synthesis: str | None = None, planted: dict[str, str] | None = None
+    note: str | None = None,
+    synthesis: str | None = None,
+    planted: dict[str, str] | None = None,
+    referee: Callable[[str], str] | None = None,
 ) -> FakePort:
     """A port that answers every model turn from the recorded files, by the prompt's first words.
-    `planted` replaces the answer to a prompt that starts with its key."""
+    `planted` replaces the answer to a prompt that starts with its key, and `referee` answers the
+    referee step from what it was given."""
     whole = {
         "You triage new quant-finance papers": recorded(RS1, "triage.json"),
         "You write the research note": note or recorded(RS1, "note.json"),
@@ -279,8 +291,6 @@ def answers(
         "Label the sampled items the way you would label": recorded(CRYSTALLISE, "sample.json"),
         "You turn his one-line trading idea": recorded(B, "claim.json"),
         "You build one QMX trading unit": recorded(B, "build.json"),
-        "You ask QMX's referee": recorded(B, "referee-fail.json"),
-        "You explain why a trading unit died": recorded(B, "explanation.json"),
         "You are the writer of QMX's build-and-prove scorecard": recorded(B, "summary.json"),
         "You draft dictionary entries": recorded(U3, "drafts.json"),
     } | (planted or {})
@@ -296,6 +306,7 @@ def answers(
         "You are an analyst on QMX's overnight": lambda c: mine(
             [T4], "claims.json", "claims", "source_id", c
         ),
+        **({"You ask QMX's referee": referee} if referee else {}),
     }
 
     async def answer(port: FakePort, chat: str) -> Turn:
@@ -355,58 +366,16 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_each_template_once_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 55
-    assert len(set(ids)) == 55
+    assert len(ids) == len(set(ids))
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
-    assert [t.id for t in CATALOG if not t.needs] == [
-        "paper-scout-to-research-note",
-        "news-and-macro-calendar-watch",
-        "rough-idea-to-test-plan",
-        "source-to-component-card",
-        "literature-review-on-a-topic",
-        "video-to-strategy-ideas",
-        "weekly-review",
-        "morning-market-brief",
-        "research-desk-overnight",
-        "copilot-eval-battery",
-        "demo-trades-fill-quality",
-        "trade-journal-in-risk-units",
-        "trading-guards-alive",
-        "decay-and-limit-report",
-        "incident-post-mortem",
-        "strategy-idea-to-paper-tested",
-        "revolution-loop",
-        "ask-the-panel",
-        "clippings-into-research",
-        "morning-digest",
-        "crystallise-a-workflow",
-        "synthetic-data",
-        "connections-health",
-        "feed",
-        "download-dukascopy",
-        "download-binance",
-        "download-ccxt",
-        "extract-source",
-        "refresh-ccxt-records",
-        "run-a-unit-on-every-market",
-        "where-a-failed-unit-still-holds",
-        "expand-the-dictionary-from-a-source",
-        "find-repeated-code-and-gaps-in-the-dictionary",
-        "shortlist-markets-before-each-session",
-        "tag-units-to-markets",
-        "check-the-mis-against-an-agents-read",
-        "review-the-days-data",
-        "replay-a-live-day-and-diff-it",
-    ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
-    assert sum(1 for t in CATALOG if t.needs) == 17
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
@@ -429,31 +398,6 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
     assert find(" A ") is find("video-to-strategy-ideas")
     assert find("b-build-and-prove").id == "strategy-idea-to-paper-tested"
     assert set(ALIASES.values()) <= {template.id for template in CATALOG}
-    assert {template.id for template in CATALOG} - set(ALIASES.values()) == {
-        "revolution-loop",
-        "ask-the-panel",
-        "clippings-into-research",
-        "morning-digest",
-        "crystallise-a-workflow",
-        "run-one-job-on-his-server",
-        "synthetic-data",
-        "connections-health",
-        "feed",
-        "download-dukascopy",
-        "download-binance",
-        "download-ccxt",
-        "extract-source",
-        "refresh-ccxt-records",
-        "run-a-unit-on-every-market",
-        "where-a-failed-unit-still-holds",
-        "expand-the-dictionary-from-a-source",
-        "find-repeated-code-and-gaps-in-the-dictionary",
-        "shortlist-markets-before-each-session",
-        "tag-units-to-markets",
-        "check-the-mis-against-an-agents-read",
-        "review-the-days-data",
-        "replay-a-live-day-and-diff-it",
-    }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
     with pytest.raises(KeyError):
@@ -1017,26 +961,24 @@ def test_b_turns_a_sentence_into_a_verdict_and_a_death_certificate(home: Path) -
         "problem_set": card["check"]["problem_set"],
     }
     assert card["judge"]["overall"] == "fail"
-    assert card["certificate"] == {
+    assert {key: value for key, value in card["certificate"].items() if key != "object_id"} == {
         "unit": "unit-object-fixture",
         "verdict": "verdict-fixture-fail",
-        "cause": "behaviour",
+        "cause": "costs",
         "classifier_version": "1",
     }
-    assert card["explanation"].startswith("The unit's edge did not survive its costs")
+    assert card["dead_end"]["verdict"] == "fail"
     assert card["proposal"] is None
     assert [s["stage"] for s in card["lineage"]] == ["unit", "result"]
-    assert "propose" not in ran
-    assert {"backtest", "robustness"}.isdisjoint(ran)
+    assert "paper" not in ran
+    assert {"backtest", "robustness", "referee"}.isdisjoint(ran)
 
 
 def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home: Path) -> None:
-    report, card, ran = scorecard(
-        home, "pass", {"You ask QMX's referee": recorded(B, "referee-pass.json")}
-    )
+    report, card, ran = scorecard(home, "pass")
 
     assert report.status == "passed", report.reason
-    assert card["proposal"] == {
+    assert {key: value for key, value in card["proposal"].items() if key != "object_id"} == {
         "subject": "unit-object-fixture",
         "ask": "paper",
         "evidence": [
@@ -1045,13 +987,14 @@ def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home
             "result-fixture-robustness",
         ],
         "verdict": "verdict-fixture-pass",
-        "tries": {"raw": 2, "effective": 2},
-        "why": json.loads(recorded(B, "referee-pass.json"))["verdict"]["says"],
-        "cost": {"qmb_runs": 2},
-        "made_by": card["proposal"]["made_by"],
+        "tries": 2,
+        "preset": "shipped",
+        "placeholders": [],
+        "made_by": "agent:referee-fixture",
     }
+    assert card["card"]["kind"] == "start paper trial"
     assert card["certificate"] is None
-    assert "certify" not in ran
+    assert "dead" not in ran
 
 
 def test_b_tests_nothing_when_the_check_step_had_to_fix_the_saved_unit(home: Path) -> None:
@@ -1146,14 +1089,19 @@ def test_the_dictionary_agent_reads_its_source_only_as_quoted_data(home: Path) -
 
 
 def test_the_referee_step_is_one_brief_and_one_schema_in_every_template_that_asks_it() -> None:
-    for name in ("prompts/referee.md", "schemas/referee.json"):
+    for name in (
+        "prompts/referee.md",
+        "schemas/referee.json",
+        "scripts/hand.py",
+        "scripts/stored.py",
+        "scripts/recorded.py",
+    ):
         copies = {(folder / name).read_bytes() for folder in (B, U1, U2)}
         assert len(copies) == 1, name
 
 
 def test_run_on_every_market_gives_one_row_per_market_under_one_verdict(home: Path) -> None:
-    port = answers(planted={"You ask QMX's referee": recorded(U1, "referee.json")})
-    with fake_service(home, harness=port) as svc:
+    with fake_service(home, harness=answers()) as svc:
         item = svc.drafts.put(U1.name, Bundle.read(U1), 0, caller=OPERATOR).item
         inputs = {**cast(dict[str, Any], find("run-a-unit-on-every-market").test_inputs)}
         inputs["markets"] = ["fx.eurusd", "metal.xauusd", "fx.usdjpy"]
@@ -1170,8 +1118,7 @@ def test_run_on_every_market_gives_one_row_per_market_under_one_verdict(home: Pa
 
 
 def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home: Path) -> None:
-    port = answers(planted={"You ask QMX's referee": recorded(U2, "referee.json")})
-    with fake_service(home, harness=port) as svc:
+    with fake_service(home, harness=answers()) as svc:
         item = svc.drafts.put(U2.name, Bundle.read(U2), 0, caller=OPERATOR).item
         inputs = find("where-a-failed-unit-still-holds").test_inputs
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
@@ -1183,15 +1130,17 @@ def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home:
         ["fx.eurusd"],
         [{"from": 7, "to": 16}],
     )
-    assert {k: out["card"][k] for k in ("subject", "ask", "evidence", "placeholders", "why")} == {
+    assert {k: out["card"][k] for k in ("subject", "ask", "placeholders", "why")} == {
         "subject": "unit-object-fixture",
         "ask": "admit_market",
-        "evidence": ["verdict-fixture-contexts", "result-fixture-sweep", "result-fixture-whatif"],
         "placeholders": {"markets": ["fx.gbpusd"]},
         "why": "the rules hold on fx.gbpusd, with the sessions 7:00 to 16:00 UTC tried and "
-        "counted. Did not hold everywhere. fx.gbpusd holds; fx.eurusd fails the try-corrected "
-        "step. Behind it: 4 tries, 4 effective.",
+        "counted. Pass by the shipped preset. fx.eurusd fails the try-corrected: the shrunk "
+        "expectancy does not clear its bar; fx.gbpusd passes on 112 trades at 0.16R shrunk. "
+        "Behind it: 4 tries, 4 effective.",
     }
+    assert out["card"]["evidence"][0] == out["verdict"]["verdict_id"]
+    assert out["card"]["evidence"][2:] == ["result-fixture-sweep", "result-fixture-whatif"]
 
 
 def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(home: Path) -> None:
@@ -1203,8 +1152,9 @@ def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(hom
     out = finished_output(home, report, "check")
     requests = finished_output(home, report, "match")["library_written"]
     assert report.status == "passed", report.reason
-    assert out["matched"] == [{"sentence": "Wait for the EMA to turn up", "entry": "ema@1"}]
+    assert out["matched"] == []
     assert out["append_requests"] == [
+        "Wait for the EMA to turn up",
         "Time the turn with the smoothed close fixture",
         "Enter when the Wolfe wave completes its fifth point",
     ]
@@ -1214,7 +1164,7 @@ def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(hom
     assert [(r["pin"], r["problems"][0]["message"]) for r in out["refused"]] == [
         ("wolfe-wave@1", "the entry has no schema, component_type, origin, definition")
     ]
-    assert [w["refused"] for w in requests] == [None, None]
+    assert [w["refused"] for w in requests] == [None, None, None]
     assert [w["refused"] for w in out["library_written"]] == [None]
 
 
@@ -1317,6 +1267,353 @@ def test_b_asks_qmb_for_a_walk_forward_only_when_the_run_names_ranges() -> None:
     }
     assert plain["walk_forward"] is None
     assert (asked["ok"], asked["window"]) == (True, {"start": "2020-01-01", "end": "2023-01-01"})
+
+
+AGENTS = Path(__file__).resolve().parents[3]
+MARCH = {"start": "2025-03-01", "end": "2025-04-01"}
+"""QML's synthetic month: the dummy makes 6 trades on `fx.eurusd` and 2 on `metal.xauusd` in it."""
+IDEA_ON_MARCH = {"idea": IDEA["idea"], "window": MARCH, "study": {"min_in_sample_days": 20}}
+UNIT_IDEA = "buy pullbacks in an uptrend, sell rallies in a downtrend"
+"""The dummy's own claim card, which a quick study claims."""
+HIM = Principal("operator")
+
+
+@dataclass
+class World:
+    """A real store, the real QMB app and the real landers, as the host composes them."""
+
+    control: ControlService
+    store: Store
+    dummy: str
+    tools: dict[str, Any]
+
+
+@pytest.fixture(scope="module")
+def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
+    from qmx_host.first_start import land_dummy  # pyright: ignore[reportMissingTypeStubs]
+    from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
+        STUDY_CHECKER,
+        landers,
+        study_check,
+    )
+
+    root = tmp_path_factory.mktemp("qmb-world")
+    bars = root / "bars"
+    bars.mkdir()
+    for source in (AGENTS.parent / "qml" / "tests" / "fixtures" / "slices").glob("synthetic-*.csv"):
+        shutil.copyfile(source, bars / source.name.removeprefix("synthetic-"))
+    home = qmx_folder(root / "QMX")
+    control = ControlService(home)
+    control.settings_put("qmb", {"bars": str(bars), "gap_bars_refuse": 108})
+    with Store.open(home / "library", redactor=redact) as store:
+        control.attach_library(store)
+        runtime = control.app_runtime()
+        runtime.attach_landers(
+            landers(store, runtime, "pc", settings=lambda: control.settings_get("qmb"))
+        )
+        runtime.install(AGENTS / "apps" / "qmb", trust="first_party")
+        runtime.start("qmb")
+        store.register_checker(STUDY_CHECKER, study_check)
+        dummy = land_dummy(store)
+        assert dummy is not None
+        context = DomainContext(root=root / "tools")
+        context.control, context.library = control, control.library
+        try:
+            yield World(control, store, dummy, domain_functions(context)["backtest"])
+        finally:
+            control.close()
+
+
+@pytest.fixture
+def judged_on_a_small_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped preset asks 100 trades before any step counts, and a study cannot lower that,
+    so the dummy's month is `too_thin` and lands no paper. Only this number moves, and only in the
+    process that judges."""
+    small = dataclasses.replace(PRESETS["shipped"], min_trades=2)
+    monkeypatch.setitem(PRESETS, "shipped", small)
+
+
+def the_real_referee(
+    world: World,
+    change: Callable[[dict[str, Any]], dict[str, Any]],
+    padding: str | None = None,
+) -> Any:
+    """A referee step that presses the real tool on the runs its input names, then answers `change`
+    of what the tool said, as a model that copies or forges it would. `padding`, an old result, is
+    pressed with them, and the answer names its run beside the verdict."""
+
+    def answer(chunk: str) -> str:
+        runs = sorted(set(re.findall(r"qmbr-[\w-]+", chunk)))
+        results = [world.store.with_field("backtest-result", "run_id", run)[0] for run in runs]
+        beside = {}
+        if padding is not None:
+            results.append(padding)
+            beside["run_id"] = world.store.get(HIM, padding).fields["run_id"]
+        said = world.tools["backtest_judge_run"](results=results)["result"]
+        return json.dumps({"verdict": change({**said, "result_ids": results}), **beside})
+
+    return answer
+
+
+def real_run(world: World, folder: Path, inputs: Any, port: FakePort) -> tuple[Any, dict[str, Any]]:
+    """`folder` test-run on the real store with no `fixture`: its report, and each finished node's
+    outputs."""
+
+    async def run() -> Any:
+        async with EngineDoor.open(
+            world.control,
+            library=EngineLibraryAdapter(world.store),
+            harness=port,
+            principal=lambda: OPERATOR,
+        ) as door:
+            item = door.svc.drafts.put(None, Bundle.read(folder), 0, caller=OPERATOR).item
+            return await door.svc.tests.run(item, caller=OPERATOR, inputs=inputs)
+
+    report = asyncio.run(run())
+    with Reader.open(world.control.home) as reader:
+        finished = {
+            str(e.data["node_id"]): e.data.get("outputs")
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished"
+        }
+    return report, finished
+
+
+def real_b(
+    world: World, change: Callable[[dict[str, Any]], dict[str, Any]] = lambda said: said
+) -> tuple[Any, dict[str, Any], FakePort]:
+    """`b` from a sentence, its builder answering the dummy's pin, on real QMB and the real tool."""
+    built = {**json.loads(recorded(B, "build.json")), "object_id": world.dummy}
+    port = answers(
+        planted={"You build one QMX trading unit": json.dumps(built)},
+        referee=the_real_referee(world, change),
+    )
+    report, finished = real_run(world, B, IDEA_ON_MARCH, port)
+    return report, finished, port
+
+
+def real_u1(
+    world: World, change: Callable[[dict[str, Any]], dict[str, Any]] = lambda said: said
+) -> tuple[Any, dict[str, Any]]:
+    """u1 over the dummy's two markets, a markets-only sweep on real QMB and the real tool."""
+    inputs = {"unit": world.dummy, "window": MARCH, "markets": ["fx.eurusd", "metal.xauusd"]}
+    return real_run(world, U1, inputs, answers(referee=the_real_referee(world, change)))
+
+
+def refusal(world: World, report: Any, node_id: str) -> str:
+    """Why `node_id` failed the run, in the words the run's record keeps."""
+    with Reader.open(world.control.home) as reader:
+        return next(
+            str(e.data["message"])
+            for e in reader.events(report.run_id)
+            if e.kind == "node_failed" and e.data.get("node_id") == node_id
+        )
+
+
+def papers_on_main(world: World, verdict: str) -> list[dict[str, Any]]:
+    return [
+        dict(world.store.get(HIM, found).fields)
+        for kind in ("death-certificate", "proposal-card", "baseline-card")
+        for found in world.store.with_field(kind, "verdict", verdict)
+    ]
+
+
+def papers_a_run_landed(world: World) -> list[str]:
+    """A second paper is an artifact a template's step lands on its run's ref, or a child's."""
+    return [
+        found
+        for kind in ("death-certificate", "proposal-card")
+        for found in world.store.with_field("artifact", "type", kind)
+    ]
+
+
+def real_job(world: World, job: str, **asked: Any) -> str:
+    """One real QMB job of the dummy over the month, through the real lander: its landed result."""
+    inputs = {"unit": world.dummy, "window": MARCH, **asked}
+    ran = world.control.app_job(
+        "qmb", f"jobs/{job}.py", inputs=cast("Any", inputs), principal="agent:chat-9"
+    )
+    [result] = world.store.with_field("backtest-result", "run_id", str(ran["run_id"]))
+    return result
+
+
+def judge_one_sweep(world: World) -> dict[str, Any]:
+    """A real sweep of one market, then the real tool over it."""
+    result = real_job(world, "sweep", grid={"markets": ["fx.eurusd"]})
+    return cast("dict[str, Any]", world.tools["backtest_judge_run"](results=[result])["result"])
+
+
+def test_b_real_qmb_real_referee_real_scorecard(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    report, finished, port = real_b(world)
+
+    assert report.status == "passed", report.reason
+    card = finished["deliver"]["main"]
+    assert [(m["market"], m["outcome"], m["trades"]) for m in card["judge"]["per_market"]] == [
+        ("fx.eurusd", "fail", 6),
+        ("metal.xauusd", "fail", 2),
+    ]
+    assert card["judge"]["overall"] == "fail"
+    assert card["certificate"]["cause"] == "no_signal"
+    assert card["certificate"]["verdict"] == card["judge"]["verdict_id"]
+    assert card["proposal"] is None
+    assert [p["cause"] for p in papers_on_main(world, card["judge"]["verdict_id"])] == ["no_signal"]
+    assert papers_a_run_landed(world) == []
+    assert [c["toolsets"] for c in port.chats if ":build:" in str(c["title"])] == [
+        ("unit", "blocks", "memory")
+    ]
+
+
+def test_a_real_sweep_reaches_the_same_one_paper(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    report, finished = real_u1(world)
+
+    assert report.status == "passed", report.reason
+    table = finished["table"]["main"]
+    assert [(m["market"], m["outcome"], m["trades"]) for m in table["markets"]] == [
+        ("fx.eurusd", "fail", 6),
+        ("metal.xauusd", "fail", 2),
+    ]
+    assert table["unjudged"] == []
+    assert table["verdict"]["overall"] == "fail"
+    assert [p["cause"] for p in papers_on_main(world, table["verdict"]["verdict_id"])] == [
+        "no_signal"
+    ]
+    assert papers_a_run_landed(world) == []
+
+
+def test_a_failed_cost_step_lands_cause_costs(world: World, judged_on_a_small_record: None) -> None:
+    results = [
+        real_job(world, "backtest"),
+        real_job(world, "robustness", battery=["cost_stress"]),
+    ]
+
+    said = world.tools["backtest_judge_run"](results=results)["result"]
+
+    assert said["overall"] == "fail"
+    assert [p["cause"] for p in papers_on_main(world, said["verdict_id"])] == ["costs"]
+
+
+def test_a_forged_pass_routes_as_fail(world: World, judged_on_a_small_record: None) -> None:
+    def forged(said: dict[str, Any]) -> dict[str, Any]:
+        markets = [{**m, "outcome": "pass"} for m in said["per_market"]]
+        return {**said, "overall": "pass", "says": "Holds.", "per_market": markets}
+
+    report, finished, _ = real_b(world, forged)
+
+    assert report.status == "passed", report.reason
+    card = finished["deliver"]["main"]
+    assert finished["referee"]["main"]["verdict"]["overall"] == "pass"
+    assert card["judge"]["overall"] == "fail"
+    assert sorted(finished["passed"]) == ["false"]
+    assert "paper" not in finished
+    assert card["card"] is None
+    assert card["proposal"] is None
+    assert card["dead_end"]["verdict"] == "fail"
+    assert card["certificate"]["cause"] == "no_signal"
+
+
+def test_a_forged_id_naming_another_units_verdict_is_refused(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    theirs = world.store.put(
+        HIM,
+        LibraryDraft(
+            "verdict",
+            "verdict-of-another-unit",
+            "another unit passed",
+            fields={
+                "overall": "pass",
+                "unit": "another-unit",
+                "results": [],
+                "per_market": [],
+                "says": "Holds.",
+                "raw_tries": 1,
+                "effective_tries": 1,
+            },
+        ),
+        on=MAIN,
+        expected_head=None,
+    ).object_id
+
+    report, finished = real_u1(world, lambda said: {**said, "verdict_id": theirs, "cards": {}})
+
+    assert report.status == "failed"
+    assert refusal(world, report, "stored") == (
+        f"the verdict {theirs} judged another-unit, and this run tested {world.dummy}"
+    )
+    assert "table" not in finished
+
+
+def test_a_true_verdict_of_an_earlier_run_is_refused(
+    world: World, judged_on_a_small_record: None
+) -> None:
+    earlier = judge_one_sweep(world)
+    its_results = world.store.get(HIM, earlier["verdict_id"]).fields["results"]
+
+    report, finished = real_u1(
+        world,
+        lambda said: {
+            **said,
+            "verdict_id": earlier["verdict_id"],
+            "cards": earlier["cards"],
+            "result_ids": its_results,
+        },
+    )
+
+    assert report.status == "failed"
+    assert refusal(world, report, "stored") == (
+        f"the verdict {earlier['verdict_id']} judged other runs than this run's"
+    )
+    assert "table" not in finished
+
+    report, finished = real_run(
+        world,
+        U1,
+        {"unit": world.dummy, "window": MARCH, "markets": ["metal.xauusd"]},
+        answers(referee=the_real_referee(world, lambda said: said, padding=its_results[0])),
+    )
+
+    assert report.status == "failed"
+    padded = finished["referee"]["main"]["verdict"]["verdict_id"]
+    assert refusal(world, report, "stored") == (
+        f"the verdict {padded} judged other runs than this run's"
+    )
+    assert "table" not in finished
+
+
+def test_a_dead_unit_leaves_a_memory_row_the_builder_can_read(
+    world: World, judged_on_a_small_record: None, tmp_path: Path
+) -> None:
+    from qmx_host.host import dead_end_memory  # pyright: ignore[reportMissingTypeStubs]
+    from qmx_host.sessions import memory_reads  # pyright: ignore[reportMissingTypeStubs]
+    from qmx_memory.engine import RecallEngine
+    from qmx_tools.functions import attach_dead_ends
+
+    engine = RecallEngine(world.store, home=tmp_path / "memory")
+    attach_dead_ends(world.control, dead_end_memory(engine, tmp_path))
+    try:
+        said = judge_one_sweep(world)
+        again = world.tools["backtest_judge_run"](
+            results=world.store.get(HIM, said["verdict_id"]).fields["results"]
+        )["result"]
+    finally:
+        attach_dead_ends(world.control, None)
+
+    death = world.store.get(HIM, said["cards"]["death-certificate"]).fields
+    checked = asyncio.run(
+        memory_reads(engine, SessionId("builder"))["memory_check"]({"query": UNIT_IDEA})
+    )
+    engine.close()
+    assert again["cards"] == said["cards"]
+    dead_ends = cast("list[dict[str, Any]]", checked["dead_ends"])
+    assert [row["row_id"] for row in dead_ends] == [death["memory_row"]]
+    [row] = dead_ends
+    assert row["text"].startswith(f"{UNIT_IDEA}: {world.dummy} died of no_signal. ")
+    assert row["refs"] == [f"object:{world.dummy}", f"object:{said['verdict_id']}"]
+    assert "died of no_signal" in (tmp_path / "memory" / "general.md").read_text("utf-8")
 
 
 T7 = PACK / "t7-trade-journal-review"

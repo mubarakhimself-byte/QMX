@@ -99,7 +99,9 @@ class World:
     dummy: str
     backtest: Mapping[str, Any]
 
-    def conformance(self, app_id: str, version: str = QMB_VERSION) -> ConformanceRun:
+    def conformance(self, app_id: str, version: str | None = None) -> ConformanceRun:
+        asked = version or (QMB_VERSION if app_id == "qmb" else "1.0.0")
+
         def run_job(
             app: str, job: str, inputs: Mapping[str, object], principal: str
         ) -> Mapping[str, object]:
@@ -108,7 +110,7 @@ class World:
             )
 
         return run_conformance(
-            app_id, version, run_job=run_job, library=self.library, principal="operator"
+            app_id, asked, run_job=run_job, library=self.library, principal="operator"
         )
 
     def landed(self, item: str, trades: list[dict[str, Any]]) -> str:
@@ -271,6 +273,27 @@ def test_two_results_of_one_request_compare_trade_by_trade(world: World) -> None
             "opened_at": 1743092100000000000,
             "order": 0,
             "differs": {"money": ["95.38", "95.37"], "r": ["2.0013", "2.0010"]},
+        },
+    ]
+
+
+def test_a_row_from_before_the_added_fields_compares_on_what_both_rows_hold(world: World) -> None:
+    older = {"market_id": "fx.eurusd", "opened_at": "1740787200000000000", "money": "1.00"}
+    newer = {**older, "mae_r": "0.20", "mfe_r": "0.80", "cash": "-1.00", "net_r": "0.40"}
+    before = world.landed("row-before", [older])
+    after = world.landed("row-after", [newer])
+    charged = world.landed("row-charged", [{**newer, "cash": "-2.00"}])
+
+    across = world.backtest["backtest_compare"](left=before, right=after)
+    within = world.backtest["backtest_compare"](left=after, right=charged)
+
+    assert (across["same_trades"], across["result"]) == (True, [])
+    assert within["result"] == [
+        {
+            "market_id": "fx.eurusd",
+            "opened_at": 1740787200000000000,
+            "order": 0,
+            "differs": {"cash": ["-1.00", "-2.00"]},
         },
     ]
 

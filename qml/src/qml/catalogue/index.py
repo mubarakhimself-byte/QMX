@@ -3,7 +3,8 @@
 ``row`` turns an entry into one index row. ``find`` ranks rows by the words they share with a
 query. ``match`` reads a text sentence by sentence and names the entry each sentence states, so a
 source's every sentence is either known or comes back as an append request; a sentence matches an
-entry only when it holds every word of one of the entry's names, so a match is never a guess.
+entry only when it holds every word of one of the entry's names of two words or more, so a match is
+never a guess.
 """
 
 from __future__ import annotations
@@ -185,8 +186,10 @@ class MatchReport:
 
 
 def match(text: str, rows: Sequence[IndexRow]) -> MatchReport:
-    """Each sentence of ``text`` and the entry whose longest name it holds every word of."""
-    names = [(name, found.pin) for found in rows for name in found.names()]
+    """Each sentence of ``text`` and the entry whose longest name it holds every word of. A one-word
+    name does not match alone: a false "known" loses an idea silently, where a false "new" only
+    makes an append request someone reviews."""
+    names = [(name, found.pin) for found in rows for name in found.names() if len(name) > 1]
     names.sort(key=lambda n: (-len(n[0]), n[1]))
     sentences: list[Match] = []
     for sentence in (s.strip() for s in _SENTENCE.split(text)):

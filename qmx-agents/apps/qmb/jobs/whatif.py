@@ -41,7 +41,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             "total_r": str(ran.value.result.total_r),
             "scenarios": scenarios,
         },
-        labels={"zero_trades": not trades, "fidelity": "bars"},
+        labels={
+            "zero_trades": not trades,
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
         files=[
             tester.write(
                 folder,

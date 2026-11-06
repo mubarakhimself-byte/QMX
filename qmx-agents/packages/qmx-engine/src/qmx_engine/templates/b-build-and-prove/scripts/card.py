@@ -1,9 +1,9 @@
 """Funnel stage 12: a passing verdict gets a "start paper trial?" card for his click, with the
 demo-only minimal risk profile (fixed small r, tighten-only). A `fail` or `no_trades` verdict, the
 two the judge certifies dead, becomes a dead-end row with the judge's outcome, its plain words and
-the tries behind it, kept for R6. `incomplete` and `too_thin` get neither: the verdict waits. The
-`judge` block's, decided by script; the block hands on its child's outputs nested, so the verdict
-is found by its key. Nothing starts here; the trial is his act.
+the tries behind it, kept for R6. `incomplete` and `too_thin` get neither: the verdict waits. Its
+input holds the stored verdict the rule routed, found by its key. Nothing starts here; the trial is
+his act.
 """
 
 import json

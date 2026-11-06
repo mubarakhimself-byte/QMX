@@ -7,10 +7,11 @@ import importlib.metadata
 import json
 import time
 import uuid
+import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
@@ -18,7 +19,14 @@ import qml
 from qmf.core import Instant, fingerprint, is_refusal
 from qmf.data.journal_writer import key_token
 from qmf.data.series import STATE_NAME, SeriesKey, SeriesStore
-from qml.catalogue.entry import ENTRY_SCHEMA, Computed, compute_status, corpus_problems
+from qml.catalogue.entry import (
+    ENTRY_SCHEMA,
+    Computed,
+    EntryProblem,
+    alias_key,
+    compute_status,
+    corpus_problems,
+)
 from qml.catalogue.index import find as find_rows
 from qml.catalogue.index import match as match_text
 from qml.catalogue.index import row as index_row
@@ -30,13 +38,16 @@ from qmx_judge.judge import (
     STUDY_KIND,
     JudgedResult,
     JudgeRefused,
+    Remember,
     judge,
     land_judgement,
+    late_spec,
     parse_spec,
     quick_spec,
+    spec_edit,
 )
 from qmx_judge.landing import REPORT_SLOT, RESULT_KIND, Stored
-from qmx_judge.tries import TRY_KIND, try_item
+from qmx_judge.tries import TRY_KIND, Try, spec_edit_item, try_item
 from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, drafts_ref, state_ref
@@ -58,14 +69,32 @@ from qmx_tools.service import (
 from qmx_tools.unit_check import checked
 
 if TYPE_CHECKING:
+    from qmx_control.service import ControlService
     from qmx_library.port import JsonObject, ObjectId, ObjectView
     from qmx_library.store import Store
 
 UNIT_KIND: Final = "unit"
 NO_NODE: Final = "no trading node is set up yet"
 REPO: Final = Path(qml.__file__).resolve().parents[3]
+QUICK_STUDY: Final = "study-quick-"
+"""The item prefix of a unit's quick study, the one study written after its results by design."""
 COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "motion", "study")
 """The result fields that make two runs one request, whatever tester ran them."""
+ADDED_TRADE_FIELDS: Final = frozenset({"mae_r", "mfe_r", "cash", "net_r"})
+"""Row fields QMB 1.0.4 added. An older result or another tester's row may not hold them."""
+
+
+DEAD_ENDS: Final[weakref.WeakKeyDictionary[ControlService, Remember]] = weakref.WeakKeyDictionary()
+
+
+def attach_dead_ends(control: ControlService, remember: Remember | None) -> None:
+    """Give `backtest_judge_run` on `control`'s home the host's memory, or take it away. The
+    harness builds its own domain context over the same control service, as `attach_node` says, so
+    a door with no host keeps none and its certificate names no row."""
+    if remember is None:
+        DEAD_ENDS.pop(control, None)
+    else:
+        DEAD_ENDS[control] = remember
 
 
 type Opening = tuple[str, int, int, str]
@@ -192,15 +221,25 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         study: str | None = None,
         compiled_fp: str | None = None,
         seed: int | None = None,
-        motion: Literal["on", "off"] = "on",
+        motion: Literal["on", "off", "both"] = "on",
         allow_gaps: bool | None = None,
+        source: str | None = None,
+        cost_profile: str | None = None,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
         """Backtest a unit on QMB over `window` (`{"start": "2025-03-01", "end": "2025-04-01"}`)
         and land its result in the Library. Answers the run id, and the result id when it
-        finished within the wait; otherwise read it later with backtest_status. A hole in the
-        bars longer than `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true;
-        left out, the study's `allow_gaps` decides."""
+        finished within the wait. A unit's first run on a market answers `checking` with its
+        behaviour check's run id; backtest_status on that id names the run once it opens.
+        `markets` narrows it to some of the unit's markets. It reads the market store's months
+        under `source`, the study's when left out, else `dukascopy`, and a missing month is
+        refused by name before anything starts. A hole in the bars longer than
+        `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true, and a study that states
+        `allow_gaps` beats this one. `motion` both runs the unit with its calibrated numbers moving
+        and held, and reports both. `cost_profile` pins a library_save of kind `cost-profile`,
+        `{"costs": {market: qmx.qmb.cost-profile/1}, "funding": {market: "timestamp,rate" CSV}}`:
+        net money pays it and R does not, and the study's `cost_rule` beats it. `costs` must name
+        every market of the run by its market id, such as `fx.eurusd`, or nothing starts."""
         asked = {
             "unit": unit,
             "window": window,
@@ -210,12 +249,15 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "seed": seed,
             "motion": motion,
             "allow_gaps": allow_gaps,
+            "source": source,
+            "cost_profile": cost_profile,
         }
         request = {name: value for name, value in asked.items() if value is not None}
         return ctx.backtest(request, response_format)
 
     def backtest_status(run_id: str, response_format: ResponseFormat = "concise") -> dict[str, Any]:
-        """Read a run's state from its try rows: running, landed or failed, and its result id."""
+        """Read a run's state from its try rows: running, landed or failed, its result id, and why
+        it failed. A behaviour check also names under `run` the run it went before, once open."""
         store = ctx.library.store
         opened = store.head(try_item(run_id, "opened"), MAIN)
         if opened is None:
@@ -224,6 +266,10 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         closed = store.head(try_item(run_id, "landed"), MAIN)
         last = None if closed is None else store.get(OPERATOR, closed[0]).fields
         links = cast("list[str]", (last or {}).get("links") or [])
+        result_id = links[1] if len(links) > 1 else None
+        landed = {} if result_id is None else store.get(OPERATOR, result_id).fields
+        behaviour = cast("dict[str, Any]", landed.get("behaviour") or {})
+        reason = landed.get("reason") or behaviour.get("reason")
         return ctx.output(
             {
                 "run_id": run_id,
@@ -232,7 +278,9 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 "tester": first.get("tester"),
                 "principal": first.get("principal"),
                 "place": first.get("place"),
-                "result_id": links[1] if len(links) > 1 else None,
+                "result_id": result_id,
+                **({"reason": reason} if reason else {}),
+                **({"run": ctx.run_after_check(first)} if first.get("kind") == "check" else {}),
             },
             "status",
             response_format,
@@ -279,7 +327,8 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         """Compare two landed results trade by trade (the parity diff): each trade only one made,
         each trade both made whose prices, size, money or R differ, and the measures that
         differ. Trades pair by market, opening time and their order among trades opened on
-        that market at that time, so two testers' names never matter."""
+        that market at that time, so two testers' names never matter. `mae_r`, `mfe_r`, `cash`
+        and `net_r` compare only when both rows hold them."""
         (first, mine), (second, theirs) = _result(left), _result(right)
         ours, other = _by_opening(left, mine), _by_opening(right, theirs)
         rows: list[dict[str, Any]] = []
@@ -291,7 +340,11 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 continue
             differs = {
                 name: [a.get(name), b.get(name)]
-                for name in sorted((a.keys() | b.keys()) - {"trade_id"})
+                for name in sorted(
+                    (a.keys() | b.keys())
+                    - {"trade_id"}
+                    - (ADDED_TRADE_FIELDS - (a.keys() & b.keys()))
+                )
                 if a.get(name) != b.get(name)
             }
             if differs:
@@ -325,30 +378,52 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         results: list[str], study: str | None = None, response_format: ResponseFormat = "concise"
     ) -> dict[str, Any]:
         """Judge landed results with the core's referee and land the verdict. Answers the
-        verdict in plain words, with the raw and effective tries behind it."""
+        verdict in plain words, with the raw and effective tries behind it. Every market the
+        results traded is judged. A study version made after the results' first try counts as a
+        try and its own k is not used."""
         store = ctx.library.store
         judged = [_judged(store, result_id) for result_id in results]
         pin, spec_fields = _study(store, study, judged)
         tries = _tries(store, judged)
         family = [
             found
-            for result_id in sorted(_landed_results(tries) - set(results))
+            for result_id in sorted(_landed_results(list(tries.values())) - set(results))
             if (found := _judged(store, result_id)).status == "finished"
         ]
         principal = ctx.control._caller()  # pyright: ignore[reportPrivateUsage]
+        late = _written_late(store, pin, judged, tries)
+        edit = _new_spec_edit(store, pin, judged, tries, principal) if late else None
+        library = _JudgeLibrary(store)
         try:
             spec = parse_spec(spec_fields)
             verdict = judge(
-                spec,
+                late_spec(spec) if late else spec,
                 study=pin,
                 results=judged,
-                tries=tries,
+                tries=[*tries.values(), *([] if edit is None else [edit.fields()])],
                 family=family,
                 principal=principal,
                 versions={"checker": f"qml {importlib.metadata.version('qml')}"},
             )
+            if edit is not None:
+                title = f"spec_edit {pin}"
+                library.put(
+                    TRY_KIND,
+                    edit.fields(),
+                    {},
+                    item=spec_edit_item(pin),
+                    title=title,
+                    summary=title,
+                    principal=principal,
+                )
             landed = land_judgement(
-                _JudgeLibrary(store), verdict, results=judged, spec=spec, writer=str(OPERATOR)
+                library,
+                verdict,
+                results=judged,
+                spec=spec,
+                writer=str(OPERATOR),
+                placeholders=tuple(dict.fromkeys(p for r in judged for p in r.placeholders)),
+                remember=DEAD_ENDS.get(ctx.control),
             )
         except JudgeRefused as refused:
             raise ValueError("; ".join(refused.problems)) from refused
@@ -438,8 +513,10 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         envelope field (unit_id, market_id, kind, world, account, machine, ...). View `rows`,
         `trades_with_context` (each signal and trade with its market's minute, spread included),
         or `digest` (counts per unit, market and day). Past the data it says where the data
-        stops; backfilled rows are left out unless include_backfilled. Reading history is
-        read with readings_query, which keeps the study's holdout."""
+        stops; backfilled rows are left out unless include_backfilled. A window reaching a month
+        the door's Settings holdout seals is refused by name. Reading history is read with
+        readings_query, which keeps the study's holdout."""
+        door = ctx.market
         answer = journals.journal_query(
             ctx.root,
             stream=stream,
@@ -448,6 +525,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             view=view,
             include_backfilled=include_backfilled,
             detailed=response_format == "detailed",
+            held_from=None if door is None else partial(_held_out_from, door),
         )
         rows = cast("list[Any]", answer.pop("rows"))
         paged = ctx.page(
@@ -634,6 +712,14 @@ def _judged(store: Store, result_id: str) -> JudgedResult:
     return JudgedResult.read(result_id, view.fields, trades)
 
 
+def _quick_fields(store: Store, judged: list[JudgedResult]) -> JsonObject:
+    """The quick spec of the results' unit, its claim the unit's own claim card idea."""
+    unit = judged[0].unit if judged else ""
+    claim = store.get(OPERATOR, unit).fields.get("claim_card") if store.catalog.row(unit) else None
+    idea = cast("dict[str, Any]", claim).get("idea") if isinstance(claim, dict) else None
+    return cast("JsonObject", quick_spec(idea if isinstance(idea, str) else None))
+
+
 def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple[str, JsonObject]:
     """The study the verdict is judged under: the one named, else the results' own, else a quick
     spec over every admitted market, landed once per unit."""
@@ -645,11 +731,9 @@ def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple
             raise ValueError(f"{named} is a {view.kind}; pass the id of a study-spec")
         return named, view.fields
     unit = judged[0].unit if judged else ""
-    claim = store.get(OPERATOR, unit).fields.get("claim_card") if store.catalog.row(unit) else None
-    idea = cast("dict[str, Any]", claim).get("idea") if isinstance(claim, dict) else None
-    fields = cast("JsonObject", quick_spec(idea if isinstance(idea, str) else None))
+    fields = _quick_fields(store, judged)
     key = fingerprint({"unit": unit, "spec": fields})
-    item = f"study-quick-{unit if is_refusal(key) else key.value.digest[:24]}"
+    item = f"{QUICK_STUDY}{unit if is_refusal(key) else key.value.digest[:24]}"
     head = store.head(item, MAIN)
     if head is not None:
         return head[0], fields
@@ -657,8 +741,8 @@ def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple
     return store.put(OPERATOR, draft, on=MAIN, expected_head=None).object_id, fields
 
 
-def _tries(store: Store, judged: list[JudgedResult]) -> list[dict[str, Any]]:
-    """Every `try` of the results' families, and each result's own run tries."""
+def _tries(store: Store, judged: list[JudgedResult]) -> dict[str, dict[str, Any]]:
+    """Every `try` of the results' families, and each result's own run tries, by object id."""
     found: dict[str, dict[str, Any]] = {}
     for result in judged:
         for state in ("opened", "landed"):
@@ -669,7 +753,48 @@ def _tries(store: Store, judged: list[JudgedResult]) -> list[dict[str, Any]]:
     for family in sorted(families):
         for object_id in store.with_field(TRY_KIND, "family", family):
             found[object_id] = dict(store.get(OPERATOR, object_id).fields)
-    return list(found.values())
+    return found
+
+
+def _written_late(
+    store: Store, pin: str, judged: list[JudgedResult], tries: dict[str, dict[str, Any]]
+) -> bool:
+    """Whether this study version was made after the results' families first tried something.
+    The store's move order decides, which no clock and no caller sets. A behaviour check is no
+    try at a result. Only the unit's own quick study is exempt, because it is written late by
+    design and `origin` is a free field an agent could fill in itself."""
+    first = min(
+        (store.catalog.placed_seq(o) for o, row in tries.items() if row.get("kind") != "check"),
+        default=None,
+    )
+    view = store.get(OPERATOR, pin)
+    if first is None or (
+        view.item.startswith(QUICK_STUDY) and view.fields == _quick_fields(store, judged)
+    ):
+        return False
+    moves = store.history_of(OPERATOR, view.item)
+    return min((m.seq for m in moves if m.new_head == pin), default=0) > first
+
+
+def _new_spec_edit(
+    store: Store,
+    pin: str,
+    judged: list[JudgedResult],
+    tries: dict[str, dict[str, Any]],
+    principal: str,
+) -> Try | None:
+    """The counted try of judging under a late study version, or None once it has landed. The
+    item is named by the version, so the host's `land_spec_edit` and this door land one between
+    them."""
+    if store.head(spec_edit_item(pin), MAIN) is not None:
+        return None
+    return spec_edit(
+        pin,
+        unit=judged[0].unit,
+        family=next(str(row["family"]) for row in tries.values() if row.get("family")),
+        principal=principal,
+        at=datetime.now(UTC).isoformat(),
+    )
 
 
 def _landed_results(tries: list[dict[str, Any]]) -> set[str]:
@@ -810,7 +935,7 @@ def _qml_entries() -> tuple[_Held, ...]:
     return tuple(held)
 
 
-def _entry_items(store: Store) -> list[str]:
+def entry_items(store: Store) -> list[str]:
     """Every Library item that ever held an entry marked `qmx.entry/1`."""
     return sorted(
         {
@@ -823,7 +948,7 @@ def _entry_items(store: Store) -> list[str]:
 def _library_entries(store: Store) -> list[_Held]:
     """The Library's entries on `main`, each with the status its last status run wrote."""
     held: list[_Held] = []
-    for item in _entry_items(store):
+    for item in entry_items(store):
         head = store.head(item, MAIN)
         if head is None:
             continue
@@ -842,30 +967,93 @@ def _library_entries(store: Store) -> list[_Held]:
     return held
 
 
-def write_entry_statuses(store: Store) -> list[tuple[str, str, Computed]]:
-    """Compute the status of each Library entry at its `main` and draft heads from its code
-    and its `golden` blob, and write it on that object as its `status` annotation. Returns
-    `(item, ref, computed)` per object, `main` first. Rerunning writes the same values."""
+def write_entry_status(store: Store, item: str) -> list[tuple[str, str, Computed]]:
+    """Compute one Library entry's status at its `main` and draft heads from its code and its
+    `golden` blob, and write it on that object as its `status` annotation. Returns
+    `(item, ref, computed)` per object, `main` first. A head that already holds the same value
+    writes nothing, because an annotation is a log row and a rerun must not grow that log."""
     written: list[tuple[str, str, Computed]] = []
-    for item in _entry_items(store):
-        seen: set[str] = set()
-        for ref in (MAIN, drafts_ref(item)):
-            head = store.head(item, ref)
-            if head is None or head[0] in seen:
-                continue
-            seen.add(head[0])
-            view = store.get(store.engine, head[0])
-            if view.kind != "component":
-                continue
-            code, golden = view.blobs.get("code"), view.blobs.get("golden")
-            computed = compute_status(
-                entry_face(view.fields),
-                None if code is None else store.read_blob(code.blob_id),
-                None if golden is None else json.loads(store.read_blob(golden.blob_id)),
-            )
-            store.annotate(store.engine, head[0], {"status": json_value(computed.annotation())})
-            written.append((item, ref, computed))
+    seen: set[str] = set()
+    for ref in (MAIN, drafts_ref(item)):
+        head = store.head(item, ref)
+        if head is None or head[0] in seen:
+            continue
+        seen.add(head[0])
+        view = store.get(store.engine, head[0])
+        face = entry_face(view.fields)
+        if view.kind != "component" or face.get("schema") != ENTRY_SCHEMA:
+            continue
+        code, golden = view.blobs.get("code"), view.blobs.get("golden")
+        computed = compute_status(
+            face,
+            None if code is None else store.read_blob(code.blob_id),
+            None if golden is None else json.loads(store.read_blob(golden.blob_id)),
+        )
+        mark = json_value(computed.annotation())
+        if view.annotations.get("status") != mark:
+            store.annotate(store.engine, head[0], {"status": mark})
+        written.append((item, ref, computed))
     return written
+
+
+def write_entry_statuses(store: Store) -> list[tuple[str, str, Computed]]:
+    """`write_entry_status` for every Library entry. Rerunning writes nothing new."""
+    return [row for item in entry_items(store) for row in write_entry_status(store, item)]
+
+
+@cache
+def _own_faces() -> tuple[dict[str, object], ...]:
+    """QML's own entries as their files hold them, read once per process."""
+    return tuple(
+        cast("dict[str, object]", json.loads((version / "entry.json").read_text("utf-8")))
+        for folder in STDLIB.iterdir()
+        for version in folder.iterdir()
+        if (version / "entry.json").is_file()
+    )
+
+
+def _library_names(store: Store) -> list[dict[str, object]]:
+    """The `entry_id`, version and aliases of every Library entry at a head. One query holding only
+    these fields, because a save runs this and opening every object would cost it dearly."""
+    rows = store.catalog.db.execute(
+        "SELECT DISTINCT json_extract(o.fields, '$.entry.entry_id'), "
+        "json_extract(o.fields, '$.entry.version'), "
+        "CASE json_type(o.fields, '$.entry.aliases') "
+        "WHEN 'array' THEN json_extract(o.fields, '$.entry.aliases') END "
+        "FROM heads h JOIN objects o ON o.object_id = h.head "
+        "WHERE o.kind = 'component' AND json_extract(o.fields, '$.entry.schema') = ?",
+        (ENTRY_SCHEMA,),
+    )
+    return [
+        {"entry_id": entry_id, "version": version, "aliases": json.loads(aliases or "[]")}
+        for entry_id, version, aliases in rows
+    ]
+
+
+def _name_keys(entry: Mapping[str, object]) -> set[str]:
+    aliases = entry.get("aliases")
+    given = cast("list[object]", aliases) if isinstance(aliases, list) else []
+    names = [entry.get("entry_id"), *given]
+    return {alias_key(name) for name in names if isinstance(name, str)}
+
+
+def entry_clashes(store: Store, fields: Mapping[str, object]) -> tuple[EntryProblem, ...]:
+    """What saving this entry would break across the whole dictionary: a name another entry holds,
+    or a pin QML's own files hold with other words. A new version of one entry shares its names with
+    the old one, so it clashes with nothing. Only QML's files answer for a pin, because a checker is
+    not told the item, and a Library head at this pin may be this item's own last save."""
+    entry = entry_face(fields)
+    pin = f"{entry.get('entry_id')}@{entry.get('version')}"
+    own = _own_faces()
+    keys = _name_keys(entry)
+    others = [
+        held
+        for held in (*own, *_library_names(store))
+        if held.get("entry_id") != entry.get("entry_id") and keys & _name_keys(held)
+    ]
+    same_pin = [held for held in own if f"{held.get('entry_id')}@{held.get('version')}" == pin]
+    found = corpus_problems([*same_pin, *others, entry])
+    return tuple(p for p in found if p.where == pin or p.where.startswith(f"{pin}/"))
 
 
 def block_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]]]:

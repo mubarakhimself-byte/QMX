@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import dataclasses
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -73,7 +73,7 @@ type Calibrations = Callable[[str, str], Sequence[Mapping[str, object]]]
 
 
 class GRecords(Protocol):
-    def g_record(self, compiled_fp: str) -> GRecord | None: ...
+    def g_record(self, compiled_fp: str, markets: Collection[str]) -> GRecord | None: ...
 
 
 class Refused(Exception):
@@ -309,7 +309,7 @@ class Promoter:
         """Refuse a move Part A's `fold` refuses, before anything reaches the node."""
         mine = [seen.sequence for seen in known if seen.writer == self.lifecycle.writer_id]
         stamped = dataclasses.replace(event, sequence=max(mine, default=-1) + 1)
-        folded = fold([*known, stamped], auto_paper=self.lifecycle.auto_paper())
+        folded = fold([*known, stamped])
         for rejected in folded.rejected:
             if rejected.event.event_id == event.event_id:
                 raise Refused(
@@ -337,7 +337,7 @@ class Promoter:
                 "Name the node's tag and the account id.",
                 status=400,
             )
-        current = fold(known, auto_paper=self.lifecycle.auto_paper()).state(click.key)
+        current = fold(known).state(click.key)
         if current is State.STOPPED:
             raise Refused(
                 "illegal_move",
@@ -348,7 +348,7 @@ class Promoter:
         probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
         self._allowed(probe, known)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
-        report = self._g_record(compiled.compiled_fingerprint.value)
+        report = self._g_record(compiled.compiled_fingerprint.value, click.market_id)
         account = _one(
             _main(self.store, "account", "account_id", click.account.id),
             f"account {click.account.id}",
@@ -412,7 +412,7 @@ class Promoter:
         """Park or retire: record the move, then ask the node to withdraw each deployment his
         clicks put on this market. A market already parked or retired records nothing and asks
         the withdraw again, so a second click finishes a withdraw the node did not answer."""
-        folded = fold(known, auto_paper=self.lifecycle.auto_paper())
+        folded = fold(known)
         current = folded.state(click.key)
         moves = [applied for applied in folded.applied if applied.key == click.key]
         made = event_id(digest)
@@ -484,10 +484,14 @@ class Promoter:
             raise Refused("no_g_record", f"the unit does not compile: {first}", "Fix the unit.")
         return document, compiled
 
-    def _g_record(self, compiled: str) -> str:
-        found = self.records.g_record(compiled)
+    def _g_record(self, compiled: str, market: str) -> str:
+        found = self.records.g_record(compiled, (market,))
         if found is None or not found.safety_passed:
-            why = "no G test-report" if found is None else f"G test-report {found.object_id} failed"
+            why = (
+                f"no G test-report on {market}"
+                if found is None
+                else f"G test-report {found.object_id} failed"
+            )
             raise Refused(
                 "no_g_record",
                 f"{why} for compiled fingerprint {compiled}",

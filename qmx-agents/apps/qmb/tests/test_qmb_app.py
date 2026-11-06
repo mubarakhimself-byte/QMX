@@ -9,6 +9,8 @@ so every literal below holds on every machine.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import shutil
 import threading
@@ -16,12 +18,15 @@ import time
 from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
 import psutil
 import pytest
+from qmf.core import fingerprint_bytes, is_refusal
+from qmf.data.series import SeriesKey
+from qmf.data.store.engines.typed import BAR_COLUMNS, TICK_COLUMNS, TypedWriter
 from qmx_apps.errors import AppError, Document
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
@@ -42,8 +47,17 @@ from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
     landers,
     study_check,
 )
+from qmx_host.market_data import (  # pyright: ignore[reportMissingTypeStubs]
+    MarketDoor,
+    Placement,
+)
+from qmx_host.venue_records import (  # pyright: ignore[reportMissingTypeStubs]
+    Market,
+    land,
+    records_of,
+)
 from qmx_library.port import Draft
-from qmx_library.principal import Principal, drafts_ref
+from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
 from qmx_tools.functions import domain_functions
 from qmx_tools.gather import DUMMY, template
@@ -107,15 +121,11 @@ class World:
     tools: Mapping[str, Mapping[str, Callable[..., dict[str, Any]]]]
 
 
-@pytest.fixture(scope="module")
-def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
-    root = tmp_path_factory.mktemp("qmb")
-    bars = root / "bars"
-    bars.mkdir()
-    for source in SLICES.glob("synthetic-*.csv"):
-        shutil.copyfile(source, bars / source.name.removeprefix("synthetic-"))
+def a_world(root: Path, *, bars: Path | None) -> Generator[World]:
+    """QMB installed on a real supervisor over a real store, in `root`, the dummy landed."""
     control = ControlService(root / "home")
-    control.settings_put("qmb", {"bars": str(bars)})
+    if bars is not None:
+        control.settings_put("qmb", {"bars": str(bars)})
     control.attach_workflow_engine(cast(WorkflowEngine, Chat()))
     with Store.open(root / "library", redactor=redact, wall=Clock()) as store:
         control.attach_library(store)
@@ -135,6 +145,16 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
             yield World(control, store, runtime, dummy, tools["backtest"], tools)
         finally:
             control.close()
+
+
+@pytest.fixture(scope="module")
+def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
+    root = tmp_path_factory.mktemp("qmb")
+    bars = root / "bars"
+    bars.mkdir()
+    for source in SLICES.glob("synthetic-*.csv"):
+        shutil.copyfile(source, bars / source.name.removeprefix("synthetic-"))
+    yield from a_world(root, bars=bars)
 
 
 def fields(store: Store, object_id: str) -> dict[str, Any]:
@@ -190,7 +210,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.2"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.8"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -285,19 +305,6 @@ def test_an_agent_writes_adx_above_25_and_a_job_runs_it(world: World) -> None:
     assert at_25["labels"]["zero_trades"] is False
     assert at_25["measures"]["trades"] == 1
     assert at_99["labels"]["zero_trades"] is True
-
-
-def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: World) -> None:
-    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
-
-    fills = report(world.store, answer["result_id"])["fills"]
-    entries = [fill for fill in fills if fill["kind"] == "entry"]
-    assert entries
-    assert all(
-        Decimal(f["quantity"])
-        == Decimal(f["receipt_quantity"]).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-        for f in entries
-    )
 
 
 def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
@@ -401,6 +408,7 @@ def test_a_failing_safety_verdict_refuses_the_run_with_its_report(world: World) 
             "check": "qml-g/1",
             "status": "finished",
             "compiled_fingerprint": compiled,
+            "behaviour": {"slice": {"market_ids": ["fx.eurusd", "metal.xauusd"]}},
             "safety": {"verdict": "fail"},
         },
     )
@@ -491,7 +499,9 @@ def test_a_study_that_allows_gaps_runs_the_month_the_hole_rule_fails(world: Worl
 
 
 def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -> None:
-    world.control.settings_put("qmb", {"gap_bars_refuse": 4, "calibrated_min_fills": 7})
+    """The synthetic month's last bar opens on Friday 28 March, so its window ends short by the 108
+    open bars forex has from Sunday 30 March and the 100 gold has. A limit of 108 passes both."""
+    world.control.settings_put("qmb", {"gap_bars_refuse": 108, "calibrated_min_fills": 7})
     try:
         answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
     finally:
@@ -501,7 +511,473 @@ def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -
     written = json.loads((run / "in" / "request.json").read_text("utf-8"))
     assert answer["status"] == "finished"
     assert report(world.store, answer["result_id"])["holes"] == []
-    assert (written["gap_bars_refuse"], written["calibrated_min_fills"]) == (4, 7)
+    assert (written["gap_bars_refuse"], written["calibrated_min_fills"]) == (108, 7)
+    assert fields(world.store, answer["result_id"])["labels"]["data_short"] == [
+        {"market_id": "fx.eurusd", "before_first": 0, "after_last": 108},
+        {"market_id": "metal.xauusd", "before_first": 0, "after_last": 100},
+    ]
+
+
+type OnMain = Callable[..., str]
+
+
+@pytest.fixture
+def on_main(world: World) -> Generator[OnMain]:
+    """What the node read lands on the real store through the host's own `venue_records`. Each item
+    is withdrawn after its test, so the module's other literals stay on the fixtures."""
+    items: set[str] = set()
+
+    def on_this_store(market: Market, **symbol: int) -> str:
+        item = node_read(world.store, market, **symbol)
+        items.add(item)
+        return item
+
+    yield on_this_store
+    for item in items:
+        world.store.archive(OPERATOR, item, "the test is over")
+
+
+def node_read(store: Store, market: Market, **symbol: int) -> str:
+    answer = {
+        "schema_version": "qmx.node.records/1",
+        "venue": {"name": "icmarkets-ctrader", "platform": "ctrader", "sandbox": "demo"},
+        "account": {"id": "9000", "world": "demo", "leverage": "30"},
+        "instruments": [
+            {
+                "symbol": market.symbol,
+                "quote_currency": "USD",
+                "schedule_zone": "UTC",
+                "trading_mode": "ENABLED",
+                **symbol,
+            }
+        ],
+    }
+    rows = {row.kind: row for row in land(store, records_of(answer, [market]))}
+    assert rows["instrument"].outcome == "landed"
+    return rows["instrument"].item
+
+
+GOLD = Market("XAUUSD", "gold", "metal", "metals-24x5@1", "America/New_York", "17:00")
+GOLD_SYMBOL = {"digits": 2, "pip_position": 1, "lot_size": 10_000}
+EURUSD = Market("EURUSD", "eurusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
+GBPUSD = Market("GBPUSD", "gbpusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
+AUDUSD = Market("AUDUSD", "audusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
+NZDUSD = Market("NZDUSD", "nzdusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
+USDCAD = Market("USDCAD", "usdcad", "fx", "fx-24x5@1", "America/New_York", "17:00")
+EURGBP = Market("EURGBP", "eurgbp", "fx", "fx-24x5@1", "America/New_York", "17:00")
+FX_SYMBOL = {"digits": 5, "pip_position": 4, "lot_size": 10_000_000}
+EURUSD_ON_THE_FIXTURE = (
+    "no Library record for this market, so it reads QML's test fixture: fx.eurusd reads eurusd.json"
+)
+
+
+def laid_record(world: World, run_id: str, market_id: str) -> dict[str, Any]:
+    """The record a finished run's folder holds, as the tester read it."""
+    folder = Volume(world.runtime.home, "qmb").root / "data" / "runs" / run_id / "in" / "records"
+    return cast("dict[str, Any]", json.loads((folder / f"{market_id}.json").read_text("utf-8")))
+
+
+def on_main_now(world: World, item: str) -> dict[str, Any]:
+    """An item's fields at its head on `main`, with the version the Library counts for it."""
+    head = world.store.head(item, MAIN)
+    assert head is not None
+    return {**fields(world.store, head[0]), "record_version": head[1]}
+
+
+def test_a_record_on_main_reaches_the_run_and_its_fills(world: World, on_main: OnMain) -> None:
+    item = on_main(GOLD, **GOLD_SYMBOL, step_volume=1_000, min_volume=1_000)
+
+    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
+
+    laid = laid_record(world, answer["run_id"], "metal.xauusd")
+    gold = [
+        fill
+        for fill in report(world.store, answer["result_id"])["fills"]
+        if fill["market_id"] == "metal.xauusd"
+    ]
+    assert laid == on_main_now(world, item)
+    assert (laid["lot_step"], laid["record_version"]) == ("0.1", 1)
+    assert gold
+    assert {Decimal(fill["quantity"]) % Decimal("0.1") for fill in gold} == {Decimal(0)}
+    assert fields(world.store, answer["result_id"])["labels"]["fixture_records"] == [
+        EURUSD_ON_THE_FIXTURE
+    ]
+
+
+def test_a_market_with_only_a_library_record_runs(world: World, on_main: OnMain) -> None:
+    item = on_main(GBPUSD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    bars = Path(str(world.control.settings_get("qmb")["bars"]))
+    for side in ("bid", "ask"):
+        month = f"m15-{side}-2025-03-01-2025-04-01.csv"
+        shutil.copyfile(bars / f"eurusd-{month}", bars / f"gbpusd-{month}")
+    document = template(DUMMY)
+    document["markets"] = [
+        {
+            "market_id": "fx.gbpusd",
+            "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": "GBPUSD"},
+        }
+    ]
+    draft = Draft("unit", "unit-gbpusd", "gbpusd", fields=cast("Any", document))
+    unit = world.store.put(
+        OPERATOR, draft, on=drafts_ref("unit-gbpusd"), expected_head=None
+    ).object_id
+
+    answer = world.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+
+    assert answer["status"] == "finished"
+    assert laid_record(world, answer["run_id"], "fx.gbpusd") == on_main_now(world, item)
+    assert fields(world.store, answer["result_id"])["labels"]["fixture_records"] == []
+
+
+def test_a_record_moved_on_main_shows_in_the_next_run(world: World, on_main: OnMain) -> None:
+    on_main(EURUSD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    run = world.backtest["backtest_run"]
+
+    first = run(unit=world.dummy, **GAPS)["result"]
+    on_main(EURUSD, **FX_SYMBOL, step_volume=100_000, min_volume=500_000)
+    second = run(unit=world.dummy, **GAPS)["result"]
+
+    before = laid_record(world, first["run_id"], "fx.eurusd")
+    after = laid_record(world, second["run_id"], "fx.eurusd")
+    assert (before["min_lot"], before["record_version"]) == ("0.01", 1)
+    assert (after["min_lot"], after["record_version"]) == ("0.05", 2)
+
+
+def test_a_study_forbidding_gaps_beats_a_chat_allowing_them(world: World) -> None:
+    spec = {"origin": "written", "preset": "shipped", "markets": "admitted", "allow_gaps": False}
+    draft = Draft("study-spec", "study-no-gaps", "no gaps", fields=cast("Any", spec))
+    world.store.register_checker(STUDY_CHECKER, study_check)
+    study = world.store.put(OPERATOR, draft, on="main", expected_head=None).object_id
+
+    answer = world.backtest["backtest_run"](unit=world.dummy, study=study, **GAPS)["result"]
+
+    assert (answer["status"], fields(world.store, answer["result_id"]).get("reason")) == (
+        "failed",
+        SUNDAY_HOLE,
+    )
+
+
+@pytest.fixture(scope="module")
+def fresh(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
+    """A fresh home: no `[qmb] bars`, no CSV anywhere, only what a test puts through the door."""
+    yield from a_world(tmp_path_factory.mktemp("fresh"), bars=None)
+
+
+TICK_OFFSETS_MS = (0, 200_000, 400_000, 880_000)
+"""Open, high, low and close, each at its own moment inside a bar, as `bridge.py` cuts them."""
+APRIL = {"start": "2025-04-01", "end": "2025-05-01"}
+THIRTY_ONE_DAYS_MS = 31 * 86_400_000
+
+
+def month_door(world: World) -> MarketDoor:
+    opened = MarketDoor.open(world.runtime.home / "market", {}, placement=Placement.PC)
+    assert not is_refusal(opened)
+    return opened.value
+
+
+def ticks_in_the_store(
+    world: World,
+    cut_from: str,
+    symbol: str,
+    *,
+    scale: int | None = 5,
+    moved_ms: int = 0,
+    month: int = 3,
+) -> tuple[str, Path]:
+    """QML's synthetic month of `cut_from`, four ticks a bar, committed as `symbol`'s through the
+    real door. Answers the fingerprint and where the store keeps the month's file."""
+    door = month_door(world)
+    pair = [
+        (SLICES / f"synthetic-{cut_from}-m15-{side}-2025-03-01-2025-04-01.csv").read_text("utf-8")
+        for side in ("bid", "ask")
+    ]
+    bids, asks = (csv.DictReader(io.StringIO(text)) for text in pair)
+    rows: list[tuple[int, int, int, float, float]] = []
+    for bid, ask in zip(bids, asks, strict=True):
+        for offset, name in zip(TICK_OFFSETS_MS, ("open", "high", "low", "close"), strict=True):
+            digits = len(bid[name].partition(".")[2])
+            rows.append(
+                (
+                    int(bid["timestamp"]) + offset + moved_ms,
+                    int(Decimal(bid[name]).scaleb(digits)),
+                    int(Decimal(ask[name]).scaleb(digits)),
+                    1.0,
+                    1.0,
+                )
+            )
+    key = SeriesKey.try_create("dukascopy", symbol, "ticks", 2025, month)
+    assert not is_refusal(key)
+    staging = world.runtime.home / "staging"
+    staged = staging / "dukascopy" / symbol / "ticks" / "-" / f"2025-{month:02d}.parquet"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    TypedWriter(staged, key.value.text, TICK_COLUMNS).add(sorted(rows)).finish()
+    landed = door.commit([staged], staging=staging, born_on=Placement.PC)
+    assert not is_refusal(landed)
+    if scale is not None:
+        assert not is_refusal(door.state_scale(key.value.series, scale))
+    series = door.series_store()
+    return landed.value[0].fingerprint, next(series.folder(key.value).glob("*.parquet"))
+
+
+def a_unit_on(world: World, market: Market, **symbol: int) -> str:
+    """A record for `market` on `main`, as the node's read lands it, and the dummy on it alone."""
+    node_read(world.store, market, **symbol)
+    market_id = f"{market.klass}.{market.symbol.lower()}"
+    document = template(DUMMY)
+    document["markets"] = [
+        {
+            "market_id": market_id,
+            "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": market.symbol},
+        }
+    ]
+    name = f"unit-{market.symbol.lower()}"
+    draft = Draft("unit", name, market.symbol, fields=cast("Any", document))
+    return world.store.put(OPERATOR, draft, on=drafts_ref(name), expected_head=None).object_id
+
+
+def run_folder(world: World, run_id: str) -> Path:
+    return Volume(world.runtime.home, "qmb").root / "data" / "runs" / run_id
+
+
+def run_tries(store: Store) -> list[str]:
+    return sorted(store.with_field("try", "kind", "run"))
+
+
+def test_a_fresh_home_with_ticks_in_the_store_lands_a_result(fresh: World) -> None:
+    fingerprint, _ = ticks_in_the_store(fresh, "eurusd", "GBPUSD")
+    unit = a_unit_on(fresh, GBPUSD, **FX_SYMBOL, step_volume=500_000, min_volume=500_000)
+
+    answer = fresh.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+
+    landed = fields(fresh.store, answer["result_id"])
+    laid = run_folder(fresh, answer["run_id"]) / "in"
+    consumed = fresh.store.walk(OPERATOR, [answer["result_id"]], ("consumed",), "out", depth=1)
+    cards = [fresh.store.get(OPERATOR, found.object_id) for found in consumed]
+    fills = report(fresh.store, answer["result_id"])["fills"]
+    assert answer["status"] == "finished"
+    assert [(card.kind, card.fields["partition_digests"]) for card in cards] == [
+        ("dataset", [fingerprint])
+    ]
+    assert landed["request_fp"] == fingerprint_bytes((laid / "request.json").read_bytes()).value
+    assert landed["labels"]["datasets"] == ["dukascopy/GBPUSD/ticks/-"]
+    assert (landed["fidelity"], landed["labels"]["fixture_records"]) == ("quotes", [])
+    assert not (laid / "bars").exists()
+    assert not (laid / "data").exists()
+    assert fills
+    assert {Decimal(fill["quantity"]) % Decimal("0.05") for fill in fills} == {Decimal(0)}
+
+
+def test_a_month_of_bid_and_ask_bars_is_read_before_its_ticks(fresh: World) -> None:
+    ticks_in_the_store(fresh, "eurusd", "EURGBP")
+    door = month_door(fresh)
+    staging = fresh.runtime.home / "staging"
+    staged: list[Path] = []
+    for side in ("bid", "ask"):
+        key = SeriesKey.try_create("dukascopy", "EURGBP", "bar-m1", 2025, 3, side)
+        assert not is_refusal(key)
+        with (SLICES / f"synthetic-eurusd-m15-{side}-2025-03-01-2025-04-01.csv").open(
+            encoding="utf-8", newline=""
+        ) as month:
+            rows = [
+                (
+                    int(bar["timestamp"]) + 14 * 60_000,
+                    *(int(Decimal(bar[n]).scaleb(5)) for n in ("open", "high", "low", "close")),
+                    1.0,
+                )
+                for bar in csv.DictReader(month)
+            ]
+        path = staging / "dukascopy" / "EURGBP" / "bar-m1" / side / "2025-03.parquet"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        TypedWriter(path, key.value.text, BAR_COLUMNS).add(rows).finish()
+        staged.append(path)
+        assert not is_refusal(door.state_scale(key.value.series, 5))
+    assert not is_refusal(door.commit(staged, staging=staging, born_on=Placement.PC))
+    unit = a_unit_on(fresh, EURGBP, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+
+    answer = fresh.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+
+    landed = fields(fresh.store, answer["result_id"])
+    assert answer["status"] == "finished"
+    assert landed["labels"]["datasets"] == [
+        "dukascopy/EURGBP/bar-m1/bid",
+        "dukascopy/EURGBP/bar-m1/ask",
+    ]
+
+
+def test_no_month_is_refused_naming_the_month_and_the_template(fresh: World) -> None:
+    before = run_tries(fresh.store)
+
+    with pytest.raises(ControlError) as refused:
+        fresh.control.app_job(
+            "qmb",
+            "jobs/backtest.py",
+            inputs=asked(fresh.dummy, {"start": "2025-01-01", "end": "2025-02-01"}),
+            principal=CHAT,
+        )
+
+    assert refused.value.code == "run_refused"
+    assert str(refused.value) == (
+        "no data for 2025-01-01 to 2025-02-01: fx.eurusd 2025-01, metal.xauusd 2025-01 not in the "
+        "market store under dukascopy; run the download-dukascopy template for each month"
+    )
+    assert run_tries(fresh.store) == before
+
+
+def test_a_month_through_a_csv_and_through_the_store_gives_the_same_trades(
+    fresh: World, tmp_path: Path
+) -> None:
+    ticks_in_the_store(fresh, "eurusd", "EURUSD")
+    ticks_in_the_store(fresh, "xauusd", "XAUUSD", scale=3)
+    for source in SLICES.glob("synthetic-*.csv"):
+        shutil.copyfile(source, tmp_path / source.name.removeprefix("synthetic-"))
+    run = fresh.backtest["backtest_run"]
+
+    fresh.control.settings_put("qmb", {"bars": str(tmp_path)})
+    try:
+        by_csv = run(unit=fresh.dummy, **GAPS)["result"]
+    finally:
+        fresh.control.settings_put("qmb", {"remove": ["bars"]})
+    by_store = run(unit=fresh.dummy, **GAPS)["result"]
+
+    csv_fields = fields(fresh.store, by_csv["result_id"])
+    store_fields = fields(fresh.store, by_store["result_id"])
+    assert (by_csv["status"], by_store["status"]) == ("finished", "finished")
+    assert (csv_fields["measures"]["trades"], store_fields["measures"]["trades"]) == (8, 8)
+    assert csv_fields["measures"]["trade_list_fp"] == store_fields["measures"]["trade_list_fp"]
+    assert "request_fp" not in csv_fields
+    assert "datasets" not in csv_fields["labels"]
+
+
+def test_a_sealed_month_is_refused_and_no_sealed_file_sits_in_a_run_folder(fresh: World) -> None:
+    fingerprint, _ = ticks_in_the_store(fresh, "eurusd", "AUDUSD")
+    unit = a_unit_on(fresh, AUDUSD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    fresh.store.register_checker(STUDY_CHECKER, study_check)
+    sealed_spec = {"origin": "written", "holdout": {"boundary": "2025-03", "months": 12}}
+    draft = Draft("study-spec", "study-sealed", "sealed", fields=cast("Any", sealed_spec))
+    study = fresh.store.put(OPERATOR, draft, on="main", expected_head=None).object_id
+    runs = Volume(fresh.runtime.home, "qmb").root / "data" / "runs"
+    before = run_tries(fresh.store)
+
+    with pytest.raises(ControlError) as refused:
+        fresh.control.app_job(
+            "qmb",
+            "jobs/backtest.py",
+            inputs=cast("Document", {**asked(unit, MARCH), "study": study}),
+            principal=CHAT,
+        )
+    sealed_files = list(runs.rglob(f"{fingerprint}.parquet"))
+    tries_after_the_refusal = run_tries(fresh.store)
+    unsealed = fresh.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+
+    assert refused.value.code == "run_refused"
+    assert str(refused.value) == "this month is sealed for the final look: 2025-03"
+    assert tries_after_the_refusal == before
+    assert sealed_files == []
+    assert unsealed["status"] == "finished"
+    assert fields(fresh.store, unsealed["result_id"])["labels"]["datasets"] == [
+        "dukascopy/AUDUSD/ticks/-"
+    ]
+
+
+def test_one_market_of_a_two_market_unit_lands_naming_that_market(fresh: World) -> None:
+    ticks_in_the_store(fresh, "eurusd", "EURUSD")
+
+    answer = fresh.backtest["backtest_run"](unit=fresh.dummy, markets=["fx.eurusd"], **GAPS)[
+        "result"
+    ]
+
+    landed = fields(fresh.store, answer["result_id"])
+    laid = run_folder(fresh, answer["run_id"]) / "in"
+    assert (answer["status"], landed["markets"]) == ("finished", ["fx.eurusd"])
+    assert landed["measures"]["trades"] == 6
+    assert landed["labels"]["datasets"] == ["dukascopy/EURUSD/ticks/-"]
+    assert json.loads((laid / "request.json").read_text("utf-8"))["markets"] == ["fx.eurusd"]
+    assert {t["market_id"] for t in report(fresh.store, answer["result_id"])["trades"]} == {
+        "fx.eurusd"
+    }
+
+
+def test_every_other_data_refusal_comes_before_any_try(fresh: World) -> None:
+    ticks_in_the_store(fresh, "eurusd", "NZDUSD", scale=None)
+    unsaid = a_unit_on(fresh, NZDUSD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    ticks_in_the_store(fresh, "eurusd", "EURUSD")
+    source = month_door(fresh)
+    staged = fresh.runtime.home / "staging" / "other" / "EURUSD" / "ticks" / "-" / "2025-03.parquet"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(
+        next(source.series_store().root.glob("dukascopy/EURUSD/ticks/-/2025-03/*.parquet")),
+        staged,
+    )
+    landed = source.commit([staged], staging=fresh.runtime.home / "staging", born_on=Placement.PC)
+    assert not is_refusal(landed)
+    assert not is_refusal(source.state_scale("other/EURUSD/ticks/-", 5))
+    fresh.store.register_checker(STUDY_CHECKER, study_check)
+    other_spec = {"origin": "written", "source": "other"}
+    draft = Draft("study-spec", "study-other", "other", fields=cast("Any", other_spec))
+    study = fresh.store.put(OPERATOR, draft, on="main", expected_head=None).object_id
+    before = run_tries(fresh.store)
+
+    def refused(inputs: dict[str, Any]) -> str:
+        with pytest.raises(ControlError) as answer:
+            fresh.control.app_job(
+                "qmb", "jobs/backtest.py", inputs=cast("Document", inputs), principal=CHAT
+            )
+        assert answer.value.code == "run_refused"
+        return str(answer.value)
+
+    assert refused({**asked(unsaid, MARCH)}) == (
+        "dukascopy/NZDUSD/ticks/- states no price scale; run the download-dukascopy template's "
+        "check on its card, or download the month again"
+    )
+    assert refused(
+        {
+            **asked(fresh.dummy, MARCH),
+            "markets": ["fx.eurusd"],
+            "source": "dukascopy",
+            "study": study,
+        }
+    ) == (
+        "fx.eurusd holds this window under both dukascopy and other; the request and the study "
+        "name different sources, so name one"
+    )
+    assert refused({**asked(fresh.dummy, MARCH), "markets": ["fx.gbpusd"]}) == (
+        "this unit does not trade fx.gbpusd; it trades fx.eurusd, metal.xauusd"
+    )
+    assert run_tries(fresh.store) == before
+
+
+def test_a_copy_that_fails_after_the_try_opened_closes_that_try(fresh: World) -> None:
+    _, stored = ticks_in_the_store(fresh, "eurusd", "USDCAD", moved_ms=THIRTY_ONE_DAYS_MS, month=4)
+    unit = a_unit_on(fresh, USDCAD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    compiled = LanderLibrary(fresh.store).compiled_fingerprint(unit)
+    passing = Draft(
+        "test-report",
+        "g-usdcad",
+        "g passing",
+        fields={
+            "check": "qml-g/1",
+            "status": "finished",
+            "compiled_fingerprint": compiled,
+            "behaviour": {"slice": {"market_ids": ["fx.usdcad"]}},
+            "safety": {"verdict": "pass"},
+        },
+    )
+    fresh.store.put(OPERATOR, passing, on="main", expected_head=None)
+    stored.unlink()
+    before = run_tries(fresh.store)
+
+    with pytest.raises(ControlError) as refused:
+        fresh.control.app_job(
+            "qmb",
+            "jobs/backtest.py",
+            inputs=asked(unit, APRIL),
+            principal=CHAT,
+        )
+
+    new = [fields(fresh.store, i) for i in run_tries(fresh.store) if i not in before]
+    assert refused.value.code == "run_refused"
+    assert str(refused.value) == "fx.usdcad: the series state names a file that is not there"
+    assert sorted(str(row["state"]) for row in new) == ["failed", "opened"]
 
 
 def test_the_first_start_click_keeps_qmb_running_at_every_host_start(

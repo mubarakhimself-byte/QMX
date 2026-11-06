@@ -5,8 +5,13 @@ Every market a result traded, or the spec names, is judged by one rule: its mean
 toward the unit's whole result (`shrink`), and the chain runs cheapest first, each step saying
 what it can and cannot fail on (MIS-11). The last step deflates the market's Sharpe by the
 family's effective tries, so the best of many markets or variants does not pass on luck. A market
-with no trades never passes (QB-15). A step whose evidence no result carries is `not_run`, and a
-verdict with a step not run is `incomplete`, never a pass: the judge passes only what it checked.
+with no trades never passes (QB-15). A step whose evidence no result carries for that market, over
+the window its trades ran, is `not_run`, and a verdict with a step not run is `incomplete`, never a
+pass: the judge passes only what it checked.
+
+A study version made after the results' first try was written knowing them. The door counts it as
+a try, and it judges with the `spread` estimator and `FALLBACK_K`, whatever k it names
+(`late_spec`).
 
 A verdict records the judge, checker and tester versions (WF-12), and its item is named by its
 inputs, so judging the same results again finds the same verdict and a new judge version lands a
@@ -19,7 +24,7 @@ import math
 import random
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from statistics import NormalDist
 from typing import Final, Literal, cast
@@ -47,24 +52,28 @@ __all__ = [
     "Judgement",
     "MarketVerdict",
     "Overall",
+    "Remember",
     "Step",
     "StudySpec",
     "Trade",
     "Verdict",
     "baseline_card",
+    "dead_end_row",
     "death_certificate",
     "deflated_sharpe",
     "judge",
     "land_judgement",
+    "late_spec",
     "parse_spec",
     "proposal_card",
     "quick_spec",
     "score_forecast",
     "spec_edit",
     "spec_problems",
+    "trade_r",
 ]
 
-JUDGE_VERSION: Final = "1"
+JUDGE_VERSION: Final = "2"
 STUDY_KIND: Final = "study-spec"
 VERDICT_KIND: Final = "verdict"
 BASELINE_KIND: Final = "baseline-card"
@@ -86,6 +95,10 @@ type Overall = Literal["pass", "fail", "too_thin", "no_trades", "incomplete"]
 type StepOutcome = Literal["passed", "failed", "not_run"]
 type Origin = Literal["written", "quick"]
 type Estimator = Literal["spread", "fixed"]
+type Window = tuple[str, str]
+"""A run's start and end dates."""
+type Remember = Callable[[Mapping[str, object]], str]
+"""Lands one memory row and answers its object id."""
 
 
 class JudgeRefused(ValueError):
@@ -111,7 +124,7 @@ class StudySpec:
     origin: Origin
     claim: Claim | None
     markets: tuple[str, ...] | None
-    """None is `admitted`: every market the unit's results traded or named."""
+    """None is `admitted`. A list adds markets to the ones the results traded and drops none."""
     preset: Preset
     estimator: Estimator
     k: Decimal
@@ -119,6 +132,8 @@ class StudySpec:
     min_trades: int
     seed: int
     fields: Mapping[str, object] = field(default_factory=dict[str, object])
+    written_late: bool = False
+    """Made after the results' first try, so its own k is not used (`late_spec`)."""
 
 
 def _decimal(value: object) -> Decimal | None:
@@ -140,6 +155,13 @@ def _texts(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return tuple(str(item) for item in cast(list[object], value) if isinstance(item, str))
+
+
+def _window(fields: Mapping[str, object]) -> Window | None:
+    """The dates of `fields`' window, the part of its text a run is cut from."""
+    found = _object(fields, "window")
+    start, end = found.get("start"), found.get("end")
+    return (start[:10], end[:10]) if isinstance(start, str) and isinstance(end, str) else None
 
 
 def spec_problems(fields: Mapping[str, object]) -> list[str]:
@@ -206,6 +228,12 @@ def parse_spec(fields: Mapping[str, object]) -> StudySpec:
     )
 
 
+def late_spec(spec: StudySpec) -> StudySpec:
+    """The spec a study version made after the results' first try judges under. A tiny k leaves
+    every weight near 1, which switches the luckiest-market pull off, so its k is not used."""
+    return replace(spec, estimator="spread", k=FALLBACK_K, written_late=True)
+
+
 def quick_spec(idea: str | None) -> dict[str, object]:
     """The implicit spec of a run asked without one, marked `quick`: the shipped preset over
     every admitted market, its claim the unit's own claim card idea."""
@@ -218,6 +246,12 @@ def quick_spec(idea: str | None) -> dict[str, object]:
         "correlated_threshold": str(CLUSTER_CORRELATION),
         "holdout": "off",
     }
+
+
+def trade_r(trade: Mapping[str, object]) -> Decimal:
+    """The R the judge reads for a trade: `r`, price money over risk, with no costs in it. Whether
+    R includes costs is the risk session's call, and `net_r` beside it is this one line away."""
+    return Decimal(str(trade["r"]))
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,8 +279,12 @@ class JudgedResult:
     evidence: Mapping[str, Mapping[str, object]] = field(
         default_factory=dict[str, Mapping[str, object]]
     )
-    """The chain's evidence from the result's measures: `random_entries`, `cost_stress`,
-    `walk_forward`, `pbo`."""
+    """The chain's evidence from the result's measures. `random_entries`, `cost_stress` and
+    `walk_forward` are tables keyed by market, each row with its window. `pbo` answers for the
+    family, so it is one entry."""
+    costs_uncalibrated: bool = False
+    placeholders: tuple[str, ...] = ()
+    window: Window | None = None
 
     @classmethod
     def read(
@@ -256,8 +294,7 @@ class JudgedResult:
         labels = _object(fields, "labels")
         measures = _object(fields, "measures")
         found = tuple(
-            Trade(str(t["market_id"]), int(cast(int, t["closed_at"])), Decimal(str(t["r"])))
-            for t in trades
+            Trade(str(t["market_id"]), int(cast(int, t["closed_at"])), trade_r(t)) for t in trades
         )
         evidence = {
             name: cast(Mapping[str, object], measures[name])
@@ -276,6 +313,9 @@ class JudgedResult:
             markets=_texts(fields.get("markets")),
             compiled_fp=compiled if isinstance(compiled, str) else None,
             evidence=evidence,
+            costs_uncalibrated=labels.get("costs_uncalibrated") is True,
+            placeholders=_texts(labels.get("placeholders")),
+            window=_window(fields),
         )
 
 
@@ -402,6 +442,10 @@ class Verdict:
     versions: Mapping[str, str]
     counted: tuple[str, ...]
     """The labels of every counted try, so the verdict's item names what it was judged on."""
+    costs_uncalibrated: bool = False
+    """A result behind it paid no costs measured from enough real fills."""
+    written_late: bool = False
+    """Its study version was made after the results' first try."""
 
     def says(self) -> str:
         """The verdict in plain words, with the tries behind it."""
@@ -411,7 +455,20 @@ class Verdict:
         markets = "; ".join(m.says(self.min_trades) for m in self.per_market)
         raw = _count(self.raw_tries, "try", "tries")
         tries = f"Behind it: {raw}, {self.effective_tries} effective."
-        return " ".join(part for part in (head, f"{markets}." if markets else "", tries) if part)
+        costs = (
+            "These results are costs uncalibrated: their money paid no costs measured from real "
+            "fills."
+            if self.costs_uncalibrated
+            else ""
+        )
+        late = (
+            "This study was written after these results' first try, so it counted as a try and "
+            "its own k was not used."
+            if self.written_late
+            else ""
+        )
+        parts = (head, f"{markets}." if markets else "", costs, late, tries)
+        return " ".join(part for part in parts if part)
 
     def fields(self) -> dict[str, object]:
         found: dict[str, object] = {
@@ -429,6 +486,10 @@ class Verdict:
         }
         if self.compiled_fp is not None:
             found["compiled_fp"] = self.compiled_fp
+        if self.costs_uncalibrated:
+            found["costs_uncalibrated"] = True
+        if self.written_late:
+            found["written_late"] = True
         return found
 
     @property
@@ -493,20 +554,13 @@ def _moments(rs: Sequence[float]) -> tuple[float, float, float]:
     return sd, skew, kurt
 
 
-def _evidence(results: Sequence[JudgedResult], name: str) -> Mapping[str, object] | None:
-    return next((r.evidence[name] for r in results if name in r.evidence), None)
-
-
 def _claim(rule: StepRule, spec: StudySpec) -> Step:
     if spec.claim is not None and spec.claim.edge.strip():
         return Step(rule, "passed", f"claims {spec.claim.edge.strip()}")
     return Step(rule, "failed", "the study names no claim")
 
 
-def _random_entries(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "random_entries")
-    if found is None:
-        return Step(rule, "not_run", "no result in the study ran random entries")
+def _random_entries(rule: StepRule, spec: StudySpec, found: Mapping[str, object]) -> Step:
     ratio, p = _decimal(found.get("edge_ratio")), _decimal(found.get("p"))
     if ratio is None or p is None:
         return Step(rule, "failed", "random_entries carries no edge_ratio and p as text")
@@ -515,10 +569,7 @@ def _random_entries(rule: StepRule, spec: StudySpec, results: Sequence[JudgedRes
     return Step(rule, "passed" if good else "failed", detail)
 
 
-def _cost_stress(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "cost_stress")
-    if found is None:
-        return Step(rule, "not_run", "no result in the study stressed its costs")
+def _cost_stress(rule: StepRule, spec: StudySpec, found: Mapping[str, object]) -> Step:
     multiplier, expectancy = _decimal(found.get("multiplier")), _decimal(found.get("expectancy_r"))
     if multiplier is None or expectancy is None:
         return Step(rule, "failed", "cost_stress carries no multiplier and expectancy_r as text")
@@ -529,16 +580,66 @@ def _cost_stress(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult
     return Step(rule, "passed" if expectancy > 0 else "failed", detail)
 
 
-def _walk_forward(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "walk_forward")
-    if found is None:
-        return Step(rule, "not_run", "no walk-forward result in the study")
+def _walk_forward(rule: StepRule, spec: StudySpec, found: Mapping[str, object]) -> Step:
     efficiency = _decimal(found.get("efficiency"))
     if efficiency is None:
         return Step(rule, "failed", "walk_forward carries no efficiency as text")
     need = spec.preset.walk_forward_efficiency
     good = efficiency >= need
     return Step(rule, "passed" if good else "failed", f"efficiency {efficiency} of {need} needed")
+
+
+_MARKET_EVIDENCE: Final[
+    Mapping[str, tuple[Callable[[StepRule, StudySpec, Mapping[str, object]], Step], str]]
+] = {
+    "random_entries": (_random_entries, "no result in the study ran random entries"),
+    "cost_stress": (_cost_stress, "no result in the study stressed its costs"),
+    "walk_forward": (_walk_forward, "no result in the study walked forward"),
+}
+"""The steps a market answers on its own evidence: each one's reader, and its words for no row."""
+_WORST_FIRST: Final[tuple[StepOutcome, ...]] = ("failed", "not_run", "passed")
+
+
+def _spans(windows: set[Window | None]) -> str:
+    return ", ".join(
+        "no stated window" if window is None else f"{window[0]} to {window[1]}"
+        for window in sorted(windows, key=str)
+    )
+
+
+def _covers(rule: StepRule, ran: Window | None, traded: Window | None) -> bool:
+    """Whether evidence over `ran` answers for trades over `traded`. Only walk-forward may run
+    wider, as template `b`'s does over in-sample and its folds. A wider cost stress or random
+    entries would read mostly other trades, so it answers for nothing but its own window. A window
+    not stated covers only another not stated, because there is nothing to compare."""
+    if ran is None or traded is None or rule.name != "walk_forward":
+        return ran == traded
+    return ran[0] <= traded[0] and traded[1] <= ran[1]
+
+
+def _market_step(
+    rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult], market: str
+) -> Step:
+    """`market`'s step on its own rows, which must cover every window its trades ran. A row that
+    covers none answers nothing, and of several rows the worst decides, so a second friendly run
+    cannot hide a failing one."""
+    read, absent = _MARKET_EVIDENCE[rule.name]
+    rows = [row for r in results if (row := _object(r.evidence.get(rule.name, {}), market))]
+    if not rows:
+        return Step(rule, "not_run", f"{absent} on {market}")
+    traded = {r.window for r in results if any(t.market == market for t in r.trades)}
+    ran = {_window(row) for row in rows}
+    uncovered = {w for w in traded if not any(_covers(rule, found, w) for found in ran)}
+    if uncovered:
+        return Step(
+            rule,
+            "not_run",
+            f"{market}'s evidence ran over {_spans(ran)}, its trades over {_spans(uncovered)}",
+        )
+    steps = [
+        read(rule, spec, row) for row in rows if any(_covers(rule, _window(row), w) for w in traded)
+    ]
+    return min(steps, key=lambda step: _WORST_FIRST.index(step.outcome))
 
 
 def _monte_carlo(rule: StepRule, spec: StudySpec, rs: Sequence[float]) -> Step:
@@ -551,7 +652,7 @@ def _monte_carlo(rule: StepRule, spec: StudySpec, rs: Sequence[float]) -> Step:
 
 
 def _pbo(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
-    found = _evidence(results, "pbo")
+    found = next((r.evidence["pbo"] for r in results if "pbo" in r.evidence), None)
     if found is None:
         return Step(rule, "not_run", "no result in the study measured the family's PBO")
     value = _decimal(found.get("value"))
@@ -663,6 +764,57 @@ def _pooled_twice(results: Sequence[JudgedResult]) -> list[str]:
     return problems
 
 
+def _same_trades(judged: Sequence[Trade], other: Sequence[Trade]) -> bool:
+    """Whether `other` holds exactly `judged` inside each judged market's first-to-last close. A
+    version cut to a stretch or a market still holds, and a filter, which leaves a gap, does not."""
+    mine: dict[str, list[Trade]] = {}
+    for trade in judged:
+        mine.setdefault(trade.market, []).append(trade)
+    held: dict[str, list[Trade]] = {}
+    for trade in other:
+        held.setdefault(trade.market, []).append(trade)
+    for market, rows in mine.items():
+        low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
+        run = {t for t in held.get(market, []) if low <= t.closed_at <= high}
+        if run != set(rows):
+            return False
+    return True
+
+
+def _pull_table(
+    trades: Mapping[str, list[Decimal]],
+    results: Sequence[JudgedResult],
+    family: Sequence[JudgedResult],
+    enough: int,
+) -> dict[str, list[Decimal]]:
+    """The trades the shrink reads, so that what an agent chooses to judge cannot weaken the pull.
+    A market reads the longest record the same code has of it in `family`. Its judged trades stand
+    only when they are `enough` to judge it on and overlap no longer record from this tester.
+    Same code means an equal `compiled_fp`, else an equal `unit`, or a record holding exactly the
+    judged trades inside each judged market's span. Reruns are never added together."""
+    table = {market: rs for market, rs in trades.items() if rs}
+    code = {r.compiled_fp or r.unit for r in results}
+    testers = {r.tester for r in results}
+    judged = [t for r in results for t in r.trades]
+    for other in family:
+        if (other.compiled_fp or other.unit) not in code and not (
+            judged and _same_trades(judged, other.trades)
+        ):
+            continue
+        held: dict[str, list[Trade]] = {}
+        for trade in other.trades:
+            held.setdefault(trade.market, []).append(trade)
+        for market, rows in held.items():
+            low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
+            overlaps = other.tester in testers and any(
+                low <= t.closed_at <= high for t in judged if t.market == market
+            )
+            thin = len(trades.get(market, ())) < enough
+            if (thin or overlaps) and len(rows) > len(table.get(market, ())):
+                table[market] = [t.r for t in rows]
+    return table
+
+
 def judge(
     spec: StudySpec,
     *,
@@ -676,8 +828,9 @@ def judge(
 ) -> Verdict:
     """The verdict on `results` under `spec`. `tries` are the fields of every `try` item of the
     results' families; `family` are other landed results of those families, whose daily R lets
-    the clustering find how many of their tries were really different. `versions` names the
-    checker version; the verdict adds the judge's and the tester's."""
+    the clustering find how many of their tries were really different, and whose other markets
+    stay in the shrink (`_pull_table`). `versions` names the checker version; the verdict adds the
+    judge's and the tester's."""
     opened = {str(t.get("run_id")) for t in tries if t.get("state") == "opened"}
     problems = [] if results else ["the judge needs one landed result at least"]
     problems += [
@@ -705,23 +858,30 @@ def judge(
     tried = max(effective_tries(counted, threshold), 1)
     named = spec.markets if spec.markets is not None else ()
     traded = {t.market for r in results for t in r.trades}
-    markets = sorted(set(named) or (traded | {m for r in results for m in r.markets}))
+    markets = sorted(set(named) | traded | {m for r in results for m in r.markets})
     trades = {m: [t.r for r in results for t in r.trades if t.market == m] for m in markets}
-    k = spec.k if spec.estimator == "fixed" else estimate_k(trades, spec.k)
-    shrunk = {s.market: s for s in shrink(trades, k)}
+    table = _pull_table(trades, results, family, spec.min_trades)
+    k = spec.k if spec.estimator == "fixed" else estimate_k(table, spec.k)
+    shrunk = {s.market: s for s in shrink(table, k)}
     per_market: list[MarketVerdict] = []
     for market in markets:
         rs = [float(r) for r in trades[market]]
-        found = shrunk.get(market)
+        found = shrunk.get(market) if rs else None
         if found is None:
             zero = Decimal(0)
             per_market.append(MarketVerdict(market, 0, zero, zero, zero, "no_trades", ()))
             continue
+        if table[market] is not trades[market]:
+            # A market reading another run's record cannot read above what its own trades earned.
+            found = replace(
+                found,
+                shrunk_r=min(found.shrunk_r, sum(trades[market]) / len(trades[market])),
+            )
         steps = _chain(spec, results, found, rs, tried)
         outcome = _outcome(len(rs), spec.min_trades, steps)
         per_market.append(
             MarketVerdict(
-                market, found.trades, found.raw_r, found.shrunk_r, found.weight, outcome, steps
+                market, len(rs), found.raw_r, found.shrunk_r, found.weight, outcome, steps
             )
         )
     compiled = sorted({r.compiled_fp for r in results if r.compiled_fp})
@@ -739,6 +899,8 @@ def judge(
         min_trades=spec.min_trades,
         versions={**versions, "judge": judge_version, "tester": testers[0]},
         counted=tuple(c.label for c in counted),
+        costs_uncalibrated=any(r.costs_uncalibrated for r in results),
+        written_late=spec.written_late,
     )
 
 
@@ -754,12 +916,8 @@ def _chain(
         match rule.name:
             case "claim":
                 steps.append(_claim(rule, spec))
-            case "random_entries":
-                steps.append(_random_entries(rule, spec, results))
-            case "cost_stress":
-                steps.append(_cost_stress(rule, spec, results))
-            case "walk_forward":
-                steps.append(_walk_forward(rule, spec, results))
+            case "random_entries" | "cost_stress" | "walk_forward":
+                steps.append(_market_step(rule, spec, results, shrunk.market))
             case "monte_carlo":
                 steps.append(_monte_carlo(rule, spec, rs))
             case "pbo":
@@ -823,6 +981,22 @@ def death_certificate(verdict_id: str, verdict: Verdict) -> dict[str, object] | 
         "verdict": verdict_id,
         "cause": cause,
         "classifier_version": CLASSIFIER_VERSION,
+    }
+
+
+def dead_end_row(
+    verdict_id: str, verdict: Verdict, cause: object, spec: StudySpec
+) -> dict[str, object]:
+    """The memory row a death certificate stands for, so a later build's `memory_check` finds it by
+    the idea or by the unit."""
+    idea = spec.claim.edge.strip() if spec.claim is not None else ""
+    said = f"{verdict.unit} died of {cause}. {verdict.says()}"
+    return {
+        "tag": "dead_end",
+        "intent_key": verdict.unit,
+        "when_to_use": f"before building {idea or verdict.unit} again, or a unit with its rules",
+        "content": f"{idea}: {said}" if idea else said,
+        "refs": [f"object:{verdict.unit}", f"object:{verdict_id}"],
     }
 
 
@@ -925,10 +1099,11 @@ def land_judgement(
     spec: StudySpec,
     writer: str,
     placeholders: Sequence[str] = (),
+    remember: Remember | None = None,
 ) -> Judgement:
     """Land the verdict and the cards it calls for, each once: a pass freezes its baseline card
-    and leaves a proposal for his click, a failure lands its death certificate. Landing it again
-    finds every item and writes nothing."""
+    and leaves a proposal for his click, a failure lands its death certificate and, through
+    `remember`, the dead-end row it names. Landing it again finds every item and writes nothing."""
 
     def once(kind: str, item: str, fields: Mapping[str, object], title: str) -> str:
         found = library.find(item)
@@ -954,7 +1129,11 @@ def land_judgement(
         fields = build()
         if fields is None:
             continue
-        card = once(kind, f"{kind}-{verdict.item}", fields, f"{kind} of {verdict.unit}")
+        item = f"{kind}-{verdict.item}"
+        if kind == DEATH_KIND and remember is not None and library.find(item) is None:
+            row = dead_end_row(verdict_id, verdict, fields["cause"], spec)
+            fields = {**fields, "memory_row": remember(row)}
+        card = once(kind, item, fields, f"{kind} of {verdict.unit}")
         library.link(card, "derived-from", verdict_id, principal=writer)
         cards[kind] = card
     return Judgement(verdict_id, cards)

@@ -65,7 +65,7 @@ RUN_KINDS = [
     "whatif",
     "replay_check",
 ]
-FIDELITIES = ["bars"]
+FIDELITIES = ["quotes"]
 INSTRUMENT_CLASSES = ["fx", "metal"]
 
 

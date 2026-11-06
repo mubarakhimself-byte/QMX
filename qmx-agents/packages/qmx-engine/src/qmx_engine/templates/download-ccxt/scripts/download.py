@@ -12,9 +12,9 @@ trade-built bar series has one side and says so in its variant.
 
 CCXT states a bar's open in UTC epoch milliseconds, and the stamp check confirms it from the
 stamps' magnitude before the month lands (LD-03). A bar length that differs from the month the
-series last landed (kept beside the claims) is a cadence seam on the card (LD-04). With a
-`calendar` in the source definition the month is counted against open time, and an empty open
-hour holds it open until the source definition lists it in `confirmed_empty` (LD-01).
+series last landed (kept beside the claims) is a cadence seam on the card (LD-04). The month is
+counted against open time, on the source definition's `calendar` or else `crypto-24x7@1`, and an
+empty open hour holds it open until the source definition lists it in `confirmed_empty` (LD-01).
 """
 
 import json
@@ -42,6 +42,7 @@ from qmx_engine.workers.zones import home_of
 FAILURE = "[QMX_FAILURE]"
 DEFAULT_FLOOR_GB = 3.0
 DEFAULT_PRICE_SCALE = 8
+DEFAULT_CALENDAR = "crypto-24x7@1"
 KIND = "bar-m1"
 VARIANT = "trade"
 
@@ -157,10 +158,13 @@ if exchange_name == "" or symbol == "":
 year, month = month_of(str(source.get("month") or ""))
 timeframe = str(source.get("timeframe") or "1m")
 scale = int(source.get("price_scale") or DEFAULT_PRICE_SCALE)
-calendar_ref = str(source.get("calendar") or "").strip() or None
-calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
-if calendar_ref and calendar is None:
-    fail(f"no shipped calendar is named {calendar_ref!r}")
+named_calendar = str(source.get("calendar") or "").strip()
+calendar_ref = named_calendar or DEFAULT_CALENDAR
+calendar = shipped_calendars().get(calendar_ref)
+if named_calendar and calendar is None:
+    fail(f"no shipped calendar is named {named_calendar!r}")
+if calendar is None:
+    calendar_ref = None
 confirmed = confirmed_hours(source.get("confirmed_empty") or [])
 if isinstance(confirmed, str):
     fail(f"confirmed_empty: {confirmed}")

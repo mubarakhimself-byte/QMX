@@ -1,7 +1,10 @@
 """The behaviour check: QML's layer G run as QMB code (Part B slice B5b, R1-B-01).
 
-QMB loads a run folder's unit, checks that its recorded slice covers the unit's derived warm-up
-plus the ``[qmb] g_slice_margin`` share more, and calls QML's ``layer_g`` once over it. QML's
+QMB loads a run folder's unit, refuses a market with fewer bars than the unit's derived warm-up plus
+the ``[qmb] g_slice_margin`` share more, and calls QML's ``layer_g`` once over each market's first
+``[qmb] g_slice_bars``, or that many when it is more. So a long window costs the check no more than
+a short one, and the slice still runs far enough past the warm-up for the unit to trade, because a
+check of a unit that placed no order would prove nothing about its orders. QML's
 function drives the hosted unit and fills the unchanged ``evaluate_layer2``'s observations;
 QMB adds nothing to either half. Its answer is the ``qmx.behaviour/1`` report, whose
 ``safety`` half carries ``evaluate_layer2``'s verdict and whose warnings name each fault.
@@ -28,10 +31,13 @@ from qml.check.layer_g import layer_g
 from qmb._refuse import invalid
 from qmb.host.unit_runner import UnitRunRequest, load_unit_folder, parse_unit_run_request
 
-__all__ = ["G_SLICE_MARGIN", "BehaviourCheck", "check_behaviour", "child_main"]
+__all__ = ["G_SLICE_BARS", "G_SLICE_MARGIN", "BehaviourCheck", "check_behaviour", "child_main"]
 
 G_SLICE_MARGIN: Final[Decimal] = Decimal("0.20")
 """``[qmb] g_slice_margin``'s starting default: the slice covers the warm-up and 20% more."""
+G_SLICE_BARS: Final[int] = 5_000
+"""``[qmb] g_slice_bars``'s starting default: the most bars per market the check reads, unless its
+warm-up and margin need more. A month of 15-minute bars fits whole."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +61,7 @@ def check_behaviour(
     request: UnitRunRequest,
     *,
     margin: Decimal = G_SLICE_MARGIN,
+    slice_bars: int = G_SLICE_BARS,
     loaded_in_isolation: bool,
     may_not_trade_on_slice: bool = False,
 ) -> Result[BehaviourCheck]:
@@ -67,7 +74,7 @@ def check_behaviour(
     compiled = loaded.value.compiled
     warm = compiled.warm_up[compiled.plan.stream]
     needed = int((warm * (1 + margin)).to_integral_value(rounding=ROUND_CEILING))
-    bars = loaded.value.bars()
+    bars = loaded.value.bars(max(needed, slice_bars))
     if is_refusal(bars):
         return bars
     short = {m: len(b) for m, b in bars.value.items() if len(b) < needed}
@@ -109,6 +116,7 @@ def child_main(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int
             Path(str(job.get("run_folder"))),
             request.value,
             margin=margin,
+            slice_bars=cast("int", job.get("slice_bars") or G_SLICE_BARS),
             loaded_in_isolation=True,
             may_not_trade_on_slice=job.get("may_not_trade_on_slice") is True,
         )

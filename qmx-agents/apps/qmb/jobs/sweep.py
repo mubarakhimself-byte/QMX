@@ -6,6 +6,10 @@ to run one at a time: ``{"numbers": {"ema_period": ["50", "100"]}, "markets": ["
 the unit, compiled in its own folder under ``cells/``, over the run's whole window. The bundle
 lists every cell under ``measures.counted``, and the core lands one try per cell in the unit's
 family, a cell that failed included.
+
+A grid that names no numbers has at most one cell per market, so its report also lists their
+trades, and the judge reads them. A grid that names numbers lists none: its cells are variants of
+one market, and the judge would pool them as one record.
 """
 
 from __future__ import annotations
@@ -34,15 +38,19 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
     if is_refusal(cells):
         return tester.failed(run_id, tester.reason(cells))
     rows: list[dict[str, object]] = []
+    trades: list[dict[str, object]] = []
     for cell in cells.value:
         row = cell.fields()
         root = folder / "cells" / cell.name / "in"
-        ran = trade_cell(base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}"))
+        ran = trade_cell(
+            base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}")
+        )
         if is_refusal(ran):
             rows.append(row | {"status": "failed", "reason": tester.reason(ran)})
             continue
         result = ran.value.result
         count = len(result.trades)
+        trades += tester.trade_rows(result)
         rows.append(
             row
             | {
@@ -55,6 +63,9 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             }
         )
     finished = [row for row in rows if row["status"] == "finished"]
+    report: dict[str, object] = {"cells": rows}
+    if not any(cell.numbers for cell in cells.value):
+        report["trades"] = trades
     return tester.leave(
         run_id,
         "finished",
@@ -65,7 +76,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
             "trades": sum(cast("int", row["trades"]) for row in finished),
             "total_r": str(sum((Decimal(str(row["total_r"])) for row in finished), Decimal(0))),
         },
-        labels={"zero_trades": not any(row.get("trades") for row in finished), "fidelity": "bars"},
-        files=[tester.write(folder, "report.json", {"cells": rows})],
+        labels={
+            "zero_trades": not any(row.get("trades") for row in finished),
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
+        files=[tester.write(folder, "report.json", report)],
         versions={"qmb": tester.TESTER["version"]},
     )

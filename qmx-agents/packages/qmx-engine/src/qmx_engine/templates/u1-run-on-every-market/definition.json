@@ -27,16 +27,22 @@
     {"id": "ask", "name": "The sweep QMB runs", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/ask.py"}, "effect": "none"},
     {"id": "sweep", "name": "Sweep every market on QMB", "type": "app_op", "typeVersion": 1, "position": [880, 0], "parameters": {"app": "qmb", "job": "jobs/sweep.py", "inputs": {}}},
     {"id": "referee", "name": "Ask the referee", "type": "agent", "typeVersion": 1, "toolsets": ["backtest"], "position": [1100, 0], "role": "judge", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/referee.md", "output_schema_ref": "schemas/referee.json", "tools": []}, "effect": "none"},
-    {"id": "table", "name": "One row per market", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/table.py"}, "effect": "none"}
+    {"id": "hand", "name": "Hand on the verdict", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/hand.py"}, "effect": "none"},
+    {"id": "read", "name": "Read the stored verdict", "type": "library", "typeVersion": 1, "position": [1540, 0], "parameters": {}, "effect": "none"},
+    {"id": "stored", "name": "The stored verdict", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/stored.py"}, "effect": "none"},
+    {"id": "table", "name": "One row per market", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/table.py"}, "effect": "none"}
   ],
   "connections": {
     "On request": {"main": [[{"node": "Route the run", "port": "in", "map": "one"}]]},
-    "Route the run": {"main": [[{"node": "Recorded run?", "port": "in", "map": "one"}, {"node": "One row per market", "port": "in", "map": "one"}]]},
+    "Route the run": {"main": [[{"node": "Recorded run?", "port": "in", "map": "one"}, {"node": "Hand on the verdict", "port": "in", "map": "one"}, {"node": "One row per market", "port": "in", "map": "one"}]]},
     "Recorded run?": {"true": [[{"node": "Replay the recorded run", "port": "in", "map": "one"}]], "false": [[{"node": "The sweep QMB runs", "port": "in", "map": "one"}]]},
     "The sweep QMB runs": {"main": [[{"node": "Sweep every market on QMB", "port": "in", "map": "one"}]]},
-    "Sweep every market on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
-    "Replay the recorded run": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
-    "Ask the referee": {"main": [[{"node": "One row per market", "port": "in", "map": "one", "required": true}]]}
+    "Sweep every market on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}, {"node": "Hand on the verdict", "port": "in", "map": "one"}]]},
+    "Replay the recorded run": {"main": [[{"node": "Hand on the verdict", "port": "in", "map": "one"}]]},
+    "Ask the referee": {"main": [[{"node": "Hand on the verdict", "port": "in", "map": "one"}]]},
+    "Hand on the verdict": {"main": [[{"node": "Read the stored verdict", "port": "in", "map": "one"}, {"node": "The stored verdict", "port": "in", "map": "one"}]]},
+    "Read the stored verdict": {"main": [[{"node": "The stored verdict", "port": "in", "map": "one"}]]},
+    "The stored verdict": {"main": [[{"node": "One row per market", "port": "in", "map": "one", "required": true}]]}
   },
   "meta": {"template": "run-a-unit-on-every-market"}
 }

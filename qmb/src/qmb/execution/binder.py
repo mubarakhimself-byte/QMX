@@ -9,14 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Any, Final, Protocol, cast, runtime_checkable
 
 from qmf.core.chrono import Duration
 from qmf.core.fingerprint import Fingerprint, World, fingerprint
 from qmf.core.refusal import Ok, Result, is_refusal
 
-from qmb._refuse import clean_token, invalid, policy, unsupported
+from qmb._refuse import clean_token, invalid
 from qmb.config.compiler import (
     CLOCK_REPLAY,
     PROVENANCE_SYNTHETIC_TAINTED,
@@ -29,9 +28,6 @@ from qmb.execution.adapters import (
     FINANCING_ADAPTER_SCHEDULED,
     SLIPPAGE_ADAPTER_CATALOG,
     DeclaredPathFillAdapter,
-    decode_commission_calibration,
-    decode_slippage_calibration,
-    parse_adapter_ref,
 )
 from qmb.execution.cost import COST_CALIBRATION_KEY, CommissionCalibration
 from qmb.execution.fidelity import FidelityIdentity, RunFidelity, compute_run_fidelity
@@ -76,12 +72,9 @@ __all__ = [
     "SLIPPAGE_ADAPTER_KEY",
     "BoundExecution",
     "bind_execution_ports",
-    "bind_requested_execution",
     "composition_identity",
     "derive_composition_version",
-    "execution_keys_from_request",
     "fingerprint_composition",
-    "require_requested_execution",
 ]
 
 BOUND_FROM_RESOLVED_CONFIG: Final[bool] = True
@@ -306,125 +299,6 @@ def bind_execution_ports(config: object) -> Result[BoundExecution]:
             composition_version=version.value,
         )
     )
-
-
-_EXECUTION_FIELDS: Final[frozenset[str]] = frozenset(
-    {"fill_model", "fill_basis", "slippage", "cost_profile", "carry", "margin"}
-)
-_REQUESTED_EXECUTION_KEYS: Final[tuple[str, ...]] = (
-    FILL_ADAPTER_KEY,
-    FILL_BASIS_KEY,
-    SLIPPAGE_ADAPTER_KEY,
-    SLIPPAGE_CALIBRATION_KEY,
-    COST_ADAPTER_KEY,
-    COST_CALIBRATION_KEY,
-    FINANCING_SCHEDULE_KEY,
-)
-
-
-def execution_keys_from_request(inputs: object) -> Result[Mapping[str, object]]:
-    """Turn a run request's ``execution`` data into the run-config keys the binder reads.
-
-    The request names each adapter as ``name@version`` with its calibration beside it, so
-    a run's fill, slippage, cost and carry are data a JSON file can hold. The keys returned
-    are the ones ``bind_execution_ports`` binds from, so a config compiled with them binds
-    exactly what the request named.
-    """
-    if not isinstance(inputs, Mapping):
-        return invalid("execution", "a run request names its execution inputs as a mapping")
-    body = cast("Mapping[str, object]", inputs)
-    unknown = sorted(str(key) for key in body if key not in _EXECUTION_FIELDS)
-    if unknown:
-        return invalid(
-            "execution", "unknown execution input", given=unknown, known=sorted(_EXECUTION_FIELDS)
-        )
-    if body.get("margin") is not None:
-        return unsupported("execution.margin", "QMB has no margin adapter to bind yet")
-    fill = parse_adapter_ref("execution.fill_model", body.get("fill_model"), FILL_ADAPTER_CATALOG)
-    if is_refusal(fill):
-        return fill
-    basis = body.get("fill_basis", FILL_BASIS_WORST_CASE)
-    if basis not in FILL_BASES:
-        return invalid(
-            "execution.fill_basis", "unknown fill basis", given=repr(basis), known=list(FILL_BASES)
-        )
-    slippage_body = _section(body, "slippage")
-    if is_refusal(slippage_body):
-        return slippage_body
-    slippage = parse_adapter_ref(
-        "execution.slippage.adapter", slippage_body.value.get("adapter"), SLIPPAGE_ADAPTER_CATALOG
-    )
-    if is_refusal(slippage):
-        return slippage
-    slippage_calibration = decode_slippage_calibration(slippage.value, slippage_body.value)
-    if is_refusal(slippage_calibration):
-        return slippage_calibration
-    cost_body = _section(body, "cost_profile")
-    if is_refusal(cost_body):
-        return cost_body
-    cost = parse_adapter_ref(
-        "execution.cost_profile.adapter", cost_body.value.get("adapter"), COST_ADAPTER_CATALOG
-    )
-    if is_refusal(cost):
-        return cost
-    commission = decode_commission_calibration(cost.value, cost_body.value)
-    if is_refusal(commission):
-        return commission
-    carry_body = _section(body, "carry")
-    if is_refusal(carry_body):
-        return carry_body
-    schedule = clean_token(carry_body.value.get("schedule"))
-    if schedule is None:
-        return invalid("execution.carry.schedule", "carry names its financing schedule")
-    keys: dict[str, object] = {
-        FILL_ADAPTER_KEY: fill.value,
-        FILL_BASIS_KEY: basis,
-        SLIPPAGE_ADAPTER_KEY: slippage.value,
-        COST_ADAPTER_KEY: cost.value,
-        FINANCING_SCHEDULE_KEY: schedule,
-    }
-    if slippage_calibration.value is not None:
-        keys[SLIPPAGE_CALIBRATION_KEY] = slippage_calibration.value
-    if commission.value is not None:
-        keys[COST_CALIBRATION_KEY] = commission.value
-    return Ok(MappingProxyType(keys))
-
-
-def require_requested_execution(config: object, inputs: object) -> Result[ResolvedRunConfig]:
-    """Refuse a run-config whose execution keys differ from the ones its request named."""
-    resolved = _require_config(config)
-    if is_refusal(resolved):
-        return resolved
-    keys = execution_keys_from_request(inputs)
-    if is_refusal(keys):
-        return keys
-    differing = sorted(
-        key
-        for key in _REQUESTED_EXECUTION_KEYS
-        if resolved.value.keys.get(key) != keys.value.get(key)
-    )
-    if differing:
-        return policy(
-            "execution",
-            "the run-config binds the execution inputs its request named",
-            differing=differing,
-        )
-    return resolved
-
-
-def bind_requested_execution(config: object, inputs: object) -> Result[BoundExecution]:
-    """Bind the execution ports a run request named, from the config compiled for it."""
-    resolved = require_requested_execution(config, inputs)
-    if is_refusal(resolved):
-        return resolved
-    return bind_execution_ports(resolved.value)
-
-
-def _section(body: Mapping[str, object], field: str) -> Result[Mapping[str, object]]:
-    raw = body.get(field)
-    if not isinstance(raw, Mapping):
-        return invalid(f"execution.{field}", "this execution input is a mapping")
-    return Ok(cast("Mapping[str, object]", raw))
 
 
 def _build_fill(adapter_id: str, config: ResolvedRunConfig) -> Result[object]:

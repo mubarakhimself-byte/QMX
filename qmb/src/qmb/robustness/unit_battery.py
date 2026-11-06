@@ -1,7 +1,8 @@
 """A unit run's robustness evidence: its entries against random entries, and its costs stressed.
 
-Both read one finished unit run's trades and the bars it ran over (B14, the judge's chain steps 2
-and 3, `judge.md` §3):
+Both read trades of one finished unit run and the bars it ran over (B14, the judge's chain steps 2
+and 3, `judge.md` §3). The job measures each market on its own trades (``by_market``), because a
+market answers for its own evidence:
 
 - ``entry_edge``: the entry edge ratio, the trades' summed favourable excursion over their summed
   adverse excursion in the ``horizon`` bars after each fill, both in R of the trade's own stop
@@ -20,13 +21,14 @@ from __future__ import annotations
 
 import bisect
 import random
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from array import array
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from decimal import ROUND_HALF_EVEN, Decimal
 from fractions import Fraction
-from typing import Final
+from typing import Final, cast
 
-from qmf.core.refusal import Ok, Result
+from qmf.core.refusal import Ok, Result, TypedRefusal
 from qml.protocol.unit import QuoteBar
 from qml.unit.model import Side
 
@@ -39,8 +41,11 @@ __all__ = [
     "EDGE_RESAMPLES",
     "EDGE_RESAMPLES_LEAST",
     "STRESS_MULTIPLIER",
+    "CompactBars",
     "CostStress",
     "EntryEdge",
+    "by_market",
+    "compact_bars",
     "cost_stress",
     "entry_edge",
 ]
@@ -96,21 +101,89 @@ class CostStress:
         }
 
 
-def _fill_bar(bars: Sequence[QuoteBar], opened_at: int) -> int:
+@dataclass(slots=True)
+class CompactBars:
+    """One market's bars as columns of whole numbers at one price scale: only what the battery
+    reads, at 56 bytes a bar, because it reads random spans of the whole window."""
+
+    scale: int = 0
+    closes_ns: array[int] = field(default_factory=lambda: array("q"))
+    bid_open: array[int] = field(default_factory=lambda: array("q"))
+    bid_high: array[int] = field(default_factory=lambda: array("q"))
+    bid_low: array[int] = field(default_factory=lambda: array("q"))
+    ask_open: array[int] = field(default_factory=lambda: array("q"))
+    ask_high: array[int] = field(default_factory=lambda: array("q"))
+    ask_low: array[int] = field(default_factory=lambda: array("q"))
+
+    def __len__(self) -> int:
+        return len(self.closes_ns)
+
+    def price(self, whole: int) -> Decimal:
+        return Decimal(whole).scaleb(-self.scale)
+
+    def add(self, bar: QuoteBar) -> None:
+        """One bar more. Finer prices than the scale so far raise every column, so none rounds."""
+        prices = (bar.bid.open, bar.bid.high, bar.bid.low, bar.ask.open, bar.ask.high, bar.ask.low)
+        finest = max(-cast("int", price.as_tuple().exponent) for price in prices)
+        columns = (
+            self.bid_open,
+            self.bid_high,
+            self.bid_low,
+            self.ask_open,
+            self.ask_high,
+            self.ask_low,
+        )
+        if finest > self.scale:
+            raised = 10 ** (finest - self.scale)
+            for column in columns:
+                column[:] = array("q", (whole * raised for whole in column))
+            self.scale = finest
+        self.closes_ns.append(bar.knowable_at.value_ns)
+        for column, price in zip(columns, prices, strict=True):
+            column.append(int(price.scaleb(self.scale)))
+
+
+def by_market(trades: Iterable[UnitTrade]) -> dict[str, list[UnitTrade]]:
+    """Each market's own trades, in the run's order."""
+    found: dict[str, list[UnitTrade]] = {}
+    for trade in trades:
+        found.setdefault(trade.market_id, []).append(trade)
+    return found
+
+
+def compact_bars(
+    feeds: Mapping[str, Callable[[], Iterable[QuoteBar | TypedRefusal]]],
+) -> Result[dict[str, CompactBars]]:
+    """Each market's bars from its feed into columns, or the refusal that stopped a feed."""
+    held: dict[str, CompactBars] = {}
+    for market, feed in feeds.items():
+        bars = CompactBars()
+        for item in feed():
+            if isinstance(item, TypedRefusal):
+                return item
+            bars.add(item)
+        held[market] = bars
+    return Ok(held)
+
+
+_NO_BARS: Final = CompactBars()
+
+
+def _fill_bar(bars: CompactBars, opened_at: int) -> int:
     """The index of the bar a fill at ``opened_at`` traded in: the first closing after it."""
-    return bisect.bisect_right([b.knowable_at.value_ns for b in bars], opened_at)
+    return bisect.bisect_right(bars.closes_ns, opened_at)
 
 
 def _excursions(
-    bars: Sequence[QuoteBar], start: int, side: Side, entry: Decimal, risk: Decimal, horizon: int
+    bars: CompactBars, start: int, side: Side, entry: Decimal, risk: Decimal, horizon: int
 ) -> tuple[Fraction, Fraction]:
-    ahead = bars[start : start + horizon]
+    end = start + horizon
     if side is Side.LONG:
-        favourable = max(b.bid.high for b in ahead) - entry
-        adverse = entry - min(b.bid.low for b in ahead)
+        favourable = bars.price(max(bars.bid_high[start:end])) - entry
+        adverse = entry - bars.price(min(bars.bid_low[start:end]))
     else:
-        favourable = entry - min(b.ask.low for b in ahead)
-        adverse = max(b.ask.high for b in ahead) - entry
+        favourable = entry - bars.price(min(bars.ask_low[start:end]))
+        adverse = bars.price(max(bars.ask_high[start:end])) - entry
     return Fraction(max(favourable, Decimal(0)) / risk), Fraction(max(adverse, Decimal(0)) / risk)
 
 
@@ -121,7 +194,7 @@ def _ratio(pairs: Sequence[tuple[Fraction, Fraction]]) -> Fraction | None:
 
 def entry_edge(
     trades: Sequence[UnitTrade],
-    bars: Mapping[str, Sequence[QuoteBar]],
+    bars: Mapping[str, CompactBars],
     *,
     horizon: int = EDGE_HORIZON_BARS,
     resamples: int = EDGE_RESAMPLES,
@@ -136,7 +209,7 @@ def entry_edge(
         )
     measured: list[tuple[UnitTrade, Decimal, tuple[Fraction, Fraction]]] = []
     for trade in trades:
-        held = bars.get(trade.market_id, ())
+        held = bars.get(trade.market_id, _NO_BARS)
         start = _fill_bar(held, trade.opened_at.value_ns)
         risk = abs(trade.entry_price - trade.stop)
         if risk == 0 or start + horizon > len(held):
@@ -156,7 +229,7 @@ def entry_edge(
         for trade, risk, _pair in measured:
             held = bars[trade.market_id]
             at = draw.randrange(0, len(held) - horizon + 1)
-            entry = held[at].ask.open if trade.side is Side.LONG else held[at].bid.open
+            entry = held.price(held.ask_open[at] if trade.side is Side.LONG else held.bid_open[at])
             pairs.append(_excursions(held, at, trade.side, entry, risk, horizon))
         null.append(_ratio(pairs) or Fraction(0))
     reached = sum(1 for ratio in null if ratio >= observed)
@@ -164,17 +237,14 @@ def entry_edge(
     return Ok(EntryEdge(_text(observed), _text(p), len(measured), horizon, resamples))
 
 
-def _trade_cost_r(
-    trade: UnitTrade, held: Sequence[QuoteBar], profile: CostProfile | None
-) -> Decimal:
+def _trade_cost_r(trade: UnitTrade, held: CompactBars, profile: CostProfile | None) -> Decimal:
     """One trade's costs in its own R: the fill bar's spread, plus profiled slippage and
     commission on both fills."""
     risk = abs(trade.entry_price - trade.stop)
     start = _fill_bar(held, trade.opened_at.value_ns)
     if risk == 0 or start >= len(held):
         return Decimal(0)
-    bar = held[start]
-    paid = (bar.ask.open - bar.bid.open) / risk
+    paid = held.price(held.ask_open[start] - held.bid_open[start]) / risk
     if profile is None:
         return paid
     for ns in (trade.opened_at.value_ns, trade.closed_at.value_ns):
@@ -189,7 +259,7 @@ def _trade_cost_r(
 
 def cost_stress(
     trades: Sequence[UnitTrade],
-    bars: Mapping[str, Sequence[QuoteBar]],
+    bars: Mapping[str, CompactBars],
     profiles: Mapping[str, CostProfile],
     *,
     multiplier: Decimal = STRESS_MULTIPLIER,
@@ -203,7 +273,7 @@ def cost_stress(
         return invalid("robustness", "a cost stress needs trades to stress")
     extra = multiplier - 1
     stressed = [
-        t.r - extra * _trade_cost_r(t, bars.get(t.market_id, ()), profiles.get(t.market_id))
+        t.r - extra * _trade_cost_r(t, bars.get(t.market_id, _NO_BARS), profiles.get(t.market_id))
         for t in trades
     ]
     count = len(trades)

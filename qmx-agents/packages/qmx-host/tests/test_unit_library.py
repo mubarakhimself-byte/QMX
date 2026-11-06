@@ -6,22 +6,23 @@ from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import cast
 
 import pytest
 from pydantic import JsonValue
 from qml.unit import schema
+from qmx_control.service import ControlError, ControlService
 from qmx_library.kinds import KindRefused, kind
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
-from qmx_tools.gather import DUMMY, check_unit, gather, template
+from qmx_tools.gather import DUMMY, FIXTURE_RECORDS, check_unit, gather, template
 
-from qmx_host import first_start
+from qmx_host import first_start, venue_records
 from qmx_host.first_start import Places, make_new
-from qmx_host.host import land_first_unit, open_store, register_checkers
+from qmx_host.host import LanderLibrary, RunUnit, land_first_unit, open_store, register_checkers
 
 OPERATOR = Principal("operator")
 KINDS = Path(first_start.__file__).parents[3] / "qmx-library" / "src" / "qmx_library" / "kinds"
@@ -192,8 +193,147 @@ def test_gather_binds_a_record_by_the_markets_instrument_ref() -> None:
         "metal.xauusd": ("icmarkets-ctrader", "XAUUSD"),
     }
     assert gather(None, document).warnings == (
-        "instrument records are QML's test fixtures until the instrument kind lands (C-02): "
+        "no Library record for this market, so it reads QML's test fixture: "
         "fx.eurusd reads eurusd.json",
-        "instrument records are QML's test fixtures until the instrument kind lands (C-02): "
+        "no Library record for this market, so it reads QML's test fixture: "
         "metal.xauusd reads xauusd.json",
     )
+
+
+def test_one_host_reads_each_record_that_replaces_another_though_they_all_read_version_one(
+    store: Store,
+) -> None:
+    library = LanderLibrary(store)
+    draft_unit(store, template(), "dummy")
+    head = store.head("dummy", drafts_ref("dummy"))
+    assert head is not None
+    pin = head[0]
+    fixture = json.loads((FIXTURE_RECORDS / "xauusd.json").read_text("utf-8"))
+    del fixture["record_version"]
+
+    def gold(item: str, lot_step: str) -> None:
+        fields = {**fixture, "lot_step": lot_step}
+        draft = Draft("instrument", item, item, fields=cast("dict[str, JsonValue]", fields))
+        store.put(OPERATOR, draft, on=MAIN, expected_head=None)
+
+    def read() -> tuple[RunUnit, tuple[str, object, object]]:
+        found = library.unit(pin)
+        assert isinstance(found, RunUnit)
+        record = found.context.records["metal.xauusd"]
+        document = found.record_documents["metal.xauusd"]
+        return found, (record.name, document["lot_step"], document["record_version"])
+
+    on_fixture, fixture_read = read()
+    again, _ = read()
+    gold("gold-first", "0.1")
+    first_item, first_read = read()
+    store.archive(OPERATOR, "gold-first", "withdrawn")
+    gold("gold-second", "0.5")
+    _, second_read = read()
+
+    assert again is on_fixture
+    assert fixture_read == ("icmarkets-ctrader:XAUUSD@1", "0.01", 1)
+    assert first_read == ("icmarkets-ctrader:XAUUSD@1", "0.1", 1)
+    assert second_read == ("icmarkets-ctrader:XAUUSD@1", "0.5", 1)
+    assert on_fixture.fixture_records == (
+        "no Library record for this market, so it reads QML's test fixture: "
+        "fx.eurusd reads eurusd.json",
+        "no Library record for this market, so it reads QML's test fixture: "
+        "metal.xauusd reads xauusd.json",
+    )
+    assert first_item.fixture_records == (
+        "no Library record for this market, so it reads QML's test fixture: "
+        "fx.eurusd reads eurusd.json",
+    )
+
+
+GBPUSD_ROW: dict[str, JsonValue] = {
+    "symbol": "GBPUSD",
+    "market_id": "gbpusd",
+    "klass": "fx",
+    "calendar_ref": "fx-24x5@1",
+    "zone": "America/New_York",
+    "day_boundary": "17:00",
+}
+GBPUSD_SYMBOL: dict[str, object] = {
+    "symbol": "GBPUSD",
+    "quote_currency": "USD",
+    "digits": 5,
+    "pip_position": 4,
+    "lot_size": 10_000_000,
+    "step_volume": 100_000,
+    "min_volume": 100_000,
+    "schedule_zone": "UTC",
+    "trading_mode": "ENABLED",
+}
+
+
+def node_call(operation: str, arguments: Mapping[str, object]) -> Mapping[str, object]:
+    """A self-tested node with one bound account, answering only the symbols it is asked for, as
+    its real `records` operation does."""
+    if operation == "passport":
+        return {"ok": True, "value": {"checks": [{"ok": True}]}}
+    if operation == "status":
+        return {"ok": True, "value": {"venues": [{"venue": "ctrader", "accounts": ["9000"]}]}}
+    held = {"GBPUSD": GBPUSD_SYMBOL}
+    asked = cast("list[str]", arguments["symbols"])
+    return {
+        "ok": True,
+        "value": {
+            "venue": {"name": "icmarkets-ctrader", "platform": "ctrader", "sandbox": "demo"},
+            "account": {"id": "9000", "world": "demo", "leverage": "30"},
+            "instruments": [held[symbol] for symbol in asked if symbol in held],
+        },
+    }
+
+
+def test_a_market_added_to_node_settings_lands_its_record_and_gather_reads_it(
+    store: Store, tmp_path: Path
+) -> None:
+    control = ControlService(tmp_path / "control")
+    document = template()
+    document["markets"] = [
+        {
+            "market_id": "fx.gbpusd",
+            "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": "GBPUSD"},
+        }
+    ]
+
+    def as_the_host_builds_it() -> venue_records.VenueRecords:
+        section = control.settings_get("node")
+        return venue_records.VenueRecords(
+            node_call,
+            store,
+            every_s=venue_records.refresh_s(section),
+            markets=venue_records.record_markets(section),
+        )
+
+    before = as_the_host_builds_it()
+    before.round()
+    records_before = gather(store, document).context.records
+    control.settings_put("node", {"record_markets": [GBPUSD_ROW], "records_refresh_s": 600})
+    after = as_the_host_builds_it()
+    after.round()
+    found = gather(store, document)
+
+    assert (records_before, before.every_s) == ({}, 86_400)
+    assert found.context.records["fx.gbpusd"].name == "icmarkets-ctrader:GBPUSD@1"
+    assert (found.warnings, after.every_s) == ((), 600)
+
+
+def test_a_node_row_missing_a_fact_is_refused_and_a_broken_table_reads_as_the_starting_rows(
+    tmp_path: Path,
+) -> None:
+    control = ControlService(tmp_path)
+    missing = {key: value for key, value in GBPUSD_ROW.items() if key != "zone"}
+
+    with pytest.raises(ControlError) as refused:
+        control.settings_put("node", {"record_markets": [missing]})
+    (tmp_path / "settings.toml").write_text(
+        '[node]\nrecord_markets = ["GBPUSD"]\nrecords_refresh_s = "soon"\n', "utf-8"
+    )
+    broken = control.settings_get("node")
+
+    assert refused.value.code == "invalid_settings"
+    assert [m.symbol for m in venue_records.record_markets(broken)] == ["EURUSD", "XAUUSD"]
+    assert venue_records.refresh_s(broken) == 86_400
