@@ -31,7 +31,6 @@ from qmx_judge.judge import (
     parse_spec,
 )
 from qmx_judge.landing import Stored
-from qmx_judge.tries import Counted, effective_tries
 
 DAY = 86_400 * 10**9
 START = 1_735_689_600 * 10**9
@@ -232,12 +231,6 @@ def variants(seed: int) -> list[dict[str, float]]:
         [0.2 * c + math.sqrt(1 - 0.2**2) * draw.gauss(0, 1) for c in common] for _ in range(10)
     ]
     return [{f"d{d:03d}": value for d, value in zip(days, row, strict=True)} for row in rows]
-
-
-def test_51_variants_cluster_to_11_effective_tries() -> None:
-    streams = variants(11)
-
-    assert effective_tries([Counted(f"v{i}", s) for i, s in enumerate(streams)], 0.5) == 11
 
 
 def test_the_verdict_counts_51_variants_of_one_family_as_11_tries() -> None:
