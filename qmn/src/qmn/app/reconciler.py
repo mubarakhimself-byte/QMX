@@ -474,7 +474,8 @@ def _unbooked(
 ) -> Result[list[Lost]]:
     """Each entry of ``deployments`` with a ``filled`` row or a resolved unknown and no ``trade``
     row, that the venue does not list. A plain "send without an exit" would read every past
-    stop-out as lost, because only the node's own close writes a ``closed`` row."""
+    stop-out as lost, because only the node's own close writes a ``closed`` row. An entry the
+    node closed for protection never reaches its unit, so its missing ``trade`` row says nothing."""
     orders = _demo_bodies(root, JournalStream.NODE, "order")
     reconciles = _demo_bodies(root, JournalStream.NODE, "reconcile")
     trades = _demo_bodies(root, JournalStream.UNIT, "trade")
@@ -489,6 +490,7 @@ def _unbooked(
     stops: dict[str, Decimal] = {}
     filled: dict[str, _Filled] = {}
     told: dict[str, Mapping[str, object]] = {}
+    closed_for_protection: set[str] = set()
     for body in orders.value:
         name = str(body.get("client_order_id"))
         step = body.get("step")
@@ -507,6 +509,8 @@ def _unbooked(
             )
         elif step == "closed" and "exit" in body:
             told[name] = body
+        elif step == "closed" and str(body.get("event_id")).endswith("/closed-protection"):
+            closed_for_protection.add(name)
     for body in reconciles.value:
         for row in cast("Sequence[Mapping[str, object]]", body.get("resolved", ())):
             if row.get("outcome") == "filled":
@@ -522,7 +526,12 @@ def _unbooked(
     lost: list[Lost] = []
     for name, send in sends.items():
         fill = filled.get(name)
-        if fill is None or fill.position in traded or _still_listed(send, fill, listed):
+        if (
+            fill is None
+            or fill.position in traded
+            or fill.position in closed_for_protection
+            or _still_listed(send, fill, listed)
+        ):
             continue
         quantity = Decimal(str(send["quantity"])) if fill.quantity is None else fill.quantity
         position = VenuePosition(
@@ -534,7 +543,8 @@ def _unbooked(
             fill.price,
             stops[name],
         )
-        lost.append(Lost(Ours(position, send, True), fill.position_id, told.get(fill.position)))
+        ours = Ours(position, send, closed_while_down=True)
+        lost.append(Lost(ours, fill.position_id, told.get(fill.position)))
     return Ok(lost)
 
 

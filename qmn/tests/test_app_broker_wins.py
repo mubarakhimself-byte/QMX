@@ -220,8 +220,9 @@ def test_a_resolved_unknown_finds_its_close_over_the_sends_window(tmp_path: Path
 
     assert filled == []
     assert "ProtoOADealListReq" in again.fake.requests()
-    assert cast("dict[str, Json]", b.runtime(again).alarms[0])["price"] == "1.08022"
-    assert b.runtime(again).alarms[0]["guessed"] is False
+    assert [(a["alarm"], a["price"], a["guessed"]) for a in b.runtime(again).alarms] == [
+        ("closed_while_down", "1.08022", False)
+    ]
     assert [(t["trade_id"], t["exit_kind"], t["exit_price"]) for t in trades] == [
         (name, "stop", "1.08022")
     ]
@@ -272,6 +273,29 @@ def test_old_stop_outs_and_a_paper_send_stay_quiet_at_a_restart(tmp_path: Path) 
     b.runtime(again).stop()
 
 
+class HoldsNoStop(b.FakeCTrader):
+    def _on_ProtoOAAmendPositionSLTPReq(self, msg_id: str, body: dict[str, object]) -> None:
+        del body
+        self._order_error(msg_id, "TRADING_BAD_STOPS")
+
+
+def test_an_entry_the_node_closed_for_protection_stays_quiet_at_a_restart(tmp_path: Path) -> None:
+    rig, runtime, _ = trading(tmp_path, HoldsNoStop(b.codec(), holds_stops=False))
+    name = b.sent_entries(rig)[0]
+    rows = [r["event_id"] for r in closed_rows(rig)]
+    raised = [a["alarm"] for a in runtime.alarms]
+    rig.node.stop()
+
+    again = restarted(rig, tmp_path)
+    b.tick_quotes(again, 3)
+
+    assert rows[:1] == [f"{name}/closed-protection"]
+    assert raised[0] == "protection_escalation"
+    assert b.runtime(again).alarms == []
+    assert "ProtoOADealListByPositionIdReq" not in again.fake.requests()
+    b.runtime(again).stop()
+
+
 def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Path) -> None:
     rig, runtime, at = trading(
         tmp_path, b.FakeCTrader(b.codec(), stop_slip=Decimal("0.00010"), history_silent=True)
@@ -284,7 +308,7 @@ def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Pat
         "market_id": "fx.eurusd",
         "price": "1.08022",
         "why": "the broker no longer lists this position and its history named no closing deal,"
-        " so the node booked it at the stop it held, and that price is a guess",
+        " so the node reads it closed at the stop it held, and that price is a guess",
     }
 
     rig.fake.drop_socket()
@@ -318,7 +342,7 @@ def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Pat
             "position": name,
             "market_id": "fx.eurusd",
             "why": "the broker lists this position again after the node read it closed, so the"
-            " node holds it again and the trade row it booked is wrong",
+            " node holds it again and any trade row it booked for it is wrong",
         },
     ]
     runtime.stop()

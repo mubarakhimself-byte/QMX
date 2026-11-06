@@ -855,7 +855,8 @@ class CTraderVenue:
                 "market_id": held.market_id,
                 "price": str(price),
                 "why": "the broker no longer lists this position and its history named no closing"
-                " deal, so the node booked it at the stop it held, and that price is a guess",
+                " deal, so the node reads it closed at the stop it held, and that price is a"
+                " guess",
             }
         )
 
@@ -946,7 +947,7 @@ class CTraderVenue:
                     "position": name,
                     "market_id": seen.market_id,
                     "why": "the broker lists this position again after the node read it closed, so"
-                    " the node holds it again and the trade row it booked is wrong",
+                    " the node holds it again and any trade row it booked for it is wrong",
                 }
             )
 
