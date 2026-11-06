@@ -1265,15 +1265,24 @@ def judged_on_a_small_record(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(PRESETS, "shipped", small)
 
 
-def the_real_referee(world: World, change: Callable[[dict[str, Any]], dict[str, Any]]) -> Any:
+def the_real_referee(
+    world: World,
+    change: Callable[[dict[str, Any]], dict[str, Any]],
+    padding: str | None = None,
+) -> Any:
     """A referee step that presses the real tool on the runs its input names, then answers `change`
-    of what the tool said, as a model that copies or forges it would."""
+    of what the tool said, as a model that copies or forges it would. `padding`, an old result, is
+    pressed with them, and the answer names its run beside the verdict."""
 
     def answer(chunk: str) -> str:
         runs = sorted(set(re.findall(r"qmbr-[\w-]+", chunk)))
         results = [world.store.with_field("backtest-result", "run_id", run)[0] for run in runs]
+        beside = {}
+        if padding is not None:
+            results.append(padding)
+            beside["run_id"] = world.store.get(HIM, padding).fields["run_id"]
         said = world.tools["backtest_judge_run"](results=results)["result"]
-        return json.dumps({"verdict": change({**said, "result_ids": results})})
+        return json.dumps({"verdict": change({**said, "result_ids": results}), **beside})
 
     return answer
 
@@ -1489,6 +1498,20 @@ def test_a_true_verdict_of_an_earlier_run_is_refused(
     assert report.status == "failed"
     assert refusal(world, report, "stored") == (
         f"the verdict {earlier['verdict_id']} judged other runs than this run's"
+    )
+    assert "table" not in finished
+
+    report, finished = real_run(
+        world,
+        U1,
+        {"unit": world.dummy, "window": MARCH, "markets": ["metal.xauusd"]},
+        answers(referee=the_real_referee(world, lambda said: said, padding=its_results[0])),
+    )
+
+    assert report.status == "failed"
+    padded = finished["referee"]["main"]["verdict"]["verdict_id"]
+    assert refusal(world, report, "stored") == (
+        f"the verdict {padded} judged other runs than this run's"
     )
     assert "table" not in finished
 
