@@ -766,7 +766,8 @@ class HostStore(Store):
         write): a dictionary entry's status on whichever ref it saved to, and once a record reaches
         `main`, a verdict's judge moves and a study spec's `spec_edit` try when a result exists
         against an earlier version of it."""
-        kind = str(self._require(object_id)[2])
+        with self._mutex:
+            kind = str(self._require(object_id)[2])
         if kind == ENTRY_KIND:
             land_entry_status(self, item)
         elif ref != MAIN:
@@ -904,18 +905,22 @@ def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -
 
 def land_entry_status(store: Store, item: str) -> None:
     """One saved entry's status. A status that fails to compute or write is printed: the save has
-    committed and stands, and the next start's pass tries again. It runs the entry's own code, as
-    `blocks_check` does, and layer F lets that code raise anything, with a name and words that
-    raise when read, so all of it stops here. A real Ctrl-C still ends the host: asyncio's first
-    press cancels `serve` the next time it waits, and only a later press can raise in here."""
+    committed and stands, and the next start's pass tries again. An entry refused is named too.
+    It runs the entry's own code, and `compute_status` keeps anything that code raises."""
     try:
-        write_entry_status(store, item)
-    except BaseException as refused:
-        try:
-            why = f"{type(refused).__name__}: {refused}"
-        except BaseException:
-            why = "an error that cannot be printed"
-        print(f"library: the status of {item} was not written: {why}", file=sys.stderr)
+        written = write_entry_status(store, item)
+    except Exception as refused:
+        print(
+            f"library: the status of {item} was not written: {type(refused).__name__}: {refused}",
+            file=sys.stderr,
+        )
+        return
+    for _, _, computed in written:
+        if computed.status is None:
+            print(
+                f"library: the status of {item} is refused: {computed.problems[0].message}",
+                file=sys.stderr,
+            )
 
 
 def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
@@ -1011,16 +1016,28 @@ def land_dictionary_wave(store: Store) -> None:
         )
 
 
-def land_dictionary_statuses(store: Store) -> None:
+def land_dictionary_statuses(store: Store) -> threading.Thread:
     """Every Library entry's status at each PC start, because a store an older checker wrote or a
     save whose status failed reads true only after this. A head already true writes nothing. One
-    entry at a time, so one that raises names itself and costs only its own status, and the host
-    starts anyway."""
-    try:
-        for item in entry_items(store):
-            land_entry_status(store, item)
-    except (LibraryRefused, OSError, ValueError) as refused:
-        print(f"library: the dictionary's statuses were not written: {refused}", file=sys.stderr)
+    entry at a time, so one that raises names itself and costs only its own status.
+
+    On a daemon thread, and the start does not wait for it, because a thread cannot be stopped and
+    an entry's code can loop forever. Such an entry costs this thread, a core, and the status of
+    every item sorted after it, this start and each next one. Nothing reads a status during a
+    start, and until the pass reaches an entry its page reads the status last written."""
+
+    def run() -> None:
+        try:
+            for item in entry_items(store):
+                land_entry_status(store, item)
+        except (LibraryRefused, OSError, ValueError) as refused:
+            print(
+                f"library: the dictionary's statuses were not written: {refused}", file=sys.stderr
+            )
+
+    running = threading.Thread(target=run, name="qmx-entry-statuses", daemon=True)
+    running.start()
+    return running
 
 
 def library_line(store: Store) -> DoctorLine:

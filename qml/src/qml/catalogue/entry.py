@@ -159,6 +159,13 @@ class EntryProblem:
         return {"where": self.where, "message": self.message, "hint": self.hint}
 
 
+_CODE_STOPPED: Final = EntryProblem(
+    "/code",
+    "this entry's code stopped its own check, by an exit or a raise no check can read",
+    "a block returns a value or raises an ordinary error; remove the exit",
+)
+
+
 @dataclass(slots=True)
 class _Found:
     problems: list[EntryProblem] = field(default_factory=lambda: [])
@@ -946,7 +953,21 @@ def compute_status(
     """The status ``raw`` has earned: its own checks, then its machine face, then its code
     (``source``, the bytes of ``block.py``) against its fingerprint, layer F's scan, the loader
     and, when the entry names golden cases, those cases (``golden``, the decoded cases file) and
-    the cut-against-full check over them."""
+    the cut-against-full check over them.
+
+    Every door that runs an entry's code runs it here, inside a long-lived process, and layer F
+    lets that code raise anything, an exit included, with a name and words that raise when read.
+    So none of it leaves, and it answers refused in fixed words. With no ``source`` no entry's
+    code ran, and whatever rose is not the entry's. An endless loop is not stopped here."""
+    try:
+        return _earned(raw, source, golden)
+    except BaseException:
+        if source is None:
+            raise
+        return Computed(None, (_CODE_STOPPED,), (), "")
+
+
+def _earned(raw: Mapping[str, object], source: bytes | None, golden: object) -> Computed:
     problems = list(check_entry(raw, source))
     try:
         printed = None if source is None else block_fingerprint(source).value

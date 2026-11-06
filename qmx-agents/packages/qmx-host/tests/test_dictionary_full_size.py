@@ -11,6 +11,9 @@ stdlib is read from its files."""
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -44,6 +47,7 @@ from qmx_host.host import (
 from qmx_host.publish_collection import publish_collection_router
 
 OPERATOR = Principal("operator")
+CODE_STOPPED = "this entry's code stopped its own check, by an exit or a raise no check can read"
 PORT = cast(dict[str, Any], json.loads((PORT_SEED / "port.json").read_text("utf-8")))
 FAMILIES = sorted(f for f in WAVE_SEED.iterdir() if f.is_dir())
 COLLECTIONS = [str(PORT["collection"]["item"]), *(str(seed_rows(f)[0]["item"]) for f in FAMILIES)]
@@ -101,7 +105,7 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
     ]
     pages = blocks(control, tmp_path)["blocks_find"](words="", limit=1000)["rows"]
     log = store.annotation_log.read_bytes()
-    land_dictionary_statuses(store)
+    land_dictionary_statuses(store).join()
 
     assert [v.annotations.get("status") is None for v in before] == [False] * 343
     assert sum(c["published"] for c in counts) == 343
@@ -119,7 +123,7 @@ def test_a_start_gives_a_status_to_a_page_an_older_host_saved(control: ControlSe
     )
 
     unmarked = store.get(OPERATOR, older.object_id).annotations.get("status")
-    land_dictionary_statuses(store)
+    land_dictionary_statuses(store).join()
 
     assert unmarked is None
     assert (
@@ -249,7 +253,7 @@ def test_one_bad_entry_costs_its_own_status_and_the_start_carries_on(
 
         # A raise left to reach pytest crashes its report on the same bad name, and the run exits 0.
         try:
-            land_dictionary_statuses(store)
+            land_dictionary_statuses(store).join()
             answer = store.put(
                 OPERATOR,
                 a_block("e-saved-now", "raise KeyboardInterrupt"),
@@ -270,26 +274,109 @@ def test_one_bad_entry_costs_its_own_status_and_the_start_carries_on(
         item: mark and cast(dict[str, str], mark)["value"] for item, mark in status.items()
     } == {
         "a-index-error": "specified",
-        "b-base": None,
-        "b-exits": None,
-        "b-generator-exit": None,
-        "b-keyboard": None,
-        "b-no-name": None,
-        "b-no-words": None,
+        "b-base": "refused",
+        "b-exits": "refused",
+        "b-generator-exit": "refused",
+        "b-keyboard": "refused",
+        "b-no-name": "refused",
+        "b-no-words": "refused",
         "c-unreadable-golden": None,
         "d-older-word": "named",
     }
-    for line in (
-        "b-base was not written: BaseException: x",
-        "b-exits was not written: SystemExit: 1",
-        "b-generator-exit was not written: GeneratorExit: ",
-        "b-keyboard was not written: KeyboardInterrupt: ",
-        "b-no-name was not written: an error that cannot be printed",
-        "b-no-words was not written: an error that cannot be printed",
-        "c-unreadable-golden was not written: JSONDecodeError: ",
-        "e-saved-now was not written: KeyboardInterrupt: ",
+    assert "c-unreadable-golden was not written: JSONDecodeError: " in said
+    for item in ("b-base", "b-exits", "b-generator-exit", "b-keyboard", "b-no-name", "b-no-words"):
+        assert f"library: the status of {item} is refused: {CODE_STOPPED}" in said
+    assert f"library: the status of e-saved-now is refused: {CODE_STOPPED}" in said
+
+
+A_START = """
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[2])
+from test_dictionary_full_size import (
+    OPERATOR, Store, a_block, a_draft, drafts_ref, land_dictionary_statuses, open_store,
+    register_checkers,
+)
+
+def status_of(store, item):
+    mark = store.get(OPERATOR, store.head(item, drafts_ref(item))[0]).annotations.get("status")
+    return mark and mark["value"]
+
+root = Path(sys.argv[1])
+with open_store(root, root / "library", serving=False, floor=0) as store:
+    register_checkers(store)
+    for draft in (
+        a_draft("a-older-word"),
+        a_block("b-endless", "while True:\\n            pass"),
+        a_draft("c-older-word"),
     ):
-        assert f"library: the status of {line}" in said
+        Store.put(store, OPERATOR, draft, on=drafts_ref(str(draft.item)), expected_head=None)
+    land_dictionary_statuses(store)
+    print("the start went on", flush=True)
+    while status_of(store, "a-older-word") is None:
+        time.sleep(0.05)
+    time.sleep(2)
+    store.put(OPERATOR, a_draft("d-saved-now"), on=drafts_ref("d-saved-now"), expected_head=None)
+    for item in ("a-older-word", "b-endless", "c-older-word", "d-saved-now"):
+        print(item, status_of(store, item), flush=True)
+print("the store closed", flush=True)
+"""
+
+
+def test_an_endless_block_costs_a_stuck_thread_and_not_the_start(tmp_path: Path) -> None:
+    """Its own process, because a thread stuck in `while True` takes the GIL for as long as the
+    process lives, and here that process must also end by itself."""
+    done = subprocess.run(
+        [sys.executable, "-c", A_START, str(tmp_path), str(Path(__file__).parent)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert (done.returncode, done.stdout.splitlines()) == (
+        0,
+        [
+            "the start went on",
+            "a-older-word named",
+            "b-endless None",
+            "c-older-word None",
+            "d-saved-now named",
+            "the store closed",
+        ],
+    )
+
+
+def test_a_save_beside_a_thread_reading_the_store_answers(tmp_path: Path) -> None:
+    """The start's pass reads and writes beside his saves. A save that committed must not read as
+    failed because another thread was on the same catalog statement."""
+    failed: list[str] = []
+    stop = threading.Event()
+    with open_store(tmp_path, tmp_path / "library", serving=False, floor=0) as store:
+        register_checkers(store)
+        held = store.put(OPERATOR, a_draft("held"), on=drafts_ref("held"), expected_head=None)
+
+        def reads() -> None:
+            try:
+                while not stop.is_set():
+                    store.get(OPERATOR, held.object_id)
+            except Exception as error:
+                failed.append(f"read {type(error).__name__}")
+
+        reader = threading.Thread(target=reads, daemon=True)
+        reader.start()
+        try:
+            for n in range(60):
+                item = f"saved-{n}"
+                store.put(OPERATOR, a_draft(item), on=drafts_ref(item), expected_head=None)
+        except Exception as error:
+            failed.append(f"save {type(error).__name__}")
+        stop.set()
+        reader.join()
+
+    assert failed == []
 
 
 def test_a_clashing_save_is_refused_and_a_new_version_is_not(
