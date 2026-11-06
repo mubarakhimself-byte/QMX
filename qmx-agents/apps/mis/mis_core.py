@@ -130,12 +130,16 @@ class Outcome:
 
 @dataclass(frozen=True, slots=True)
 class Market:
-    """One configured market as its instrument snapshot describes it."""
+    """One configured market as its instrument snapshot describes it.
+
+    `source` names the store folder its bars live under, which is the source that downloaded
+    them and never the venue that lists them. None means the store holds no bars for this market:
+    it stays configured, publishes nothing, and `status` says which market it is."""
 
     market_id: str
     venue: str
     symbol: str
-    source: str
+    source: str | None
     instrument_class: str
     digits: int
     pip: Decimal | None
@@ -441,10 +445,12 @@ class MarketData:
         self.sealed: set[str] = set()
 
     def _keys(self, kind: str, variant: str) -> list[SeriesKey]:
-        if self._store is None:
+        store = self._store
+        source = self._market.source
+        if store is None or source is None:
             return []
         market = self._market
-        folder = self._store.root / market.source / market.symbol / kind / (variant or "-")
+        folder = store.root / source / market.symbol / kind / (variant or "-")
         keys: list[SeriesKey] = []
         for state in sorted(folder.glob("*/state.json")) if folder.is_dir() else ():
             month = _month(state.parent.name)
@@ -570,9 +576,9 @@ def _market(entry: object, index: int) -> Market:
     ):
         raise Refused(f"{where}.instrument.data_levels.levels is a list of levels")
     pip = cast(Json, record.get("pip") or {}).get("size")
-    source = market.get("source", texts["venue"])
-    if not isinstance(source, str) or not source:
-        raise Refused(f"{where}.source is a text")
+    source = market.get("source")
+    if source is not None and (not isinstance(source, str) or not source):
+        raise Refused(f"{where}.source is the source that holds its bars, or left out")
     return Market(
         market_id=market_id,
         venue=str(texts["venue"]),
@@ -681,6 +687,7 @@ class Mis:
         self._writers: dict[tuple[str, str], JournalWriter] = {}
         self._published = self._read_published()
         self._last_round: Json | None = None
+        self._last_error: str | None = None
         self._lock = threading.Lock()
         self.plan = self._saved_plan()
 
@@ -724,6 +731,13 @@ class Mis:
             for writer in self._writers.values():
                 writer.close()
             self._writers.clear()
+
+    def round_failed(self, error: BaseException) -> None:
+        """Record why a round raised, for `status`; the round thread carries on and the next
+        round reads again. A later success leaves the last error in place, because the market or
+        month it names is still the reason a reading is missing."""
+        with self._lock:
+            self._last_error = f"{type(error).__name__}: {error}"
 
     def _configure(self, arguments: Json) -> Json:
         current = self.plan
@@ -860,6 +874,7 @@ class Mis:
             markets.append(
                 {
                     "market_id": market.market_id,
+                    "source": market.source,
                     "readings": {
                         str(row.reading.card.pin): None if body is None else body["health"]
                         for row, body in zip(rows, bodies, strict=True)
@@ -875,6 +890,7 @@ class Mis:
             "holdout": facts.seal.fact(),
             "markets": markets,
             "last_round": self._last_round,
+            "last_error": self._last_error,
         }
 
     def _board(self, now: int) -> Json:

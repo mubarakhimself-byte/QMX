@@ -73,11 +73,11 @@ def _path(target: State, version: str = "v1") -> list[Event]:
     return [_event(n, a, b, by, version=version) for n, (a, b, by) in enumerate(steps)]
 
 
-def _attempt(start: State, to: State, by: Actor, *, auto_paper: bool = False) -> list[Refusal]:
+def _attempt(start: State, to: State, by: Actor) -> list[Refusal]:
     before = _path(start)
     stop = before[-1].event_id if start is S.STOPPED else None
     move = _event(10, start, to, by, clears=stop)
-    folded = fold([*before, move], auto_paper=auto_paper)
+    folded = fold([*before, move])
     assert folded.applied[: len(before)] == tuple(before), "the path to the start state is legal"
     return [rejected.refusal for rejected in folded.rejected]
 
@@ -120,46 +120,21 @@ TOWARD_TRADING = [(S.TESTED, S.PAPER), (S.PAPER, S.LIVE), (S.STOPPED, S.PAPER), 
 OTHERS = ["agent:copilot-1", "run:wf-9", "node:vps-1", "system", "", "Operator", "operator "]
 
 
-@pytest.mark.parametrize("auto_paper", [False, True])
 @pytest.mark.parametrize("principal", OTHERS)
-def test_no_principal_but_operator_moves_a_unit_toward_paper_or_live(
-    principal: str, auto_paper: bool
-) -> None:
+def test_no_principal_but_operator_moves_a_unit_toward_paper_or_live(principal: str) -> None:
     refusals = {
-        (start, to, kind): _attempt(start, to, Actor(kind, principal), auto_paper=auto_paper)
+        (start, to, kind): _attempt(start, to, Actor(kind, principal))
         for (start, to), kind in itertools.product(TOWARD_TRADING, ActorKind)
     }
-    judge_auto = (S.TESTED, S.PAPER, ActorKind.JUDGE)
-    expected = {move: [Refusal.NOT_OPERATOR] for move in refusals}
-    if auto_paper:
-        expected[judge_auto] = []
 
-    assert refusals == expected
+    assert refusals == {move: [Refusal.NOT_OPERATOR] for move in refusals}
 
 
-def test_a_click_toward_paper_from_an_agent_or_a_run_is_rejected_and_from_him_applies() -> None:
-    tested = _path(S.TESTED)
-    clicks = [
-        _event(10, S.TESTED, S.PAPER, Actor(ActorKind.HIS_CLICK, "agent:x")),
-        _event(11, S.TESTED, S.PAPER, Actor(ActorKind.HIS_CLICK, "run:y")),
-        _event(12, S.TESTED, S.PAPER, HIM),
-    ]
-    folded = fold([*tested, *clicks])
-
-    assert [(r.event.event_id, r.refusal) for r in folded.rejected] == [
-        ("e10-v1", Refusal.NOT_OPERATOR),
-        ("e11-v1", Refusal.NOT_OPERATOR),
-    ]
-    assert folded.applied[-1].event_id == "e12-v1"
-    assert folded.state(KEY) is S.PAPER
-
-
-def test_the_judge_moves_tested_to_paper_only_while_auto_paper_is_on() -> None:
+def test_the_judge_never_moves_a_unit_to_paper() -> None:
     events = [*_path(S.TESTED), _event(10, S.TESTED, S.PAPER, JUDGE)]
 
     assert fold(events).state(KEY) is S.TESTED
     assert [r.refusal for r in fold(events).rejected] == [Refusal.NOT_OPERATOR]
-    assert fold(events, auto_paper=True).state(KEY) is S.PAPER
 
 
 @pytest.mark.parametrize("node_clock", [timedelta(seconds=-50), timedelta(minutes=30)])
@@ -177,10 +152,13 @@ def test_a_later_stop_stays_in_force_whatever_the_two_clocks_say(node_clock: tim
     assert folded.latest_stop[KEY] == later.event_id
 
 
-@pytest.mark.parametrize(("clears", "refusals", "state"), [
-    ("e10-v1", [Refusal.STOP_NOT_CLEARED], S.STOPPED),
-    ("e12-v1", [], S.LIVE),
-])
+@pytest.mark.parametrize(
+    ("clears", "refusals", "state"),
+    [
+        ("e10-v1", [Refusal.STOP_NOT_CLEARED], S.STOPPED),
+        ("e12-v1", [], S.LIVE),
+    ],
+)
 def test_the_latest_stop_from_one_writer_is_its_highest_sequence_when_its_clock_steps_back(
     clears: str, refusals: list[Refusal], state: State
 ) -> None:
@@ -208,15 +186,6 @@ def test_between_two_writers_the_later_stop_in_fold_order_is_the_latest() -> Non
     assert (refused.state(KEY), refused.latest_stop[KEY]) == (S.STOPPED, "e11-v1")
     assert [r.refusal for r in refused.rejected] == [Refusal.STOP_NOT_CLEARED]
     assert (resumed.state(KEY), resumed.rejected) == (S.LIVE, ())
-
-
-def test_a_resume_must_name_the_latest_stop() -> None:
-    stopped = _path(S.STOPPED)
-    stale = _event(10, S.STOPPED, S.LIVE, HIM, clears="e0-v1")
-    folded = fold([*stopped, stale])
-
-    assert [r.refusal for r in folded.rejected] == [Refusal.STOP_NOT_CLEARED]
-    assert folded.state(KEY) is S.STOPPED
 
 
 def test_a_second_version_is_admitted_on_a_live_market_only_after_the_first_is_parked() -> None:

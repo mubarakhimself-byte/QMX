@@ -66,7 +66,7 @@ def proved(owner: Supervisor, definition_hash: str) -> None:
             state.append(
                 Evidence(
                     definition_hash=definition_hash,
-                    version="0.1.0",
+                    version=Definition.load(APP_FOLDER).manifest.version,
                     stage=cast(Stage, stage),
                     passed=True,
                     inputs={"fixture": True},

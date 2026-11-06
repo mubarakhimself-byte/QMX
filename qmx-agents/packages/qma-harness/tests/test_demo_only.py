@@ -149,9 +149,10 @@ def test_a_token_swapped_for_a_live_accounts_is_refused_at_the_next_launch(
     )
 
 
-def test_a_row_with_no_venue_is_never_checked(fake_url: str) -> None:
+def test_a_row_with_the_wired_credential_and_no_venue_is_refused(fake_url: str) -> None:
     plain = {"url": fake_url, "credential_ref": "qmx/ctrader-mcp"}
-    assert vet({"plain": plain}, LIVE) == ({}, {"plain": REMOTE_TOOLS})
+    note = "it could not be vetted (ValueError: a row with a stored credential names its venue)"
+    assert vet({"plain": plain}, LIVE) == ({"plain": note}, {})
 
 
 @pytest.mark.parametrize(

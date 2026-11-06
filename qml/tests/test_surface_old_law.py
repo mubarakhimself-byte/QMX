@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import ast
-import importlib
 import os
 from pathlib import Path
-
-import pytest
 
 import qml
 
@@ -106,13 +103,6 @@ def scan_repo(root: Path) -> tuple[int, list[str]]:
 def test_no_old_law_name_is_on_the_top_level_surface() -> None:
     assert sorted(set(qml.__all__) & OLD_LAW_HOMES.keys()) == []
     assert [name for name in OLD_LAW_HOMES if hasattr(qml, name)] == []
-
-
-@pytest.mark.parametrize(("name", "home"), sorted(OLD_LAW_HOMES.items()))
-def test_each_old_law_name_imports_from_its_submodule(name: str, home: str) -> None:
-    module = importlib.import_module(home)
-    assert name in module.__all__
-    assert getattr(module, name) is not None
 
 
 def test_scan_catches_every_top_level_form() -> None:

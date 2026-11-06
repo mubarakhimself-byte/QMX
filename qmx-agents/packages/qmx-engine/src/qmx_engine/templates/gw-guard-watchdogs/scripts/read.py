@@ -3,8 +3,8 @@ no node anything.
 
 Inputs, all optional, each a card setting with its default in `definition.json`: `nodes` (machine
 names; every node seen by default), `here` (this machine's place name, `pc` on This PC),
-`lookback_h` (how far back kill rises, protection alarms and heals count), `stand_down_days` (how
-far back a stand-down still held is found), `heartbeat_stale_after_s` and `quote_chars` (how much
+`lookback_h` (how far back protection alarms and heals count), `stand_down_days` (how far back a
+stand-down or a kill still held is found), `heartbeat_stale_after_s` and `quote_chars` (how much
 of a node's outside text is quoted before an ellipsis).
 
 The machines watched are every node in `nodes`, every server node whose tail file This PC keeps,
@@ -20,10 +20,14 @@ It reads three things, each a read:
 - the heartbeat log's newest row per subject: the trading node app's row for a node on this
   machine, and the Hub's row of the server's host for a node elsewhere.
 
-A node reads Alarm while a stand-down that waits for his resume is held, when the kill switch rose
-or the venue did not hold a stop inside the lookback, and when its heartbeat is late. It reads
-Watch while a stand-down that clears itself is held (a stale feed, the clock band, the disk guard,
-a venue not ready) and when its runtime healed inside the lookback. Otherwise it reads Well.
+A node reads Alarm while a stand-down that waits for his resume is held, while a kill is held, when
+the venue did not hold a stop inside the lookback, and when its heartbeat is late. It reads Watch
+while a stand-down that clears itself is held (a stale feed, the clock band, the disk guard, a
+venue not ready) and when its runtime healed inside the lookback. Otherwise it reads Well.
+
+The newest `kill_level` row with a level decides its scope, and a GREEN row also clears every scope
+its `cleared` names, because a resume at `all` clears kills held at other scopes. A row with no
+level decides nothing.
 
 Every time printed is a row's own, never an age from the run's clock, so the output stays the same
 while a node's health does, and the monitor this script feeds lands a note only when it changes.
@@ -51,7 +55,8 @@ CLEARS = {
     "his_resume": "waits for your resume",
     "his_click": "waits for your click",
 }
-LOOKBACK_KINDS = ("kill_level", "protection", "node_lifecycle")
+HELD_KINDS = ("stand_down", "kill_level")
+LOOKBACK_KINDS = ("protection", "node_lifecycle")
 
 asked = door.settings(json.load(sys.stdin).get("in"))
 home, now, here = door.home(), door.now(), str(asked["here"])
@@ -116,7 +121,9 @@ def said(text):
 
 
 try:
-    rows = journalled("stand_down", held_back)
+    rows = []
+    for kind in HELD_KINDS:
+        rows += journalled(kind, held_back)
     for kind in LOOKBACK_KINDS:
         rows += journalled(kind, lookback)
 except ValueError as refused:
@@ -125,9 +132,9 @@ except ValueError as refused:
 seen = {r["record_id"] for r in rows if r["record_id"]}
 tail_rows, tail_nodes = tailed()
 for found in tail_rows:
-    reach = held_back if found["kind"] == "stand_down" else lookback
+    reach = held_back if found["kind"] in HELD_KINDS else lookback
     fresh = found["record_id"] not in seen and instant(found["at"]) >= now - reach
-    if fresh and found["kind"] in ("stand_down", *LOOKBACK_KINDS):
+    if fresh and found["kind"] in (*HELD_KINDS, *LOOKBACK_KINDS):
         rows.append(found)
         seen.add(found["record_id"])
 rows.sort(key=lambda r: (r["at"], str(r["record_id"])))
@@ -171,6 +178,31 @@ def stand_downs(machine):
     return causes
 
 
+def kills(machine):
+    held = {}
+    for found in rows:
+        body = found["body"]
+        level = body.get("level")
+        if found["machine"] != machine or found["kind"] != "kill_level" or level is None:
+            continue
+        if level == "GREEN":
+            for scope in (body.get("scope"), *(body.get("cleared") or [])):
+                held.pop(scope, None)
+        else:
+            held[body.get("scope")] = found
+    return [
+        {
+            "word": "alarm",
+            "what": "kill_level",
+            "level": found["body"].get("level"),
+            "scope": scope,
+            "at": found["at"],
+            "positions_closed": found["body"].get("positions_closed", 0),
+        }
+        for scope, found in held.items()
+    ]
+
+
 def events(machine):
     causes = []
     runtime = [
@@ -185,18 +217,7 @@ def events(machine):
         body = found["body"]
         if found["machine"] != machine or instant(found["at"]) < now - lookback:
             continue
-        if found["kind"] == "kill_level" and body.get("level") not in (None, "GREEN"):
-            causes.append(
-                {
-                    "word": "alarm",
-                    "what": "kill_level",
-                    "level": body.get("level"),
-                    "scope": body.get("scope"),
-                    "at": found["at"],
-                    "positions_closed": body.get("positions_closed", 0),
-                }
-            )
-        elif found["kind"] == "protection":
+        if found["kind"] == "protection":
             causes.append(
                 {
                     "word": "alarm",
@@ -274,7 +295,7 @@ def line(cause):
 nodes = []
 for machine in machines:
     beat, late = heartbeat(machine)
-    causes = stand_downs(machine) + events(machine) + ([late] if late else [])
+    causes = stand_downs(machine) + kills(machine) + events(machine) + ([late] if late else [])
     word = max((c["word"] for c in causes), key=WORDS.index, default="well")
     nodes.append({"node": machine, "word": word, "heartbeat": beat, "causes": causes})
 

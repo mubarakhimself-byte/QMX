@@ -120,13 +120,19 @@ def test_a_deploy_the_node_took_is_never_shown_refused(node: Node) -> None:
     assert rows(link, "deployments") == [{"deployment_id": "dep-1", "state": "trading"}]
 
 
-def test_a_deploy_filed_refused_that_the_node_holds_reads_as_the_node_has_it(node: Node) -> None:
-    """A timed out ask settles as refused though the node may have kept the deployment."""
+@pytest.mark.parametrize("code", ["tool_timeout", "tool_failed"])
+def test_a_deploy_the_supervisor_could_not_answer_stays_waiting_and_reads_as_the_node_has_it(
+    node: Node, code: str
+) -> None:
+    """An ask the supervisor could not answer is no answer, so the change keeps waiting.
+    `tool_timeout` is its own stuck loop and `tool_failed` its 20 s MCP ask; the node may have
+    kept the deployment either way."""
     link = link_of(node)
-    node.deploy_answer = {"ok": False, "code": "tool_timeout", "message": "did not complete"}
-    link.change("trading-node", "deploy", DEPLOY, principal="operator", op_id="dep-1")
+    node.deploy_answer = {"ok": False, "code": code, "message": "did not complete"}
+    change = link.change("trading-node", "deploy", DEPLOY, principal="operator", op_id="dep-1")
     node.rows = [{"deployment_id": "dep-1", "state": "trading"}]
 
+    assert change.state == "waiting"
     assert rows(link, "deployments") == [{"deployment_id": "dep-1", "state": "trading"}]
 
 

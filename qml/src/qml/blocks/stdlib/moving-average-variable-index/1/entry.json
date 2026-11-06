@@ -88,5 +88,14 @@
   "golden": {
     "reference": "MetaTrader help's VIDYA formula, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "cmo_period": "9",
+      "ema_period": "12"
+    },
+    "bars": 330,
+    "tolerance": "1e-9",
+    "scales_by": "ema_period"
   }
 }

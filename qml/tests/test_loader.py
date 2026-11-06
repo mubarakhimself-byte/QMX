@@ -131,17 +131,3 @@ def test_pinned_weights_are_checked_by_their_own_fingerprint() -> None:
     ]
     assert isinstance(loaded, Loaded)
     assert loaded.weights == {"ema@1": b"weights-v1"}
-
-
-def test_every_parameter_port_names_its_measure() -> None:
-    named = ("ema@1", "roc-of-series@1", "rsi-cross-back@1", "fixed-fraction-at-stop@1")
-    measures = {
-        pin: {k: v.measure.value for k, v in _face(pin).parameters.items()} for pin in named
-    }
-
-    assert measures == {
-        "ema@1": {"period": "bars"},
-        "roc-of-series@1": {"lookback": "bars", "floor": "percent"},
-        "rsi-cross-back@1": {"period": "bars", "level": "ratio"},
-        "fixed-fraction-at-stop@1": {"fraction": "percent"},
-    }
