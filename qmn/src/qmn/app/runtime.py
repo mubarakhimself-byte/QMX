@@ -48,6 +48,7 @@ import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
@@ -169,6 +170,12 @@ __all__ = [
 
 RECONCILE_TICK_S: Final = 0.2
 """`[node] reconcile_tick_ms`, starting at 200 (NODE.md section 9)."""
+HOST_FACTS: Final = Path("road") / "host" / "facts.json"
+"""The host's facts in the node's volume (C-05c, AD-307): the machine, the trading profile, the
+holdout, and the newest clock probe."""
+CLOCK_FACT_STALE_NS: Final = 180_000_000_000
+"""`[node] clock_fact_stale_s`, starting at 180 s: three missed host probes, after which the
+clock's offset is unproven and reads None."""
 PROTECT_CONFIRM_NS: Final = 2_000_000_000
 """`[node] protect_confirm_ms`, starting at 2,000: how long one try waits for the venue to show
 the stop. A labelled placeholder for the risk session."""
@@ -2107,6 +2114,7 @@ class Runtime:
             clock_ns=clock_ns,
             free_bytes=lambda: shutil.disk_usage(context.data).free,
             on_alarm=self.alarms.append,
+            clock_offset_ns=lambda: clock_offset(context.data.parent / HOST_FACTS, clock_ns()),
             market_open=market_hours(context.store),
         )
         self._paper_journal: JournalWriter | None = None
@@ -3088,6 +3096,36 @@ class Runtime:
             if self._shown.get(key) != text:
                 self.context.store.observe(key, json.loads(text), self.clock_ns())
                 self._shown[key] = text
+
+
+def clock_offset(facts: Path, now_ns: int) -> int | None:
+    """The offset the host last proved, in nanoseconds, from the facts in the node's volume.
+
+    None when no probe answered, the file cannot be read, or the reading is older than
+    `CLOCK_FACT_STALE_NS`: an old reading is not acted on, so a host that stops probing leaves the
+    clock unproven rather than holding a stale offset."""
+    try:
+        document: object = json.loads(facts.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(document, Mapping):
+        return None
+    clock = cast("Mapping[str, object]", document).get("clock")
+    if not isinstance(clock, Mapping):
+        return None
+    named = cast("Mapping[str, object]", clock)
+    offset, probed = named.get("offset_ms"), named.get("probed_at")
+    if not isinstance(offset, int) or isinstance(offset, bool) or not isinstance(probed, str):
+        return None
+    try:
+        at = datetime.fromisoformat(probed)
+    except ValueError:
+        return None
+    if at.tzinfo is None:
+        return None
+    if now_ns - int(at.timestamp() * 1e9) > CLOCK_FACT_STALE_NS:
+        return None
+    return offset * 1_000_000
 
 
 def _why(refusal: TypedRefusal) -> str:
