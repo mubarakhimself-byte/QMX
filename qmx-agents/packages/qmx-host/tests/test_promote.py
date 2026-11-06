@@ -507,7 +507,8 @@ def test_a_withdraw_that_times_out_keeps_the_park_and_a_second_click_finishes_it
     rig.node.withdraw_times_out = False
     again = rig.click(op_id="click-park-2", to="parked", node=None, account=None)
 
-    assert (timed_out[0], timed_out[1]["code"]) == (409, "node_not_ready")
+    assert (timed_out[0], timed_out[1].get("code")) == (200, None), timed_out
+    assert timed_out[1]["value"]["node_answer"] == "queued"
     assert timed_out[1]["value"]["lifecycle_event_id"] == again[1]["value"]["lifecycle_event_id"]
     assert (again[0], again[1]["value"]["node_answer"]) == (200, "accepted")
     assert rig.node.withdraws() == [deployment, deployment]
@@ -579,7 +580,7 @@ def test_a_record_that_fails_after_the_deploy_names_what_a_timed_out_withdraw_le
     )
     assert answer["message"] == (
         "storage: the lifecycle row was not written: disk full, and the node did not withdraw"
-        f" deployment {held}: tool_timeout"
+        f" deployment {held}: the withdraw is queued"
     )
     assert answer["next_step"] == f"Kill deployment {held} on the node's card."
     assert (len(rig.moves()), rig.node.withdraws()) == (1, [held])
