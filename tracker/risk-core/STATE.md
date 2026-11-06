@@ -4,7 +4,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
-**Latest (6 Nov): resumed; read items 41-44 first. Fable funnel running; then the Opus reviewer, then architecture versions.**
+**Latest (6 Nov): resumed; read items 41-44 first. Architecture arena running; then cross-judge, pick, graft, verify; then the plain-words explanation.**
 
 1. Grounding DONE 2026-11-01: G1-G5 in `grounding/` (G5 is the timeline), sims in `grounding/sims/`. Next: find the clean starting point with him, then design by scenarios.
 2. Grounding files land in `grounding/`:
@@ -314,6 +314,19 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - Main cause: the evidence ceiling under a baseline already built to survive at zero edge. About 39 cut-only factors, against April's 15.
     - **One fix round is running with the Fable judge**, on the lead's calls: name the core; take the ceiling out from under the baseline; a portfolio day stop in the first increment; house money stays as a real pair; self-configuring is not silently cut (applier modes against refresh-at-anchors is a fork); real forks replace shapes A, B and C; test the core with fat tails, gaps, lot rounding and correlated units.
     - Next: architecture versions via the arena.
+
+48. **Funnel fix round done and committed.**
+    - Core: twelve parts, 202 variables, 25 to 35 PRs. Hybrid fates: 232 core (60 are X4 scenarios), 70 shadow, 201 later with plug points, 7 dropped. 15 binding cut-only factors, equal to April's count but each with its own job.
+    - The e-meter is out from under the baseline. QMB's holdout sets the start level.
+    - The portfolio day stop is in the first increment. The house-money pair is in the core.
+    - Harder sim (`funnel/working/review/core_sim.py`): core runs a healthy unit at 0.89-0.92 of baseline, a weak one at 0.84-0.89, 0% floor touches. Drift brakes are slower with ten units (18-43% lose half the cushion at 1.5x costs). F1 reopened: the 55% scalper exists only if the cut catches few winners; the two-arm trial is the harness's first job.
+    - Questions for him: Q1-Q8 in `funnel/FUNNEL.md` section 6, each with a default. They go with the plain-words explanation after the fold.
+    **Architecture arena started** (`architecture/ARENA-BRIEF.md`, skills bmad-architecture, codebase-design, domain-modeling, checked by transcript afterwards):
+    - candidate 1 (Fable): guard plus learner and applier;
+    - candidate 2 (Opus): guard plus refresh at anchors;
+    - candidate 3 (Fable): halt slots in the unit.
+    Hidden rubric for the pick: expresses the 12 parts without workaround; extension by row and plug, no rework; self-configuring answer; performance (no re-stacking, healthy unit above the choke budget); fit to code and build size; simplicity; survival and hard lines. Then cross-judge (Opus), pick, graft, verify.
+    **Ledger v1 agent running** → `ledger/v1/`.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 

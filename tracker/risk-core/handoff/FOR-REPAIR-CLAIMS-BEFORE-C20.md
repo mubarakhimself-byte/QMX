@@ -11,6 +11,7 @@ The audit's call graph reads these as having no callers, so the deletion sweep w
 - `sqs_baseline_producer.py`: the SQS baseline. It must move before the old gate goes.
 - `labelers.py`: its SQS rule text.
 - `qmn/replay/port.py`: its SQS replay rule.
+- `qmn/protection/dispatch.py`, the `control_window` module in `qmf-risk`, and `registry_catalog.py`: named by the funnel's news and SQS decisions.
 
 The old SQS gate's rule text (`qmn/src/qmn/host/decision_root.py:493-510`) is already copied verbatim into `grounding/G12-audit-and-repair-for-risk.md` section 2, so C-20 can still remove that gate when its time comes.
 
