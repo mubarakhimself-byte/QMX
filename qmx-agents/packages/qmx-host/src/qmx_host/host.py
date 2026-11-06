@@ -739,6 +739,8 @@ class HostStore(Store):
     """On the server only: which store is primary right now."""
     lifecycle: LifecycleWriter | None = None
     """This PC's lifecycle writer, which records the judge's move when a verdict lands."""
+    closing: bool = False
+    """Set once the store begins to close, so the status pass's thread stops and says nothing."""
 
     def put(
         self, who: Principal, draft: Draft, *, on: str, expected_head: ObjectId | None
@@ -757,9 +759,13 @@ class HostStore(Store):
         return merged
 
     def close(self) -> None:
-        if self.lifecycle is not None:
-            self.lifecycle.close()
-        super().close()
+        """Under the mutex, because closing the one connection mid-statement on another thread
+        kills the process. No block's code runs under it, so a stuck pass does not hold this up."""
+        with self._mutex:
+            self.closing = True
+            if self.lifecycle is not None:
+                self.lifecycle.close()
+            super().close()
 
     def _landed(self, who: Principal, item: str, ref: str, object_id: ObjectId) -> None:
         """What the host owes once a save has committed (a checker runs inside the put and cannot
@@ -903,20 +909,23 @@ def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -
         return []
 
 
-def land_entry_status(store: Store, item: str) -> None:
+def land_entry_status(store: HostStore, item: str) -> None:
     """One saved entry's status. A status that fails to compute or write is printed: the save has
     committed and stands, and the next start's pass tries again. An entry refused is named too.
-    It runs the entry's own code, and `compute_status` keeps anything that code raises."""
+    It runs the entry's own code, and `compute_status` keeps anything that code raises. Nothing is
+    printed once the store is closing, because `start` shows the log's last line as the reason."""
     try:
         written = write_entry_status(store, item)
     except Exception as refused:
-        print(
-            f"library: the status of {item} was not written: {type(refused).__name__}: {refused}",
-            file=sys.stderr,
-        )
+        if not store.closing:
+            print(
+                f"library: the status of {item} was not written: "
+                f"{type(refused).__name__}: {refused}",
+                file=sys.stderr,
+            )
         return
     for _, _, computed in written:
-        if computed.status is None:
+        if computed.status is None and not store.closing:
             print(
                 f"library: the status of {item} is refused: {computed.problems[0].message}",
                 file=sys.stderr,
@@ -1016,7 +1025,7 @@ def land_dictionary_wave(store: Store) -> None:
         )
 
 
-def land_dictionary_statuses(store: Store) -> threading.Thread:
+def land_dictionary_statuses(store: HostStore) -> threading.Thread:
     """Every Library entry's status at each PC start, because a store an older checker wrote or a
     save whose status failed reads true only after this. A head already true writes nothing. One
     entry at a time, so one that raises names itself and costs only its own status.
@@ -1024,16 +1033,21 @@ def land_dictionary_statuses(store: Store) -> threading.Thread:
     On a daemon thread, and the start does not wait for it, because a thread cannot be stopped and
     an entry's code can loop forever. Such an entry costs this thread, a core, and the status of
     every item sorted after it, this start and each next one. Nothing reads a status during a
-    start, and until the pass reaches an entry its page reads the status last written."""
+    start, and until the pass reaches an entry its page reads the status last written. It stops at
+    the next entry once the store is closing, and the next start's pass does the rest."""
 
     def run() -> None:
         try:
             for item in entry_items(store):
+                if store.closing:
+                    return
                 land_entry_status(store, item)
-        except (LibraryRefused, OSError, ValueError) as refused:
-            print(
-                f"library: the dictionary's statuses were not written: {refused}", file=sys.stderr
-            )
+        except (LibraryRefused, OSError, ValueError, sqlite3.Error) as refused:
+            if not store.closing:
+                print(
+                    f"library: the dictionary's statuses were not written: {refused}",
+                    file=sys.stderr,
+                )
 
     running = threading.Thread(target=run, name="qmx-entry-statuses", daemon=True)
     running.start()

@@ -37,6 +37,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_host.first_start import PORT_SEED, WAVE_SEED, seed_rows
 from qmx_host.host import (
+    HostStore,
     land_dictionary_statuses,
     land_dictionary_wave,
     land_first_unit,
@@ -105,7 +106,7 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
     ]
     pages = blocks(control, tmp_path)["blocks_find"](words="", limit=1000)["rows"]
     log = store.annotation_log.read_bytes()
-    land_dictionary_statuses(store).join()
+    land_dictionary_statuses(cast(HostStore, store)).join()
 
     assert [v.annotations.get("status") is None for v in before] == [False] * 343
     assert sum(c["published"] for c in counts) == 343
@@ -123,7 +124,7 @@ def test_a_start_gives_a_status_to_a_page_an_older_host_saved(control: ControlSe
     )
 
     unmarked = store.get(OPERATOR, older.object_id).annotations.get("status")
-    land_dictionary_statuses(store).join()
+    land_dictionary_statuses(cast(HostStore, store)).join()
 
     assert unmarked is None
     assert (
@@ -336,7 +337,7 @@ def test_an_endless_block_costs_a_stuck_thread_and_not_the_start(tmp_path: Path)
         check=False,
     )
 
-    assert (done.returncode, done.stdout.splitlines()) == (
+    assert (done.returncode, done.stdout.splitlines(), done.stderr) == (
         0,
         [
             "the start went on",
@@ -346,7 +347,56 @@ def test_an_endless_block_costs_a_stuck_thread_and_not_the_start(tmp_path: Path)
             "d-saved-now named",
             "the store closed",
         ],
+        "",
     )
+
+
+A_LEAVING = """
+import sys
+import time
+from pathlib import Path
+
+from qmx_host.host import land_dictionary_statuses, open_store, register_checkers
+
+root = Path(sys.argv[1])
+with open_store(root, root / "library", serving=False, floor=0) as store:
+    register_checkers(store)
+    running = land_dictionary_statuses(store)
+    time.sleep(float(sys.argv[2]))
+running.join(60)
+print("the pass goes on" if running.is_alive() else "the pass stopped")
+"""
+
+
+def test_leaving_the_store_under_the_status_pass_says_nothing(tmp_path: Path) -> None:
+    """`serve` leaves its store on a refused start and on a normal stop, with the pass maybe still
+    on it. Its own process, because that close used to end the process with an access violation."""
+
+    def leaving(root: Path, after_seconds: float) -> tuple[int, str, str]:
+        done = subprocess.run(
+            [sys.executable, "-c", A_LEAVING, str(root), str(after_seconds)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        return done.returncode, done.stdout, done.stderr
+
+    clean = (0, "the pass stopped\n", "")
+    full, one_slow = tmp_path / "full", tmp_path / "one-slow"
+    with open_store(full, full / "library", serving=False, floor=0) as store:
+        register_checkers(store)
+        land_ported_dictionary(store)
+        land_dictionary_wave(store)
+    with open_store(one_slow, one_slow / "library", serving=False, floor=0) as store:
+        register_checkers(store)
+        slow = a_block("slow", "for _ in range(6_000_000):\n            pass\n        return None")
+        Store.put(store, OPERATOR, slow, on=drafts_ref("slow"), expected_head=None)
+
+    between_entries = [leaving(full, seconds) for seconds in (0.0, 0.05, 0.2)]
+    inside_a_block = leaving(one_slow, 1.0)
+
+    assert [*between_entries, inside_a_block] == [clean] * 4
 
 
 def test_a_save_beside_a_thread_reading_the_store_answers(tmp_path: Path) -> None:
