@@ -10,11 +10,18 @@ Every write path B15 adds runs once against one real Library: the harvester's ro
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
-from qmf.core import is_refusal
-from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
-from qmf.data.journal_writer import JournalWriter, WriterScope
+from qmb.execution.fill import FillKind
+from qmb.host.unit_handler import UnitTrade
+from qmb.results.journal import RunJournal
+from qmf.core import Instant, is_refusal
+from qmf.data.journal_envelope import JournalWorld
+from qml.compile import CompiledUnit
+from qml.unit.model import Side
 from qmx_host.market_data import MarketDoor
 from qmx_host.records import Cadence, Harvester, Projection, Records, append_roots
 from qmx_tools.functions import domain_functions
@@ -22,6 +29,18 @@ from qmx_tools.service import DomainContext
 
 _REAL = datetime.now(UTC)  # ambient-scan: allow (the store freezes by the real month)
 OPENED = datetime(_REAL.year, _REAL.month, 1, tzinfo=UTC)
+COMPILED = cast(
+    "CompiledUnit",
+    SimpleNamespace(
+        unit=SimpleNamespace(unit_id="dummy"),
+        document_fingerprint=SimpleNamespace(value="v1"),
+        plan=SimpleNamespace(
+            markets=[(SimpleNamespace(market_id="fx.eurusd"), SimpleNamespace(venue="conformance"))],
+            sides=[],
+        ),
+    ),
+)
+"""The four facts the real writer reads of a compiled unit."""
 
 
 def test_the_journal_write_paths_land_trades_paper_runs_notes_and_results_only(
@@ -29,30 +48,37 @@ def test_the_journal_write_paths_land_trades_paper_runs_notes_and_results_only(
 ) -> None:
     home = tmp_path / "QMX"
     root = home / "apps" / "practice-node" / "data" / "journal"
-    closed = OPENED + timedelta(hours=9)
-    scope = WriterScope(JournalStream.UNIT, "dummy", JournalWorld.PAPER, "this-pc", "node", "b")
-    opened = JournalWriter.open(
-        root, scope, clock=lambda: int(closed.timestamp()) * 1_000_000_000, boot_epoch_id="b1"
-    )
-    assert not is_refusal(opened)
-    body: dict[str, object] = {
-        "closing_deal_id": "t1.close",
-        "trade_id": "t1",
-        "side": "short",
-        "opened_at": int(OPENED.timestamp()) * 1_000_000_000,
-        "closed_at": int(closed.timestamp()) * 1_000_000_000,
-        "money": "20.00",
-        "r": "1.0",
-    }
-    facts = RowFacts(
-        ts_recv=0,
-        clock_ok=True,
-        unit_id="dummy",
-        market_id="fx.eurusd",
-        venue="conformance",
+    closed = Instant((int(OPENED.timestamp()) + 9 * 3_600) * 1_000_000_000)
+    opened = RunJournal.open_live(
+        root,
+        COMPILED,
+        scope_id="dep-1",
+        world=JournalWorld.PAPER,
+        machine="this-pc",
+        role="node",
+        build="b",
+        boot_epoch_id="b1",
         account="demo-1",
     )
-    assert not is_refusal(opened.value.append("trade", body, facts))
+    assert not is_refusal(opened)
+    opened.value.at(closed)
+    opened.value.append(
+        UnitTrade(
+            "t1",
+            "fx.eurusd",
+            Side.SHORT,
+            Instant(int(OPENED.timestamp()) * 1_000_000_000),
+            closed,
+            Decimal("1.08300"),
+            Decimal("1.08000"),
+            Decimal("1.08600"),
+            Decimal("0.10"),
+            FillKind.CLOSE,
+            Decimal("20.00"),
+            Decimal("1.0"),
+        )
+    )
+    assert opened.value.write_failure is None
     opened.value.close()
     context = DomainContext(root=home)
     store = context.library.store

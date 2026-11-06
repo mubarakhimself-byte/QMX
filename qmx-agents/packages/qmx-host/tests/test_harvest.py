@@ -10,13 +10,21 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
-from qmf.core import fingerprint_bytes, is_refusal
+from qmb.execution.fill import FillKind
+from qmb.host.unit_handler import UnitTrade
+from qmb.results.journal import RunJournal
+from qmf.core import Instant, fingerprint_bytes, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmf.data.series import SeriesKey, SeriesStore
+from qml.compile import CompiledUnit
+from qml.unit.model import Side
 from qmx_engine.ledger import redact
 from qmx_library.principal import MAIN, Principal
 from qmx_library.store import Store
@@ -30,6 +38,18 @@ CLOSED_MONTH = (OPEN_MONTH - timedelta(days=40)).replace(day=1)
 NOW = OPEN_MONTH + timedelta(days=10)
 MACHINE = "this-pc"
 OPERATOR = Principal("operator")
+COMPILED = cast(
+    "CompiledUnit",
+    SimpleNamespace(
+        unit=SimpleNamespace(unit_id="dummy"),
+        document_fingerprint=SimpleNamespace(value="v1"),
+        plan=SimpleNamespace(
+            markets=[(SimpleNamespace(market_id="fx.eurusd"), SimpleNamespace(venue="conformance"))],
+            sides=[],
+        ),
+    ),
+)
+"""The four facts the real writer reads of a compiled unit."""
 
 
 @dataclass
@@ -53,6 +73,7 @@ class Volume:
     unit: JournalWriter
     market: JournalWriter
     readings: JournalWriter
+    journal: RunJournal
     clock: Clock
     bars: int = 0
     ticks: int = 0
@@ -79,29 +100,44 @@ class Volume:
         )
         assert not is_refusal(self.unit.append("signal", body, facts))
 
-    def trade(self, trade_id: str, opened: datetime, closed: datetime, **extra: str) -> None:
+    def trade(
+        self, trade_id: str, opened: datetime, closed: datetime, *, r: str, money: str = "0.00"
+    ) -> None:
         self.clock.at(closed)
+        self.journal.at(Instant(self.clock.ns))
+        self.journal.append(
+            UnitTrade(
+                trade_id,
+                "fx.eurusd",
+                Side.LONG,
+                Instant(int(opened.timestamp()) * 1_000_000_000),
+                Instant(self.clock.ns),
+                Decimal("1.08000"),
+                Decimal("1.08300"),
+                Decimal("1.07900"),
+                Decimal("0.10"),
+                FillKind.CLOSE,
+                Decimal(money),
+                Decimal(r),
+            )
+        )
+        assert self.journal.write_failure is None
+
+    def trade_with_no_r(self, trade_id: str, opened: datetime, closed: datetime, money: str) -> None:
+        """The real writer always states R, so this row is the test's own, for the reader's
+        `r_missing` branch. Its account and envelope are the real writer's facts."""
+        self.clock.at(closed)
+        self.journal.at(Instant(self.clock.ns))
         body = {
             "closing_deal_id": f"{trade_id}.close",
             "trade_id": trade_id,
             "side": "long",
             "opened_at": int(opened.timestamp()) * 1_000_000_000,
             "closed_at": self.clock.ns,
-            "entry_price": "1.08000",
-            "exit_price": "1.08300",
-            "quantity": "0.10",
-            **extra,
+            "money": money,
         }
-        facts = RowFacts(
-            ts_recv=self.clock.ns,
-            clock_ok=True,
-            unit_id="dummy",
-            unit_version="v1",
-            market_id="fx.eurusd",
-            venue="conformance",
-            account="demo-1",
-        )
-        assert not is_refusal(self.unit.append("trade", body, facts))
+        written = self.journal._writer.append("trade", body, self.journal._facts("fx.eurusd"))
+        assert not is_refusal(written)
 
     def add_bars(self, count: int) -> None:
         for _ in range(count):
@@ -138,16 +174,30 @@ def volume(tmp_path: Path) -> Iterator[Volume]:
     root = home / "apps" / "practice-node" / "data" / "journal"
     clock = Clock(0)
     clock.at(CLOSED_MONTH)
+    opened = RunJournal.open_live(
+        root,
+        COMPILED,
+        scope_id="dep-1",
+        world=JournalWorld.PAPER,
+        machine=MACHINE,
+        role="node",
+        build="test-build",
+        boot_epoch_id="boot1",
+        account="demo-1",
+    )
+    assert not is_refusal(opened)
     made = Volume(
         home,
         writer(root, JournalStream.UNIT, "dummy", clock),
         writer(root, JournalStream.MARKET, "fx.eurusd", clock),
         writer(root, JournalStream.READINGS, "node.fx.eurusd", clock),
+        opened.value,
         clock,
     )
     yield made
     for journal in (made.unit, made.market, made.readings):
         journal.close()
+    made.journal.close()
 
 
 def harvester(home: Path) -> Harvester:
@@ -255,7 +305,7 @@ def test_a_reprojected_trade_lands_nothing_new_and_one_without_initial_risk_says
 ) -> None:
     closed = OPEN_MONTH + timedelta(hours=9)
     volume.trade("t1", OPEN_MONTH, closed, r="1.5", money="53.30")
-    volume.trade("t2", OPEN_MONTH, closed, money="-12.00")
+    volume.trade_with_no_r("t2", OPEN_MONTH, closed, "-12.00")
     with Store.open(tmp_path / "library", redactor=redact) as store:
         job = Records(
             harvester(volume.home),
