@@ -1093,6 +1093,8 @@ def server_config(
     venue, ref = row.get("venue"), row.get("credential_ref") or None
     if venue is not None and venue not in VENUES:
         raise ValueError(f"venue {venue!r} is not one QMX checks ({', '.join(sorted(VENUES))})")
+    if ref is not None and venue is None:
+        raise ValueError("a row with a stored credential names its venue")
     if ref is not None and ref not in WIRED_CREDENTIALS:
         raise ValueError("servers that need a stored credential are not wired yet")
     command, url = row.get("command"), row.get("url")
