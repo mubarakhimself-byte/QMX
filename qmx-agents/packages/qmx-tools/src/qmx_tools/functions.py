@@ -192,18 +192,24 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         study: str | None = None,
         compiled_fp: str | None = None,
         seed: int | None = None,
-        motion: Literal["on", "off"] = "on",
+        motion: Literal["on", "off", "both"] = "on",
         allow_gaps: bool | None = None,
         source: str | None = None,
+        cost_profile: str | None = None,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
         """Backtest a unit on QMB over `window` (`{"start": "2025-03-01", "end": "2025-04-01"}`)
         and land its result in the Library. Answers the run id, and the result id when it
-        finished within the wait; otherwise read it later with backtest_status. `markets` narrows
-        it to some of the unit's markets. It reads the market store's months under `source`, the
-        study's when left out, else `dukascopy`, and a missing month is refused by name before
-        anything starts. A hole in the bars longer than `[qmb] gap_bars_refuse` fails the run
-        unless `allow_gaps` is true; left out, the study's `allow_gaps` decides."""
+        finished within the wait. A unit's first run on a market answers `checking` with its
+        behaviour check's run id; backtest_status on that id names the run once it opens.
+        `markets` narrows it to some of the unit's markets. It reads the market store's months
+        under `source`, the study's when left out, else `dukascopy`, and a missing month is
+        refused by name before anything starts. A hole in the bars longer than
+        `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true; left out, the study's
+        `allow_gaps` decides. `motion` both runs the unit with its calibrated numbers moving and
+        held, and reports both. `cost_profile` pins a library_save of kind `cost-profile`,
+        `{"costs": {market: qmx.qmb.cost-profile/1}, "funding": {market: "timestamp,rate" CSV}}`:
+        net money pays it and R does not, and the study's `cost_rule` beats it."""
         asked = {
             "unit": unit,
             "window": window,
@@ -214,12 +220,14 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "motion": motion,
             "allow_gaps": allow_gaps,
             "source": source,
+            "cost_profile": cost_profile,
         }
         request = {name: value for name, value in asked.items() if value is not None}
         return ctx.backtest(request, response_format)
 
     def backtest_status(run_id: str, response_format: ResponseFormat = "concise") -> dict[str, Any]:
-        """Read a run's state from its try rows: running, landed or failed, and its result id."""
+        """Read a run's state from its try rows: running, landed or failed, its result id, and why
+        it failed. A behaviour check also names under `run` the run it went before, once open."""
         store = ctx.library.store
         opened = store.head(try_item(run_id, "opened"), MAIN)
         if opened is None:
@@ -228,6 +236,10 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         closed = store.head(try_item(run_id, "landed"), MAIN)
         last = None if closed is None else store.get(OPERATOR, closed[0]).fields
         links = cast("list[str]", (last or {}).get("links") or [])
+        result_id = links[1] if len(links) > 1 else None
+        landed = {} if result_id is None else store.get(OPERATOR, result_id).fields
+        behaviour = cast("dict[str, Any]", landed.get("behaviour") or {})
+        reason = landed.get("reason") or behaviour.get("reason")
         return ctx.output(
             {
                 "run_id": run_id,
@@ -236,7 +248,9 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 "tester": first.get("tester"),
                 "principal": first.get("principal"),
                 "place": first.get("place"),
-                "result_id": links[1] if len(links) > 1 else None,
+                "result_id": result_id,
+                **({"reason": reason} if reason else {}),
+                **({"run": ctx.run_after_check(first)} if first.get("kind") == "check" else {}),
             },
             "status",
             response_format,
@@ -352,7 +366,12 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 versions={"checker": f"qml {importlib.metadata.version('qml')}"},
             )
             landed = land_judgement(
-                _JudgeLibrary(store), verdict, results=judged, spec=spec, writer=str(OPERATOR)
+                _JudgeLibrary(store),
+                verdict,
+                results=judged,
+                spec=spec,
+                writer=str(OPERATOR),
+                placeholders=tuple(dict.fromkeys(p for r in judged for p in r.placeholders)),
             )
         except JudgeRefused as refused:
             raise ValueError("; ".join(refused.problems)) from refused
