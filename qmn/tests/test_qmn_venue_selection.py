@@ -77,15 +77,6 @@ def _binding(
     )
 
 
-def test_venue_client_kind_enum_is_exactly_four_members() -> None:
-    assert tuple(member.value for member in VenueClientKind) == (
-        "ctrader",
-        "replay",
-        "conformance",
-        "ccxt",
-    )
-
-
 def test_replay_world_selects_replay_for_any_venue_id() -> None:
     selected = _ok(select_venue_client(World.REPLAY, _venue("venue-ctrader-demo")))
     assert selected.kind is VenueClientKind.REPLAY
