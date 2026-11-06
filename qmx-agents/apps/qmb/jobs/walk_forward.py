@@ -5,8 +5,9 @@ The request's ``split`` names the folds, ``{"folds": 3}``, and its ``ranges`` th
 pick among, as an optimize run names them. Every candidate is one cell of the kept sweep
 expansion (`qmb.sweep.cells`) and trades the whole window once, so it warms up as it would live;
 the folds are spans of those runs (`qmb.robustness.unit_walk`). The bundle lists each fold under
-``measures.counted``, and its ``walk_forward`` measure is the efficiency the judge's chain reads,
-which the core keeps only from a run whose own kind is `walk_forward`.
+``measures.counted``. Its ``walk_forward`` measure is a table keyed by market, each row the folds
+walked over that market's own trades with the run's window, which is what the judge's chain reads.
+The core keeps it only from a run whose own kind is `walk_forward`.
 
 A request with no ranges, or ranges of one value each, picks nothing, so its folds are a
 stability view of the unit's own run in the report and the bundle carries no `walk_forward`
@@ -21,6 +22,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from qmb.host.unit_handler import UnitTrade
+from qmb.robustness.unit_battery import by_market
 from qmb.robustness.unit_walk import WALK_FORWARD_FOLDS, walk_forward
 from qmb.sweep.cells import range_grid, run_cell, trade_cell, unit_cells
 from qmf.core.refusal import is_refusal
@@ -75,7 +77,9 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
                 rows.append(cell.fields() | {"status": "failed", "reason": tester.reason(ran)})
                 continue
             candidates[cell.name] = ran.value.result.trades
-            rows.append(cell.fields() | {"status": "finished", "trades": len(candidates[cell.name])})
+            rows.append(
+                cell.fields() | {"status": "finished", "trades": len(candidates[cell.name])}
+            )
     else:
         ran = run_cell(base, tester.unit_body(asked, run_id))
         if is_refusal(ran):
@@ -95,15 +99,37 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
     unmeasured = None
     if len(candidates) < _PICKS_FROM:
         unmeasured = f"the folds picked among fewer than {_PICKS_FROM} candidates"
-    elif found.efficiency is None:
-        unmeasured = "no fold had a candidate with an in-sample Sharpe to pick"
     else:
-        measures["walk_forward"] = found.evidence()
+        own = {name: by_market(trades) for name, trades in candidates.items()}
+        table: dict[str, object] = {}
+        lacking: list[str] = []
+        for market in sorted({market for trades in own.values() for market in trades}):
+            walked = walk_forward(
+                {name: trades.get(market, []) for name, trades in own.items()},
+                start_ns=start,
+                end_ns=end,
+                folds=folds,
+            )
+            if is_refusal(walked):
+                return tester.failed(run_id, tester.reason(walked))
+            if walked.value.efficiency is None:
+                lacking.append(market)
+            else:
+                table[market] = walked.value.evidence() | {"window": window}
+        if table:
+            measures["walk_forward"] = table
+        if lacking or not table:
+            named = f" on {', '.join(lacking)}" if lacking else ""
+            unmeasured = f"no fold had a candidate with an in-sample Sharpe to pick{named}"
     return tester.leave(
         run_id,
         "finished",
         measures=measures,
-        labels={"zero_trades": not any(candidates.values()), "fidelity": "bars"},
+        labels={
+            "zero_trades": not any(candidates.values()),
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
         files=[
             tester.write(
                 folder,

@@ -25,6 +25,7 @@ import qml
 from qmf.core import is_ok
 from qmf.data.series import SeriesKey, SeriesStore
 from qmx_home import resolve
+from qmx_host.market_data import MarketDoor  # pyright: ignore[reportMissingTypeStubs]
 
 from qmx_engine.templates.catalog import PACK
 
@@ -45,7 +46,7 @@ def step(tmp_path: Path, given: dict[str, Any], tick: tuple[int, int, int, int])
     folder = resolve(tmp_path / "QMX", create=True, drives=[]).root
     shared = folder / "cache" / "zones" / "run-1" / "work"
     work = tmp_path / "attempt"
-    work.mkdir(parents=True)
+    work.mkdir(parents=True, exist_ok=True)
     hours = shared / "hours" / str(given["source"]["symbol"]) / "2025" / "02"
     day, hour, ask, bid = tick
     for d in range(1, calendar.monthrange(2025, 3)[1] + 1):
@@ -91,6 +92,22 @@ def priced(row: dict[str, Any], card: dict[str, Any]) -> tuple[Decimal, Decimal]
     return Decimal(row["bid"]).scaleb(-scale), Decimal(row["ask"]).scaleb(-scale)
 
 
+def stated_scale(tmp_path: Path, symbol: str, kind: str = "ticks/-") -> int | None:
+    """The scale a QMB run would read for the series, through the door the host opens."""
+    door = MarketDoor.open(tmp_path / "QMX" / "data" / "market", {})
+    assert is_ok(door)
+    return door.value.price_scale(f"dukascopy/{symbol}/{kind}")
+
+
+def stored_bars(tmp_path: Path, side: str) -> list[dict[str, Any]]:
+    """March's EURUSD `bar-m1` rows of one side, as the store holds them."""
+    store, _ = month(tmp_path, "EURUSD")
+    key = SeriesKey.try_create("dukascopy", "EURUSD", "bar-m1", 2025, 3, side)
+    assert is_ok(key)
+    (file,) = store.folder(key.value).glob("*.parquet")
+    return cast("list[dict[str, Any]]", pq.read_table(file).to_pylist())  # pyright: ignore[reportUnknownMemberType]
+
+
 def nothing_landed(tmp_path: Path, symbol: str) -> bool:
     store, key = month(tmp_path, symbol)
     return store.state(key) is None
@@ -105,6 +122,7 @@ def test_gold_at_scale_three_reads_its_first_price_exactly(tmp_path: Path) -> No
     assert (summary["status"], summary["rows"]) == ("landed", 1)
     assert rows[0]["t"] == 1740956400000
     assert priced(rows[0], card) == (Decimal("2855.205"), Decimal("2856.475"))
+    assert stated_scale(tmp_path, "XAUUSD") == 3
 
 
 def test_eurusd_at_scale_five_lands_the_same_month_as_before(tmp_path: Path) -> None:
@@ -186,3 +204,66 @@ def test_a_gold_card_landed_at_scale_five_reads_wrong_scale(tmp_path: Path) -> N
     }
     assert right["status"] == "scale_ok"
     assert nothing_landed(tmp_path, "XAUUSD")
+    assert stated_scale(tmp_path, "XAUUSD") is None
+    assert stated_scale(tmp_path / "again", "XAUUSD") == 3
+
+
+def test_a_landed_month_lands_its_minute_bars_and_a_rerun_lands_the_same_rows(
+    tmp_path: Path,
+) -> None:
+    source = {"symbol": "EURUSD", "month": "2025-03", "price_scale": 5}
+    tick = (2, 22, 104033, 104032)
+
+    first = json.loads(step(tmp_path, {"source": source}, tick))
+    again = json.loads(step(tmp_path, {"source": source}, tick))
+
+    series = ["dukascopy/EURUSD/bar-m1/bid", "dukascopy/EURUSD/bar-m1/ask"]
+    assert (first["derived"], again["derived"]) == (series, series)
+    assert first["fingerprint"] == again["fingerprint"]
+    assert [stored_bars(tmp_path, side) for side in ("bid", "ask")] == [
+        [
+            {
+                "t": 1740952800000,
+                "open": 104032,
+                "high": 104032,
+                "low": 104032,
+                "close": 104032,
+                "volume": 2.0,
+            }
+        ],
+        [
+            {
+                "t": 1740952800000,
+                "open": 104033,
+                "high": 104033,
+                "low": 104033,
+                "close": 104033,
+                "volume": 1.0,
+            }
+        ],
+    ]
+    assert stated_scale(tmp_path, "EURUSD", kind="bar-m1/bid") == 5
+
+
+def test_a_source_naming_no_calendar_takes_its_markets_or_says_it_has_none(tmp_path: Path) -> None:
+    def landed_with(symbol: str, scale: int) -> dict[str, Any]:
+        source = {"symbol": symbol, "month": "2025-03", "price_scale": scale}
+        return json.loads(step(tmp_path / symbol, {"source": source}, (2, 22, 104033, 104032)))
+
+    euro, gold, silver, bitcoin = (
+        landed_with("EURUSD", 5),
+        landed_with("XAUUSD", 3),
+        landed_with("XAGUSD", 3),
+        landed_with("BTCUSD", 1),
+    )
+
+    assert (euro["calendar"], euro["frozen"]) == ({"ref": "fx-24x5@1"}, False)
+    assert (gold["calendar"], gold["frozen"]) == ({"ref": "metals-24x5@1"}, False)
+    assert silver["calendar"] == {"ref": "metals-24x5@1"}
+    assert "calendar" not in bitcoin
+    assert bitcoin["calendar_note"] == (
+        "no calendar for BTCUSD, so its open hours are not counted; name one in the source's "
+        "calendar to count them"
+    )
+    assert "calendar_note" not in euro
+    assert bitcoin["held_open"] is None

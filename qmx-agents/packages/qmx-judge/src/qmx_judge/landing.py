@@ -5,23 +5,14 @@ the `opened` try, `close` checks the tester's bundle and lands one `backtest-res
 edges and the closing try, and `fail` lands a `killed` result with no measures. All three are
 idempotent by run id, so a retry finds what the first call wrote and writes nothing again.
 
-`land` is PR 204's step, moved here from QMB so the referee stays home (Level 0 AD-25). It puts
-QMB's ledger line and CT-32 artifact verbatim, with three edges:
-
-- ``consumed`` to the dataset card version the backtest read;
-- ``uses`` to the bot version it ran;
-- ``tests`` to a hypothesis, when one is named.
-
 The trade and equity tables travel inside the result's report blob, so a backtest of millions of
-rows stays one object instead of a row per item. Everything else about the object's fields is the
-kind's own schema: this step validates nothing twice, so a field the kind does not allow is
-refused where kinds are enforced.
+rows stays one object instead of a row per item.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -42,7 +33,6 @@ from qmx_judge.runs import (
 from qmx_judge.tries import TRY_KIND, Try, TryKind, TryState, try_item
 
 __all__ = [
-    "BASE_PRINCIPAL",
     "CHECK_KIND",
     "COUNTED",
     "EVIDENCE",
@@ -50,8 +40,6 @@ __all__ = [
     "REPORT_SLOT",
     "RESULT_KIND",
     "TEST_REPORT",
-    "BacktestLanding",
-    "BacktestResult",
     "CheckFirst",
     "GRecord",
     "GRecords",
@@ -60,11 +48,7 @@ __all__ = [
     "LandingPort",
     "RunJob",
     "Stored",
-    "land",
 ]
-
-BASE_PRINCIPAL: Final[str] = "qmb:backtest"
-"""Who puts a backtest result: QMB's own run, not the agent that asked for it."""
 
 REPORT_SLOT: Final[str] = "report"
 """The one blob slot a `backtest-result` kind declares today."""
@@ -75,28 +59,6 @@ class Stored:
     """What the Library answered when the object landed."""
 
     object_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class BacktestResult:
-    """One finished QMB backtest, as the landing step receives it.
-
-    ``report`` is the ledger line and the CT-32 artifact verbatim, with the trade and equity
-    tables inside it. ``outcome`` is the kind's own word (``supports | refutes | inconclusive``)
-    when the run had one to claim.
-    """
-
-    run_id: str
-    title: str
-    summary: str
-    world: str
-    claim_class: str
-    role: str
-    fidelity: str
-    provenance: Mapping[str, object]
-    report: bytes
-    outcome: str | None = None
-    memo_key: str | None = None
 
 
 class LandingPort(Protocol):
@@ -115,58 +77,6 @@ class LandingPort(Protocol):
     ) -> Stored: ...
 
     def link(self, from_id: str, relation: str, to_id: str, *, principal: str) -> str: ...
-
-
-@dataclass(frozen=True, slots=True)
-class BacktestLanding:
-    """The object that landed and the edges written from it, in order."""
-
-    object_id: str
-    edges: tuple[tuple[str, str], ...]
-
-
-def land(
-    result: BacktestResult,
-    library: LandingPort,
-    *,
-    consumed: str,
-    uses: str,
-    tests: str | None = None,
-    principal: str = BASE_PRINCIPAL,
-) -> BacktestLanding:
-    """Store one `backtest-result` and link it to its data, its bot and its hypothesis.
-
-    ``consumed`` is the dataset card version the backtest read, ``uses`` the bot version it ran,
-    and ``tests`` the hypothesis it was built to test. The result is stored under its QMB run id,
-    so a rerun of the same run replaces nothing: QMB names a run by its own fingerprint.
-    """
-    fields: dict[str, object] = {
-        "claim_class": result.claim_class,
-        "fidelity": result.fidelity,
-        "provenance": dict(result.provenance),
-        "role": result.role,
-        "world": result.world,
-    }
-    if result.outcome is not None:
-        fields["outcome"] = result.outcome
-    if result.memo_key is not None:
-        fields["memo_key"] = result.memo_key
-    stored = library.put(
-        "backtest-result",
-        fields,
-        {REPORT_SLOT: result.report},
-        item=result.run_id,
-        title=result.title,
-        summary=result.summary,
-        principal=principal,
-    )
-    written: list[tuple[str, str]] = []
-    for relation, target in (("consumed", consumed), ("uses", uses), ("tests", tests)):
-        if target is None:
-            continue
-        library.link(stored.object_id, relation, target, principal=principal)
-        written.append((relation, target))
-    return BacktestLanding(stored.object_id, tuple(written))
 
 
 RESULT_KIND: Final = "backtest-result"
@@ -306,7 +216,7 @@ def check_job(job: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class GRecord:
-    """A unit's recorded layer G verdict for one compiled fingerprint."""
+    """A unit's recorded layer G verdict for one compiled fingerprint over some markets."""
 
     object_id: str
     safety_passed: bool
@@ -319,8 +229,12 @@ class GRecords(Protocol):
         """The fingerprint `unit` compiles to, or None when the pin names no unit document."""
         ...
 
-    def g_record(self, compiled_fp: str) -> GRecord | None:
-        """The finished layer G `test-report` of that fingerprint, if one landed."""
+    def markets_of(self, unit: str) -> Sequence[str]:
+        """The markets `unit` trades, which a run naming none of them reads."""
+        ...
+
+    def g_record(self, compiled_fp: str, markets: Collection[str]) -> GRecord | None:
+        """The finished layer G verdict of that fingerprint over `markets`, if one saw them."""
         ...
 
 
@@ -471,15 +385,21 @@ class Lander:
     def _behaviour_first(
         self, app_id: str, job: str, request: Mapping[str, object], compiled: str, principal: str
     ) -> None:
-        """Run the unit's behaviour check on the same tester when no G verdict is recorded for
-        `compiled`, then refuse the run unless that verdict's safety half passed."""
+        """Run the unit's behaviour check on the same tester when no G verdict of `compiled` saw
+        the run's markets, then refuse the run unless that verdict's safety half passed. The
+        check runs one motion setting, whatever the run asks: `both` is a backtest's report."""
         first = cast(CheckFirst, self.check_first)
-        found = first.records.g_record(compiled)
+        named = cast("list[str] | None", request.get("markets"))
+        markets = named or first.records.markets_of(str(request["unit"]))
+        found = first.records.g_record(compiled, markets)
         if found is None:
             ran = first.run_job(
-                app_id, check_job(job), {**request, "compiled_fp": compiled}, principal
+                app_id,
+                check_job(job),
+                {**request, "compiled_fp": compiled, "motion": "on"},
+                principal,
             )
-            found = first.records.g_record(compiled)
+            found = first.records.g_record(compiled, markets)
             if found is None:
                 report = self.library.find(str(ran.get("run_id", "")))
                 raise BundleRefused(

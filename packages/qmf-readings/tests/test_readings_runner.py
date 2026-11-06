@@ -2,7 +2,7 @@
 
 The recorded day is six EURUSD quotes in a typed ``ticks`` partition, the market-data store's
 own format. The runner reads it from the store and writes reading records through Part B's
-journal writer. QMB replays the same partition through its typed replay reader. A unit
+journal writer. QMB reads the same partition through the tick reader its runs use. A unit
 computes the same readings itself, quote by quote, as its ``compute_here`` fallback would.
 """
 
@@ -12,11 +12,7 @@ import itertools
 from pathlib import Path
 from typing import TypeVar
 
-from qmb.host.replay import (
-    PinnedInstrumentPriceMetadata,
-    TypedPartitionRef,
-    read_typed_replay_source,
-)
+from qmb.host.replay import Tick, read_tick_parquet
 from qmf.core import (
     Duration,
     ExactRational,
@@ -106,19 +102,11 @@ def _rows() -> list[tuple[object, ...]]:
     ]
 
 
-def _recorded_day(root: Path) -> tuple[SeriesStore, SeriesKey, TypedPartitionRef]:
+def _recorded_day(root: Path) -> tuple[SeriesStore, SeriesKey, Path]:
     store = SeriesStore(root / "market")
     key = _ok(SeriesKey.try_create("dukascopy", "EURUSD", "ticks", 2025, 10))
     receipt = _ok(store.commit(key, _rows()))
-    ref = _ok(
-        TypedPartitionRef.try_create(
-            path=receipt.path,
-            series=key.series,
-            month=f"{key.year:04d}-{key.month:02d}",
-            fingerprint=receipt.fingerprint,
-        )
-    )
-    return store, key, ref
+    return store, key, receipt.path
 
 
 def _quote(at_ns: int, bid: int, ask: int) -> Quote:
@@ -138,29 +126,17 @@ def _store_quotes(store: SeriesStore, key: SeriesKey) -> list[Quote]:
     ]
 
 
-def _qmb_quotes(ref: TypedPartitionRef) -> list[Quote]:
-    instrument = _instrument()
-    identity: dict[str, object] = {
-        "instrument": instrument.fp1_identity(),
-        "metadata_version": "c08-golden-day-v1",
-        "price_scale": _SCALE,
-        "source_policy": {"kind": "typed-partition-test"},
-    }
-    metadata = _ok(
-        PinnedInstrumentPriceMetadata.try_create(
-            instrument=instrument,
-            price_scale=_SCALE,
-            metadata_identity=identity,
-            metadata_fp1=_ok(fingerprint(identity)),
-        )
-    )
-    source = _ok(
-        read_typed_replay_source(partitions=(ref,), stream_id="eurusd", instrument_metadata=metadata)
-    )
+def _qmb_quotes(partition: Path) -> list[Quote]:
     quotes: list[Quote] = []
-    for path in source.execution_paths:
-        assert path.bar_start is not None and path.bid is not None and path.ask is not None
-        quotes.append(Quote(at=path.bar_start, bid=path.bid, ask=path.ask))
+    for tick in read_tick_parquet((partition,), _SCALE, _FIRST_MS, _FIRST_MS + 86_400_000):
+        assert isinstance(tick, Tick), tick
+        quotes.append(
+            _quote(
+                tick.ms * _MS,
+                int(tick.bid.scaleb(_SCALE)),
+                int(tick.ask.scaleb(_SCALE)),
+            )
+        )
     return quotes
 
 
@@ -354,7 +330,7 @@ def test_the_runner_writes_every_field_of_section_7_through_the_journal_writer(
 def test_golden_replay_agrees_across_unit_qmb_and_runner_per_reading_and_version(
     tmp_path: Path,
 ) -> None:
-    store, key, ref = _recorded_day(tmp_path)
+    store, key, partition = _recorded_day(tmp_path)
 
     runner, writer = _hot_runner(tmp_path)
     _ok(runner.run(_store_quotes(store, key)))
@@ -380,7 +356,7 @@ def test_golden_replay_agrees_across_unit_qmb_and_runner_per_reading_and_version
             clock_ok=True,
         )
     )
-    qmb_records: tuple[ReadingRecord, ...] = _ok(qmb_runner.run(_qmb_quotes(ref)))
+    qmb_records: tuple[ReadingRecord, ...] = _ok(qmb_runner.run(_qmb_quotes(partition)))
     _ok(bundle.close())
     from_qmb = _outputs([record.body() for record in qmb_records])
 

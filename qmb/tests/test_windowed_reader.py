@@ -1,8 +1,8 @@
-"""The windowed reader's memory stays flat in run length (B7, QB-01, CC-07).
+"""A run's memory stays flat in its length (B7, QB-01, CC-07).
 
 A run keeps each market's derived warm-up plus its declared lookback, never the history
-behind it, and nothing caps its steps. Peak memory is traced over the whole read, from the
-rows streaming in to the bars landing in the window, at 10,000 and at 200,000 one-minute steps.
+behind it, and nothing caps its steps. Peak memory is traced at 10,000 and at 200,000 steps, over
+the read from the rows streaming in to the bars landing in the window, and over a real run.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import tracemalloc
 from collections.abc import Iterator, MutableMapping
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 from qmb.host.replay import (
     WINDOW_MEMORY_TOLERANCE,
@@ -22,14 +23,16 @@ from qmb.host.replay import (
     replay_feed,
     window_size,
 )
-from qmb.host.unit_runner import load_unit_folder
+from qmb.host.behaviour import check_behaviour
+from qmb.host.unit_runner import load_unit_folder, run_loaded
 from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
 from qml.protocol.unit import OHLC, QuoteBar
-from test_unit_runner import make_run_folder
+from test_unit_runner import dummy_document, make_run_folder, request
 
 _START_MS = 1_577_836_800_000
 """2020-01-01T00:00Z."""
+_LONG_RUN = 200_000
 
 
 def _minutes(count: int) -> Iterator[Bar]:
@@ -85,11 +88,63 @@ def test_peak_memory_at_200000_steps_stays_within_the_tolerance_of_10000() -> No
     assert large_peak <= small_peak * (1 + WINDOW_MEMORY_TOLERANCE)
 
 
-def test_the_probe_sees_a_reader_that_keeps_every_bar_grow_past_the_tolerance() -> None:
-    _, kept_10000 = _read(10_000, {})
-    _, kept_20000 = _read(20_000, {})
+def _one_side_on_one_market() -> dict[str, object]:
+    """The dummy trading one side of one market, the cheapest real run to repeat 200,000 times."""
+    document = dummy_document()
+    logic = cast("dict[str, object]", document["logic"])
+    del logic["short"]
+    del cast("dict[str, object]", document["numbers"])["rsi_high"]
+    document["direction"] = "long"
+    document["markets"] = cast("list[object]", document["markets"])[:1]
+    return document
 
-    assert kept_20000 > kept_10000 * (1 + WINDOW_MEMORY_TOLERANCE)
+
+def _peak_of_a_real_run(root: Path, steps: int) -> tuple[int, int]:
+    """Bars of ``steps`` closes that zig-zag without a trade, because a run keeps every trade it
+    makes by design. Answers the trades made and the peak bytes traced over ``run_loaded``."""
+    root.mkdir()
+    folder = make_run_folder(root, _one_side_on_one_market())
+    for side, spread in (("bid", 0), ("ask", 2)):
+        with (folder / "bars" / "fx.eurusd" / f"{side}.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as bars:
+            bars.write("timestamp,open,high,low,close,volume\n")
+            for step in range(steps):
+                level = 108_000 + abs(step % 192 - 96) * 10 + spread
+                text = f"{level // 100_000}.{level % 100_000:05d}"
+                bars.write(f"{_START_MS + step * 900_000},{text},{text},{text},{text},0\n")
+    loaded = load_unit_folder(folder)
+    assert not isinstance(loaded, TypedRefusal), loaded
+    asked = request(folder)
+    tracemalloc.start()
+    base = tracemalloc.get_traced_memory()[0]
+    ran = run_loaded(loaded.value, asked)
+    peak = tracemalloc.get_traced_memory()[1] - base
+    tracemalloc.stop()
+    assert not isinstance(ran, TypedRefusal), ran
+    return len(ran.value.trades), peak
+
+
+def test_a_real_backtest_of_200000_steps_stays_flat(tmp_path: Path) -> None:
+    small_trades, small_peak = _peak_of_a_real_run(tmp_path / "small", 10_000)
+    large_trades, large_peak = _peak_of_a_real_run(tmp_path / "large", _LONG_RUN)
+
+    assert (small_trades, large_trades) == (0, 0)
+    assert large_peak <= small_peak * (1 + WINDOW_MEMORY_TOLERANCE)
+
+
+def test_the_behaviour_check_reads_no_more_than_its_slice(tmp_path: Path) -> None:
+    folder = make_run_folder(tmp_path)
+
+    whole = check_behaviour(folder, request(folder), loaded_in_isolation=False)
+    cut = check_behaviour(folder, request(folder), slice_bars=1200, loaded_in_isolation=False)
+    floor = check_behaviour(folder, request(folder), slice_bars=1, loaded_in_isolation=False)
+
+    assert not isinstance(whole, TypedRefusal), whole
+    assert not isinstance(cut, TypedRefusal), cut
+    assert not isinstance(floor, TypedRefusal), floor
+    ends = [cast("dict[str, object]", c.value.report["slice"])["to"] for c in (whole, cut, floor)]
+    assert ends == [1743199200000000000, 1742378400000000000, 1742293800000000000]
 
 
 def test_a_card_refuses_a_row_of_another_kind_and_the_feed_stops_there() -> None:

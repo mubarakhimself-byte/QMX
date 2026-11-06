@@ -195,13 +195,18 @@ def judged(writer: LifecycleWriter, unit: str, compiled: str, market: str) -> No
     )
 
 
-def g_report(store: HostStore, compiled: str, verdict: str = "pass") -> str:
+def g_report(
+    store: HostStore,
+    compiled: str,
+    verdict: str = "pass",
+    saw: tuple[str, ...] = ("fx.eurusd", "metal.xauusd"),
+) -> str:
     fields: JsonObject = {
         "check": G_CHECK,
         "run_id": f"qmbr-g-{verdict}",
         "status": "finished",
         "compiled_fingerprint": compiled,
-        "behaviour": {},
+        "behaviour": {"slice": {"market_ids": list(saw)}},
         "safety": {"verdict": verdict},
     }
     return put(store, TEST_REPORT, f"qmbr-g-{verdict}", fields)
@@ -362,10 +367,24 @@ def test_a_unit_with_no_passing_g_report_is_refused(rig: Rig) -> None:
     assert (none[0], none[1]["code"], none[1]["message"]) == (
         409,
         "no_g_record",
-        f"no G test-report for compiled fingerprint {fp}",
+        f"no G test-report on fx.eurusd for compiled fingerprint {fp}",
     )
     assert failed[1]["code"] == "no_g_record"
     assert failed[1]["message"].endswith(f"failed for compiled fingerprint {fp}")
+    assert (len(rig.moves()), rig.node.calls) == (1, [])
+
+
+def test_a_move_on_a_market_no_behaviour_check_saw_is_refused(rig: Rig) -> None:
+    fp = rig.compiled.compiled_fingerprint.value
+    g_report(rig.store, fp, saw=("metal.xauusd",))
+
+    status, answer = rig.click(op_id="click-1", to="paper")
+
+    assert (status, answer["code"], answer["message"]) == (
+        409,
+        "no_g_record",
+        f"no G test-report on fx.eurusd for compiled fingerprint {fp}",
+    )
     assert (len(rig.moves()), rig.node.calls) == (1, [])
 
 

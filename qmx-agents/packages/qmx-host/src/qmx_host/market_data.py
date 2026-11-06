@@ -64,6 +64,7 @@ from qmx_host.door import RUN_PASS
 __all__ = [
     "HANDLE_ROWS",
     "SEAL_READ_REASON",
+    "HoldoutAsk",
     "MarketDoor",
     "Placement",
     "Purpose",
@@ -100,6 +101,8 @@ PIN_NAME: Final[str] = ".pinned"
 MONTH_NAME: Final = re.compile(r"^(\d{4})-(\d{2})$")
 STAGED_MONTH: Final = re.compile(r"^(\d{4})-(\d{2})\.parquet$")
 """A staged file names its month by its name and its key by its place under the staging root."""
+_ANY_SERIES: Final = ("any", "any", "ticks", "-")
+"""A seal falls on a month whatever the series, so a month alone is asked with this key."""
 
 
 class Purpose(StrEnum):
@@ -363,6 +366,54 @@ class MarketDoor:
             "seal_boundary": "" if seal.value is None else seal.value.seal_boundary.label(),
         }
         return Ok(payload)
+
+    def sealed_months(
+        self, months: Sequence[str], *, holdout: HoldoutAsk = None, run: str | None = None
+    ) -> Result[tuple[str, ...]]:
+        """Which of these `YYYY-MM` months a holdout seals, its run fixed as a read fixes it.
+
+        `materialise` copies a sealed month into a folder it is given, for a final look, so
+        whoever lays a run out asks here before copying anything.
+        """
+        seal = self._holdout_for(holdout, run)
+        if is_refusal(seal):
+            return seal
+        sealed: list[str] = []
+        for month in months:
+            key = _key_of(*_ANY_SERIES, month=month)
+            if is_refusal(key):
+                return key
+            answered = _month_sealed(key.value, seal.value)
+            if is_refusal(answered):
+                return answered
+            if answered.value:
+                sealed.append(month)
+        return Ok(tuple(sealed))
+
+    def state_scale(self, series: str, scale: int) -> Result[None]:
+        """Keep the price scale a series' rows are at, so a run can read them as prices."""
+        if self.too_new is not None:
+            return self._read_only("a stated scale")
+        path = self._scale_path(series)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            staged = path.with_suffix(".tmp")
+            staged.write_text(json.dumps({"price_scale": scale}), encoding="utf-8")
+            staged.replace(path)
+        except OSError as exc:
+            return storage_failure(
+                "could not keep the series' scale", context={"series": series, "error": str(exc)}
+            )
+        return Ok(None)
+
+    def price_scale(self, series: str) -> int | None:
+        """The scale `state_scale` kept for a series, or None for one that never stated it."""
+        try:
+            found: object = json.loads(self._scale_path(series).read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            return None
+        scale = cast("Mapping[str, object]", found).get("price_scale")
+        return scale if type(scale) is int else None
 
     def read(
         self,
@@ -1045,6 +1096,9 @@ class MarketDoor:
 
     def _inbox_path(self) -> Path:
         return self.root / "seal-inbox.jsonl"
+
+    def _scale_path(self, series: str) -> Path:
+        return self.root / ".clocks" / f"{series.replace('/', '_')}.scale.json"
 
     def _file_task(self, task: Mapping[str, object]) -> dict[str, object]:
         for row in self.inbox():

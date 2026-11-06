@@ -24,14 +24,19 @@ at, so the source must name `price_scale`. A source with none is refused rather 
 when the source hands in Dukascopy's own `instrument` record for the symbol, its `digits` must
 agree. A run given `check` (a landed series' card) fetches nothing and reports `wrong_scale` when
 that card states another scale; downloading the month again lands the same rows under a card at
-the right scale.
+the right scale. The door keeps the scale a landed month or a `scale_ok` check states, because a
+QMB run refuses a series with none.
 
 Before the month lands, its stamps are checked (a bi5 tick is milliseconds from its UTC hour,
-so the source clock is UTC in milliseconds) and, when the source definition names its market's
-`calendar`, the month is counted against that calendar's open time. An hour wholly inside open
-time with no tick is a fetch failure until a retry and a second source agree, so the month
-lands held open, unfrozen, until the source definition lists that hour in `confirmed_empty`
-(LD-01). The card states the clock, the seams and the calendar.
+so the source clock is UTC in milliseconds) and the month is counted against its market's
+`calendar`, as the source definition names it or else as the symbol implies it: a currency pair
+on `fx-24x5@1`, gold and silver on `metals-24x5@1`. Any other symbol has none, and the output says
+so. An hour wholly inside open time with no tick is a fetch failure until a retry and a second
+source agree, so the month lands held open, unfrozen, until the source definition lists that hour
+in `confirmed_empty` (LD-01). The card states the clock, the seams and the calendar.
+
+The month's one-minute bid and ask bars land right after its ticks, under the same hold, so a run
+reads them instead of millions of ticks.
 """
 
 import http.client
@@ -58,6 +63,7 @@ from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import TICK_COLUMNS, TypedWriter
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Partition, SeriesCard, card_fields
+from qmx_tools.derive_bars import derive_month
 
 from qmx_engine.triggers.preflight import shipped_calendars
 from qmx_engine.workers.zones import home_of
@@ -68,11 +74,49 @@ USER_AGENT = "qmx-feed/1.0"
 SOURCE = "dukascopy"
 DEFAULT_FLOOR_GB = 3.0
 HEARTBEAT_SECONDS = 10.0
+METAL_CODES = frozenset({"XAU", "XAG"})
+CURRENCY_CODES = frozenset(
+    [
+        "AUD",
+        "CAD",
+        "CHF",
+        "CNH",
+        "CZK",
+        "DKK",
+        "EUR",
+        "GBP",
+        "HKD",
+        "HUF",
+        "ILS",
+        "JPY",
+        "MXN",
+        "NOK",
+        "NZD",
+        "PLN",
+        "RON",
+        "RUB",
+        "SEK",
+        "SGD",
+        "THB",
+        "TRY",
+        "USD",
+        "ZAR",
+    ]
+)
+"""The currencies of Dukascopy's spot pairs, so a six-letter crypto or stock code is no pair."""
 
 
 def fail(why: str) -> NoReturn:
     print(f"{FAILURE} {why}")
     raise SystemExit(0)
+
+
+def default_calendar(symbol: str) -> str | None:
+    """The calendar a source naming none trades on, or None when the symbol does not imply one."""
+    base, quote = symbol[:3], symbol[3:]
+    if base in METAL_CODES:
+        return "metals-24x5@1"
+    return "fx-24x5@1" if base in CURRENCY_CODES and quote in CURRENCY_CODES else None
 
 
 def scale_of(source: dict[str, object], symbol: str) -> int:
@@ -305,23 +349,34 @@ symbol = str(source.get("symbol") or "").strip().upper()
 if symbol == "":
     fail("the source definition names no symbol")
 scale = scale_of(source, symbol)
-if "check" in given:
-    print(json.dumps(scale_report(given["check"], symbol, scale), sort_keys=True))
-    raise SystemExit(0)
-year, month = month_of(str(source.get("month") or ""))
-calendar_ref = str(source.get("calendar") or "").strip() or None
-calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
-if calendar_ref and calendar is None:
-    fail(f"no shipped calendar is named {calendar_ref!r}")
-confirmed = confirmed_hours(source.get("confirmed_empty") or [])
-if isinstance(confirmed, str):
-    fail(f"confirmed_empty: {confirmed}")
 shared = Path(os.environ["QMX_WORK_SHARED"])
 home = home_of(shared)
 settings_file = home / "settings.toml"
 settings = tomllib.loads(settings_file.read_text("utf-8")) if settings_file.is_file() else {}
 data = settings.get("data") if isinstance(settings.get("data"), dict) else {}
 root, placement = door_place(home, data)
+if "check" in given:
+    report = scale_report(given["check"], symbol, scale)
+    if report["status"] == "scale_ok":
+        checked = MarketDoor.open(root, data, placement=placement)
+        if is_refusal(checked):
+            fail(f"the market-data door did not open: {checked.context}")
+        stated = checked.value.state_scale(str(report["series"]), scale)
+        if is_refusal(stated):
+            fail(f"the door did not keep the scale: {stated.context}")
+    print(json.dumps(report, sort_keys=True))
+    raise SystemExit(0)
+year, month = month_of(str(source.get("month") or ""))
+named_calendar = str(source.get("calendar") or "").strip()
+calendar_ref = named_calendar or default_calendar(symbol)
+calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
+if named_calendar and calendar is None:
+    fail(f"no shipped calendar is named {named_calendar!r}")
+if calendar is None:
+    calendar_ref = None
+confirmed = confirmed_hours(source.get("confirmed_empty") or [])
+if isinstance(confirmed, str):
+    fail(f"confirmed_empty: {confirmed}")
 key = SeriesKey.try_create("dukascopy", symbol, "ticks", year, month)
 if is_refusal(key):
     fail(f"the partition key was refused: {key.context}")
@@ -412,6 +467,12 @@ try:
         fail(f"the door refused the commit: {landed.context}")
     receipt = landed.value[0]
     ledger.record(key.value.series, year, month, stamps)
+    stated = door.state_scale(key.value.series, scale)
+    if is_refusal(stated):
+        fail(f"the door did not keep the scale: {stated.context}")
+    derived = derive_month(door, key.value.series, year, month, staging=staging, hold=hold)
+    if is_refusal(derived):
+        fail(f"the door did not land the month's one-minute bars: {derived.context}")
     partitions = (
         Partition(
             year=year,
@@ -454,8 +515,17 @@ try:
                 "frozen": receipt.frozen,
                 "held_open": hold,
                 **card_facts(stamps, calendar_ref),
+                **(
+                    {}
+                    if calendar_ref
+                    else {
+                        "calendar_note": f"no calendar for {symbol}, so its open hours are not "
+                        "counted; name one in the source's calendar to count them"
+                    }
+                ),
                 "checked": None if report is None else report.as_json(),
                 "fingerprint": receipt.fingerprint,
+                "derived": [bars.key.series for bars in derived.value],
                 "hours": len(keys),
                 "staged_bytes": written.bytes,
                 "volume": VOLUME_LIQUIDITY,

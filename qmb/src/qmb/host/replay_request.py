@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
@@ -31,36 +31,26 @@ from qmf.data.splits import (
 from qml.conformance.layer2 import Layer2Verdict
 from qml.declaration import BotDefinition
 from qml.logic import fingerprint_source_manifest
-from qml.protocol import MappingReadSurface
 
 from qmb._refuse import invalid, policy, unavailable
-from qmb.execution.binder import execution_keys_from_request
 from qmb.host.adapter import HostedBot, construct_conformant_bot
 from qmb.host.replay import (
     PinnedInstrumentPriceMetadata,
     RecordedReplaySource,
-    TypedPartitionRef,
     read_recorded_replay_source,
-    read_typed_replay_source,
 )
 from qmb.host.runner import FACTORY_KIND_SOURCE, FactorySpec, load_factory, run_sandbox
 
 __all__ = [
     "REPLAY_REQUEST_FORMAT_VERSION",
-    "TYPED_REQUEST_CLASS",
     "ReplayInputRequest",
     "ResolvedReplayRequest",
-    "TypedReplayRequest",
-    "load_typed_replay_request",
-    "parse_typed_replay_request",
     "persist_replay_request",
     "resolve_replay_request",
-    "resolve_typed_replay_request",
 ]
 
 REPLAY_REQUEST_FORMAT_VERSION: Final[int] = 1
 _REQUEST_CLASS: Final[str] = "qmb-recorded-replay-request-v1"
-TYPED_REQUEST_CLASS: Final[str] = "qmb-typed-replay-request-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,30 +361,20 @@ def resolve_replay_request(
     request = _request_context(body, split, role, metadata.value)
     if is_refusal(request):
         return request
-    return _host_selected_bot(ref, split, source.value, request.value)
-
-
-def _host_selected_bot(
-    ref: Fingerprint,
-    split: SplitManifest,
-    source: RecordedReplaySource,
-    request: Mapping[str, object],
-) -> Result[ResolvedReplayRequest]:
-    """Run the selected CT-33 source's Layer 2 check, then host it over the source's surfaces."""
-    declaration = BotDefinition.try_from_mapping(request["bot_identity"])
+    declaration = BotDefinition.try_from_mapping(request.value["bot_identity"])
     if is_refusal(declaration):
         return declaration
     conformance = run_sandbox(
         declaration=declaration.value,
-        source_tree=request["source_tree"],
-        assignment=request["assignment"],
-        state_scope=request["state_scope"],
-        state_bound=request["state_bound"],
-        timeout_seconds=request["timeout"],
+        source_tree=request.value["source_tree"],
+        assignment=request.value["assignment"],
+        state_scope=request.value["state_scope"],
+        state_bound=request.value["state_bound"],
+        timeout_seconds=request.value["timeout"],
     )
     if is_refusal(conformance):
         return conformance
-    tree = cast("Mapping[str, str]", request["source_tree"])
+    tree = cast("Mapping[str, str]", request.value["source_tree"])
     candidates = [
         (path, text) for path, text in tree.items() if path.rsplit("/", 1)[-1] == "factory.py"
     ]
@@ -413,321 +393,14 @@ def _host_selected_bot(
     hosted = construct_conformant_bot(
         factory.value,
         declaration=declaration.value,
-        assignment=request["assignment"],
-        read_surfaces=source.read_surfaces,
+        assignment=request.value["assignment"],
+        read_surfaces=source.value.read_surfaces,
     )
     if is_refusal(hosted):
         return hosted
     return Ok(
-        ResolvedReplayRequest(ref, split.fingerprint, source, hosted.value, conformance.value)
+        ResolvedReplayRequest(ref, split.fingerprint, source.value, hosted.value, conformance.value)
     )
-
-
-_TYPED_REQUEST_FIELDS: Final[frozenset[str]] = frozenset(
-    {
-        "class",
-        "format_version",
-        "stream_id",
-        "split_identity",
-        "split_role",
-        "price_metadata_identity",
-        "partitions",
-        "bot_identity",
-        "source_tree",
-        "assignment",
-        "state_scope",
-        "state_bound",
-        "conformance_timeout_seconds",
-        "execution",
-    }
-)
-
-
-@dataclass(frozen=True, slots=True)
-class TypedReplayRequest:
-    """A replay request written as data: typed partitions, the bot and its execution inputs.
-
-    Every field is parsed from one JSON body and ``fingerprint`` is that body's fp1, so the
-    file in the run's input folder is the request's whole identity. Partition files are
-    named relative to that folder and must exist inside it.
-    """
-
-    split: SplitManifest
-    split_role: SegmentRole
-    stream_id: str
-    price_metadata: PinnedInstrumentPriceMetadata
-    partitions: tuple[TypedPartitionRef, ...]
-    bot: Mapping[str, object]
-    execution: Mapping[str, object]
-    fingerprint: Fingerprint
-
-
-def load_typed_replay_request(
-    *, request_path: object, input_dir: object
-) -> Result[TypedReplayRequest]:
-    """Read a typed replay request's JSON file and parse it against its input folder."""
-    if not isinstance(request_path, (str, Path)) or not str(request_path).strip():
-        return invalid("request_path", "a typed replay request is a named JSON file")
-    raw = _read_bytes(Path(request_path))
-    if is_refusal(raw):
-        return raw
-    try:
-        decoded: object = json.loads(raw.value)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return invalid("request", "a typed replay request is UTF-8 JSON")
-    return parse_typed_replay_request(decoded, input_dir=input_dir)
-
-
-def parse_typed_replay_request(body: object, *, input_dir: object) -> Result[TypedReplayRequest]:
-    """Validate a typed replay request body; every refusal comes before any data is read."""
-    if not isinstance(body, Mapping):
-        return invalid("request", "a typed replay request is a JSON object")
-    fields = cast("Mapping[str, object]", body)
-    unknown = sorted(str(key) for key in fields if key not in _TYPED_REQUEST_FIELDS)
-    if unknown:
-        return invalid("request", "unknown typed replay request field", given=unknown)
-    if (
-        fields.get("class") != TYPED_REQUEST_CLASS
-        or fields.get("format_version") != REPLAY_REQUEST_FORMAT_VERSION
-    ):
-        return invalid(
-            "request",
-            "a typed replay request names its class and format version",
-            expected_class=TYPED_REQUEST_CLASS,
-            expected_format_version=REPLAY_REQUEST_FORMAT_VERSION,
-        )
-    stream_id = fields.get("stream_id")
-    if not isinstance(stream_id, str) or not stream_id.strip():
-        return invalid("stream_id", "a typed replay request names its run stream")
-    split_identity = _mapping(fields.get("split_identity"), "split_identity")
-    if is_refusal(split_identity):
-        return split_identity
-    split = _decode_split_manifest(split_identity.value)
-    if is_refusal(split):
-        return split
-    if split.value.world is not World.REPLAY:
-        return policy("split", "a typed replay request pins a world=replay CT-12 manifest")
-    try:
-        role = SegmentRole(fields.get("split_role"))
-    except (TypeError, ValueError):
-        return invalid("split_role", "a typed replay request names one CT-12 segment role")
-    metadata = _typed_price_metadata(fields.get("price_metadata_identity"))
-    if is_refusal(metadata):
-        return metadata
-    partitions = _typed_partitions(fields.get("partitions"), input_dir)
-    if is_refusal(partitions):
-        return partitions
-    bot = _bot_context(fields)
-    if is_refusal(bot):
-        return bot
-    execution = _mapping(fields.get("execution"), "execution")
-    if is_refusal(execution):
-        return execution
-    checked_execution = execution_keys_from_request(execution.value)
-    if is_refusal(checked_execution):
-        return checked_execution
-    stamped = fingerprint(fields)
-    if is_refusal(stamped):
-        return stamped
-    return Ok(
-        TypedReplayRequest(
-            split=split.value,
-            split_role=role,
-            stream_id=stream_id,
-            price_metadata=metadata.value,
-            partitions=partitions.value,
-            bot=bot.value,
-            execution=_freeze_mapping(execution.value),
-            fingerprint=stamped.value,
-        )
-    )
-
-
-def resolve_typed_replay_request(
-    *, request: object, holdout_months: object
-) -> Result[ResolvedReplayRequest]:
-    """Read a typed request's partitions month by month, then host its bot over them.
-
-    Each month is read and its fingerprint re-derived by ``read_typed_replay_source``; the
-    months are joined into one source whose read surface keeps every sample so far, as a
-    single read does, so a bot sees two months exactly as it would see one.
-    """
-    if not isinstance(request, TypedReplayRequest):
-        return invalid("request", "resolution consumes a parsed TypedReplayRequest")
-    seal = HoldoutSeal.from_manifest(request.split, holdout_months)
-    if is_refusal(seal):
-        return seal
-    months = sorted({ref.month for ref in request.partitions})
-    sources: list[RecordedReplaySource] = []
-    for month in months:
-        read = read_typed_replay_source(
-            partitions=[ref for ref in request.partitions if ref.month == month],
-            stream_id=request.stream_id,
-            instrument_metadata=request.price_metadata,
-            split_manifest=request.split,
-            split_role=request.split_role,
-            holdout_seal=seal.value,
-            world=World.REPLAY,
-        )
-        if is_refusal(read):
-            return read
-        sources.append(read.value)
-    joined = _join_months(sources)
-    if is_refusal(joined):
-        return joined
-    return _host_selected_bot(request.fingerprint, request.split, joined.value, request.bot)
-
-
-def _typed_price_metadata(raw: object) -> Result[PinnedInstrumentPriceMetadata]:
-    identity = _mapping(raw, "price_metadata_identity")
-    if is_refusal(identity):
-        return identity
-    instrument_body = _mapping(identity.value.get("instrument"), "instrument")
-    if is_refusal(instrument_body):
-        return instrument_body
-    instrument = _instrument(instrument_body.value)
-    if is_refusal(instrument):
-        return instrument
-    stamped = fingerprint(identity.value)
-    if is_refusal(stamped):
-        return stamped
-    return PinnedInstrumentPriceMetadata.try_create(
-        instrument=instrument.value,
-        price_scale=identity.value.get("price_scale"),
-        metadata_identity=identity.value,
-        metadata_fp1=stamped.value,
-    )
-
-
-def _typed_partitions(raw: object, input_dir: object) -> Result[tuple[TypedPartitionRef, ...]]:
-    """Resolve each named partition file inside the run's input folder, refusing by name."""
-    if not isinstance(input_dir, (str, Path)) or not str(input_dir).strip():
-        return invalid("input_dir", "a typed replay request is read against its input folder")
-    root = Path(input_dir).resolve()
-    if not isinstance(raw, list) or not raw:
-        return invalid("partitions", "a typed replay request names at least one partition")
-    refs: list[TypedPartitionRef] = []
-    for index, item in enumerate(cast("list[object]", raw)):
-        entry = _mapping(item, "partitions")
-        if is_refusal(entry):
-            return entry
-        series = entry.value.get("series")
-        month = entry.value.get("month")
-        file = entry.value.get("file")
-        if not isinstance(file, str) or not file.strip():
-            return invalid("partitions", "a partition names its file", index=index)
-        path = (root / file).resolve()
-        if not path.is_relative_to(root):
-            return policy(
-                "partitions", "a partition file lies inside the run's input folder", file=file
-            )
-        if not path.is_file():
-            return invalid(
-                "partitions",
-                "a named partition file exists in the run's input folder",
-                series=series,
-                month=month,
-                file=file,
-            )
-        ref = TypedPartitionRef.try_create(
-            path=path, series=series, month=month, fingerprint=entry.value.get("fingerprint")
-        )
-        if is_refusal(ref):
-            return ref
-        if any(
-            (known.series, known.month) == (ref.value.series, ref.value.month) for known in refs
-        ):
-            return invalid("partitions", "each partition is named once", series=series, month=month)
-        refs.append(ref.value)
-    return Ok(tuple(refs))
-
-
-def _bot_context(fields: Mapping[str, object]) -> Result[dict[str, object]]:
-    """Validate the selected CT-33 bot a typed request names, as ``ReplayInputRequest`` does."""
-    bot = _mapping(fields.get("bot_identity"), "bot_identity")
-    tree = _mapping(fields.get("source_tree"), "source_tree")
-    assignment = _mapping(fields.get("assignment"), "assignment")
-    scope = _mapping(fields.get("state_scope"), "state_scope")
-    if is_refusal(bot):
-        return bot
-    if is_refusal(tree):
-        return tree
-    if is_refusal(assignment):
-        return assignment
-    if is_refusal(scope):
-        return scope
-    files: dict[str, str] = {}
-    for raw_path, raw_source in tree.value.items():
-        if not isinstance(raw_source, str):
-            return invalid("source_tree", "source paths and file contents are strings")
-        files[raw_path] = raw_source
-    if not files:
-        return invalid("source_tree", "a selected logic source manifest is non-empty")
-    state_bound = fields.get("state_bound")
-    timeout = fields.get("conformance_timeout_seconds")
-    if isinstance(state_bound, bool) or not isinstance(state_bound, int) or state_bound < 1:
-        return invalid("state_bound", "QML state bound is an explicit positive integer")
-    if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
-        return invalid(
-            "conformance_timeout_seconds",
-            "isolated conformance timeout is explicit positive seconds",
-        )
-    definition = BotDefinition.try_from_mapping(bot.value)
-    if is_refusal(definition):
-        return definition
-    source_fp = fingerprint_source_manifest(files)
-    if is_refusal(source_fp):
-        return source_fp
-    if source_fp.value != definition.value.logic_reference.source_manifest:
-        return policy("source_tree", "selected source files match the CT-33 logic identity")
-    context: dict[str, object] = {
-        "bot_identity": _freeze_mapping(bot.value),
-        "source_tree": MappingProxyType(files),
-        "assignment": _freeze_mapping(assignment.value),
-        "state_scope": _freeze_mapping(scope.value),
-        "state_bound": state_bound,
-        "timeout": timeout,
-    }
-    return Ok(context)
-
-
-def _join_months(sources: Sequence[RecordedReplaySource]) -> Result[RecordedReplaySource]:
-    """Join month sources into one, each frame keeping every earlier month's samples."""
-    if len(sources) == 1:
-        return Ok(sources[0])
-    first = sources[0]
-    stream = first.stream_id
-    frames: dict[int, object] = {}
-    carried: tuple[object, ...] = ()
-    previous: int | None = None
-    for source in sources:
-        latest = carried
-        for frontier_ns, payload in source.read_surfaces[stream].frames.items():
-            if previous is not None and frontier_ns <= previous:
-                return invalid(
-                    "partitions",
-                    "joined months replay in strictly increasing frontiers",
-                    frontier_ns=frontier_ns,
-                )
-            samples = cast("Mapping[str, Sequence[object]]", payload)["samples"]
-            latest = carried + tuple(samples)
-            frames[frontier_ns] = {"kind": "series", "samples": latest}
-            previous = frontier_ns
-        carried = latest
-    surface = MappingReadSurface.try_create(frames)
-    if is_refusal(surface):
-        return surface
-    joined = replace(
-        first,
-        slices=tuple(item for source in sources for item in source.slices),
-        read_surfaces=MappingProxyType({stream: surface.value}),
-        execution_paths=tuple(item for source in sources for item in source.execution_paths),
-        partitions=tuple(item for source in sources for item in source.partitions),
-    )
-    stamped = fingerprint(joined.fp1_identity())
-    if is_refusal(stamped):
-        return stamped
-    return Ok(replace(joined, fingerprint=stamped.value))
 
 
 def _identity(

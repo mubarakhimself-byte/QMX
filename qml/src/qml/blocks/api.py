@@ -29,6 +29,7 @@ contract every block in a slot must pass.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation
@@ -263,11 +264,22 @@ class Parameter:
 
 @dataclass(frozen=True, slots=True)
 class Settle:
-    """The recursive-settle length found at ``params`` within ``tolerance`` (QML-03)."""
+    """The recursive-settle length found at ``params`` within ``tolerance`` (QML-03). ``scales_by``
+    names the parameter the length grows with, so ``bars / params[scales_by]`` is its bars per
+    period; a block with no such parameter leaves it None and settles at ``bars`` whatever it is
+    given."""
 
     params: Mapping[str, Decimal]
     bars: int
     tolerance: Decimal
+    scales_by: str | None = None
+
+    def bars_at(self, params: Mapping[str, Decimal]) -> int:
+        """The settle length at a binding's ``params``, rounded up to a whole bar."""
+        value = None if self.scales_by is None else params.get(self.scales_by)
+        if self.scales_by is None or value is None:
+            return self.bars
+        return math.ceil(Decimal(self.bars) * value / self.params[self.scales_by])
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,7 +359,17 @@ def _settle(value: object) -> Settle | None:
     params = {
         k: Decimal(str(v)) for k, v in _object(raw.get("params"), "settle_bars/params").items()
     }
-    return Settle(params=params, bars=bars, tolerance=Decimal(_text(raw, "tolerance")))
+    scales_by = raw.get("scales_by")
+    if scales_by is not None and (
+        not isinstance(scales_by, str) or params.get(scales_by, Decimal(0)) <= 0
+    ):
+        raise _Bad("settle_bars/scales_by", "one of its params, above 0")
+    return Settle(
+        params=params,
+        bars=bars,
+        tolerance=Decimal(_text(raw, "tolerance")),
+        scales_by=scales_by,
+    )
 
 
 def parse_entry(data: bytes) -> EntryFace | FaceProblem:

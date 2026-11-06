@@ -1,17 +1,30 @@
 {
   "recorded": {
-    "sweep": {
-      "app_id": "qmb",
-      "job": "jobs/sweep.py",
-      "version": "1.0.0",
-      "run_id": "qmbr-pc-recorded-sweep",
-      "result": {
-        "output": "backtest-result",
-        "data": {
-          "run_id": "qmbr-pc-recorded-sweep",
-          "status": "finished"
-        }
-      }
+    "verdict": {
+      "unit": "unit-object-fixture",
+      "overall": "pass",
+      "says": "Pass by the shipped preset. fx.eurusd passes on 104 trades at 0.14R shrunk; metal.xauusd fails the try-corrected: the shrunk expectancy does not clear its bar. Behind it: 3 tries, 3 effective.",
+      "raw_tries": 3,
+      "effective_tries": 3,
+      "results": ["result-fixture-sweep"],
+      "per_market": [
+        {"market": "fx.eurusd", "outcome": "pass", "trades": 104, "steps": []},
+        {"market": "metal.xauusd", "outcome": "fail", "trades": 131, "steps": [{"name": "try_corrected", "outcome": "failed"}]}
+      ]
+    },
+    "baseline-card": {
+      "unit": "unit-object-fixture",
+      "verdict": "verdict-fixture-every-market"
+    },
+    "proposal-card": {
+      "subject": "unit-object-fixture",
+      "ask": "paper",
+      "evidence": ["verdict-fixture-every-market", "result-fixture-sweep"],
+      "verdict": "verdict-fixture-every-market",
+      "tries": 3,
+      "preset": "shipped",
+      "placeholders": [],
+      "made_by": "agent:referee-fixture"
     }
   }
 }

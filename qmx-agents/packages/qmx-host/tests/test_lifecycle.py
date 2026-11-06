@@ -50,9 +50,9 @@ SPEC_FIELDS: JsonObject = {
 }
 SPEC = parse_spec(SPEC_FIELDS)
 EVIDENCE = {
-    "random_entries": {"edge_ratio": "1.4", "p": "0.01"},
-    "cost_stress": {"multiplier": "1.5", "expectancy_r": "0.2"},
-    "walk_forward": {"efficiency": "0.7"},
+    "random_entries": {"fx.eurusd": {"edge_ratio": "1.4", "p": "0.01"}},
+    "cost_stress": {"fx.eurusd": {"multiplier": "1.5", "expectancy_r": "0.2"}},
+    "walk_forward": {"fx.eurusd": {"efficiency": "0.7"}},
 }
 
 

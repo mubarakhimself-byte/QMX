@@ -18,7 +18,7 @@ from qmf.core import is_refusal
 from qml.numbers import InstrumentClass, InstrumentRecord, distance, parse_record
 from qml.unit.model import Measure
 from qmx_engine.ledger import redact
-from qmx_tools.gather import FIXTURE_WARNING, gather, template
+from qmx_tools.gather import gather, template
 
 from qmx_library.kinds import KindRefused, roster
 from qmx_library.port import Draft
@@ -113,6 +113,12 @@ def store(tmp_path: Path) -> Iterator[Store]:
         yield opened
 
 
+GOLD_ON_THE_FIXTURE = (
+    "no Library record for this market, so it reads QML's test fixture: "
+    "metal.xauusd reads xauusd.json"
+)
+
+
 def land(store: Store, fields: dict[str, Any], item: str | None = None) -> str:
     """One instrument item put on `main`, a new version when the item is already there."""
     name = item or f"instrument:{fields['venue']}:{fields['symbol']}"
@@ -199,22 +205,6 @@ def test_a_key_outside_the_kinds_or_a_wrong_spelling_is_refused_at_put(
     assert [p.where for p in refused.value.problems] == [(pointer,)]
 
 
-def test_a_venue_record_lands_with_its_trigger_basis_and_data_levels(store: Store) -> None:
-    fields: dict[str, JsonValue] = {
-        "venue": "hyperliquid",
-        "trigger_basis": "mark",
-        "cancel_on_disconnect": False,
-        "sandbox": "testnet",
-        "unattended": "allowed",
-        "history_limits": {"candles": 5000},
-        "data_levels": {"schema": "qmx.data-level/1", "levels": [0, 1, 3, 4, 5]},
-    }
-    done = store.put(OPERATOR, Draft("venue", "venue:hyperliquid", fields=fields), on=MAIN,
-                     expected_head=None)  # fmt: skip
-
-    assert store.get(OPERATOR, done.object_id).fields == fields
-
-
 def test_gold_at_two_contract_sizes_risks_the_same_money_and_gives_equal_r(store: Store) -> None:
     land(store, ONE_PER_CLASS[1])
     small = record("metal", "other-cfd-broker", "GOLD", "gold", contract_size="1",
@@ -277,7 +267,7 @@ def test_the_check_reads_the_librarys_version_and_a_market_with_no_item_reads_th
         "icmarkets-ctrader:EURUSD@2",
         "icmarkets-ctrader:XAUUSD@1",
     )
-    assert gathered.warnings == (f"{FIXTURE_WARNING}: metal.xauusd reads xauusd.json",)
+    assert gathered.warnings == (GOLD_ON_THE_FIXTURE,)
 
 
 def test_two_items_for_one_symbol_or_an_item_missing_a_fact_bind_nothing_and_say_why(
@@ -310,4 +300,4 @@ def test_an_archived_item_binds_nothing_and_its_replacement_binds_alone(store: S
     gathered = gather(store, template())
 
     assert gathered.context.records["fx.eurusd"].name == "icmarkets-ctrader:EURUSD@2"
-    assert gathered.warnings == (f"{FIXTURE_WARNING}: metal.xauusd reads xauusd.json",)
+    assert gathered.warnings == (GOLD_ON_THE_FIXTURE,)

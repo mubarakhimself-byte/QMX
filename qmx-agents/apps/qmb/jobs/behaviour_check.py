@@ -27,6 +27,7 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         "run_folder": str((folder / "in").resolve()),
         "request": tester.unit_body(asked, run_id),
         "margin": asked.get("g_slice_margin", "0.20"),
+        "slice_bars": asked.get("g_slice_bars"),
     }
     child = subprocess.run(
         [sys.executable, "-m", "qmb.host.behaviour"],

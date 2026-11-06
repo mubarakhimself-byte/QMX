@@ -4,8 +4,7 @@ section 8, standing order 7).
 His clicks, the judge's verdicts and risk stops are events written by three writers on their own
 partitions. ``fold`` orders them by ``(at, writer, sequence)`` and applies each through one
 transition table. A move it refuses is kept as a rejected event with a typed reason, never
-dropped. Only his click with principal ``operator`` moves toward paper or live; the one
-exception is the judge's tested to paper, and only while ``lifecycle.auto_paper`` is on.
+dropped. Only his click with principal ``operator`` moves toward paper or live.
 """
 
 from __future__ import annotations
@@ -98,7 +97,6 @@ class Transition:
     from_state: State
     to_state: State
     actor: ActorKind
-    needs_auto_paper: bool = False
 
 
 def _rows() -> tuple[Transition, ...]:
@@ -108,7 +106,6 @@ def _rows() -> tuple[Transition, ...]:
         Transition(s.DRAFT, s.TESTED, judge),
         Transition(s.DRAFT, s.PARKED, judge),
         Transition(s.TESTED, s.PAPER, click),
-        Transition(s.TESTED, s.PAPER, judge, needs_auto_paper=True),
         Transition(s.PAPER, s.LIVE, click),
         Transition(s.PAPER, s.STOPPED, risk),
         Transition(s.LIVE, s.STOPPED, risk),
@@ -131,7 +128,6 @@ class Refusal(StrEnum):
     NOT_OPERATOR = "not_operator"
     """A click, or any move toward paper or live, whose principal is not ``operator``."""
     NOT_IN_TABLE = "not_in_table"
-    AUTO_PAPER_OFF = "auto_paper_off"
     FROM_MISMATCH = "from_mismatch"
     STOP_NOT_CLEARED = "stop_not_cleared"
     SECOND_VERSION = "second_version"
@@ -156,10 +152,7 @@ class Folded:
         return self.states.get(key, State.DRAFT)
 
 
-_ROWS: Final = {
-    move: tuple(r for r in TRANSITIONS if (r.from_state, r.to_state, r.actor) == move)
-    for move in {(r.from_state, r.to_state, r.actor) for r in TRANSITIONS}
-}
+_MOVES: Final = frozenset((r.from_state, r.to_state, r.actor) for r in TRANSITIONS)
 
 
 def _refusal(
@@ -167,27 +160,19 @@ def _refusal(
     current: State,
     latest_stop: str | None,
     versions: Mapping[str, State],
-    auto_paper: bool,
 ) -> tuple[Refusal, str] | None:
     """Why ``event`` cannot apply, or None. ``versions`` holds this unit's versions on the
     event's market."""
     to, actor = event.to_state, event.by
     if actor.kind is ActorKind.HIS_CLICK and actor.principal != OPERATOR:
         return Refusal.NOT_OPERATOR, f"a click by {actor.principal!r} is not his click"
-    judge_auto = actor.kind is ActorKind.JUDGE and current is State.TESTED and auto_paper
-    if to in TRADING and actor.principal != OPERATOR and not (judge_auto and to is State.PAPER):
+    if to in TRADING and actor.principal != OPERATOR:
         return Refusal.NOT_OPERATOR, f"only his click moves a unit to {to}"
     is_stop = actor.kind is ActorKind.RISK_RULE and to is State.STOPPED
     if not is_stop and event.from_state is not current:
         return Refusal.FROM_MISMATCH, f"the market is {current}, not {event.from_state}"
-    rows = _ROWS.get((current, to, actor.kind), ())
-    if not rows:
+    if (current, to, actor.kind) not in _MOVES:
         return Refusal.NOT_IN_TABLE, f"{actor.kind} cannot move {current} to {to}"
-    if all(r.needs_auto_paper for r in rows) and not auto_paper:
-        return (
-            Refusal.AUTO_PAPER_OFF,
-            "lifecycle.auto_paper is off, so tested to paper is his click",
-        )
     if current is State.STOPPED and to is not State.STOPPED and event.clears != latest_stop:
         return Refusal.STOP_NOT_CLEARED, f"the latest stop is {latest_stop}, not {event.clears}"
     if to in TRADING:
@@ -199,7 +184,7 @@ def _refusal(
     return None
 
 
-def fold(events: Iterable[Event], *, auto_paper: bool = False) -> Folded:
+def fold(events: Iterable[Event]) -> Folded:
     """The current state of every unit version on every market, and every refused move.
 
     An event id seen twice is applied once, so a replayed journal folds to the same answer.
@@ -220,7 +205,7 @@ def fold(events: Iterable[Event], *, auto_paper: bool = False) -> Folded:
         key = event.key
         versions = markets.setdefault((key.unit_id, key.market_id), {})
         current = states.get(key, State.DRAFT)
-        refused = _refusal(event, current, stops.get(key), versions, auto_paper)
+        refused = _refusal(event, current, stops.get(key), versions)
         if refused is not None:
             rejected.append(Rejected(event, *refused))
             continue

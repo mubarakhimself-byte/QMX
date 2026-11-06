@@ -1,7 +1,7 @@
 """One row per market he asked for: the referee's outcome and trades for it. Zero tokens.
 
-Its inputs are the route's `ask` and the referee step's `verdict`, which the referee copies from
-the core's `backtest_judge_run` answer. Every cell of the sweep is a counted try in the unit's
+Its inputs are the route's `ask` and the stored verdict, which the Library holds. Every cell of
+the sweep is a counted try in the unit's
 family, so the verdict is already corrected for having looked at every market. A market he asked
 for that the verdict does not judge is listed under `unjudged`, so a market with no data is
 never silently dropped.

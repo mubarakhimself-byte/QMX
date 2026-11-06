@@ -86,5 +86,13 @@
   "golden": {
     "reference": "talib.SAR 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "step": "0.02",
+      "maximum": "0.2"
+    },
+    "bars": 18,
+    "tolerance": "1e-9"
   }
 }

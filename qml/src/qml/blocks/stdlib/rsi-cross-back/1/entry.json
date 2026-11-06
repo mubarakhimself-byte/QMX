@@ -84,9 +84,11 @@
   },
   "settle_bars": {
     "params": {
-      "period": "14"
+      "period": "14",
+      "level": "30"
     },
     "bars": 285,
-    "tolerance": "1e-9"
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }

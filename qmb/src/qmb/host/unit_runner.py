@@ -7,7 +7,10 @@ A run folder holds what the core gathered for one run:
 - ``records/<market_id>.json``: the instrument record of each of the unit's markets;
 - ``bars/<market_id>/bid.csv`` and ``ask.csv``: the market's closed bars on the unit's stream,
   one row per bar (``timestamp`` is the bar's open in epoch milliseconds, then ``open``,
-  ``high``, ``low``, ``close``), as the Dukascopy download template saves them;
+  ``high``, ``low``, ``close``), the test and hand-saved route;
+- or ``data/<market_id>/``: the market's months copied from the market store, ticks or a pair of
+  ``bar-m1`` series, beside a ``card.json`` naming their files, scale and window, which clip them;
+- ``request.json``, optional: its ``markets`` names the markets a run trades, of the unit's;
 - ``costs/<market_id>.json``, optional: the market's ``qmx.qmb.cost-profile/1``;
 - ``funding/<market_id>.csv``: a market that pays funding, its recorded rates
   (``timestamp,rate``).
@@ -27,18 +30,23 @@ Every market rule reads the instrument record (B10): fills, gaps and liquidation
 ``CarrySchedule``, commission and slippage through the cost profile. Before the first bar a
 preflight counts each market's holes in open time; one longer than the request's
 ``gap_bars_refuse`` fails the run unless the request sets ``allow_gaps``, and then the result
-lists it. A run whose costs come from no calibrated profile says ``costs_uncalibrated``.
+lists it. A request that names its window also has the open bars missing at each end counted, and
+the result says ``data_short``. They fail the run past the same limit, where the market's calendar
+holds closures from before the window, so a shut day there would not read as missing. A run whose
+costs come from no calibrated profile says ``costs_uncalibrated``.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import partial
+from itertools import islice
 from pathlib import Path
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from qmf.core.chrono import Instant
 from qmf.core.identity import AccountRole, VenueId
@@ -49,7 +57,16 @@ from qml.numbers import InstrumentRecord, parse_record
 from qml.protocol.unit import MotionSwitch, OwnPosition, QuoteBar, TraceLevel, construct_unit
 
 from qmb._refuse import invalid, policy
-from qmb.data.gap_check import GAP_BARS_REFUSE, HOLES_UNCHECKED, Hole, find_holes, open_time
+from qmb.data.gap_check import (
+    DATA_SHORT,
+    GAP_BARS_REFUSE,
+    HOLES_UNCHECKED,
+    Hole,
+    ShortEnds,
+    find_holes,
+    open_time,
+    short_ends,
+)
 from qmb.execution.cost import (
     CALIBRATED_MIN_FILLS,
     COSTS_UNCALIBRATED,
@@ -69,8 +86,11 @@ from qmb.host.replay import (
     BarWindow,
     DataCard,
     Fidelity,
+    Row,
     VenueDay,
     read_bar_pair_csv,
+    read_bar_pair_parquet,
+    read_tick_parquet,
     replay_feed,
     replay_windowed,
     window_size,
@@ -99,6 +119,7 @@ __all__ = [
 
 ZERO_TRADES: Final[str] = "zero_trades"
 _NS_PER_SEC: Final[int] = 1_000_000_000
+_NS_PER_MS: Final[int] = 1_000_000
 _EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
 _QUOTES: Final[DataCard] = DataCard(Fidelity.QUOTES)
 
@@ -120,6 +141,8 @@ class UnitRunRequest:
     """The study runs over holes in its data; the unit sees each one as a gap row."""
     gap_bars_refuse: int = GAP_BARS_REFUSE
     calibrated_min_fills: int = CALIBRATED_MIN_FILLS
+    window_ns: tuple[int, int] | None = None
+    """The half-open window the bars should fill, when the caller names one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,12 +164,13 @@ class LoadedUnit:
     margins: Mapping[str, MarginRule]
     costs: Mapping[str, CostProfile]
 
-    def bars(self) -> Result[dict[str, tuple[QuoteBar, ...]]]:
-        """Every market's bars held whole, for a short recorded slice; a run streams them."""
+    def bars(self, limit: int | None = None) -> Result[dict[str, tuple[QuoteBar, ...]]]:
+        """Each market's first ``limit`` bars held whole, or all of them, for a short recorded
+        slice; a run streams them."""
         held: dict[str, tuple[QuoteBar, ...]] = {}
         for market, feed in self.feeds.items():
             bars: list[QuoteBar] = []
-            for item in feed():
+            for item in islice(feed(), limit):
                 if isinstance(item, TypedRefusal):
                     return item
                 bars.append(item)
@@ -170,6 +194,21 @@ class UnitRunResult:
     """Holes in open time the run went over because the request allowed gaps."""
     unchecked: tuple[str, ...] = ()
     """Markets whose calendar QMB cannot read yet, so their holes were not counted."""
+    short: tuple[ShortEnds, ...] = ()
+    """Markets whose bars stop short of the window, with the open bars missing at each end."""
+    max_drawdown_r: Decimal = Decimal(0)
+    """The deepest fall of the running total of the trades' R from its high."""
+
+
+def _window_ns(given: object) -> Result[tuple[int, int] | None]:
+    """A request's ``{start, end}`` dates as a half-open window in ns, or None for no window."""
+    if given is None:
+        return Ok(None)
+    named = cast("Mapping[str, object]", given if isinstance(given, Mapping) else {})
+    start, end = _day_ms(named.get("start")), _day_ms(named.get("end"))
+    if start is None or end is None:
+        return invalid("window", "a run's window is {start, end} as dates", window=str(named))
+    return Ok((start * _NS_PER_MS, end * _NS_PER_MS))
 
 
 def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
@@ -226,6 +265,9 @@ def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
         if type(value) is not int or value < 0:
             return invalid(name, f"{name} is a whole number of zero or more", given=repr(value))
         counts[name] = value
+    window = _window_ns(fields.get("window"))
+    if is_refusal(window):
+        return window
     return Ok(
         UnitRunRequest(
             run_id,
@@ -237,6 +279,7 @@ def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
             allow_gaps,
             counts["gap_bars_refuse"],
             counts["calibrated_min_fills"],
+            window.value,
         )
     )
 
@@ -270,6 +313,22 @@ class _BarFiles:
         return replay_feed(_QUOTES, rows, BarBuilder(self.day.span, self.seconds))
 
 
+@dataclass(frozen=True, slots=True)
+class _StoreFiles:
+    """One market's months copied from the market store, built into bars in the venue's day.
+
+    Ticks end where they start, so the window's end closes the last bar."""
+
+    rows: Callable[[], Iterator[Row | TypedRefusal]]
+    seconds: int
+    day: VenueDay
+    until_ns: int
+
+    def __call__(self) -> Iterator[QuoteBar | TypedRefusal]:
+        builder = BarBuilder(self.day.span, self.seconds)
+        return replay_feed(_QUOTES, self.rows(), builder, until_ns=self.until_ns)
+
+
 def _bar_files(folder: Path, market: str, day: VenueDay, seconds: int) -> Result[_BarFiles]:
     bid, ask = folder / "bars" / market / "bid.csv", folder / "bars" / market / "ask.csv"
     for path in (bid, ask):
@@ -279,6 +338,64 @@ def _bar_files(folder: Path, market: str, day: VenueDay, seconds: int) -> Result
     if is_refusal(builder):
         return builder
     return Ok(_BarFiles(bid, ask, seconds, day))
+
+
+def _day_ms(text: object) -> int | None:
+    try:
+        moment = datetime.fromisoformat(str(text)).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    return (moment - _EPOCH) // timedelta(milliseconds=1)
+
+
+def _store_files(data: Path, day: VenueDay, seconds: int) -> Result[_StoreFiles]:
+    """The feed a market's ``card.json`` describes: its ticks, or its bid and ask ``bar-m1``."""
+    try:
+        found: object = json.loads((data / "card.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return invalid("data", "a market's store months sit beside their card", error=str(error))
+    card = cast("Mapping[str, Any]", found)
+    series = card.get("series")
+    scale = card.get("scale")
+    if type(scale) is not int:
+        return invalid("data", f"{(series or ['this series'])[0]} states no price scale")
+    window = cast("Mapping[str, object]", card.get("window") or {})
+    start, end = _day_ms(window.get("start")), _day_ms(window.get("end"))
+    if start is None or end is None:
+        return invalid("data", "a market's card names its window as dates", window=str(window))
+    files = {
+        side: [data / name for name in names]
+        for side, names in cast("Mapping[str, list[str]]", card.get("files") or {}).items()
+    }
+    rows: Callable[[], Iterator[Row | TypedRefusal]]
+    match card.get("kind"), files:
+        case "ticks", {"ticks": ticks}:
+            rows = partial(read_tick_parquet, ticks, scale, start, end)
+        case "bar-m1", {"bid": bid, "ask": ask}:
+            rows = partial(read_bar_pair_parquet, bid, ask, scale, start, end)
+        case _:
+            return invalid("data", "a market's card names ticks or a bar-m1 pair", series=series)
+    return Ok(_StoreFiles(rows, seconds, day, end * _NS_PER_MS))
+
+
+def _market_feed(folder: Path, market: str, day: VenueDay, seconds: int) -> Result[BarFeed]:
+    data = folder / "data" / market
+    if data.is_dir():
+        return _store_files(data, day, seconds)
+    return _bar_files(folder, market, day, seconds)
+
+
+def _asked_markets(folder: Path) -> Result[frozenset[str] | None]:
+    """The markets the core's request names, or None for a folder whose request names none."""
+    path = folder / "request.json"
+    if not path.is_file():
+        return Ok(None)
+    try:
+        asked: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return invalid("request", "the run's request is a JSON object", error=str(error))
+    named = cast("Mapping[str, object]", asked).get("markets") if isinstance(asked, dict) else None
+    return Ok(None if named is None else frozenset(cast("list[str]", named)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,13 +475,18 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
         return invalid(
             "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
         )
+    asked = _asked_markets(folder)
+    if is_refusal(asked):
+        return asked
     feeds: dict[str, BarFeed] = {}
     rules: dict[str, _MarketRules] = {}
     for market, record in compiled.plan.markets:
+        if asked.value is not None and market.market_id not in asked.value:
+            continue
         day = VenueDay.try_create(record.zone, record.day_boundary)
         if is_refusal(day):
             return day
-        files = _bar_files(folder, market.market_id, day.value, seconds)
+        files = _market_feed(folder, market.market_id, day.value, seconds)
         if is_refusal(files):
             return files
         feeds[market.market_id] = files.value
@@ -432,7 +554,7 @@ def run_loaded(
     checked = _preflight(loaded, request)
     if is_refusal(checked):
         return checked
-    holes, unchecked = checked.value
+    holes, unchecked, short = checked.value
     windows = {market: BarWindow(window_size(compiled)) for market in loaded.feeds}
     handler = UnitSliceHandler.start(
         lambda surfaces: construct_unit(
@@ -475,6 +597,7 @@ def run_loaded(
         *(() if trades else (ZERO_TRADES,)),
         *((COSTS_UNCALIBRATED,) if uncalibrated else ()),
         *((HOLES_UNCHECKED,) if unchecked else ()),
+        *((DATA_SHORT,) if short else ()),
     )
     return Ok(
         UnitRunResult(
@@ -490,29 +613,65 @@ def run_loaded(
             cash_events=cash,
             holes=holes,
             unchecked=unchecked,
+            short=short,
+            max_drawdown_r=handler.value.max_drawdown_r,
         )
     )
 
 
+@dataclass
+class _Opens:
+    """One market's bar opens as its feed gives them, holding only the first and last, so a scan
+    of any run length stays flat, and the refusal that stopped the feed, if one did."""
+
+    feed: Iterable[QuoteBar | TypedRefusal]
+    bar_ns: int
+    ends: tuple[int, ...] = ()
+    refused: TypedRefusal | None = None
+
+    def __iter__(self) -> Iterator[int]:
+        for item in self.feed:
+            if isinstance(item, TypedRefusal):
+                self.refused = item
+                return
+            at = item.knowable_at.value_ns - self.bar_ns
+            self.ends = (self.ends[0] if self.ends else at, at)
+            yield at
+
+
 def _preflight(
     loaded: LoadedUnit, request: UnitRunRequest
-) -> Result[tuple[tuple[Hole, ...], tuple[str, ...]]]:
-    """Each market's holes in open time, refused past the request's limit unless it allows gaps."""
+) -> Result[tuple[tuple[Hole, ...], tuple[str, ...], tuple[ShortEnds, ...]]]:
+    """Each market's holes in open time and its short ends, refused past the request's limit unless
+    it allows gaps. A short end refuses only on a calendar holding closures from before the window,
+    because elsewhere a shut day would read as missing."""
     holes: list[Hole] = []
     unchecked: list[str] = []
+    short: list[ShortEnds] = []
+    too_short: list[ShortEnds] = []
     for market, feed in loaded.feeds.items():
         hours = open_time(loaded.records[market].calendar_ref)
         if hours is None:
             unchecked.append(market)
             continue
-        opens: list[int] = []
-        for item in feed():
-            if isinstance(item, TypedRefusal):
-                return item
-            opens.append(item.knowable_at.value_ns - loaded.bar_ns)
+        opens = _Opens(feed(), loaded.bar_ns)
         holes += find_holes(
             market, opens, bar_ns=loaded.bar_ns, hours=hours, refuse_bars=request.gap_bars_refuse
         )
+        if opens.refused is not None:
+            return opens.refused
+        if request.window_ns is None:
+            continue
+        start_ns, end_ns = request.window_ns
+        ends = short_ends(
+            market, opens.ends, bar_ns=loaded.bar_ns, hours=hours, start_ns=start_ns, end_ns=end_ns
+        )
+        if ends.before_first or ends.after_last:
+            short.append(ends)
+            if max(
+                ends.before_first, ends.after_last
+            ) > request.gap_bars_refuse and hours.closures_before(start_ns):
+                too_short.append(ends)
     if holes and not request.allow_gaps:
         first = holes[0]
         after = _EPOCH + timedelta(microseconds=first.after_ns // 1_000)
@@ -523,7 +682,16 @@ def _preflight(
             "run allows unless its study allows gaps",
             holes=[(h.market_id, h.after_ns, h.before_ns, h.bars_missing) for h in holes],
         )
-    return Ok((tuple(holes), tuple(unchecked)))
+    if too_short and not request.allow_gaps:
+        first = too_short[0]
+        return policy(
+            "data",
+            f"{first.market_id} stops short of its window: {first.before_first} bars in open time "
+            f"are missing before its first bar and {first.after_last} after its last, more than "
+            f"the {request.gap_bars_refuse} a run allows unless its study allows gaps",
+            short=[(s.market_id, s.before_first, s.after_last) for s in too_short],
+        )
+    return Ok((tuple(holes), tuple(unchecked), tuple(short)))
 
 
 class _Unkept:

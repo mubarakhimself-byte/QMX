@@ -39,7 +39,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -55,15 +55,14 @@ from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_servic
 from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qma.telemetry import THIS_PC, configured, target
-from qmf.core import TypedRefusal, is_refusal
+from qmf.core import TypedRefusal, fingerprint_bytes, is_refusal
 from qml.compile import CompileContext, CompiledUnit, compile_unit
-from qml.numbers import InstrumentRecord, parse_record
 from qmx_apps.artifacts import Ending, Lander
 from qmx_apps.artifacts import Landing as AppLanding
 from qmx_apps.artifacts import Ticket as AppTicket
 from qmx_apps.errors import AppError
 from qmx_apps.manifest import HOST_SECRETS, Definition
-from qmx_apps.supervisor import MARKET_STORE, RUNS, Supervisor
+from qmx_apps.supervisor import JOB_QUEUE, MARKET_STORE, RUNS, Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.models import Document
@@ -113,7 +112,7 @@ from qmx_home.files import Busy, Held, hold
 from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
-from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, spec_edit, spec_problems
+from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, Remember, spec_edit, spec_problems
 from qmx_judge.landing import (
     G_CHECK,
     RESULT_KIND,
@@ -125,9 +124,10 @@ from qmx_judge.landing import (
 )
 from qmx_judge.landing import Lander as RunLander
 from qmx_judge.paper import PaperRule
-from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
+from qmx_judge.runs import BundleRefused, Landing, ResultBundle, RunId, Ticket, parse_bundle
 from qmx_judge.tries import TRY_KIND, spec_edit_item, try_item
 from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.cards import Partition, SeriesCard, write_card
 from qmx_library.client import OwnerTable
 from qmx_library.kinds import Checker, Problem
 from qmx_library.landing import NOT_PRIMARY
@@ -161,7 +161,13 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
-from qmx_tools.gather import FIXTURE_RECORDS, check_unit, entry_problems, gather
+from qmx_tools.functions import (
+    attach_dead_ends,
+    entry_clashes,
+    entry_items,
+    write_entry_status,
+)
+from qmx_tools.gather import check_unit, entry_problems, gather
 from qmx_tools.service import attach_node
 from uvicorn.config import STARTUP_FAILURE
 
@@ -190,7 +196,13 @@ from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
 from qmx_host.maintenance import maintenance_router
-from qmx_host.market_data import MarketDoor, Placement, market_router
+from qmx_host.market_data import (
+    SEAL_READ_REASON,
+    HoldoutAsk,
+    MarketDoor,
+    Placement,
+    market_router,
+)
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.promote import Promoter, harvested_calibrations, promote_router
@@ -199,7 +211,7 @@ from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, appe
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 from qmx_host.vault_acl import KeyRefused, VaultRefused, owner_only, read_key
-from qmx_host.venue_records import VenueRecords, node_call
+from qmx_host.venue_records import VenueRecords, node_call, record_markets, refresh_s
 
 type Role = Literal["pc", "node", "server"]
 """`server` is the node role plus the Library service: on the server the one `qmx_host` process
@@ -243,6 +255,7 @@ classes share the name `LibraryRefused`, one per side of the engine's Library po
 UNIT_CHECKER: Final = "qml.unit/1"
 STUDY_CHECKER: Final = "qmx.study-spec/1"
 ENTRY_CHECKER: Final = "qml.entry/1"
+ENTRY_KIND: Final = "component"
 CHECK_FAILED: Final = "check_failed"
 
 
@@ -633,11 +646,30 @@ def compose_memory(
     engine = RecallEngine(store, index=index, home=home / MEMORY_FOLDER)
     install(engine)
     harness.remember_into(engine)
+    attach_dead_ends(control, dead_end_memory(engine, home))
+    render_snapshot(engine, home)
+    return engine
+
+
+def render_snapshot(engine: RecallEngine, home: Path) -> None:
+    """The slot every chat launches on. A slot that cannot be written costs that chat its memory
+    of what was learnt, never the write that asked for it."""
     try:
         write_snapshot(engine, home)
     except (OSError, LibraryRefused) as error:
         print(f"memory: the snapshot slot was not written: {error}", file=sys.stderr)
-    return engine
+
+
+def dead_end_memory(engine: RecallEngine, home: Path) -> Remember:
+    """What a failed verdict's row lands through: this home's scope, written by the judge, and the
+    slot rendered again so the next chat launches on it."""
+
+    def remember(row: Mapping[str, object]) -> str:
+        written = engine.write("home", "judge", row)
+        render_snapshot(engine, home)
+        return written.object_id
+
+    return remember
 
 
 def _hindsight(harness: RecordedHarness, home: Path, control: ControlService) -> HindsightConfig:
@@ -737,13 +769,15 @@ class HostStore(Store):
     """On the server only: which store is primary right now."""
     lifecycle: LifecycleWriter | None = None
     """This PC's lifecycle writer, which records the judge's move when a verdict lands."""
+    closing: bool = False
+    """Set once the store begins to close, so the status pass's thread stops and says nothing."""
 
     def put(
         self, who: Principal, draft: Draft, *, on: str, expected_head: ObjectId | None
     ) -> Commit:
         commit = super().put(who, draft, on=on, expected_head=expected_head)
-        if on == MAIN and commit.object_id != commit.prev_head:
-            self._landed(who, commit.object_id)
+        if commit.object_id != commit.prev_head:
+            self._landed(who, commit.item, on, commit.object_id)
         return commit
 
     def merge(
@@ -751,20 +785,30 @@ class HostStore(Store):
     ) -> MergeResult:
         merged = super().merge(who, item, from_ref=from_ref, into=into, strategy=strategy)
         if into == MAIN and merged.outcome in ("fast-forward", "merged"):
-            self._landed(who, merged.object_id)
+            self._landed(who, item, MAIN, merged.object_id)
         return merged
 
     def close(self) -> None:
-        if self.lifecycle is not None:
-            self.lifecycle.close()
-        super().close()
+        """Under the mutex, because closing the one connection mid-statement on another thread
+        kills the process. No block's code runs under it, so a stuck pass does not hold this up."""
+        with self._mutex:
+            self.closing = True
+            if self.lifecycle is not None:
+                self.lifecycle.close()
+            super().close()
 
-    def _landed(self, who: Principal, object_id: ObjectId) -> None:
-        """What the host owes once a record reaches `main`, after its put has committed (a
-        checker runs inside the put and cannot write): a verdict's judge moves, and a study
-        spec's `spec_edit` try when a result exists against an earlier version of it."""
-        kind = str(self._require(object_id)[2])
-        if kind == VERDICT_KIND and self.lifecycle is not None:
+    def _landed(self, who: Principal, item: str, ref: str, object_id: ObjectId) -> None:
+        """What the host owes once a save has committed (a checker runs inside the put and cannot
+        write): a dictionary entry's status on whichever ref it saved to, and once a record reaches
+        `main`, a verdict's judge moves and a study spec's `spec_edit` try when a result exists
+        against an earlier version of it."""
+        with self._mutex:
+            kind = str(self._require(object_id)[2])
+        if kind == ENTRY_KIND:
+            land_entry_status(self, item)
+        elif ref != MAIN:
+            return
+        elif kind == VERDICT_KIND and self.lifecycle is not None:
             record_judge_moves(self, self.lifecycle, object_id)
         elif kind == STUDY_KIND:
             land_spec_edit(self, who, object_id)
@@ -827,18 +871,33 @@ def unit_problems(store: Store) -> Checker:
     return checked
 
 
-def entry_check(fields: JsonObject) -> list[Problem]:
+def entry_check(store: Store) -> Checker:
     """`qml.entry/1`, the put check of a `component` marked `qmx.entry/1`: its face reads as
-    QML's entry. QML names a face problem by its place in the face, under `/entry` here."""
-    return [
-        Problem(
-            p.message,
-            (p.where if p.where == "/component_type" else f"/entry{p.where}".rstrip("/"),),
-            CHECK_FAILED,
-            "entry/face",
-        )
-        for p in entry_problems(fields)
-    ]
+    QML's entry, and it takes no name or pin another entry holds. QML names a face problem by its
+    place in the face and a clash by the pin before that place, both under `/entry` here."""
+
+    def checked(fields: JsonObject) -> list[Problem]:
+        faces = [
+            Problem(
+                p.message,
+                (p.where if p.where == "/component_type" else f"/entry{p.where}".rstrip("/"),),
+                CHECK_FAILED,
+                "entry/face",
+            )
+            for p in entry_problems(fields)
+        ]
+        clashes = [
+            Problem(
+                p.message,
+                (f"/entry/{p.where.partition('/')[2]}".rstrip("/"),),
+                CHECK_FAILED,
+                "entry/clash",
+            )
+            for p in entry_clashes(store, fields)
+        ]
+        return [*faces, *clashes]
+
+    return checked
 
 
 def study_check(fields: JsonObject) -> list[Problem]:
@@ -851,7 +910,7 @@ def study_check(fields: JsonObject) -> list[Problem]:
 def register_checkers(store: Store) -> None:
     """The checkers the Library's kind files name, registered at composition (Part A AD-112)."""
     store.register_checker(UNIT_CHECKER, unit_problems(store))
-    store.register_checker(ENTRY_CHECKER, entry_check)
+    store.register_checker(ENTRY_CHECKER, entry_check(store))
     store.register_checker(STUDY_CHECKER, study_check)
 
 
@@ -859,14 +918,9 @@ JOURNALS: Final = "journals"
 """This PC's journal root, where the host's own streams append (Part B AD-209)."""
 
 
-def lifecycle_writer(home: Path, control: ControlService, machine: str) -> LifecycleWriter:
-    """This PC's one lifecycle writer, reading `[units] lifecycle.auto_paper` at each move."""
-
-    def auto_paper() -> bool:
-        units = cast(dict[str, object], control.settings_get("units"))
-        return cast(dict[str, object], units.get("lifecycle") or {}).get("auto_paper") is True
-
-    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}", auto_paper)
+def lifecycle_writer(home: Path, machine: str) -> LifecycleWriter:
+    """This PC's one lifecycle writer."""
+    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}")
 
 
 def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -> list[str]:
@@ -883,6 +937,29 @@ def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -
     except MoveRefused as refused:
         print(f"lifecycle: {verdict_id} moved nothing: {refused}", file=sys.stderr)
         return []
+
+
+def land_entry_status(store: HostStore, item: str) -> None:
+    """One saved entry's status. A status that fails to compute or write is printed: the save has
+    committed and stands, and the next start's pass tries again. An entry refused is named too.
+    It runs the entry's own code, and `compute_status` keeps anything that code raises. Nothing is
+    printed once the store is closing, because `start` shows the log's last line as the reason."""
+    try:
+        written = write_entry_status(store, item)
+    except Exception as refused:
+        if not store.closing:
+            print(
+                f"library: the status of {item} was not written: "
+                f"{type(refused).__name__}: {refused}",
+                file=sys.stderr,
+            )
+        return
+    for _, _, computed in written:
+        if computed.status is None and not store.closing:
+            print(
+                f"library: the status of {item} is refused: {computed.problems[0].message}",
+                file=sys.stderr,
+            )
 
 
 def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
@@ -937,6 +1014,18 @@ def enable_apps(home: Path, runtime: Supervisor) -> None:
         print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
 
 
+def close_stranded_runs(home: Path, run: QmbRun) -> None:
+    """Close what the last host left open. A store or volume that refuses is named and the host
+    starts anyway; the next start tries again."""
+    try:
+        closed = fail_stranded_runs(home, run)
+    except (AppError, LibraryRefused, OSError, ValueError) as refused:
+        print(f"apps: the runs the last host left open did not close: {refused}", file=sys.stderr)
+        return
+    if closed:
+        print(f"apps: closed as failed, the host restarted: {', '.join(closed)}", file=sys.stderr)
+
+
 def land_first_unit(store: Store) -> None:
     """The dummy unit waits in his Library as a draft from the first start on (AD-118). A store
     that refuses the put (a replica, a read-only store) is named and the host starts anyway."""
@@ -976,6 +1065,35 @@ def land_dictionary_wave(store: Store) -> None:
         print(
             f"library: the dictionary's first wave waits in the Library: {family}", file=sys.stderr
         )
+
+
+def land_dictionary_statuses(store: HostStore) -> threading.Thread:
+    """Every Library entry's status at each PC start, because a store an older checker wrote or a
+    save whose status failed reads true only after this. A head already true writes nothing. One
+    entry at a time, so one that raises names itself and costs only its own status.
+
+    On a daemon thread, and the start does not wait for it, because a thread cannot be stopped and
+    an entry's code can loop forever. Such an entry costs this thread, a core, and the status of
+    every item sorted after it, this start and each next one. Nothing reads a status during a
+    start, and until the pass reaches an entry its page reads the status last written. It stops at
+    the next entry once the store is closing, and the next start's pass does the rest."""
+
+    def run() -> None:
+        try:
+            for item in entry_items(store):
+                if store.closing:
+                    return
+                land_entry_status(store, item)
+        except (LibraryRefused, OSError, ValueError, sqlite3.Error) as refused:
+            if not store.closing:
+                print(
+                    f"library: the dictionary's statuses were not written: {refused}",
+                    file=sys.stderr,
+                )
+
+    running = threading.Thread(target=run, name="qmx-entry-statuses", daemon=True)
+    running.start()
+    return running
 
 
 def library_line(store: Store) -> DoctorLine:
@@ -1106,14 +1224,21 @@ async def serve(
                 if not serving:
                     land_first_unit(store)
                 if role == "pc":
-                    store.lifecycle = lifecycle_writer(home, control, name)
+                    store.lifecycle = lifecycle_writer(home, name)
                     land_ported_dictionary(store)
                     land_dictionary_wave(store)
+                    land_dictionary_statuses(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
-                runtime.attach_landers(
-                    landers(store, runtime, name, settings=lambda: control.settings_get("qmb"))
+                registered = landers(
+                    store,
+                    runtime,
+                    name,
+                    settings=lambda: control.settings_get("qmb"),
+                    door=door,
                 )
+                runtime.attach_landers(registered)
+                close_stranded_runs(runtime.home, cast(QmbRun, registered[QMB_RUN]))
                 threading.Thread(
                     target=enable_apps, args=(home, runtime), name="qmx-first-apps", daemon=True
                 ).start()
@@ -1126,7 +1251,17 @@ async def serve(
                     store=store,
                 )
                 records = records_job(home, control, role, door, store, nodes)
-                venue_records = VenueRecords(node_call(runtime), store) if role == "pc" else None
+                node_settings = control.settings_get("node")
+                venue_records = (
+                    VenueRecords(
+                        node_call(runtime),
+                        store,
+                        every_s=refresh_s(node_settings),
+                        markets=record_markets(node_settings),
+                    )
+                    if role == "pc"
+                    else None
+                )
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
@@ -1275,6 +1410,7 @@ async def serve(
                         await asyncio.to_thread(connect.world.logs.process.close)
                     adopt_router(None)
                     install(None)
+                    attach_dead_ends(control, None)
                     await asyncio.to_thread(memory.close)
         finally:
             await harness.close()
@@ -1725,7 +1861,7 @@ class LanderLibrary:
 
     def __init__(self, store: Store) -> None:
         self.store = store
-        self._units: dict[str, RunUnit | str | None] = {}
+        self._units: dict[str, tuple[Mapping[str, JsonObject], RunUnit | str]] = {}
 
     def find(self, item: str) -> str | None:
         head = self.store.head(item, MAIN)
@@ -1772,44 +1908,136 @@ class LanderLibrary:
             seen.add(item)
 
     def unit(self, pin: str) -> RunUnit | str | None:
-        """The unit document `pin` names, compiled with the blocks and records `gather` finds;
+        """The unit document `pin` names, compiled with the blocks and records `gather` finds now;
         why it does not compile; or None when the pin names an object of another kind. An object
-        never changes, so each pin compiles once per host."""
-        if pin not in self._units:
-            self._units[pin] = self._compiled(pin)
-        return self._units[pin]
-
-    def _compiled(self, pin: str) -> RunUnit | str | None:
+        never changes but the records it reads do, so a pin compiles again only when they moved.
+        The documents are the key, because a fixture, a first item and an item replacing an
+        archived one can all read as version 1."""
         view = self.store.get(OPERATOR_READ, pin)
         if view.kind != "unit":
             return None
         document = cast(dict[str, object], view.fields)
-        context = gather(self.store, document).context
-        compiled = compile_unit(document, context)
-        if not isinstance(compiled, CompiledUnit):
+        gathered = gather(self.store, document)
+        held = self._units.get(pin)
+        if held is not None and held[0] == gathered.record_documents:
+            return held[1]
+        compiled = compile_unit(document, gathered.context)
+        found: RunUnit | str
+        if isinstance(compiled, CompiledUnit):
+            found = RunUnit(
+                document, gathered.context, compiled, gathered.record_documents, gathered.warnings
+            )
+        else:
             first = compiled[0].message if compiled else "the unit does not compile"
-            return f"the unit {pin} does not compile: {first}"
-        return RunUnit(document, context, compiled)
+            found = f"the unit {pin} does not compile: {first}"
+        self._units[pin] = (gathered.record_documents, found)
+        return found
 
     def compiled_fingerprint(self, unit: str) -> str | None:
         found = self.unit(unit) if self.holds(unit) else None
         return found.compiled.compiled_fingerprint.value if isinstance(found, RunUnit) else None
 
-    def g_record(self, compiled_fp: str) -> GRecord | None:
-        """The first finished layer G `test-report` of `compiled_fp`: a check that failed or
-        was killed gave no verdict, so the next run checks again."""
+    def markets_of(self, unit: str) -> Sequence[str]:
+        found = self.unit(unit)
+        return found.markets if isinstance(found, RunUnit) else ()
+
+    def g_record(self, compiled_fp: str, markets: Collection[str]) -> GRecord | None:
+        """The layer G verdict of `compiled_fp` over `markets`, read from each finished
+        `test-report`'s own slice. A failure seen on any of them answers first. Otherwise the
+        first pass that saw them all, and otherwise none, so a market no check saw is checked
+        before it runs and refused a move. A check that failed or was killed gave no verdict."""
+        asked, passed = set(markets), None
         for object_id in self.store.with_field(TEST_REPORT, "compiled_fingerprint", compiled_fp):
             fields = self.store.get(OPERATOR_READ, object_id).fields
-            if fields.get("check") == G_CHECK and fields.get("status") == "finished":
-                safety = cast(dict[str, object], fields.get("safety") or {})
-                return GRecord(object_id, safety.get("verdict") == "pass")
-        return None
+            if fields.get("check") != G_CHECK or fields.get("status") != "finished":
+                continue
+            behaviour = cast(dict[str, dict[str, list[str]]], fields.get("behaviour") or {})
+            saw = set(behaviour.get("slice", {}).get("market_ids", ()))
+            safety = cast(dict[str, object], fields.get("safety") or {})
+            if safety.get("verdict") != "pass" and saw & asked:
+                return GRecord(object_id, False)
+            if passed is None and safety.get("verdict") == "pass" and asked <= saw:
+                passed = GRecord(object_id, True)
+        return passed
 
 
 OPERATOR_READ: Final = Principal.parse("operator")
 LINEAGE: Final = "variant-of"
 BAR_SIDES: Final = ("bid", "ask")
 BARS_TEMPLATE: Final = "download-dukascopy"
+DEFAULT_SOURCE: Final = "dukascopy"
+STORE_SHAPES: Final = (("bar-m1", BAR_SIDES), ("ticks", ("-",)))
+"""What a run reads from the market store, a month's bid and ask bars before its ticks, because a
+month holds far fewer of them. The child reads either, so the reader stays when a derived step
+writes `bar-m1` next to the ticks."""
+_CARDS_LOCK: Final = threading.Lock()
+"""One `dataset` card head at a time on this host, so two runs of a new series both land."""
+
+
+COST_PROFILE: Final = "cost-profile"
+"""The word `library_save` keeps for a stated cost profile. The Library has no such kind yet."""
+HOST_RESTARTED: Final = "host restarted"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StatedCosts:
+    """A cost profile a run was told to pay: its pin, each market's `qmx.qmb.cost-profile/1`, and
+    each market's funding rates as the tester's `timestamp,rate` CSV text."""
+
+    pin: str
+    profiles: Mapping[str, JsonObject]
+    funding: Mapping[str, str]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CsvPair:
+    """One market's hand-saved bid and ask files for exactly the run's window."""
+
+    bid: Path
+    ask: Path
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RunWindow:
+    """A run's window, its months, and the seal it reads them through. `run` names that seal only
+    when a study states a holdout: a name fixes its first answer for good, so a name for no stated
+    holdout would keep today's Settings default for this study and window after he changes it. A
+    quick study's "off" is no statement, because he never wrote it, so his Settings seal holds."""
+
+    start: str
+    end: str
+    months: tuple[str, ...]
+    holdout: HoldoutAsk
+    run: str | None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StoreSide:
+    """One series a market reads: its folder under `in/data/<market>/`, and the window's months
+    oldest first. `card` is `MarketDoor.card` of the whole series, for its `dataset` item."""
+
+    name: str
+    series: str
+    fingerprints: tuple[str, ...]
+    card: Mapping[str, Any]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StoreMonths:
+    """One market's whole window in the market store, in one shape and at one stated scale."""
+
+    kind: str
+    scale: int
+    sides: tuple[StoreSide, ...]
+    window: RunWindow
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class NotInStore:
+    """Why a market's window cannot read the store: months no shape holds, series with no scale."""
+
+    months: tuple[str, ...] = ()
+    unscaled: tuple[str, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -1820,22 +2048,14 @@ class RunUnit:
     document: dict[str, object]
     context: CompileContext
     compiled: CompiledUnit
+    record_documents: Mapping[str, JsonObject]
+    fixture_records: tuple[str, ...]
+    """`gather`'s warnings. Any other warning leaves a market with no record, and such a unit does
+    not compile, so on a run these only name markets on a fixture."""
 
     @property
     def markets(self) -> tuple[str, ...]:
         return tuple(market.market_id for market, _ in self.compiled.plan.markets)
-
-
-def _record_file(record: InstrumentRecord) -> Path | None:
-    """The fixture file `gather` read `record` from: records are QML's fixtures until C-02."""
-    for path in sorted(FIXTURE_RECORDS.glob("*.json")):
-        parsed = parse_record(json.loads(path.read_text("utf-8")))
-        if not is_refusal(parsed) and (parsed.value.venue, parsed.value.symbol) == (
-            record.venue,
-            record.symbol,
-        ):
-            return path
-    return None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -1845,11 +2065,13 @@ class QmbRun:
 
     For a unit document it lays the run out before the job starts (Part B AD-202 step 1), so
     the tester reads files only: `in/request.json` with the core's fields filled (among them
-    `[qmb] gap_bars_refuse` and `calibrated_min_fills`, and the study's `allow_gaps` unless the
-    request sets its own), the unit, its pinned blocks, its markets' records, and each market's
-    bid and ask bars for the window. The
-    bars are the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` that dukascopy-node
-    saves, read from `[qmb] bars` (default the market store's `bars/` folder)."""
+    `[qmb] gap_bars_refuse` and `calibrated_min_fills`, `allow_gaps` as a named study states it
+    and otherwise as the request does, and `fixture_records` naming any market on a test fixture),
+    the unit, its pinned blocks, the record documents `gather` read, and each market's data for
+    the window. A market's data is the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` when
+    `[qmb] bars` (default the market store's `bars/` folder) holds it, the test and hand-saved
+    route. Otherwise it is the months in the market store, copied through the door to
+    `in/data/<market>/` beside a `card.json`, and the result links their `dataset` items."""
 
     lander: RunLander
     library: LanderLibrary
@@ -1857,16 +2079,18 @@ class QmbRun:
     """The run folder the supervisor makes for `(app_id, run_id)` inside the app's volume."""
     settings: Callable[[], Mapping[str, object]]
     market: Path
+    door: MarketDoor | TypedRefusal
 
     def open(
         self, app_id: str, version: str, job: str, inputs: Document, principal: str
     ) -> Ticket | None:
         """Refuse a unit or study pin that names no Library object, a unit that does not
-        compile, or a window with no bars before any try lands: the result's `uses` and `tests`
-        edges point at the pins, so such a run could never close."""
+        compile, or a window with no data or a sealed month before any try lands: the result's
+        `uses` and `tests` edges point at the pins, so such a run could never close. A copy that
+        fails after the try opened fails that try, so no run stays open for good."""
         unknown = [
             f"{name} {pin} names no object in the Library"
-            for name in ("unit", "study")
+            for name in ("unit", "study", "cost_profile")
             if isinstance(pin := inputs.get(name), str) and pin and not self.library.holds(pin)
         ]
         if unknown:
@@ -1876,49 +2100,185 @@ class QmbRun:
         if isinstance(found, str):
             raise BundleRefused([found])
         bars = None if found is None else self._bars(found, inputs)
+        costs = None if bars is None else self._stated_costs(inputs, bars)
         ticket = self.lander.open(app_id, version, job, inputs, principal)
         if ticket is not None and found is not None and bars is not None:
-            self._lay_out(self.folder_of(app_id, ticket.run_id) / "in", ticket, found, bars)
+            laid = self.folder_of(app_id, ticket.run_id) / "in"
+            try:
+                self._lay_out(laid, ticket, found, bars, costs)
+            except (OSError, ValueError, LibraryRefused) as error:
+                self.lander.fail(ticket, str(error), status="failed")
+                _lighten(laid)
+                raise BundleRefused([str(error)]) from error
         return ticket
 
-    def _bars(self, found: RunUnit, inputs: Document) -> dict[str, dict[str, Path]]:
-        """Each of the unit's markets' bid and ask files for the request's window, or a refusal
-        that names every missing file and the template that downloads it (LD-06)."""
-        asked = inputs.get("markets")
-        if asked is not None and sorted(cast(list[str], asked)) != sorted(found.markets):
+    def _stated_costs(self, inputs: Document, markets: Collection[str]) -> StatedCosts | None:
+        """The cost profile a run is told to pay: the study's `cost_rule` when it names a Library
+        object, as a study's `allow_gaps` beats a chat's, else the request's `cost_profile`. A
+        `cost_rule` naming no object is words. The object is what `library_save` lands, and
+        anything else is refused before any try, as is a profile that charges one of `markets`
+        nothing. Only a `costs` entry counts: funding reaches a market only if its record pays
+        funding, so funding alone can charge nothing while the result names the profile."""
+        rule = self._study_fields(inputs).get("cost_rule")
+        named = rule if isinstance(rule, str) and self.library.holds(rule) else None
+        pin = named or inputs.get("cost_profile")
+        if pin is None:
+            return None
+        if not isinstance(pin, str):
+            raise BundleRefused(["cost_profile names one cost-profile in the Library, as text"])
+        store = self.library.store
+        view = store.get(OPERATOR_READ, pin)
+        said = view.fields.get("legacy_kind", view.kind)
+        blob = view.blobs.get("content")
+        if said != COST_PROFILE or blob is None:
+            raise BundleRefused([f"cost_profile {pin} is a {said}, not a {COST_PROFILE}"])
+        body: object = json.loads(store.read_blob(blob.blob_id))
+        held = cast(dict[str, Any], body).get("content", body) if isinstance(body, dict) else body
+        stated = cast(dict[str, Any], held) if isinstance(held, dict) else {"costs": held}
+        profiles, funding = stated.get("costs") or {}, stated.get("funding") or {}
+        if not (_maps_to(profiles, dict) and _maps_to(funding, str)):
             raise BundleRefused(
                 [
-                    f"QMB replays every market the unit trades, {list(found.markets)}; leave "
-                    "markets out or name them all"
+                    f"cost_profile {pin} needs costs by market, each an object, and funding by "
+                    "market, each CSV text"
                 ]
             )
+        missing = [market for market in markets if market not in profiles]
+        if missing:
+            raise BundleRefused([f"cost_profile {pin} names no costs for {', '.join(missing)}"])
+        return StatedCosts(pin, profiles, funding)
+
+    def _study_fields(self, inputs: Document) -> Mapping[str, Any]:
+        pin = inputs.get("study")
+        if not isinstance(pin, str) or not pin:
+            return {}
+        return self.library.store.get(OPERATOR_READ, pin).fields
+
+    def _bars(self, found: RunUnit, inputs: Document) -> dict[str, CsvPair | StoreMonths]:
+        """Each market the request names and where its window's data sits, or a refusal that
+        names every missing month and the template that downloads it (LD-06)."""
+        window = self._run_window(inputs)
+        self._refuse_sealed(window)
+        study = self._study_fields(inputs)
+        named = self.settings().get("bars")
+        folder = Path(named) if isinstance(named, str) and named else self.market / "bars"
+        stream = found.compiled.plan.stream
+        sources = _sources(inputs.get("source"), study.get("source"))
+        read: dict[str, CsvPair | StoreMonths] = {}
+        lacking: dict[str, NotInStore] = {}
+        files_missing: list[str] = []
+        for market in _asked_markets(found.markets, inputs.get("markets")):
+            record = found.context.records.get(market)
+            symbol = record.symbol if record else market.rsplit(".", 1)[-1]
+            bid, ask = (
+                folder / f"{symbol.lower()}-{stream}-{s}-{window.start}-{window.end}.csv"
+                for s in BAR_SIDES
+            )
+            if bid.is_file() and ask.is_file():
+                read[market] = CsvPair(bid, ask)
+                continue
+            files_missing += [str(path) for path in (bid, ask) if not path.is_file()]
+            in_store = self._from_store(market, symbol.upper(), sources, window)
+            if isinstance(in_store, StoreMonths):
+                read[market] = in_store
+            else:
+                lacking[market] = in_store
+        if lacking:
+            csv_named = files_missing if isinstance(named, str) and named else []
+            raise BundleRefused(_lacking_words(lacking, sources, window, csv_named))
+        return read
+
+    def _run_window(self, inputs: Document) -> RunWindow:
         window = inputs.get("window")
         if not isinstance(window, dict) or not {"start", "end"} <= set(window):
             raise BundleRefused(["a unit run names its window, {start, end} as dates"])
         start, end = str(window["start"])[:10], str(window["end"])[:10]
-        named = self.settings().get("bars")
-        folder = Path(named) if isinstance(named, str) and named else self.market / "bars"
-        stream = found.compiled.plan.stream
-        found_bars: dict[str, dict[str, Path]] = {}
-        missing: list[str] = []
-        for market in found.markets:
-            record = found.context.records.get(market)
-            symbol = (record.symbol if record else market.rsplit(".", 1)[-1]).lower()
-            paths = {s: folder / f"{symbol}-{stream}-{s}-{start}-{end}.csv" for s in BAR_SIDES}
-            missing += [str(path) for path in paths.values() if not path.is_file()]
-            found_bars[market] = paths
-        if missing:
+        study = self._study_fields(inputs)
+        holdout = None if study.get("origin") == "quick" else study.get("holdout")
+        return RunWindow(
+            start,
+            end,
+            _months_of(start, end),
+            cast("HoldoutAsk", holdout),
+            None if holdout is None else f"{inputs['study']}@{start}/{end}",
+        )
+
+    def _refuse_sealed(self, window: RunWindow) -> None:
+        """A month the run's holdout seals never reaches a run folder, by either route, because
+        `materialise` copies whatever it is given. With no door there is no seal to ask, unless
+        a study states one."""
+        if isinstance(self.door, TypedRefusal):
+            if window.holdout is None:
+                return
+            raise BundleRefused([f"this study names a holdout: {shut_line(self.door)}"])
+        sealed = self.door.sealed_months(window.months, holdout=window.holdout, run=window.run)
+        if is_refusal(sealed):
+            raise BundleRefused([_door_reason(sealed)])
+        if sealed.value:
+            raise BundleRefused([f"{SEAL_READ_REASON}: {', '.join(sealed.value)}"])
+
+    def _from_store(
+        self, market: str, symbol: str, sources: Sequence[str], window: RunWindow
+    ) -> StoreMonths | NotInStore:
+        """The one source whose store holds this market's whole window. Two is a refusal, because
+        they can differ only when the request and the study name different sources."""
+        if isinstance(self.door, TypedRefusal):
+            raise BundleRefused([f"the market-data door did not open: {shut_line(self.door)}"])
+        found = [self._held(self.door, source, symbol, window) for source in sources]
+        usable = [one for one in found if isinstance(one, StoreMonths)]
+        if len(usable) > 1:
             raise BundleRefused(
                 [
-                    f"no bars for {start} to {end}: {missing[0]} is missing; save the month "
-                    f"with dukascopy-node or the {BARS_TEMPLATE} template",
-                    *missing[1:],
+                    f"{market} holds this window under both {' and '.join(sources)}; the request "
+                    "and the study name different sources, so name one"
                 ]
             )
-        return found_bars
+        if usable:
+            return usable[0]
+        lacking = [one for one in found if isinstance(one, NotInStore)]
+        return NotInStore(
+            tuple(sorted({month for one in lacking for month in one.months})),
+            tuple(sorted({series for one in lacking for series in one.unscaled})),
+        )
+
+    def _held(
+        self, door: MarketDoor, source: str, symbol: str, window: RunWindow
+    ) -> StoreMonths | NotInStore:
+        """The first shape that holds the whole window on every side at one stated scale."""
+        lacking = NotInStore()
+        for kind, variants in STORE_SHAPES:
+            sides: list[StoreSide] = []
+            absent: list[str] = []
+            for variant in variants:
+                series = f"{source}/{symbol}/{kind}/{variant}"
+                card = door.card(series)
+                whole: dict[str, Any] = {} if is_refusal(card) else cast(dict[str, Any], card.value)
+                months = {
+                    str(p["month"]): str(p["fingerprint"]) for p in whole.get("partitions", [])
+                }
+                absent += [month for month in window.months if month not in months]
+                name = kind if variant == "-" else variant
+                in_order = tuple(months[m] for m in window.months if m in months)
+                sides.append(StoreSide(name, series, in_order, whole))
+            if absent:
+                lacking = NotInStore(tuple(sorted(set(absent))), lacking.unscaled)
+                continue
+            scales = {door.price_scale(side.series) for side in sides}
+            scale = scales.pop()
+            if scale is None or scales:
+                unscaled = [s.series for s in sides if door.price_scale(s.series) is None]
+                lacking = NotInStore((), (*lacking.unscaled, *unscaled))
+                continue
+            return StoreMonths(kind, scale, tuple(sides), window)
+        return lacking
 
     def _lay_out(
-        self, root: Path, ticket: Ticket, found: RunUnit, bars: Mapping[str, Mapping[str, Path]]
+        self,
+        root: Path,
+        ticket: Ticket,
+        found: RunUnit,
+        bars: Mapping[str, CsvPair | StoreMonths],
+        costs: StatedCosts | None = None,
     ) -> None:
         settings = self.settings()
         pin = ticket.study
@@ -1928,14 +2288,18 @@ class QmbRun:
             "equity": settings.get("equity"),
             "execution_target": settings.get("execution_target"),
             "g_slice_margin": settings.get("g_slice_margin"),
+            "g_slice_bars": settings.get("g_slice_bars"),
             "gap_bars_refuse": settings.get("gap_bars_refuse"),
             "calibrated_min_fills": settings.get("calibrated_min_fills"),
             "motion": "on",
-            "allow_gaps": study.get("allow_gaps", False),
+            "allow_gaps": False,
             **ticket.request,
+            **({"allow_gaps": study["allow_gaps"]} if "allow_gaps" in study else {}),
             "kind": run_kind(ticket.job),
             "run_id": ticket.run_id,
-            "markets": list(found.markets),
+            "markets": list(bars),
+            "fixture_records": list(found.fixture_records),
+            **({} if costs is None else {"cost_profile": costs.pin}),
         }
         root.mkdir(parents=True, exist_ok=True)
         (root / "request.json").write_text(json.dumps(request, indent=2), "utf-8")
@@ -1946,31 +2310,241 @@ class QmbRun:
             (block / "block.py").write_bytes(source)
             (block / "entry.json").write_bytes(found.context.entries[pin])
         (root / "records").mkdir(exist_ok=True)
-        for market, record in found.context.records.items():
-            source_file = _record_file(record)
-            if source_file is not None:
-                shutil.copyfile(source_file, root / "records" / f"{market}.json")
-        for market, sides in bars.items():
+        for market, document in found.record_documents.items():
+            (root / "records" / f"{market}.json").write_text(
+                json.dumps(document, indent=2), "utf-8"
+            )
+        for market, data in bars.items():
+            if isinstance(data, StoreMonths):
+                self._copy_months(root / "data" / market, market, data)
+                continue
             (root / "bars" / market).mkdir(parents=True, exist_ok=True)
-            for side, path in sides.items():
-                shutil.copyfile(path, root / "bars" / market / f"{side}.csv")
+            shutil.copyfile(data.bid, root / "bars" / market / "bid.csv")
+            shutil.copyfile(data.ask, root / "bars" / market / "ask.csv")
+        if costs is not None:
+            self._lay_costs(root, costs, bars)
+
+    def _lay_costs(
+        self, root: Path, costs: StatedCosts, bars: Mapping[str, CsvPair | StoreMonths]
+    ) -> None:
+        """Each market's stated profile and funding where the tester reads them. A stated profile
+        measured no fills whatever it says, so the run stays `costs_uncalibrated`."""
+        (root / "costs").mkdir(exist_ok=True)
+        for market in bars:
+            (root / "costs" / f"{market}.json").write_text(
+                json.dumps({**costs.profiles[market], "fills": 0}, indent=2), "utf-8"
+            )
+            if market in costs.funding:
+                (root / "funding").mkdir(exist_ok=True)
+                (root / "funding" / f"{market}.csv").write_text(costs.funding[market], "utf-8")
+
+    def _copy_months(self, folder: Path, market: str, data: StoreMonths) -> None:
+        """A market's months as verified copies, beside the card the tester reads them by."""
+        door = cast(MarketDoor, self.door)
+        files: dict[str, list[str]] = {}
+        for side in data.sides:
+            copied = door.materialise(
+                side.fingerprints,
+                into=folder / side.name,
+                holdout=data.window.holdout,
+                run=data.window.run,
+            )
+            if is_refusal(copied):
+                raise BundleRefused([f"{market}: {_door_reason(copied)}"])
+            files[side.name] = [path.relative_to(folder).as_posix() for path in copied.value]
+        card = {
+            "kind": data.kind,
+            "scale": data.scale,
+            "fidelity": "quotes",
+            "series": [side.series for side in data.sides],
+            "window": {"start": data.window.start, "end": data.window.end},
+            "months": list(data.window.months),
+            "files": files,
+            "datasets": [self._land_card(side, data.scale) for side in data.sides],
+        }
+        (folder / "card.json").write_text(json.dumps(card, indent=2), "utf-8")
+
+    def _land_card(self, side: StoreSide, scale: int) -> str:
+        """The series' `dataset` item as the door states it now, unchanged when it already is."""
+        source, subject, kind, variant = side.series.split("/")
+        parts = tuple(
+            Partition(
+                int(str(part["month"])[:4]),
+                int(str(part["month"])[5:]),
+                str(part["fingerprint"]),
+                int(part["rows"]),
+                bool(part["frozen"]),
+                tuple(str(gap) for gap in part["gaps"]),
+            )
+            for part in side.card["partitions"]
+        )
+        card = SeriesCard(
+            source,
+            subject,
+            kind,
+            "" if variant == "-" else variant,
+            quality={"price_scale": scale},
+        )
+        with _CARDS_LOCK:
+            return write_card(self.library.store, OPERATOR_READ, card, parts).object_id
 
     def close(self, landing: AppLanding) -> str:
         run, data = landing.run, landing.data
         if run is None or not isinstance(data, dict):
             raise BundleRefused(["the result is a qmx.qmb.result-bundle/1 object from a run"])
         ticket = cast(Ticket, run.ticket)
-        bundle = parse_bundle(data)
+        bundle = _with_its_data(parse_bundle(data), run.folder / "in")
         try:
-            return self.lander.close(Landing(ticket, bundle, run.folder))
+            landed = self.lander.close(Landing(ticket, bundle, run.folder))
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
+        _lighten(run.folder / "in")
+        return landed
 
     def fail(self, ticket: AppTicket, reason: str, status: Ending) -> str:
+        own = cast(Ticket, ticket)
         try:
-            return self.lander.fail(cast(Ticket, ticket), reason, status=status)
+            landed = self.lander.fail(own, reason, status=status)
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
+        _lighten(self.folder_of(own.app_id, own.run_id) / "in")
+        return landed
+
+
+def _lighten(laid: Path) -> None:
+    """A landed run's copies of its bars go, last of all, because the lander reads them first. The
+    market store and the result keep what they held. A file still open stays, and fails no run."""
+    for copied in ("bars", "data"):
+        shutil.rmtree(laid / copied, ignore_errors=True)
+
+
+def fail_stranded_runs(home: Path, run: QmbRun) -> list[str]:
+    """Close each run this machine left open, before any app starts. The thread that waited on it
+    died with the last host, and a leftover request would run with nobody to close it. Answers the
+    run ids it closed; a second start finds none."""
+    store = run.library.store
+    prefix = f"qmbr-{run.lander.machine}"
+    closed: list[str] = []
+    for object_id in store.with_field(TRY_KIND, "state", "opened"):
+        view = store.get(OPERATOR_READ, object_id)
+        fields = cast(dict[str, Any], view.fields)
+        run_id = str(fields["run_id"])
+        if run_id.rpartition("-")[0] != prefix or run.library.find(try_item(run_id, "failed")):
+            continue
+        app = str(fields["tester"]["app"])
+        queue = Volume(home, app).root / JOB_QUEUE
+        for request in queue.glob("*.request.json"):
+            asked = json.loads(request.read_text("utf-8"))
+            if asked.get("inputs", {}).get("run_id") == run_id:
+                request.unlink(missing_ok=True)
+        laid = run.folder_of(app, run_id) / "in" / "request.json"
+        ticket = Ticket(
+            run_id=RunId(run_id),
+            app_id=app,
+            version=str(fields["tester"]["version"]),
+            job=view.title.split(" ")[0],
+            principal=str(fields["principal"]),
+            unit=str(fields["unit"]),
+            study=fields.get("study"),
+            family=str(fields["family"]),
+            opened=object_id,
+            request=json.loads(laid.read_text("utf-8")) if laid.is_file() else {},
+        )
+        run.fail(ticket, HOST_RESTARTED, "failed")
+        closed.append(run_id)
+    return closed
+
+
+def _months_of(start: str, end: str) -> tuple[str, ...]:
+    """Every `YYYY-MM` a half-open window of dates touches, oldest first."""
+    try:
+        first, last = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError as error:
+        raise BundleRefused(["a unit run names its window, {start, end} as dates"]) from error
+    if last <= first:
+        raise BundleRefused([f"this window's end, {end}, comes after its start, {start}"])
+    final = last - timedelta(days=1)
+    return tuple(
+        f"{at // 12:04d}-{at % 12 + 1:02d}"
+        for at in range(first.year * 12 + first.month - 1, final.year * 12 + final.month)
+    )
+
+
+def _sources(asked: object, studied: object) -> list[str]:
+    """The sources a run may read: those the request and the study name, else the default. No
+    other is read, so an old import with no stated scale cannot block or change a result."""
+    named = [source for source in (asked, studied) if source is not None]
+    if not all(isinstance(source, str) and source for source in named):
+        raise BundleRefused(["source names one source in the market store, as text"])
+    return list(dict.fromkeys(cast(list[str], named))) or [DEFAULT_SOURCE]
+
+
+def _maps_to(value: object, kind: type) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(entry, kind) for entry in cast(dict[str, object], value).values()
+    )
+
+
+def _asked_markets(traded: Sequence[str], asked: object) -> tuple[str, ...]:
+    """The markets a run names, in the unit's order, or every one when it names none."""
+    if asked is None:
+        return tuple(traded)
+    named = cast(list[str], asked)
+    stray = [market for market in named if market not in traded]
+    if stray or not named:
+        raise BundleRefused(
+            [
+                f"this unit does not trade {', '.join(stray) or 'an empty list'}; it trades "
+                f"{', '.join(traded)}"
+            ]
+        )
+    return tuple(market for market in traded if market in named)
+
+
+def _lacking_words(
+    lacking: Mapping[str, NotInStore],
+    sources: Sequence[str],
+    window: RunWindow,
+    csv_missing: Sequence[str],
+) -> list[str]:
+    """Every reason a run has no data, the months first, since the first one is the message."""
+    months = ", ".join(f"{market} {m}" for market, why in lacking.items() for m in why.months)
+    unscaled = sorted({series for why in lacking.values() for series in why.unscaled})
+    words: list[str] = []
+    if months:
+        also = f"; {csv_missing[0]} is missing too" if csv_missing else ""
+        words.append(
+            f"no data for {window.start} to {window.end}: {months} not in the market store under "
+            f"{' or '.join(sources)}; run the {BARS_TEMPLATE} template for each month{also}"
+        )
+    words += [
+        f"{series} states no price scale; run the {BARS_TEMPLATE} template's check on its card, "
+        "or download the month again"
+        for series in unscaled
+    ]
+    return words
+
+
+def _door_reason(refusal: TypedRefusal) -> str:
+    return str(refusal.context.get("reason", refusal.category.value))
+
+
+def _with_its_data(bundle: ResultBundle, laid: Path) -> ResultBundle:
+    """A store run's leave, with what only the core knows: the `dataset` items it read, their
+    series in its labels, and the hash of its request. A hand-saved CSV run has no such card."""
+    cards = [
+        cast("dict[str, list[str]]", json.loads(path.read_text("utf-8")))
+        for path in sorted(laid.glob("data/*/card.json"))
+    ]
+    if not cards:
+        return bundle
+    series = [name for card in cards for name in card["series"]]
+    return dataclasses.replace(
+        bundle,
+        consumed=tuple(dataset for card in cards for dataset in card["datasets"]),
+        request_fp=fingerprint_bytes((laid / "request.json").read_bytes()).value,
+        labels={**(bundle.labels or {}), "datasets": series},
+    )
 
 
 def landers(
@@ -1979,11 +2553,13 @@ def landers(
     machine: str,
     *,
     settings: Callable[[], Mapping[str, object]] = lambda: QMB_DEFAULTS,
+    door: MarketDoor | TypedRefusal | None = None,
 ) -> dict[str, Lander]:
     """The core landers this host registers: `qmb-run`, writing as the operator, the one
     principal who puts records on `main`, and minting run ids named for this machine. It runs a
     unit's behaviour check first through the supervisor's own `run_job`. `settings` reads the
-    `[qmb]` section at each run."""
+    `[qmb]` section at each run. `door` is the host's market-data door, or a refusal when it did
+    not open; left out, a door with no holdout on the same store."""
 
     def provides_of(app_id: str, version: str) -> set[str]:
         for row in runtime.versions(app_id):
@@ -2013,7 +2589,11 @@ def landers(
         check_first=CheckFirst(run_job, library),
         family_of=library.family_of,
     )
-    return {QMB_RUN: QmbRun(lander, library, folder_of, settings, runtime.home / MARKET_STORE)}
+    market = runtime.home / MARKET_STORE
+    if door is None:
+        opened = MarketDoor.open(market, {})
+        door = opened if is_refusal(opened) else opened.value
+    return {QMB_RUN: QmbRun(lander, library, folder_of, settings, market, door)}
 
 
 async def keep_facts(control: ControlService) -> None:
