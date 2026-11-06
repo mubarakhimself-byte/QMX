@@ -16,4 +16,4 @@ A test run names `fixture: recorded`, and `Replay the recorded runs` stands in f
 
 - Which session held: the referee's answer judges each market across every result, not each session, so the report lists the sessions tried and names none as the one that held.
 - Readings states as a context: the unit's conditions read them, and a sweep over them needs QMB to replay the MIS's reading history, which it does not yet.
-- Starting on a death certificate's landing: a certificate lands on its run's ref, and the event payload names only its object id, which no script can read the unit from. The run is started with the unit's pin.
+- Starting on a death certificate's landing: the landing event names only the certificate's object id, so a start needs a step to read the unit from it. The run is started with the unit's pin.

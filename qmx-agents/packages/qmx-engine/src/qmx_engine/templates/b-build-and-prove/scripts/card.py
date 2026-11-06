@@ -2,13 +2,24 @@
 demo-only minimal risk profile (fixed small r, tighten-only). A `fail` or `no_trades` verdict, the
 two the judge certifies dead, becomes a dead-end row with the judge's outcome, its plain words and
 the tries behind it, kept for R6. `incomplete` and `too_thin` get neither: the verdict waits. Its
-input is the stored verdict the rule routed. Nothing starts here; the trial is his act.
+input holds the stored verdict the rule routed, found by its key. Nothing starts here; the trial is
+his act.
 """
 
 import json
 import sys
 
-verdict = json.load(sys.stdin)["in"]["verdict"]
+def judged(value):
+    if isinstance(value, dict):
+        if isinstance(value.get("verdict"), dict):
+            return value["verdict"]
+        value = list(value.values())
+    if isinstance(value, list):
+        return next((found for v in value if (found := judged(v)) is not None), None)
+    return None
+
+
+verdict = judged(json.load(sys.stdin)["in"])
 if verdict["overall"] == "pass":
     card = {
         "kind": "start paper trial",

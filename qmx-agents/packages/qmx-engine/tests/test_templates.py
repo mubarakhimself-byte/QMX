@@ -1068,7 +1068,7 @@ def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home:
         "ask": "admit_market",
         "placeholders": {"markets": ["fx.gbpusd"]},
         "why": "the rules hold on fx.gbpusd, with the sessions 7:00 to 16:00 UTC tried and "
-        "counted. Holds by the shipped preset. fx.eurusd fails the try-corrected: the shrunk "
+        "counted. Pass by the shipped preset. fx.eurusd fails the try-corrected: the shrunk "
         "expectancy does not clear its bar; fx.gbpusd passes on 112 trades at 0.16R shrunk. "
         "Behind it: 4 tries, 4 effective.",
     }
@@ -1207,6 +1207,7 @@ MARCH = {"start": "2025-03-01", "end": "2025-04-01"}
 IDEA_ON_MARCH = {"idea": IDEA["idea"], "window": MARCH, "study": {"min_in_sample_days": 20}}
 UNIT_IDEA = "buy pullbacks in an uptrend, sell rallies in a downtrend"
 """The dummy's own claim card, which a quick study claims."""
+HIM = Principal("operator")
 
 
 @dataclass
@@ -1334,7 +1335,7 @@ def refusal(world: World, report: Any, node_id: str) -> str:
 
 def papers_on_main(world: World, verdict: str) -> list[dict[str, Any]]:
     return [
-        dict(world.store.get(OPERATOR, found).fields)
+        dict(world.store.get(HIM, found).fields)
         for kind in ("death-certificate", "proposal-card", "baseline-card")
         for found in world.store.with_field(kind, "verdict", verdict)
     ]
@@ -1349,15 +1350,19 @@ def papers_a_run_landed(world: World) -> list[str]:
     ]
 
 
-def judge_one_sweep(world: World) -> dict[str, Any]:
-    """A real sweep of one market, then the real tool over it."""
+def real_job(world: World, job: str, **asked: Any) -> str:
+    """One real QMB job of the dummy over the month, through the real lander: its landed result."""
+    inputs = {"unit": world.dummy, "window": MARCH, **asked}
     ran = world.control.app_job(
-        "qmb",
-        "jobs/sweep.py",
-        inputs={"unit": world.dummy, "window": MARCH, "grid": {"markets": ["fx.eurusd"]}},
-        principal="agent:chat-9",
+        "qmb", f"jobs/{job}.py", inputs=cast("Any", inputs), principal="agent:chat-9"
     )
     [result] = world.store.with_field("backtest-result", "run_id", str(ran["run_id"]))
+    return result
+
+
+def judge_one_sweep(world: World) -> dict[str, Any]:
+    """A real sweep of one market, then the real tool over it."""
+    result = real_job(world, "sweep", grid={"markets": ["fx.eurusd"]})
     return cast("dict[str, Any]", world.tools["backtest_judge_run"](results=[result])["result"])
 
 
@@ -1403,16 +1408,10 @@ def test_a_real_sweep_reaches_the_same_one_paper(
 
 
 def test_a_failed_cost_step_lands_cause_costs(world: World, judged_on_a_small_record: None) -> None:
-    window = {"unit": world.dummy, "window": MARCH}
-    results = []
-    for job, inputs in (
-        ("backtest", window),
-        ("robustness", {**window, "battery": ["cost_stress"]}),
-    ):
-        ran = world.control.app_job(
-            "qmb", f"jobs/{job}.py", inputs=inputs, principal="agent:chat-9"
-        )
-        results += world.store.with_field("backtest-result", "run_id", str(ran["run_id"]))
+    results = [
+        real_job(world, "backtest"),
+        real_job(world, "robustness", battery=["cost_stress"]),
+    ]
 
     said = world.tools["backtest_judge_run"](results=results)["result"]
 
@@ -1443,7 +1442,7 @@ def test_a_forged_id_naming_another_units_verdict_is_refused(
     world: World, judged_on_a_small_record: None
 ) -> None:
     theirs = world.store.put(
-        Principal("operator"),
+        HIM,
         LibraryDraft(
             "verdict",
             "verdict-of-another-unit",
@@ -1475,7 +1474,7 @@ def test_a_true_verdict_of_an_earlier_run_is_refused(
     world: World, judged_on_a_small_record: None
 ) -> None:
     earlier = judge_one_sweep(world)
-    its_results = world.store.get(OPERATOR, earlier["verdict_id"]).fields["results"]
+    its_results = world.store.get(HIM, earlier["verdict_id"]).fields["results"]
 
     report, finished = real_u1(
         world,
@@ -1507,19 +1506,20 @@ def test_a_dead_unit_leaves_a_memory_row_the_builder_can_read(
     try:
         said = judge_one_sweep(world)
         again = world.tools["backtest_judge_run"](
-            results=world.store.get(OPERATOR, said["verdict_id"]).fields["results"]
+            results=world.store.get(HIM, said["verdict_id"]).fields["results"]
         )["result"]
     finally:
         attach_dead_ends(world.control, None)
 
-    death = world.store.get(OPERATOR, said["cards"]["death-certificate"]).fields
+    death = world.store.get(HIM, said["cards"]["death-certificate"]).fields
     checked = asyncio.run(
         memory_reads(engine, SessionId("builder"))["memory_check"]({"query": UNIT_IDEA})
     )
     engine.close()
     assert again["cards"] == said["cards"]
-    assert [row["row_id"] for row in checked["dead_ends"]] == [death["memory_row"]]
-    [row] = checked["dead_ends"]
+    dead_ends = cast("list[dict[str, Any]]", checked["dead_ends"])
+    assert [row["row_id"] for row in dead_ends] == [death["memory_row"]]
+    [row] = dead_ends
     assert row["text"].startswith(f"{UNIT_IDEA}: {world.dummy} died of no_signal. ")
     assert row["refs"] == [f"object:{world.dummy}", f"object:{said['verdict_id']}"]
     assert "died of no_signal" in (tmp_path / "memory" / "general.md").read_text("utf-8")

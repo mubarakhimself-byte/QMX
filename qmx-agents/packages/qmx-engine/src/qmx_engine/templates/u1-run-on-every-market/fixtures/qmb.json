@@ -3,7 +3,7 @@
     "verdict": {
       "unit": "unit-object-fixture",
       "overall": "pass",
-      "says": "Holds by the shipped preset. fx.eurusd passes on 104 trades at 0.14R shrunk; metal.xauusd fails the try-corrected: the shrunk expectancy does not clear its bar. Behind it: 3 tries, 3 effective.",
+      "says": "Pass by the shipped preset. fx.eurusd passes on 104 trades at 0.14R shrunk; metal.xauusd fails the try-corrected: the shrunk expectancy does not clear its bar. Behind it: 3 tries, 3 effective.",
       "raw_tries": 3,
       "effective_tries": 3,
       "results": ["result-fixture-sweep"],

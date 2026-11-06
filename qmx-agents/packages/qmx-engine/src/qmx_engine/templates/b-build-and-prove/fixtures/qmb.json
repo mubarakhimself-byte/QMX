@@ -3,7 +3,7 @@
     "verdict": {
       "unit": "unit-object-fixture",
       "overall": "fail",
-      "says": "Did not hold by the shipped preset. fx.eurusd fails the cost stress: expectancy -0.04R at 1.5x costs; metal.xauusd fails the cost stress: expectancy -0.02R at 1.5x costs. Behind it: 2 tries, 2 effective.",
+      "says": "Fail by the shipped preset. fx.eurusd fails the cost stress: expectancy -0.04R at 1.5x costs; metal.xauusd fails the cost stress: expectancy -0.02R at 1.5x costs. Behind it: 2 tries, 2 effective.",
       "raw_tries": 2,
       "effective_tries": 2,
       "results": ["result-fixture-backtest", "result-fixture-robustness"],
@@ -33,7 +33,7 @@
     "verdict": {
       "unit": "unit-object-fixture",
       "overall": "pass",
-      "says": "Holds by the shipped preset. fx.eurusd passes on 141 trades at 0.18R shrunk; metal.xauusd passes on 169 trades at 0.21R shrunk. Behind it: 2 tries, 2 effective.",
+      "says": "Pass by the shipped preset. fx.eurusd passes on 141 trades at 0.18R shrunk; metal.xauusd passes on 169 trades at 0.21R shrunk. Behind it: 2 tries, 2 effective.",
       "raw_tries": 2,
       "effective_tries": 2,
       "results": ["result-fixture-backtest", "result-fixture-robustness"],
