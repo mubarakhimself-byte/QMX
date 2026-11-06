@@ -164,9 +164,7 @@ def served(tmp_path: Path) -> Generator[tuple[Any, Supervisor, host.ClockRead]]:
         clock_read = host.ClockRead()
         door = market_door(home, control, "pc")
         name = placement_name(control, "pc")
-        runtime.attach_facts(
-            lambda: host_facts(control, "pc", name, door, clock=clock_read.facts)
-        )
+        runtime.attach_facts(lambda: host_facts(control, "pc", name, door, clock=clock_read.facts))
         source = tmp_path / "exchange-status"
         shutil.copytree(EXAMPLE, source, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
         runtime.install(source, trust="first_party")
@@ -227,5 +225,5 @@ def host_facts_path() -> Path:
 def read(path: Path) -> dict[str, Any]:
     try:
         return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
