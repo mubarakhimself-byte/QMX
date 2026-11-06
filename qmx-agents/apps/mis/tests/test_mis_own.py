@@ -186,6 +186,7 @@ class Rounds(unittest.TestCase):
                 "holdout": {"on": False},
                 "markets": [],
                 "last_round": None,
+                "last_error": None,
             },
         )
         self.assertEqual(

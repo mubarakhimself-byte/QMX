@@ -1,0 +1,117 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "initial-balance-range-extension",
+  "version": 2,
+  "family": "market-profile",
+  "aliases": [
+    "range extension",
+    "buying range extension",
+    "selling range extension"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "How far the session has traded beyond its initial balance on one side since the balance completed: the highest high above the balance's high for side 1, the lowest low below the balance's low for side -1, and 0 while it has not extended.",
+  "boundaries": "Missing until the initial balance is complete, as for initial-balance-high@2. A range extension above is a buying extension and below a selling one; whether it is responsive or initiating depends on yesterday's value area (responsive-and-initiating-activity@1). session_start is a second of clock's day: clock 0 is UTC, 1 is London and 2 is New York, so a session opens at the market's own time on both sides of a clock change.",
+  "recognition": "A range extension more than double the initial balance marks a trend day.",
+  "eligible_roles": [
+    "context",
+    "trigger",
+    "filter",
+    "regime_detector"
+  ],
+  "class_meanings": {
+    "fx": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "perp": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "spot_crypto": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact."
+  },
+  "sources": [
+    {
+      "source_ref": "http://www.aspenres.com/Documents/AspenGraphics4.0/Using_Market_profile.htm (read 2026-11-02)",
+      "quote": "any new high or low made after the initial balance is established",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "can be anywhere from a few ticks to double the IBR's size",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "ib_seconds": {
+      "measure": "seconds",
+      "default": "3600",
+      "origin": "source_stated",
+      "range": {
+        "min": "60",
+        "max": "86340",
+        "step": "60"
+      }
+    },
+    "side": {
+      "measure": "category",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "-1",
+        "max": "1",
+        "step": "2"
+      }
+    },
+    "clock": {
+      "measure": "category",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "native",
+    "perp": "adapted",
+    "spot_crypto": "adapted",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:85f5d91f620e5250f796c5120522d6d5cbcd67ed6549da2d135aa51a20f388ca",
+  "tests": "on clock 0 its values equal version 1's over its golden bars, in qml/tests/test_session_clock.py"
+}

@@ -6,7 +6,7 @@ Three independently collected sets:
   module is excluded so the catalog cannot satisfy the scan by existing).
 * **designed** — :data:`DESIGNED_TYPED_FAILURE_IDS`, the closed inventory of
   dotted typed-failure ids the node may emit, including dormant rows.
-* **register** — ``qmn/FAILURES.md`` FR rows plus dotted detection ids.
+* **register** — ``qmn/observability/FAILURES.md`` FR rows plus dotted detection ids.
 
 Missing (emitted or designed not covered by the register), duplicate FR ids,
 orphan detection ids, blank NFR-11 fields, and affordances that resolve to no

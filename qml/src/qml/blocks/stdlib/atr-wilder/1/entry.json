@@ -78,5 +78,13 @@
   "golden": {
     "reference": "talib.ATR 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "14"
+    },
+    "bars": 270,
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }

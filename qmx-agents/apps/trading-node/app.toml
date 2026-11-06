@@ -1,6 +1,6 @@
 id = "trading-node"
 name = "Trading node"
-version = "0.1.6"
+version = "0.1.10"
 risk = "money"
 kind = "headless"
 startup_timeout_seconds = 90
@@ -144,3 +144,4 @@ description = "Read the node's keys document again at the next safe point."
 approval = "manage"
 reversibility = "compensable"
 state = "instance"
+
