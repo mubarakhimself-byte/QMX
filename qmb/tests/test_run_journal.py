@@ -324,6 +324,34 @@ def test_a_fill_the_host_refuses_is_a_blocked_signal_and_its_guard(
     )
 
 
+@pytest.mark.parametrize("written_as", ["skip", "skipped decision"])
+def test_a_qmb_run_with_an_unlisted_reason_fails_at_close(
+    loaded: LoadedUnit, tmp_path: Path, written_as: str
+) -> None:
+    journal = _journal(loaded, tmp_path)
+    at = Instant(1_736_000_000_000_000_000)
+    journal.at(at)
+    row = DecisionRow(
+        "fp1:sha256:" + "a" * 64,
+        at,
+        "fx.eurusd",
+        Side.LONG,
+        "taken" if written_as == "skip" else "skipped",
+        (),
+        {},
+        "" if written_as == "skip" else "a word no table holds",
+    )
+    journal.append(row)
+    if written_as == "skip":
+        journal.append(Skip(at, "fx.eurusd", row.row_id, "a word no table holds", Decimal(0)))
+
+    closed = journal.close()
+
+    assert isinstance(closed, TypedRefusal)
+    assert closed.context["reason"] == "a decision's reason has no code in the journal's closed list"
+    assert closed.context["text"] == "a word no table holds"
+
+
 def _backtest_job() -> Callable[[Mapping[str, object]], dict[str, object]]:
     sys.path.insert(0, str(_APP))
     spec = importlib.util.spec_from_file_location("qmb_app_backtest", _APP / "jobs/backtest.py")
