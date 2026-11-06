@@ -7,15 +7,18 @@ the practice node up through the running host, signs in on cTrader's own demo pa
 trade, lands the passport and the records, and finds the node's journal rows in This PC's store. A
 unit reaches a node by passing the judge and his click, and this script does not make that happen:
 with no unit named it prints one plain line saying no unit has passed the judge yet, so nothing was
-deployed, and that is not a failure. It prints one PASS or FAIL line per fact and exits non-zero on
-any FAIL. Running it again converges: every step checks what is in place first.
+deployed, and that is not a failure. When one has, he names it with `--unit` and the script asks
+for his click and waits for the node's own deployment row to settle, a refusal in the node's words.
+It prints one PASS or FAIL line per fact and exits non-zero on any FAIL. Running it again converges:
+every step checks what is in place first.
 
 It talks only to the host's REST, with the bearer from Credential Manager, and imports nothing from
 `qmx-agents`, because the root env holds none of it. Only the trading node sends an order, and the
 one this script asks for is the self-test's.
 
-Real mode refuses a checkout that lacks the commit on `origin/main` that added this file, before it
-reads any credential. He squash-merges, so stack SHAs never reach main and there is no build stamp.
+Real mode refuses a checkout that lacks the commit on `origin/engine/base`, or the branch he names
+with `--landed-on`, that added this file, before it reads any credential. He squash-merges, so stack
+SHAs never reach a branch he names and there is no build stamp.
 
 `--rehearsal` runs the same steps on a throwaway folder. Its bearer and his answers come only from
 the throwaway store file named by `--store`, a JSON object of `<service>|<user>` entries, so it
@@ -56,8 +59,14 @@ LABEL: Final = "qmx-home.toml"
 PASSPORT: Final = "data/trading-node-passport.json"
 RECEIVER: Final = ("127.0.0.1", 47613)
 """The node's sign-in redirect (`qmn.app.grants.REDIRECT`), where cTrader sends the one code."""
+LANDED_ON: Final = "engine/base"
+"""The branch his landed code sits on when he names none: the one his stack lands into."""
 PLAIN_NO_UNIT: Final = "no unit has passed the judge yet, so nothing was deployed"
 """The deploy step with no unit named: a fact about the node, never a verdict."""
+SETTLED: Final = frozenset({"warming up", "trading", "waiting", "refused"})
+"""The `Phase`es a deployment settles in (`qmn.app.runtime.Phase`), so the poll may stop."""
+WITHDRAWING: Final = frozenset({"withdrawing"})
+"""A deployment on its way out, which the node's read answers instead of a phase."""
 TEST_TRADE: Final = "demo test trade with its stop placed, observed and closed"
 SELF_TEST_CHECKS: Final = (
     "broker session",
@@ -467,9 +476,10 @@ def _unit_version(world: World, unit_id: str) -> str | None:
 
 
 def _deployed(world: World) -> tuple[bool | None, str]:
-    """His click on the market he named, read once on the node's own `deployments` answer. With no
-    unit named, nothing is deployed: the node is only proved ready to receive one, and that is not
-    a failure."""
+    """His click on the market he named, then the node's own `deployments` row polled to a settled
+    phase. The link settles a refused queued deploy silently, so the promote answer proves
+    nothing, and a row still `compiling` is not a pass. With no unit named, nothing is deployed:
+    the node is only proved ready to receive one, and that is not a failure."""
     market, unit = world.options.market, world.options.unit
     if unit is None:
         return None, PLAIN_NO_UNIT
@@ -496,15 +506,28 @@ def _deployed(world: World) -> tuple[bool | None, str]:
         held = cast(Json, body) if isinstance(body, dict) else {}
         return False, f"the promote was refused: {click.said} {held.get('next_step') or ''}".strip()
     deployment = str(cast(Json, cast(Json, click.body).get("value") or {}).get("deployment_id"))
-    read = world.node("deployments")
-    rows = cast("list[Json]", read.get("value") or [])
-    row = next((item for item in rows if item.get("deployment_id") == deployment), None)
+    began, row = world.monotonic(), None
+    while world.monotonic() - began <= world.options.trade_s:
+        read = world.node("deployments")
+        rows = cast("list[Json]", read.get("value") or [])
+        row = next((item for item in rows if item.get("deployment_id") == deployment), None)
+        state = None if row is None else str(row.get("state"))
+        if state in SETTLED or state in WITHDRAWING:
+            break
+        world.sleep(POLL_S)
     if row is None:
         return False, f"the node holds no deployment {deployment}, whatever the promote answered"
-    if row.get("state") in {"refused", "withdrawing"}:
-        return False, f"the node reads {row.get('state')}: {row.get('detail')}"
+    state = str(row.get("state"))
+    if state in WITHDRAWING:
+        return False, f"the node reads {state}: {row.get('detail')}"
+    if state == "refused":
+        return False, f"the node reads refused: {row.get('detail')}"
+    if state not in SETTLED:
+        return False, (
+            f"the node left {deployment} at {state} for {world.options.trade_s:.0f} s"
+        )
     world.deployment = deployment
-    return True, f"{deployment} on {market} reads {row.get('state')}"
+    return True, f"{deployment} on {market} reads {state}"
 
 
 def _harvest_limit(world: World) -> float:
@@ -572,21 +595,24 @@ def _git(source: Path, *args: str) -> str | None:
     return done.stdout.strip() if done.returncode == 0 else None
 
 
-def landed_refusal(source: Path) -> str | None:
+def landed_refusal(source: Path, branch: str = LANDED_ON) -> str | None:
     """Why this checkout does not hold his landed code, or None. "Landed" is the commit on
-    `origin/main` that added this script being an ancestor of the checkout's head."""
-    _git(source, "fetch", "--quiet", "origin", "main")
-    added = _git(source, "log", "origin/main", "--diff-filter=A", "--format=%H", "--", SCRIPT)
+    `origin/<branch>` that added this script being an ancestor of the checkout's head. The
+    branch is the one he names with `--landed-on`, `engine/base` by default; the gate reads the
+    origin ref, because his local copy of that branch can be far behind it."""
+    _git(source, "fetch", "--quiet", "origin", branch)
+    landed = f"origin/{branch}"
+    added = _git(source, "log", landed, "--diff-filter=A", "--format=%H", "--", SCRIPT)
     if not added:
         return (
-            f"{source}: origin/main holds no {SCRIPT}, so nothing is landed. Land the stack, "
-            "pull it here, then run this again"
+            f"{source}: {landed} holds no {SCRIPT}, so nothing is landed. Land the stack on "
+            f"{branch}, pull it here, then run this again"
         )
     first = added.splitlines()[-1]
     head = _git(source, "rev-parse", "HEAD")
     if _git(source, "merge-base", "--is-ancestor", first, "HEAD") is None:
         return (
-            f"{source}: this checkout is at {head}, which lacks {first} from origin/main. "
+            f"{source}: this checkout is at {head}, which lacks {first} from {landed}. "
             "Pull it here, restart the host, then run this again"
         )
     return None
@@ -749,6 +775,15 @@ def main(
     parser.add_argument("--session-s", type=float, default=Options.session_s)
     parser.add_argument("--trade-s", type=float, default=Options.trade_s)
     parser.add_argument("--sign-in-s", type=float, default=Options.sign_in_s)
+    parser.add_argument(
+        "--unit",
+        help="the unit id he names once it has passed the judge; none proves the node alone",
+    )
+    parser.add_argument(
+        "--landed-on",
+        default=LANDED_ON,
+        help=f"the branch his landed code sits on (default {LANDED_ON})",
+    )
     parser.add_argument("--rehearsal", action="store_true")
     parser.add_argument("--store", type=Path, help="the rehearsal's throwaway store file")
     parser.add_argument(
@@ -772,7 +807,7 @@ def main(
         args.session_s,
         args.trade_s,
         args.sign_in_s,
-        None,
+        cast("str | None", args.unit),
     )
     if args.rehearsal:
         refused = rehearsal_refusal(home, args.store)
@@ -785,11 +820,14 @@ def main(
         if args.store is not None:
             print("FAIL real mode refused: --store belongs to a rehearsal", flush=True)
             return 1
-        refused = landed_refusal(cast(Path, args.source))
+        branch = cast(str, args.landed_on)
+        refused = landed_refusal(cast(Path, args.source), branch)
         if refused is not None:
             print(f"FAIL code landed: {refused}", flush=True)
             return 1
-        print(f"PASS code landed: {args.source} holds the landed code", flush=True)
+        print(
+            f"PASS code landed: {args.source} holds the landed code on origin/{branch}", flush=True
+        )
         held, asked = bearer(), him or AtTheKeyboard()
     if not held:
         print(f"FAIL folder found: no bearer in {BEARER_SERVICE}; start the host first", flush=True)
