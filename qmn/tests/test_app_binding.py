@@ -864,7 +864,12 @@ BAR = 900_000_000_000
 
 
 def deploy_dummy(rig: Bound) -> Runtime:
-    """The dummy deployed on the bound account with its recorded history, compiled."""
+    """The dummy deployed on the bound account with its recorded history, compiled.
+
+    On the self-test's market, which the bound session carries. A deployment that names a
+    market the session does not carry widens the session, and that is the widening's own test,
+    which says so in its name; these cases pin what R20 and R21 already read from the session.
+    """
     runtime = rig.node.runtime
     assert runtime is not None
     feed = runtime.venues[ACCOUNT].feed
@@ -872,9 +877,12 @@ def deploy_dummy(rig: Bound) -> Runtime:
         if at < base.LIVE_FROM:
             feed.recording.keep(market, bar)
     tick_quotes(rig)
-    deployed = rig.node.call(
-        "deploy", {"op_id": "op-deploy-1", "deployment": base.deployment(rig.data)}
-    )
+    market = server.SELF_TEST_MARKET[0]
+    document = base.deployment(rig.data)
+    document["markets"] = [
+        {"market_id": market, "instrument": {"id": base.MARKETS[market], "version": 1}}
+    ]
+    deployed = rig.node.call("deploy", {"op_id": "op-deploy-1", "deployment": document})
     assert value(deployed)["state"] == "accepted"
     compiled(runtime)
     return runtime

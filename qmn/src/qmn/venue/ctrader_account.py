@@ -1090,7 +1090,9 @@ class CTraderVenue:
             }
         # A market a position this binding holds sits on keeps the facts it had, whatever the
         # reconnect says: its stop and its size still read here, so R20's read and R21's close
-        # keep working on a position whose market went unlisted mid-session.
+        # keep working on a position whose market went unlisted mid-session. It is still
+        # reported unlisted, so a new deployment on that market is refused by name while the
+        # held position keeps its facts.
         built: dict[str, SymbolFacts] = {
             market: self.symbols[market]
             for held in self._open.values()
@@ -1106,14 +1108,13 @@ class CTraderVenue:
             ]
             # A size crosses into cTrader volume through these, so none is ever guessed.
             if ident is None or any(fact is None for fact in facts) or not all(facts[2:]):
-                if market not in built:
-                    unlisted[market] = symbol
+                unlisted[market] = symbol
                 continue
             digits, pip, lot, step, least = cast("list[int]", facts)
             built[market] = SymbolFacts(
                 market,
                 symbol,
-                cast("int", ident),
+                ident,
                 digits,
                 pip,
                 lot,
