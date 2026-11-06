@@ -328,6 +328,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     Hidden rubric for the pick: expresses the 12 parts without workaround; extension by row and plug, no rework; self-configuring answer; performance (no re-stacking, healthy unit above the choke budget); fit to code and build size; simplicity; survival and hard lines. Then cross-judge (Opus), pick, graft, verify.
     **Ledger v1 agent running** → `ledger/v1/`.
 
+49. **M45: usage.** Agents one at a time from now on (memory saved). The bar went from 38% to 40% in minutes with four agents running. He said do not pause the running ones. The bar must last about 20 days. So the rest of the route runs lean: the lead reads the candidates and picks by itself; at most one Opus check after the fold; no cross-judge unless the pick is truly tied.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
