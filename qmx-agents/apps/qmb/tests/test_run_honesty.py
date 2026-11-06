@@ -57,7 +57,9 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
     bars.mkdir()
     for source in SLICES.glob("synthetic-*.csv"):
         shutil.copyfile(source, bars / source.name.removeprefix("synthetic-"))
-    yield from a_world(root, bars=bars)
+    for made in a_world(root, bars=bars):
+        register_checkers(made.store)
+        yield made
 
 
 def a_unit(world: World, name: str, ema_period: str) -> str:
@@ -128,7 +130,6 @@ def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
 
 
 def test_a_block_that_raises_lands_a_failed_result_with_its_reason(world: World) -> None:
-    register_checkers(world.store)
     entry = json.loads((STDLIB / "rsi-cross-back" / "1" / "entry.json").read_text("utf-8"))
     source = (STDLIB / "rsi-cross-back" / "1" / "block.py").read_bytes().replace(b"\r\n", b"\n")
     update = b"    def update(self, evidence: Mapping[str, object]) -> Signal | None:\n"

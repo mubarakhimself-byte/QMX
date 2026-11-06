@@ -676,9 +676,11 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("qmb", "1.0.1"): "abc0f0534c36dc9fc15afe8e2d95c852",
     ("qmb", "1.0.2"): "0bcae551c39204b5cad1128d9bba3163",
     ("qmb", "1.0.3"): "148ef6df97946bd6eb6d91c40a685b41",
+    ("qmb", "1.0.4"): "43b0f1317da933c857813ba211e47a7c",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
     ("trading-node", "0.1.1"): "2feb6ee2e0d9cf2bd80666e58c175cae",
     ("trading-node", "0.1.2"): "2ecec90e00d3c17cffdc3ffffa49242c",
+    ("trading-node", "0.1.3"): "71e37db09841e68f226bc896d5cb82b1",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
