@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 from typing import TypeVar
 
+import pytest
 from qmf.core.refusal import Result, is_ok, is_refusal
+from qmn.app.server import open_node
 from qmn.doors.catalog import CLOSED_POWERS
 from qmn.doors.library import EVIDENCE_CAPABILITIES, POWERS_CAPABILITIES
 from qmn.observability import (
@@ -16,6 +24,7 @@ from qmn.observability import (
     parse_failures_register,
     push_classes_for_tier,
 )
+from qmn.observability import alerts
 from qmn.observability.failures_gate import (
     DESIGNED_TYPED_FAILURE_IDS,
     collect_emitted_failure_ids,
@@ -191,6 +200,91 @@ def test_affordance_resolves_to_existing_door_or_recipe() -> None:
     assert "node-config-validate" in resolved
     empty = resolve_operator_affordance("something broke")
     assert empty == frozenset()
+
+
+INSTALLED_ASK = """
+import json, sys
+from pathlib import Path
+
+from qmf.core.refusal import is_refusal
+from qmn.app.alarms import attach
+from qmn.app.store import Store
+from qmn.observability.alerts import __file__ as module, load_alert_allow_list
+
+senders = attach(
+    Store(Path(sys.argv[1]) / "node.sqlite"),
+    "a4dqobyh",
+    sys.argv[2],
+    open_at=lambda *_: True,
+    clock_ns=lambda: 0,
+    steady_ns=lambda: 0,
+)
+print(json.dumps({
+    "installed_copy": Path(sys.argv[3]) in Path(module).resolve().parents,
+    "refused": is_refusal(load_alert_allow_list()),
+    "push": type(senders.push).__name__,
+}))
+"""
+
+
+def test_the_installed_layout_gives_a_push_sender(tmp_path: Path) -> None:
+    packages = tmp_path / "Lib" / "site-packages"
+    shutil.copytree(
+        Path(__file__).resolve().parents[1] / "src" / "qmn",
+        packages / "qmn",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    environment = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join((str(packages), os.environ.get("PYTHONPATH", ""))),
+    }
+
+    asked = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            INSTALLED_ASK,
+            str(tmp_path),
+            json.dumps({"alarms": {"ntfy_topic_url": "http://127.0.0.1:9/topic"}}),
+            str(packages.resolve()),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert asked.returncode == 0, asked.stderr
+    assert json.loads(asked.stdout.splitlines()[-1]) == {
+        "installed_copy": True,
+        "refused": False,
+        "push": "PushSender",
+    }
+
+
+def test_status_says_alarms_off_while_the_register_will_not_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys = json.dumps({"alarms": {"ntfy_topic_url": "http://127.0.0.1:9/topic"}})
+    with monkeypatch.context() as broken:
+        broken.setattr(alerts, "default_failures_path", lambda: tmp_path / "gone.md")
+        node = open_node(tmp_path / "data", here="fp-pc-1", machine="pc", keys=lambda: keys)
+        off = node.call("status", {})["value"]
+    assert isinstance(off, dict)
+    assert off["reasons"] == [
+        "Phone alarms off: the failure register did not load (invalid input). No push or "
+        "liveness ping leaves this node until that is fixed."
+    ]
+    assert off["word"] == "Ready"
+
+    assert node.call("rotate_keys", {"op_id": "op-rotate-1"})["ok"] is True
+    back = node.call("status", {})["value"]
+    assert isinstance(back, dict)
+    assert back["reasons"] == []
+    node.stop()
+    if node.journal is not None:
+        node.journal.close()
 
 
 def test_emitted_scan_is_independent_of_the_catalog_module() -> None:

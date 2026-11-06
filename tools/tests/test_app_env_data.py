@@ -45,6 +45,7 @@ from pathlib import Path
 
 from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, compile_descriptor_set
 from qmn.app.server import DEFINITIONS
+from qmn.observability.alerts import load_alert_allow_list
 from qmn.time.calendars import market_calendars
 
 raw = DEFINITIONS.read_bytes()
@@ -54,6 +55,7 @@ print(json.dumps({{
     "definitions_sha256": hashlib.sha256(raw).hexdigest(),
     "definitions_in_env": Path(sys.prefix) in DEFINITIONS.parents,
     "compiled": type(compiled).__name__,
+    "alarm_list": type(load_alert_allow_list()).__name__,
     "extensions_imported": sorted(m for m in sys.modules if m.startswith("qmf.calendar_")),
     "broker_door": any(m.startswith("qmx_broker") for m in sys.modules),
 }}))
@@ -110,6 +112,7 @@ def test_the_node_env_reads_every_calendar_and_its_ctrader_definitions(tmp_path:
     assert found["definitions_sha256"] == RELEASE_91_SHA256
     assert found["definitions_in_env"] is True
     assert found["compiled"] == "Ok"
+    assert found["alarm_list"] == "Ok"
     assert found["broker_door"] is False
 
 

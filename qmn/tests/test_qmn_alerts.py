@@ -37,7 +37,7 @@ T = TypeVar("T")
 
 _QMN_ROOT = Path(__file__).resolve().parents[1]
 _OBS_SRC = _QMN_ROOT / "src" / "qmn" / "observability"
-_FAILURES = _QMN_ROOT / "FAILURES.md"
+_FAILURES = _OBS_SRC / "FAILURES.md"
 
 
 def _try_symlink(link: Path, target: Path) -> None:
