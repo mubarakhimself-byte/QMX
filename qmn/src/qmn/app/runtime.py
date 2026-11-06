@@ -1847,6 +1847,38 @@ def journalled_resumes(root: Path) -> set[str]:
     return found
 
 
+def journalled_flattens(root: Path) -> Result[set[str]]:
+    """The op id of each flatten the node journal holds as done, so a restart never replays an
+    old flatten on new positions. A folder the volume refuses answers the refusal: reading it as
+    holding none would close positions he opened since, so the op waits for a read that works."""
+    found: set[str] = set()
+    for folder in stream_folders(root):
+        if not folder.name.startswith(f"{JournalStream.NODE.source}.kill_level."):
+            continue
+        lines = read_committed(folder)
+        if is_refusal(lines):
+            return lines
+        for line in lines.value:
+            if isinstance(line, JournalLine):
+                body = cast("Mapping[str, object]", line.record.get("body", {}))
+                if isinstance(body.get("op_id"), str):
+                    found.add(str(body["op_id"]))
+    return Ok(found)
+
+
+@dataclass(frozen=True, slots=True)
+class _Open:
+    """One position of this node open at the venue, whether a unit holds it or not."""
+
+    name: str
+    market: str
+    side: Side
+    entry: Decimal
+    path: OrderPath
+    scopes: frozenset[str]
+    """Every scope key that names it."""
+
+
 class Runtime:
     """The node's runtime thread over its store, its journal and its venue bindings."""
 
@@ -1880,6 +1912,9 @@ class Runtime:
         self.alarms: list[Mapping[str, object]] = []
         self.applied: dict[str, KsaLevel] = {}
         self._resumes_seen = journalled_resumes(context.journal_root)
+        self._flattened: set[str] | None = None
+        """Every flatten op journalled done; None until the journal could be read."""
+        self._flat_closed: dict[str, int] = {}
         self._paths: dict[str, OrderPath] = {}
         self._compiler = ThreadPoolExecutor(max_workers=1, thread_name_prefix="node-compile")
         self._wake = threading.Event()
@@ -2075,7 +2110,7 @@ class Runtime:
             if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, {}):
                 reasons.append(f"account {account} is not reconciled")
             reasons.extend(
-                f"position {orphan.position} of ours is open and no unit holds it"
+                f"position {orphan.position.position} of ours is open and no unit holds it"
                 for orphan in self._orphans(account, venue)
             )
         reasons.extend(
@@ -2096,7 +2131,9 @@ class Runtime:
                 hosted.phase, hosted.detail = Phase.WAITING, "the node's identity is unconfirmed"
             self._observe()
             return
-        self._protect(self._kill(target))
+        tried = self._kill(target)
+        self._flatten(target, accepted, tried)
+        self._protect(tried)
         self._journal_resumes(accepted)
         self._deployments(target)
         faulted = self._repeated_fault()
@@ -2132,7 +2169,7 @@ class Runtime:
         for unit in units:
             unit.adopt(self.reconciler.mine(account))
 
-    def _orphans(self, account: str, venue: Venue) -> list[VenuePosition]:
+    def _orphans(self, account: str, venue: Venue) -> list[Ours]:
         """The node's own positions the reconcile read open on ``account`` that no hosted unit
         holds and the venue has not closed since."""
         held = {
@@ -2140,13 +2177,73 @@ class Runtime:
         }
         return sorted(
             (
-                ours.position
+                ours
                 for ours in self.reconciler.mine(account)
                 if ours.position.position not in held
                 and venue.client.closed(ours.position.position) is None
             ),
-            key=lambda position: position.position,
+            key=lambda ours: ours.position.position,
         )
+
+    def _mine(self) -> list[_Open]:
+        """Every position of this node open at the venue. A unit's own list holds what opened
+        since the last reconcile, and paper; the orphans add what no unit holds. Only the
+        reconcile's ``Claim.MINE`` positions ever join, so a position not ours is never here."""
+        found = [
+            _Open(
+                name,
+                market,
+                side,
+                entry,
+                unit.orders,
+                frozenset(
+                    {
+                        "all",
+                        f"deployment_id:{hosted.deployment.deployment_id}",
+                        f"account:{hosted.deployment.account_id}",
+                        *unit.instrument_scopes(market),
+                    }
+                ),
+            )
+            for hosted in self.hosted.values()
+            if (unit := hosted.unit) is not None
+            for name, (market, side, entry) in unit.venue_open().items()
+        ]
+        for account, venue in self.venues.items():
+            for orphan in self._orphans(account, venue):
+                position = orphan.position
+                found.append(
+                    _Open(
+                        position.position,
+                        position.market_id,
+                        Side(position.side),
+                        position.entry_price,
+                        cast("OrderPath", self._path(account)),
+                        frozenset(
+                            {
+                                "all",
+                                f"deployment_id:{orphan.send.get('deployment_id')}",
+                                f"account:{account}",
+                                *same_market(
+                                    self._target.deployments, f"instrument:{position.market_id}"
+                                ),
+                            }
+                        ),
+                    )
+                )
+        return found
+
+    def _close_scope(self, scope: str, why: str, tried: set[str], *, every: bool = False) -> int:
+        """Close every position of this node at ``scope``, or all of them with ``every``;
+        answers how many the venue closed now. A position already tried this tick waits."""
+        closed = 0
+        for held in self._mine():
+            if held.name in tried or not (every or scope in held.scopes):
+                continue
+            tried.add(held.name)
+            done = held.path.close(held.name, held.market, held.side, held.entry, why)
+            closed += isinstance(done, Placed)
+        return closed
 
     def _path(self, account: str) -> OrderPath | None:
         venue = self.venues.get(account)
@@ -2243,30 +2340,59 @@ class Runtime:
     def _enact(self, scope: str, effect: KillEffect, tried: set[str]) -> int:
         if not (effect.close_positions or effect.close_all_and_pause):
             return 0
-        closed = 0
-        for hosted in self.hosted.values():
-            unit = hosted.unit
-            if unit is None:
+        why = f"kill-{effect.level.value.lower()}"
+        return self._close_scope(scope, why, tried, every=effect.close_all_and_pause)
+
+    def _flatten(self, target: Target, accepted: Sequence[Change], tried: set[str]) -> None:
+        """Close each flatten's scope until it reads flat, then write the op's done row: a
+        ``kill_level`` row with no ``level``, which reads as neither a kill nor a clear. The row
+        is read back at start, so a restart never replays it on new positions, and a journal
+        that cannot be read holds every op unacted."""
+        if self._flattened is None:
+            read = journalled_flattens(self.context.journal_root)
+            if is_refusal(read):
+                return
+            self._flattened = read.value
+        for op_id, scope in target.flattens.items():
+            if op_id in self._flattened:
                 continue
-            for position, (market, side, price) in unit.venue_open().items():
-                covers = (
-                    effect.close_all_and_pause
-                    or scope == "all"
-                    or scope
-                    in (
-                        f"deployment_id:{hosted.deployment.deployment_id}",
-                        f"account:{hosted.deployment.account_id}",
-                        *unit.instrument_scopes(market),
-                    )
-                )
-                if not covers or position in tried:
-                    continue
-                tried.add(position)
-                done = unit.orders.close(
-                    position, market, side, price, f"kill-{effect.level.value.lower()}"
-                )
-                closed += isinstance(done, Placed)
-        return closed
+            closed = self._flat_closed.get(op_id, 0) + self._close_scope(scope, "flatten", tried)
+            self._flat_closed[op_id] = closed
+            if not self._reads_flat(scope, accepted):
+                continue
+            written = self.journal.append(
+                "kill_level",
+                {"op_id": op_id, "scope": scope, "positions_closed": closed},
+                RowFacts(ts_recv=self.clock_ns(), clock_ok=False),
+            )
+            if not is_refusal(written):
+                self._flattened.add(op_id)
+
+    def _reads_flat(self, scope: str, accepted: Sequence[Change]) -> bool:
+        """Whether the broker is proved to hold nothing of this node at ``scope``: every account
+        he kept bound that the scope may reach is bound now, its session is up and reconciled,
+        and no entry's answer is unknown. An empty view proves nothing, because a restart sees
+        no position until its first reconcile."""
+        kept = {
+            str(change.args["account"]): change.args["action"]
+            for change in accepted
+            if change.kind == "bind"
+        }
+        accounts = {name for name, action in kept.items() if action == "add"} | set(self.venues)
+        for account in accounts:
+            if scope.startswith("account:") and scope != f"account:{account}":
+                continue
+            venue = self.venues.get(account)
+            path = self._paths.get(account)
+            unknown = {} if path is None else path.unknown
+            if (
+                venue is None
+                or unknown
+                or not venue.feed.ready
+                or self.reconciler.due(account, venue.feed.reconnects, unknown)
+            ):
+                return False
+        return not any(scope in held.scopes for held in self._mine())
 
     def _protect(self, tried: set[str]) -> None:
         """Close again each position the venue filled without holding its stop, until the
@@ -2313,10 +2439,10 @@ class Runtime:
             if held_by_reconcile is not None:
                 return held_by_reconcile
             for orphan in self._orphans(hosted.deployment.account_id, venue):
-                if orphan.market_id == market:
+                if orphan.position.market_id == market:
                     return (
                         f"a position of ours that no unit holds is open on {market}:"
-                        f" {orphan.position}"
+                        f" {orphan.position.position}"
                     )
             held = self.stand_downs.blocking(
                 (
@@ -2643,6 +2769,10 @@ class Runtime:
             ("runtime.deployments", deployments),
             ("runtime.units", units),
             ("runtime.positions", positions),
+            (
+                "runtime.mine",
+                [{"position": held.name, "scopes": sorted(held.scopes)} for held in self._mine()],
+            ),
             ("runtime.board", boards),
             ("runtime.kill", kill),
             ("runtime.venues", venues),
