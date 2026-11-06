@@ -26,7 +26,7 @@ import test_app_runtime as base
 from qmb.host.unit_runner import load_unit_folder
 from qmf.core import Instant, Result, TypedRefusal
 from qml.protocol.unit import Account as UnitAccount
-from qmn.app.runtime import Phase, Runtime
+from qmn.app.runtime import Deployment, Phase, Runtime
 from qmn.app.store import Json
 from qmn.venue.conformance import submit_not_ready_refusal
 from qmn.venue.ctrader_account import CTraderVenue, Wire
@@ -180,8 +180,7 @@ class Forgetting(FakeCTrader):
     forget: str = "XAUUSD"
     unlist: bool = False
 
-    def _on_ProtoOASymbolsListReq(self, msg_id: str, body: dict[str, object]) -> None:
-        del body
+    def _on_ProtoOASymbolsListReq(self, msg_id: str, _: dict[str, object]) -> None:
         listed = [
             {"symbolId": ident, "symbolName": name, "enabled": True}
             for name, (ident, *_rest) in self.SYMBOLS.items()
@@ -322,7 +321,11 @@ def test_red_closes_an_orphan_on_a_market_other_than_the_self_tests(tmp_path: Pa
 
     again = bound_rig(tmp_path, grant=rig.grants.held, broker=rig.fake, at=rig.now[0])
     rt = runtime(again)
-    rt.compile = lambda _deployment, _folder: "the unit did not compile: a block changed"
+
+    def will_not_compile(_deployment: Deployment, _folder: Path) -> str:
+        return "the unit did not compile: a block changed"
+
+    rt.compile = will_not_compile
     binding.tick_quotes(again, 5)
     assert [row["state"] for row in shown(again).values()] == ["refused", "refused"]
 
@@ -569,6 +572,6 @@ def test_a_restart_restores_a_moved_number_or_writes_its_cold_reason(tmp_path: P
     again = base.rig(tmp_path)
     base.settle(again)
     restored = again.runtime.hosted["dep-1"].unit
-    assert restored is not None
+    assert restored is not None and restored.hosted_unit is not None
     assert dict(restored.hosted_unit.calibrated_values) == {"min_trend_strength": Decimal("0.0002")}
     again.runtime.stop()
