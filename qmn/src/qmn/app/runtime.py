@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import threading
@@ -485,6 +486,43 @@ def staging_folder(data: Path, deployment_id: str) -> Path:
     return data / "deployments" / deployment_id / "in"
 
 
+def snapshot_path(data: Path, deployment_id: str) -> Path:
+    """The deployment's saved unit state, beside the staging folder it owns."""
+    return data / "deployments" / deployment_id / "snapshot.json"
+
+
+def unit_symbols(deployment: Deployment) -> dict[str, str]:
+    """Each market of the unit by the symbol the unit's own document states."""
+    found: dict[str, str] = {}
+    raw = deployment.unit_document.get("markets")
+    for item in cast("list[object]", raw) if isinstance(raw, list) else ():
+        if not isinstance(item, Mapping):
+            continue
+        entry = cast("Mapping[str, object]", item)
+        market = entry.get("market_id")
+        reference = entry.get("instrument_ref")
+        symbol = reference.get("symbol") if isinstance(reference, Mapping) else None
+        if isinstance(market, str) and isinstance(symbol, str):
+            found[market] = symbol
+    return found
+
+
+def stream_seconds(name: str) -> int | None:
+    """A QMB stream name as seconds, read as ``qmb/host/unit_runner.py`` reads it: ``m15`` 900."""
+    unit, count = name[:1], name[1:]
+    if not count.isdigit() or int(count) == 0:
+        return None
+    match unit:
+        case "m":
+            return int(count) * 60
+        case "h":
+            return int(count) * 3600
+        case "d":
+            return int(count) * 86_400
+        case _:
+            return None
+
+
 def staged_path(folder: Path, path: str) -> Path | None:
     """``path`` inside the staging folder, or None when it resolves outside it: an absolute
     path, ``..``, a link out, or on Windows a rooted ``/x`` or a drive-relative ``C:x``."""
@@ -616,6 +654,22 @@ class VenueAccount(Protocol):
 
     def read_back(self) -> Result[ReadBack]:
         """Every order and position the venue holds on the account, as reconcile reads them."""
+        ...
+
+    def nets_positions(self) -> bool:
+        """Whether one position per symbol is all this venue keeps, so a second unit's cancels."""
+        ...
+
+    def bar_size_ns(self) -> int | None:
+        """The bar this venue's feed builds, or None when its bars are the unit's own."""
+        ...
+
+    def add_markets(self, markets: Mapping[str, str], /) -> bool:
+        """Add each market the binding does not hold; True when the session must reconnect."""
+        ...
+
+    def unauthorised(self, market: str, /) -> str | None:
+        """Why this binding cannot trade ``market``, or None when it can."""
         ...
 
 
@@ -770,6 +824,23 @@ class ConformanceAccount:
             for name, held in self._positions.items()
         )
         return Ok(ReadBack(tuple(self._orders), positions))
+
+    def nets_positions(self) -> bool:
+        """The conformance double reports a netting account unless a case arms hedging, so one
+        position per market is the model here as well."""
+        return True
+
+    def bar_size_ns(self) -> int | None:
+        """Its bars are the ones the recording plays, not a size of its own."""
+        return None
+
+    def add_markets(self, markets: Mapping[str, str], /) -> bool:
+        del markets
+        return False
+
+    def unauthorised(self, market: str, /) -> str | None:
+        del market
+        return None
 
     def opened_elsewhere(self, order: VenueOrder, position: VenuePosition | None = None) -> None:
         """An order, and the position it opened, that reached the account from somewhere other
@@ -1461,6 +1532,9 @@ class NodeUnit:
         self.handler: UnitSliceHandler | None = None
         self.hosted_unit: HostedUnit | None = None
         self.target: ExecutionTarget | None = None
+        self.kept_values: dict[str, Decimal] = {}
+        """The slow numbers the deployment's saved snapshot already holds, so a write happens
+        only when one of them moves."""
 
     def start(
         self,
@@ -1825,6 +1899,8 @@ class _Hosted:
     loop: CommandStreamLoop | None = None
     compiling: Future[CompiledUnit | str] | None = None
     venue: Venue | None = None
+    held_compile: CompiledUnit | None = None
+    """The compiled unit, kept while its account's session is not up or not bound yet."""
 
 
 class _Sink:
@@ -2647,6 +2723,8 @@ class Runtime:
             compiling = hosted.compiling
             if hosted.phase is Phase.COMPILING and compiling is not None and compiling.done():
                 self._host(hosted, compiling.result())
+            elif hosted.phase is Phase.WAITING and hosted.held_compile is not None:
+                self._host(hosted, hosted.held_compile)
             withdrawn = hosted.deployment.deployment_id in target.withdrawn
             if withdrawn and hosted.unit is not None and not hosted.unit.venue_open():
                 hosted.phase, hosted.detail = Phase.STOPPED, "withdrawn and flat"
@@ -2668,12 +2746,45 @@ class Runtime:
         if venue is None:
             hosted.phase = Phase.WAITING
             hosted.detail = f"no venue binding holds account {deployment.account_id}"
+            hosted.held_compile = compiled
             return
         live = deployment.lane == "live"
         if live and venue.client.account.role is not AccountRole.DEMO:
             hosted.phase = Phase.REFUSED
             hosted.detail = "a live lane trades only on a demo binding until a live one is bound"
             return
+        seconds, account_bar = stream_seconds(compiled.plan.stream), venue.client.bar_size_ns()
+        if seconds is not None and account_bar is not None and seconds * _NS != account_bar:
+            hosted.phase = Phase.REFUSED
+            hosted.detail = (
+                f"the unit reads {compiled.plan.stream} bars and this account's feed builds"
+                f" {account_bar // (60 * _NS):g}-minute bars"
+            )
+            return
+        if self._widen(venue, deployment):
+            hosted.phase, hosted.detail = Phase.WAITING, "waiting for its account's session"
+            hosted.held_compile = compiled
+            return
+        if not venue.feed.ready:
+            hosted.phase, hosted.detail = Phase.WAITING, "waiting for its account's session"
+            hosted.held_compile = compiled
+            return
+        untradeable = next(
+            (
+                why
+                for market in deployment.markets
+                if (why := venue.client.unauthorised(market)) is not None
+            ),
+            None,
+        )
+        if untradeable is not None:
+            hosted.phase, hosted.detail = Phase.REFUSED, untradeable
+            return
+        netted = self._netted(venue, deployment)
+        if netted is not None:
+            hosted.phase, hosted.detail = Phase.REFUSED, netted
+            return
+        hosted.held_compile = None
         path = self._path(deployment.account_id) if live else self._paper_path(hosted, venue)
         if path is None:
             hosted.phase, hosted.detail = Phase.REFUSED, "the paper lane's journal would not open"
@@ -2710,11 +2821,13 @@ class Runtime:
         if is_refusal(target):
             hosted.phase, hosted.detail = Phase.REFUSED, "the account is not a trading target"
             return
-        started = unit.start(venue.client.equity(), target.value)
+        started = unit.start(venue.client.equity(), target.value, self._saved_snapshot(deployment))
         if is_refusal(started):
             hosted.phase = Phase.REFUSED
             hosted.detail = f"the unit would not start: {_why(started)}"
             return
+        if unit.hosted_unit is not None:
+            unit.kept_values = dict(unit.hosted_unit.calibrated_values)
         loop = self._loop(unit, account)
         if is_refusal(loop):
             hosted.phase, hosted.detail = Phase.REFUSED, "the loop driver refused the unit"
@@ -2728,6 +2841,69 @@ class Runtime:
         ]
         self._drive_one(hosted, recorded)
         self._settle_warm(hosted)
+
+    def _widen(self, venue: Venue, deployment: Deployment) -> bool:
+        """Add each market the deployment chose that the binding does not hold, then drop the
+        session once so it reconnects and subscribes them. True when it must come back first.
+
+        The reconnect is the path R20 and R21 already reset: books rebuild, quotes go with the
+        old session, and the reconcile runs once on the new one. A running unit on that account
+        misses one bar's record, which the plan accepts.
+        """
+        symbols = unit_symbols(deployment)
+        wanted = {market: symbols[market] for market in deployment.markets if market in symbols}
+        if not venue.client.add_markets(wanted):
+            return False
+        venue.feed.markets = tuple(dict.fromkeys((*venue.feed.markets, *wanted)))
+        venue.feed.drop("a deployment added a market")
+        return True
+
+    def _netted(self, venue: Venue, deployment: Deployment) -> str | None:
+        """Why a second live unit on a netting account may not trade a market this one holds:
+        its position would cancel the first at the venue, and neither unit would know."""
+        if deployment.lane != "live" or not venue.client.nets_positions():
+            return None
+        for hosted in self.hosted.values():
+            other = hosted.deployment
+            unit = hosted.unit
+            if (
+                other.deployment_id != deployment.deployment_id
+                and other.account_id == deployment.account_id
+                and other.lane == "live"
+                and unit is not None
+            ):
+                shared = sorted(set(unit.traded) & set(deployment.markets))
+                if shared:
+                    return f"another unit already trades {shared[0]} on this netting account"
+        return None
+
+    def _saved_snapshot(self, deployment: Deployment) -> Mapping[str, object] | None:
+        """The unit state the deployment's folder holds, or None when there is none to read. A
+        file that does not parse starts the unit fresh: no reason to refuse the deployment."""
+        try:
+            found = json.loads(
+                snapshot_path(self.context.data, deployment.deployment_id).read_text("utf-8")
+            )
+        except (OSError, ValueError):
+            return None
+        return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else None
+
+    def _write_snapshot(self, hosted: _Hosted) -> None:
+        """Save the unit's own state when one of its slow numbers moved, written whole and
+        replaced, so a stop halfway leaves the last good one. The next start hands it back to
+        ``unit.start``, which resumes the unit or writes the ``cold_start`` reason."""
+        unit = hosted.unit
+        if unit is None or unit.hosted_unit is None:
+            return
+        values = dict(unit.hosted_unit.calibrated_values)
+        if values == unit.kept_values:
+            return
+        path = snapshot_path(self.context.data, hosted.deployment.deployment_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(unit.hosted_unit.snapshot(), sort_keys=True), "utf-8")
+        os.replace(temporary, path)
+        unit.kept_values = values
 
     def _paper_path(self, hosted: _Hosted, venue: Venue) -> OrderPath | None:
         """A paper deployment's own order path: every step a live order takes, ending at its
@@ -2844,6 +3020,7 @@ class Runtime:
                 unit.warm_seen += 1
                 if unit.warm_seen >= unit.warm_needed:
                     unit.warming = False
+        self._write_snapshot(hosted)
 
     # --- what he sees ---
 

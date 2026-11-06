@@ -318,6 +318,11 @@ class FeedKeeper:
                     bars.append(event)
         return tuple(bars)
 
+    def drop(self, reason: str, /) -> None:
+        """Drop the session now, so the next pump opens it again: a deployment that added a
+        market widens through this, the reconnect path the reconcile already resets."""
+        self._drop(reason)
+
     def _open(self, now: int) -> bool:
         if self._opened:
             self.reconnects += 1

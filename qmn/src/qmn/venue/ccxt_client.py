@@ -607,6 +607,24 @@ class CcxtClient:
         )
         return Decimal(0) if found is None else found
 
+    def nets_positions(self) -> bool:
+        """Hyperliquid keeps one position per coin, so a second unit on one cancels the first."""
+        return True
+
+    def bar_size_ns(self) -> int | None:
+        """Its bars are the ones the feed plays, not a size of its own."""
+        return None
+
+    def add_markets(self, markets: Mapping[str, str], /) -> bool:
+        """A Hyperliquid binding carries the markets it opened with; the binding path that
+        would widen it is p5b-2's, so nothing is added here."""
+        del markets
+        return False
+
+    def unauthorised(self, market: str, /) -> str | None:
+        del market
+        return None
+
     # --- sending ---
 
     def send(self, ticket: Ticket, /) -> Result[Sent]:

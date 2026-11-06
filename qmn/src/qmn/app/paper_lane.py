@@ -71,6 +71,19 @@ class PaperAccount:
     def equity(self) -> Decimal:
         return self.binding.equity()
 
+    def nets_positions(self) -> bool:
+        """A paper order stands in for one that would net at the binding's venue."""
+        return self.binding.nets_positions()
+
+    def bar_size_ns(self) -> int | None:
+        return self.binding.bar_size_ns()
+
+    def add_markets(self, markets: Mapping[str, str], /) -> bool:
+        return self.binding.add_markets(markets)
+
+    def unauthorised(self, market: str, /) -> str | None:
+        return self.binding.unauthorised(market)
+
     def on_bar(self, event: Bar) -> None:
         bar = event.bar
         for position, held in list(self._positions.items()):
