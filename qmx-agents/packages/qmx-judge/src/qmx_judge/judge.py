@@ -760,6 +760,23 @@ def _pooled_twice(results: Sequence[JudgedResult]) -> list[str]:
     return problems
 
 
+def _same_trades(judged: Sequence[Trade], other: Sequence[Trade]) -> bool:
+    """Whether `other` holds exactly `judged` inside each judged market's first-to-last close. A
+    version cut to a stretch or a market still holds, and a filter, which leaves a gap, does not."""
+    mine: dict[str, list[Trade]] = {}
+    for trade in judged:
+        mine.setdefault(trade.market, []).append(trade)
+    held: dict[str, list[Trade]] = {}
+    for trade in other:
+        held.setdefault(trade.market, []).append(trade)
+    for market, rows in mine.items():
+        low, high = min(t.closed_at for t in rows), max(t.closed_at for t in rows)
+        run = {t for t in held.get(market, []) if low <= t.closed_at <= high}
+        if run != set(rows):
+            return False
+    return True
+
+
 def _pull_table(
     trades: Mapping[str, list[Decimal]],
     results: Sequence[JudgedResult],
@@ -769,15 +786,15 @@ def _pull_table(
     """The trades the shrink reads, so that what an agent chooses to judge cannot weaken the pull.
     A market reads the longest record the same code has of it in `family`. Its judged trades stand
     only when they are `enough` to judge it on and overlap no longer record from this tester.
-    Same code means an equal `compiled_fp`, else an equal `unit`, or a record holding every judged
-    trade. Reruns of one market are never added together."""
+    Same code means an equal `compiled_fp`, else an equal `unit`, or a record holding exactly the
+    judged trades inside each judged market's span. Reruns are never added together."""
     table = {market: rs for market, rs in trades.items() if rs}
     code = {r.compiled_fp or r.unit for r in results}
     testers = {r.tester for r in results}
     judged = [t for r in results for t in r.trades]
     for other in family:
         if (other.compiled_fp or other.unit) not in code and not (
-            judged and set(judged) <= set(other.trades)
+            judged and _same_trades(judged, other.trades)
         ):
             continue
         held: dict[str, list[Trade]] = {}
@@ -850,6 +867,12 @@ def judge(
             zero = Decimal(0)
             per_market.append(MarketVerdict(market, 0, zero, zero, zero, "no_trades", ()))
             continue
+        if table[market] is not trades[market]:
+            # A market reading another run's record cannot read above what its own trades earned.
+            found = replace(
+                found,
+                shrunk_r=min(found.shrunk_r, sum(trades[market]) / len(trades[market])),
+            )
         steps = _chain(spec, results, found, rs, tried)
         outcome = _outcome(len(rs), spec.min_trades, steps)
         per_market.append(

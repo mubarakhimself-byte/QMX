@@ -307,6 +307,46 @@ def test_the_best_slice_of_a_record_reads_the_record_and_a_later_run_reads_its_o
     )
     assert verdict.per_market[0].fields()["weight"] == "0.6000"
 
+    draw = random.Random(26)  # noqa: S311 - a seeded fixture, not a secret
+    # 400 fresh trades plus one from the record: the record may not lift the fresh run.
+    old = [
+        {"market_id": "fx.a", "closed_at": START + day * DAY, "r": f"{draw.gauss(0.30, 1):.4f}"}
+        for day in range(800)
+    ]
+    record = JudgedResult.read("result-3", landed_fields(3, {}, MARCH), old)
+    fresh = [
+        {
+            "market_id": "fx.a",
+            "closed_at": START + (800 + day) * DAY,
+            "r": f"{draw.gauss(0.10, 1):.4f}",
+        }
+        for day in range(400)
+    ]
+    lap = [*fresh, old[-1]]
+    evidence = {
+        "random_entries": {"fx.a": {"edge_ratio": "1.4", "p": "0.01", "window": MARCH}},
+        "cost_stress": {"fx.a": {"multiplier": "1.5", "expectancy_r": "0.2", "window": MARCH}},
+        "walk_forward": {"fx.a": {"efficiency": "0.7", "window": MARCH}},
+    }
+    overlapping = JudgedResult.read("result-4", landed_fields(4, evidence, MARCH), lap)
+    verdict = judge(
+        parse_spec(WRITTEN),
+        study="study-v1",
+        results=[overlapping],
+        tries=[
+            {"kind": "run", "state": "opened", "run_id": run_id(n), "family": "unit-v1"}
+            for n in (3, 4, 5, 6)
+        ],
+        family=[record],
+        principal="agent:chat",
+        versions={},
+    )
+    own = sum(Decimal(str(t["r"])) for t in lap) / len(lap)
+    row = verdict.per_market[0]
+    assert row.trades == 401
+    assert row.fields()["shrunk_r"] == str(own.quantize(Decimal("0.0001")))
+    assert verdict.overall == "fail"
+
 
 def test_a_new_version_pays_the_pull_only_if_it_trades_the_same_trades(tmp_path: Path) -> None:
     world = landed_world(tmp_path)
@@ -324,6 +364,16 @@ def test_a_new_version_pays_the_pull_only_if_it_trades_the_same_trades(tmp_path:
     _, markets = verdict_of(world, results=[other])
     assert markets["fx.m02"]["weight"] == "0.6000"
     assert markets["fx.m02"]["shrunk_r"] == markets["fx.m02"]["raw_r"]
+
+    v4 = put(world.store, "note", "unit", {"text": "v, a filter"}, head=v3)
+    filtered = [t for i, t in enumerate(lucky) if i % 3 != 2]
+    narrower = world.land(filtered, markets=["fx.m02"], unit=v4)
+    _, markets = verdict_of(world, results=[narrower])
+    own = sum(Decimal(str(t["r"])) for t in filtered) / len(filtered)
+    assert markets["fx.m02"]["trades"] == 100
+    assert markets["fx.m02"]["raw_r"] == str(own.quantize(Decimal("0.0001")))
+    assert markets["fx.m02"]["shrunk_r"] == str(own.quantize(Decimal("0.0001")))
+    assert markets["fx.m02"]["weight"] == "0.5000"
 
 
 def test_quick_spec_lands_no_try(tmp_path: Path) -> None:
