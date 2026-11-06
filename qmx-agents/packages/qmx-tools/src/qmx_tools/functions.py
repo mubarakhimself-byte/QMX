@@ -66,6 +66,8 @@ NO_NODE: Final = "no trading node is set up yet"
 REPO: Final = Path(qml.__file__).resolve().parents[3]
 COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "motion", "study")
 """The result fields that make two runs one request, whatever tester ran them."""
+ADDED_TRADE_FIELDS: Final = frozenset({"mae_r", "mfe_r", "cash", "net_r"})
+"""Row fields QMB 1.0.4 added. An older result or another tester's row may not hold them."""
 
 
 type Opening = tuple[str, int, int, str]
@@ -205,11 +207,12 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         `markets` narrows it to some of the unit's markets. It reads the market store's months
         under `source`, the study's when left out, else `dukascopy`, and a missing month is
         refused by name before anything starts. A hole in the bars longer than
-        `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true; left out, the study's
-        `allow_gaps` decides. `motion` both runs the unit with its calibrated numbers moving and
-        held, and reports both. `cost_profile` pins a library_save of kind `cost-profile`,
+        `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true, and a study that states
+        `allow_gaps` beats this one. `motion` both runs the unit with its calibrated numbers moving
+        and held, and reports both. `cost_profile` pins a library_save of kind `cost-profile`,
         `{"costs": {market: qmx.qmb.cost-profile/1}, "funding": {market: "timestamp,rate" CSV}}`:
-        net money pays it and R does not, and the study's `cost_rule` beats it."""
+        net money pays it and R does not, and the study's `cost_rule` beats it. `costs` must name
+        every market of the run by its market id, such as `fx.eurusd`, or nothing starts."""
         asked = {
             "unit": unit,
             "window": window,
@@ -297,7 +300,8 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         """Compare two landed results trade by trade (the parity diff): each trade only one made,
         each trade both made whose prices, size, money or R differ, and the measures that
         differ. Trades pair by market, opening time and their order among trades opened on
-        that market at that time, so two testers' names never matter."""
+        that market at that time, so two testers' names never matter. `mae_r`, `mfe_r`, `cash`
+        and `net_r` compare only when both rows hold them."""
         (first, mine), (second, theirs) = _result(left), _result(right)
         ours, other = _by_opening(left, mine), _by_opening(right, theirs)
         rows: list[dict[str, Any]] = []
@@ -309,7 +313,11 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
                 continue
             differs = {
                 name: [a.get(name), b.get(name)]
-                for name in sorted((a.keys() | b.keys()) - {"trade_id"})
+                for name in sorted(
+                    (a.keys() | b.keys())
+                    - {"trade_id"}
+                    - (ADDED_TRADE_FIELDS - (a.keys() & b.keys()))
+                )
                 if a.get(name) != b.get(name)
             }
             if differs:
