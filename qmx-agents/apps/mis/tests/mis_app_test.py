@@ -204,6 +204,10 @@ def test_a_read_error_in_a_round_leaves_the_thread_alive(world: World) -> None:
     open_month.unlink()
     try:
         world.mis("configure", configure_both(op_id="c09-read-error", settings={"round_s": 1}))
+        # A thread already waiting keeps the cadence it read before the configure; the restart
+        # gives the app a thread that reads the one-second plan.
+        world.runtime.stop("mis")
+        world.runtime.start("mis")
         error = until(
             lambda: world.mis("status", {}).get("last_error"),
             "the read error reached status",
