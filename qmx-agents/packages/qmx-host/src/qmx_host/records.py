@@ -523,7 +523,7 @@ class Harvester:
             refusals.append({"key": key.text, "reason": f"could not stage: {error}"})
             return None
         try:
-            if self._journals_open:
+            if self._journals_open:  # only This PC projects, so a server's notes would never clear
                 _tell(self._folder, key)
             receipts = self._door.commit([target], staging=self.staging, born_on=Placement.NODE)
         finally:

@@ -185,8 +185,6 @@ class Recording:
         self._writer = writer
         self._kept = kept
         self._bars: dict[str, deque[QuoteBar]] = {}
-        self._minute = 0
-        self._quoted: dict[str, tuple[Decimal, Decimal]] = {}
 
     @classmethod
     def open(
@@ -229,26 +227,22 @@ class Recording:
         self.keep(market, bar)
         return Ok(None)
 
-    def quote(self, quote: Quote) -> None:
-        """Hold a market's last two-sided quote of this minute for its ``minute`` row."""
-        if self._writer is not None and quote.bid is not None and quote.ask is not None:
-            self._quoted[quote.market_id] = (quote.bid, quote.ask)
-
-    def close_minute(self, now_ns: int) -> Result[None]:
-        """Write the ``minute`` rows of a minute that has ended by ``now_ns``."""
-        minute = now_ns // NS_PER_MINUTE
-        if self._writer is None or minute == self._minute:
+    def add_minute(self, start_ns: int, closes: Sequence[Quote], now_ns: int) -> Result[None]:
+        """Write the ``minute`` row of each market's last quote in the minute from ``start_ns``,
+        which has ended. A market with one side still unknown has no spread, so it has no row."""
+        if self._writer is None or not closes:
             return Ok(None)
-        ended, self._minute = self._minute, minute
-        quoted, self._quoted = self._quoted, {}
-        name = datetime.fromtimestamp(ended * 60, tz=UTC).strftime("%Y-%m-%dT%H:%M:00Z")
-        for market, (bid, ask) in sorted(quoted.items()):
+        moment = datetime.fromtimestamp(start_ns // 1_000_000_000, tz=UTC)
+        name = moment.strftime("%Y-%m-%dT%H:%M:00Z")
+        for close in closes:
+            if close.bid is None or close.ask is None:
+                continue
             body: dict[str, object] = {
-                "market_id": market,
+                "market_id": close.market_id,
                 "minute": name,
-                "spread": f"{ask - bid:f}",
+                "spread": f"{close.ask - close.bid:f}",
             }
-            facts = RowFacts(ts_recv=now_ns, clock_ok=False, market_id=market)
+            facts = RowFacts(ts_recv=now_ns, clock_ok=False, market_id=close.market_id)
             written = self._writer.append("minute", body, facts)
             if is_refusal(written):
                 return written
@@ -291,6 +285,8 @@ class FeedKeeper:
     _quotes: dict[str, Quote] = field(default_factory=dict[str, Quote])
     _listeners: list[Callable[[Bar], None]] = field(default_factory=list[Callable[[Bar], None]])
     _opened: bool = False
+    _minute_ends: int = 0
+    _minute_began: dict[str, Quote] = field(default_factory=dict[str, Quote])
 
     @property
     def ready(self) -> bool:
@@ -316,9 +312,8 @@ class FeedKeeper:
         Answers the closed bars this turn brought, after every listener saw each of them.
         """
         now = self.clock_ns()
-        closed = self.recording.close_minute(now)
-        if is_refusal(closed):
-            self.reason = f"a minute could not be recorded ({closed.category.value})"
+        if now >= self._minute_ends:
+            self._close_minute(now)
         if self.state is SessionState.DOWN and not self._open(now):
             return ()
         if self.state is SessionState.CONNECTED:
@@ -344,9 +339,7 @@ class FeedKeeper:
                     if state is BookState.READY:
                         self._books[event.market_id] = (state, _apply(levels, event.levels))
                 case Quote():
-                    merged = _merge(self._quotes.get(event.market_id), event)
-                    self._quotes[event.market_id] = merged
-                    self.recording.quote(merged)
+                    self._quotes[event.market_id] = _merge(self._quotes.get(event.market_id), event)
                 case Bar():
                     recorded = self.recording.add(event.market_id, event.bar)
                     if is_refusal(recorded):
@@ -355,6 +348,20 @@ class FeedKeeper:
                         listener(event)
                     bars.append(event)
         return tuple(bars)
+
+    def _close_minute(self, now: int) -> None:
+        """A quote is a new object each time, so a market quoted in this minute holds a different
+        one than when the minute began. That costs the feed path nothing per quote."""
+        closes = [
+            quote
+            for market, quote in sorted(self._quotes.items())
+            if quote is not self._minute_began.get(market)
+        ]
+        written = self.recording.add_minute(self._minute_ends - NS_PER_MINUTE, closes, now)
+        if is_refusal(written):
+            self.reason = f"a minute could not be recorded ({written.category.value})"
+        self._minute_ends = (now // NS_PER_MINUTE + 1) * NS_PER_MINUTE
+        self._minute_began = dict(self._quotes)
 
     def _open(self, now: int) -> bool:
         if self._opened:
