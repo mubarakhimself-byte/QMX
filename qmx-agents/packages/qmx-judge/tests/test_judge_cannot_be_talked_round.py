@@ -323,7 +323,7 @@ def test_the_best_slice_of_a_record_reads_the_record_and_a_later_run_reads_its_o
         for day in range(400)
     ]
     lap = [*fresh, old[-1]]
-    evidence = {
+    evidence: dict[str, object] = {
         "random_entries": {"fx.a": {"edge_ratio": "1.4", "p": "0.01", "window": MARCH}},
         "cost_stress": {"fx.a": {"multiplier": "1.5", "expectancy_r": "0.2", "window": MARCH}},
         "walk_forward": {"fx.a": {"efficiency": "0.7", "window": MARCH}},
@@ -341,7 +341,7 @@ def test_the_best_slice_of_a_record_reads_the_record_and_a_later_run_reads_its_o
         principal="agent:chat",
         versions={},
     )
-    own = sum(Decimal(str(t["r"])) for t in lap) / len(lap)
+    own = sum((Decimal(str(t["r"])) for t in lap), Decimal(0)) / len(lap)
     row = verdict.per_market[0]
     assert row.trades == 401
     assert row.fields()["shrunk_r"] == str(own.quantize(Decimal("0.0001")))
@@ -369,7 +369,7 @@ def test_a_new_version_pays_the_pull_only_if_it_trades_the_same_trades(tmp_path:
     filtered = [t for i, t in enumerate(lucky) if i % 3 != 2]
     narrower = world.land(filtered, markets=["fx.m02"], unit=v4)
     _, markets = verdict_of(world, results=[narrower])
-    own = sum(Decimal(str(t["r"])) for t in filtered) / len(filtered)
+    own = sum((Decimal(str(t["r"])) for t in filtered), Decimal(0)) / len(filtered)
     assert markets["fx.m02"]["trades"] == 100
     assert markets["fx.m02"]["raw_r"] == str(own.quantize(Decimal("0.0001")))
     assert markets["fx.m02"]["shrunk_r"] == str(own.quantize(Decimal("0.0001")))
