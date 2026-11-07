@@ -1,0 +1,94 @@
+# The fold, in plain words
+
+A companion to `SPINE.md`, for a developer and for him. The spine carries the decisions; this says what they mean. Paths are as in the spine. `Mn` is his message.
+
+## What this is
+
+A unit is one trading algorithm, written as one JSON document plus the small QML blocks it names. After this work, a unit can trade, size itself, configure itself, and ships as a template someone new can use. The document has two halves. The **logic half** says when to enter and how to exit. The **risk half** says how big, when to hold back, and when to stop. Each half has its own fingerprint, so changing how big never re-proves when to enter.
+
+Above the units sits one small thing: a **group**. It holds shared money, shared limits and a shared ledger. Its limits are live facts: edit one, and every member reads the new value at its next trade, with no recompile. It can only cut. It never sizes anything.
+
+A **pod** is a recipe: a saved risk half that gets stamped into each member before it runs. Editing a pod makes a plan over its members; one click lands all of them; the move happens in place, and open trades keep their exits. On his screen a pod card shows one thing; on disk two documents sit behind it (the recipe for the method, the group for the money), and the card says so.
+
+The node runs every unit on one thread, in two passes per bar. Pass one: every unit's exits go out at once. Pass two: parked entries go out by rank under a time budget; what is left waits for the next bar. So an entry's wait on the broker can never delay another unit's exit, and a busy bar cannot kill the node.
+
+## His asks, answered
+
+| He said | Here |
+|---|---|
+| "the unit can actually trade" (M49) | After slice 5 a `canary` template places a filled paper entry from an empty store, on a fake broker, in a test that runs in CI (K7). After slice 11 all three templates do |
+| "it can size itself" (M49) | The sizer answers money at risk; one converter turns that into the venue's quantity. Every number it reads has a default, a range and a reason |
+| "Why lots?" (M49) | Lots are the broker's word for how much of one instrument. A rule speaks in money, which means the same thing on gold and on EURUSD. Lots exist in exactly one place, the converter, and the wire already says `quantity` |
+| "it can self-configure" (M49) | Find, track, correct. **Find:** a replay picks a starting value and records where it came from. **Track:** a number follows a fact (volatility, cost) each bar. **Correct:** the engine already in the code adjusts a number from the unit's own trades, inside its range, with a bounded memory. Every number says who may move it: nobody, the engine inside its range, or only at an anchor |
+| "it has a template" (M49) | Three: `scalper-mr`, `intraday-trend` (with an `orb` variant), `canary`. A new template is one JSON file |
+| "plug in our own configurations" (M49) | Every block is swappable on a typed slot. A new sizer, brake, exit, gate or modifier is one folder. A pod stamps a whole risk half; a group row changes a limit live |
+| "even if we don't have the numbers set yet" (M50) | Every value is a labelled placeholder with a reason, shown on the card as "a shape, not an edge". The numbers talk changes values, never the shape |
+| "Someone who hasn't been part of developing KMX can use tomorrow" (M49) | Day one: install, pick a template, check, backtest on synthetic bars with shipped instrument records, paper on the fake broker. Day two: a real broker after its approval. The walk is a test, so it cannot rot. The gaps outside this session are named in `OPEN.md` |
+| "a baseline with a customizability layer" (M49) | Slices 0 to 11 are the baseline: one unit, three templates, no pod, no group. Slices 12 to 16 are the layer: groups, pods, the Library doors, the fleet watch. You can stop after slice 11 and still have a whole thing |
+| "ink a paintbrush and a canvas" (M50) | Only five things refuse: agents touching money, anyone but him promoting, a blocked exit, anyone but his hand lowering the kill switch, printed keys. Everything else, including a full-Kelly pod with no brakes and no kill line, compiles, warns in the largest type, and runs |
+| "it's maintainable, please" (M52) | One module map with an owner per package; one guide generated from the code with a test that fails when it goes stale; one function that explains any size; fourteen contract tests in a fixed order; one compiler bump, before any unit deploys; a re-test workflow for every bump after |
+| "I don't want just safety. I want something that can like perform" (M33) | Own full size under one cut-only cap is the default sharing rule. Nothing above a unit can shrink it except the limits it chose to read. Accelerators have a named seat (modifiers) and house money ships on in the scalper template because he asked |
+| "I could have 200 units" (M49) | A scripted watch reads one fold and ranks every unit; two lists decide who gets looked at and who gets acted on; one incident is one card; the per-unit nightly card is switched off. Agents read the same fold later |
+
+## The pieces, and where each lands
+
+- **Sizer and converter** (slice 2): a block answers an amount; the converter spells quantity; the receipt is real; a 5,000-lot answer is caught by the size band.
+- **Exits** (slice 3 now, slice 17 after the demo): every exit in the stack runs each bar, sees the position (side, stop, targets, bars held, best and worst so far), and answers close, partial close or move the stop, with a reason. Full beats partial beats amend. A faulty exit falls to the next; if none can run, the node closes. Trails, partials on the node and the signed stop wait for the demo's facts.
+- **Brakes** (slice 4): a brake is a control row: what it reads, its scope, its verb (none, no new entries, reduce, flatten), what it does when it fires, how it comes back, what it does before it has data, and a shadow switch. The five shipped halts bind unchanged. The words ACTIVE, REDUCING, BENCHED, HALTED, RESTORE are read from the journal, so a restart or a pod edit loses nothing.
+- **Accelerators** (slice 6): named modifiers on the sizer, each with a range and a reason. House money and reverse house money are one rule on one ledger: anchor the ledger to the day and it presses with winnings and brakes on losses; anchor it to the running peak and it only brakes. A press gate block sits in front if wanted.
+- **Numbers** (slice 7): every number carries how it is derived, its range, who may move it, and why it has the value it has. Reports always show with and without motion.
+- **Facts and costs** (slice 8): equity, margin, open risk, cost per hour per instrument written from fills and labelled `uncalibrated` until there are enough. The sizer reads cost in its denominator. Fees are observed and acted on, never pretended away (M51).
+- **Sessions, streams, positions** (slice 9): a unit may declare sessions, trade 1m and 5m together, hold more than one position per market, and carry different numbers per market.
+- **Gate, stickers, sensor** (slice 10): the SQS becomes a slot. Default gate: does this entry clear what this unit allows for costs, at this quote, with this stop? The old SQS rule stays as the floor for broken markets. A node sensor measures spread, tick rate and gaps. Isolation, news and caution windows are one thing: a sticker on a scope (gold, crypto, USD pairs) with a strength and an expiry; each unit lists the sticker kinds it ignores (an ORB ignores `open`; a news unit ignores `news`). The kill switch is not a sticker.
+- **Node order path** (slice 11): two passes, exits first, entries under a budget. The kill table's effects apply to entries as well as closes. A unit with no price stop is allowed through all six places that would otherwise refuse or close it.
+- **Group** (slice 12): the document, limits as live facts, caps that only cut, a ledger, reservations so two units at one bell cannot overrun a shared cap, an order slot (rank now, "best of those firing" later as content).
+- **Pod** (slice 13): a recipe; one edit, one plan, one click; the move in place; declared stages compiled in so "at 5,000 the math changes" is a state change, not a new unit; a drift report naming members that no longer match their recipe.
+- **Readings and shipping** (slice 14): a unit pins a publisher and a fallback; a stopped publisher only ages its reading; the fallback for any market list is home markets, never everything. Mini apps land pods, presets, blocks and templates at publish; a block is saved through a door with its contract test.
+- **Fleet watch** (slice 15): the scripted fold, the two lists, one incident one card, the morning digest.
+- **Identity and re-test** (slice 16): a placeholder swap keeps the unit's record; a compiler bump re-tests every deployed unit before it reaches a node.
+
+## What happens when
+
+**A pod edit.** The copilot drafts a new recipe version. `roll_plan` stamps every member off the node, compiles each (about 150 s per 200 on one worker, unmeasured at scale), and sorts them: risk-only, unchanged, locked, logic-touching, refused. He clicks once on the plan's hash. The node compiles the staged members on its worker while the old versions keep trading, then flips all of them on one tick. Open positions keep their exits. The logic record continues; the money record starts a new line.
+
+**A group limit edit.** He edits the group row and clicks on its version. Every member reads the new limit at its next decision. No recompile, no plan over members.
+
+**A restart.** The node folds its journals and the broker's deals before answering any entry. Anchors passed while down are settled once. Cuts stand; a raise earned before the restart waits for the next anchor. Until the group ledger is rebuilt, group caps refuse entries; exits are free.
+
+**A hung block.** Chain links and control rows run under a time limit. A hang refuses that entry, stands that link's scope down, writes a row, and nothing else stops. The unit's own bar step is wrapped once the wrapper proves itself on Windows; until then the 30-second watchdog remains the backstop.
+
+**The MIS down mid-session.** Readings age past their stale limit; each read takes its declared fallback; a wide unit falls back to its home markets. A sticker source that dies lands a card and reads "prefer not", never a silent block. No shipped template needs the MIS to trade.
+
+**A newcomer's first day.** Install (release lane's job, gaps named). Pick `canary`. Check: warnings in plain words, every number labelled. Backtest on synthetic bars with the template's shipped instrument records. Paper on the fake broker. Watch: the fleet digest says "too thin to judge". Live: his click, placeholders acknowledged on the card.
+
+## MIS and SQS
+
+The MIS keeps publishing what it sees; it never adjusts (M10's question). Any app, pod or agent may publish a reading in the same record under its own name, host-stamped, with an expiry and its inputs named. The finder, which lists where a unit's claim is true now, is the first app on top and writes an `active-markets` reading a unit may pin, with home markets as the fallback. An overnight job makes one "usual level" curve per world that SQS, node, MIS and QMB all read. Fifteen new physics readings, the finder's internals, pack contents, the per-card clock and the full-bar port belong to the MIS's owner as content; the core carries only the open `source`, the publisher on a read, `valid_until`, the relay, the sensor and the curve kind.
+
+The SQS becomes a slot with verbs (block, shrink, wait, warn, shadow, none). Shipped: the cost hurdle as the gate and the old rule as the floor. The fillability bank runs in shadow; the cost dial sits off on the modifier chain. The hurdle warns while its cost cell is uncalibrated and refuses only on a measured cell showing net edge below zero, so the first trades happen and calibrate it.
+
+## Pods and mini apps
+
+E2's twenty pod configurations ship as a gallery of `pod` and `group` Library items, each listing the blocks it needs (`s:` shipped, `n:` content someone writes): Relentless, Session relay, Classic Book, Cushion pair, Old pair, Scalper first, Human mimic, Best basket, Stage switcher, Prop rider, Earned tiers, Multi-manager, Capped total, Run together, Futures desk, Model hybrid, Watched by agents, Volatility core, Canary, Full press. Three are live from the start: `canary` (Pod 19) is template C; `scalper-mr` carries Pod 6's recipe shape; "Classic Book" (Pod 3) is a recipe name, and "Book + BMS" stays a method name. None has run; they are ingredients.
+
+A mini app ships pods by its `library-items` lander: at publish, its pods, presets, blocks and templates land as drafts. A preset is a `template` item holding only what differs from its base. Mini apps feed each other by artifacts, Library events and readings; a unit reads any of it only as a reading it chose. Stop every app and the units keep trading.
+
+## What the copilot and a user can do
+
+Make a unit from a template with overrides; patch a draft by pointer; check it; explain it; find, get, check, match and now **save** a block (a Library block is Python behind a face, scanned, enrolled in the contract test; that is the Python path, and `plain_python` stays refused); save a template; draft, check and explain a pod; make a roll plan; draft and check a group; read any scope's risk state; explain any size; replay any decision; read the fleet; read drift; propose a sticker as a card; land a card. Promote, move a live deployment, lower a kill level, change the floor: no tool, his click only, in a channel no agent reads.
+
+## What this does not do, by design
+
+It does not prove an edge (methodology). It does not set a dollar value (numbers talk). It does not route by the MIS unless a unit pins the finder. It does not isolate a class by rule; the sticker exists and no rule binds. It does not press size on open profit; the cushion rule presses with realised winnings only. It does not need him to watch it. It does not refuse a reckless pod; it grades it and says so. It does not run agents; it gives them doors.
+
+## What any UI needs, as data
+
+The size trail (the decision row, through `explain_size`). The risk state per scope with its word, stamp, reason and distances (`risk_state`). "Why didn't it trade": the refusing link or sticker on the row, and the would-have rows. The pod card's numbers (at stake next trade, losses to kill line, room, daily loss) from the fold keyed by pod. The drift report. The roll plan with counts by outcome and diffs by member. The fleet's two lists and digest. The stickers in force by scope. The kill line as a warning in the largest type, never a wall. Every number's label, range, reason and authority. No screen, slot list or block name on the demo binds any of it (M55).
+
+## The overhauls he goes through
+
+Applied here from FUNNEL Appendix E: O1 SQS as a slot with the hurdle default; O2 the open readings bus; O3 the active list with home fallback; O4 stickers and tolerations; O5 the typed sizer and one converter; O6 control rows with states read from the fold; O7 two chains, one row, one wrapper (F7 C, not one chain); O8 the exit stack; O9 find, track, correct; O10 the scripted fleet watch; O11 pods as recipes stamped in plus a thin group (F1 A, with V4's live limits and V3's order block); O12 the group document with `parent`, selector and tags, Book and BMS as names; O13 capital sharing as a named row; O14 one evaluator through the shared handler; O15 bump only on a changed decision plus K8; O16 pod, pod version, method, desk; O17 UI not overhauled here, needs listed above; O18 eight more roles, `derivation`, `combiner`, the block save door; O19 one cushion rule, one ledger; O20 three floors on every reading. New here: the two-pass node loop with a time budget (F1, F2), and the six-place no-stop path (F6).
+
+## His checklist, Part C of `SEEDS-2.md`
+
+Every line H-01 to H-136 was read against this fold. Where it lands: H-01 to H-19 (the job) in sections 1, 6, 10 of the spine and the table above; H-20 to H-43 (the unit and its sizing) in AD-10, AD-11, AD-14, AD-15, slice 9 for H-33, I17 and the converter for H-30 to H-32, the restore rules for H-35, shipped records for H-43; H-44 to H-50 (exits and placeholders) in section 5 and AD-13; H-51 to H-66 (brakes and accelerators) in AD-11, AD-12, AD-16 and the gallery, with H-51's definitions on each block's dictionary page and H-57's circuit breaker shipped present and off in both templates; H-67 to H-84 (levels, pods, mini apps) in AD-4 to AD-8, section 8, the gallery, the lander and the save door; H-85 to H-95 (beyond the unit) in AD-16, AD-17 and the MIS section, with H-92's relative volume blocked on volume on bars (Q2) and H-95's Hyperliquid a venue adapter row; H-96 to H-103 (watching) in the fleet watch, AD-18 and the module map; H-104 to H-122 (room for other sessions) in `OPEN.md`'s hand-offs; H-123 to H-136 (the run itself) are the lead's. **Not held by this fold, named:** H-78 external code is held only as a Library block, never as free Python (his M50 "it has to be something that QML can't pull off" is read as the block being the door); H-90 sniping windows are found by a deterministic curve job or an agent's counted try, both content; H-92 as above; H-122 a worst, realistic and best simulation harness is a mechanism test only and belongs to methodology.
