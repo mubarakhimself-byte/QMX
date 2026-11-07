@@ -33,6 +33,8 @@
 
 ## Decisions log
 
+- 7 Nov: Overhauls allowed, including pods and UI (M56). Keep one list of every proposed overhaul for the walkthrough.
+
 - 7 Nov: He may let this run overnight (M55). The UI is a proposal, mostly outdated; it binds nothing.
 
 - 7 Nov: Game theory stays parked for the numbers talk, as he said; only flagged as a gap.

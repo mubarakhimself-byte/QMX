@@ -47,6 +47,8 @@ Everything else is open, including Book and BMS. A reckless setup must be expres
 - **Methodology:** how a unit is proven valid, per type. Prepare hand-offs only.
 - **Agentic upgrade, UI build, and the running repair program** (DeepSeek, `D:\QMX-worktrees\repair-ship\`). Don't touch their files.
 
+Overhaul is allowed (M31, M32, M56): if a thing makes no sense, including pods or the UI, propose something new, and name it plainly so he can go through every overhaul.
+
 The UI is a proposal and mostly outdated (M55). Use it and the UI notes to understand intent. No screen, slot list or block name binds the design.
 
 Design for complexity, never a complex system. Earlier generations were called "too much machine". Check code claims at `D:\QMX-worktrees\bld-repair-24`.
