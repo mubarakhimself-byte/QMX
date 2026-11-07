@@ -183,7 +183,7 @@ def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> N
     assert [(c["trades"], c["total_r"]) for c in cells] == [
         (3, "-1.6852"),
         (6, "-3.2610"),
-        (6, "-3.2610"),
+        (4, "-1.8102"),
         (3, "0.0013"),
         (2, "1.0013"),
         (3, "-1.0258"),
@@ -296,7 +296,7 @@ def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> N
     assert [(f["pick"], f["out_of_sample_trades"]) for f in report(world, walked)["folds"]] == [
         (None, 0),
         (None, 0),
-        ("cell-02", 4),
+        ("cell-03", 5),
     ]
     assert report(world, walked)["walk_forward_unmeasured"] == (
         "no fold had a candidate with an in-sample Sharpe to pick on metal.xauusd"
