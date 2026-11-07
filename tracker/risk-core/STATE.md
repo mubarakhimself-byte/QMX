@@ -10,6 +10,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 **Where we are on the to-do list (6 Nov, evening):** the final fix round is done and committed. `architecture/SPINE.md` is the folded design (about 43 PRs, range 38 to 45; section 13 is the go-live list). The plain-words explainer for him is published at https://claude.ai/artifact/Axd5Hg3GEHk7nV4zZTc3ra (source `explainers/risk-template.html`). **Stopped there, cooling off, as he asked.**
 
+**7 Nov: he is back and wants to go through the risk template together, from the explainer page.** He leads; I answer from `architecture/SPINE.md` and `funnel/`. Expect arguments on the design and numbers: correct him where he is wrong, and don't re-explain what he has read.
+
 **Next, when he comes back:**
 1. His answers to Q1-Q9 (`funnel/FUNNEL.md` section 6), which he may paste from the page. Work proceeds on the defaults.
 2. He passes `handoff/FOR-REPAIR-SOCKET.md` and `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md` to the repair.
@@ -17,7 +19,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 4. The numbers lens: the scenario harness and the argument about numbers. Open there: the scalper's cut trial, the thin choke budget (healthy 0.79 to 0.83 on 12 of 23 binding things), the bleeding book.
 
 **The map, all under `tracker/risk-core/`:**
-- `seeds/`: his words verbatim (M1-M9 1 Nov; M10-M40 3 Nov; M41-M43 6 Nov; later ones are in the session transcript `2928e6ee-...jsonl`) and `SEEDS.md`.
+- `seeds/`: his words verbatim (M1-M9 1 Nov; M10-M40 3 Nov; M41 onward in `operator-words-2026-11-06.md`, through 7 Nov) and `SEEDS.md`.
 - `grounding/G1-G12`: G12 is what the audit and repair changed.
 - `research/R1-R9` and `research/papers/text/` (302 papers).
 - `linking/`: `components/` (1,050 parts), `UNIT-IDEA-BANK.md`, `RANKING.md`, briefs.
