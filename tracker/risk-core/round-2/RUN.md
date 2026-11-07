@@ -26,12 +26,14 @@
 | 1 | Fleet watch, self-config hill climb, newcomer path, developer path | Opus | `round-2/expand/E5-fleet-selfconfig-dev.md` | done |
 | 2 | Funnel, with the new test | 1 Fable | `round-2/funnel/` | done |
 | 3 | Independent review, then fix | Opus, then the judge | `round-2/funnel/REVIEW.md` | done |
-| 4 | Architecture versions that really differ | Opus, up to 1 Fable | `round-2/arch/V*/` | running |
-| 5 | Compare, fold, check, fix | 1 Fable at a time; Opus check with BMad review | `round-2/arch/SPINE.md` | pending |
+| 4 | Architecture versions that really differ | Opus, up to 1 Fable | `round-2/arch/V*/`, `COMPARE.md` | done |
+| 5 | Compare, fold, check, fix | 1 Fable at a time; Opus check with BMad review | `round-2/arch/SPINE.md` | running |
 | 6 | Build plan, builder brief, orchestrator prompt | Opus | `round-2/build/` | pending |
 | 7 | Walkthrough page for him; agent and UI hand-offs | lead | `round-2/WALKTHROUGH.html` | pending |
 
 ## Decisions log
+
+- 7 Nov: Judge recommends V1 (unit owns it) plus 13 grafts; V2 is a real alternative, and which he wants is his call (COMPARE section 6 row 1). The run folds on V1 and states the cheapest way to move to V2. Every open row in COMPARE section 6 runs on its default.
 
 - 7 Nov: Overhauls allowed, including pods and UI (M56). Keep one list of every proposed overhaul for the walkthrough.
 
