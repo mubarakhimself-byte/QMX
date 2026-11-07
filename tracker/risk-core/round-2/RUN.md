@@ -33,6 +33,8 @@
 
 ## Decisions log
 
+- 7 Nov: He may let this run overnight (M55). The UI is a proposal, mostly outdated; it binds nothing.
+
 - 7 Nov: Game theory stays parked for the numbers talk, as he said; only flagged as a gap.
 - 7 Nov: alphaXiv's own assistant in his browser is not used while he's away. The linking agent uses disk material and may use the alphaXiv MCP read-only.
 
