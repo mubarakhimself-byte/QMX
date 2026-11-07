@@ -298,6 +298,16 @@ def command(
     )
 
 
+def child_env(python: Path) -> dict[str, str]:
+    """The check's environment, with the workspace's own interpreter first on `PATH`.
+
+    A plugin hook runs a bare `python`, so a chat starts it with the harness interpreter's folder
+    first on `PATH` (`launch_env`), and `uv run` does the same. A check that runs the shipped hook
+    by hand needs the same, or the hook gets whatever `python` the shell finds.
+    """
+    return {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+
 def _counts(report: Path) -> dict[str, int]:
     found = {"passed": 0, "failed": 0, "skipped": 0}
     if not report.is_file():
@@ -343,7 +353,12 @@ def run_check(check: Check) -> Outcome:
             argv, workspace = command(environment, [test.node_id for test in group], report)
             try:
                 done = subprocess.run(
-                    argv, cwd=workspace, capture_output=True, text=True, timeout=remaining
+                    argv,
+                    cwd=workspace,
+                    env=child_env(python),
+                    capture_output=True,
+                    text=True,
+                    timeout=remaining,
                 )
             except subprocess.TimeoutExpired:
                 return Outcome(False, f"timed out after {check.limit_s:.0f} s")
