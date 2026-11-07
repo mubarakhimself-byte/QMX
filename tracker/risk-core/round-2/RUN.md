@@ -24,9 +24,9 @@
 | 1 | Unread papers, for ideas | Opus | `round-2/expand/E3-papers.md` | done |
 | 1 | Logic linking pass | Opus | `round-2/expand/E4-linking.md` | done |
 | 1 | Fleet watch, self-config hill climb, newcomer path, developer path | Opus | `round-2/expand/E5-fleet-selfconfig-dev.md` | done |
-| 2 | Funnel, with the new test | 1 Fable | `round-2/funnel/` | running |
-| 3 | Independent review, then fix | Opus, then the judge | `round-2/funnel/REVIEW.md` | pending |
-| 4 | Architecture versions that really differ | Opus, up to 1 Fable | `round-2/arch/V*/` | pending |
+| 2 | Funnel, with the new test | 1 Fable | `round-2/funnel/` | done |
+| 3 | Independent review, then fix | Opus, then the judge | `round-2/funnel/REVIEW.md` | done |
+| 4 | Architecture versions that really differ | Opus, up to 1 Fable | `round-2/arch/V*/` | running |
 | 5 | Compare, fold, check, fix | 1 Fable at a time; Opus check with BMad review | `round-2/arch/SPINE.md` | pending |
 | 6 | Build plan, builder brief, orchestrator prompt | Opus | `round-2/build/` | pending |
 | 7 | Walkthrough page for him; agent and UI hand-offs | lead | `round-2/WALKTHROUGH.html` | pending |
