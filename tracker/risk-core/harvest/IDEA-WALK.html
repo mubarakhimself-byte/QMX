@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QMX Idea Walk</title>
+<style>
+:root{--bg:#f1f0ec;--panel:#fff;--tint:#e7e5de;--ink:#1d2326;--muted:#5c666b;--line:#d3d0c7;--accent:#8a3f1d;--accent-soft:#f3e2d8;--room:#14606b;--room-soft:#d6ecee;--later:#55621c;--later-soft:#e8ecd2;--other:#5b4a8a;--other-soft:#e6e1f2;--drop:#8d2f2f;--drop-soft:#f4dcdc;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181a;--panel:#1d2326;--tint:#272e32;--ink:#e8ebe9;--muted:#a2adb1;--line:#384247;--accent:#e6a27f;--accent-soft:#3c291f;--room:#79cfd9;--room-soft:#183a3f;--later:#c2d07a;--later-soft:#2d3419;--other:#bdaef0;--other-soft:#2d2745;--drop:#ee9a9a;--drop-soft:#402222;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14181a;--panel:#1d2326;--tint:#272e32;--ink:#e8ebe9;--muted:#a2adb1;--line:#384247;--accent:#e6a27f;--accent-soft:#3c291f;--room:#79cfd9;--room-soft:#183a3f;--later:#c2d07a;--later-soft:#2d3419;--other:#bdaef0;--other-soft:#2d2745;--drop:#ee9a9a;--drop-soft:#402222;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Georgia,"Iowan Old Style","Times New Roman",serif}
+.wrap{max-width:1000px;margin:0 auto;padding:28px 16px 80px}
+h1,h2,h3,nav button,.chip,.filter button,th,.ref{font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+h1{font-size:clamp(28px,6vw,44px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{font-size:24px;margin:0 0 8px;line-height:1.2;text-wrap:balance}
+h3{font-size:16px;margin:0 0 5px;line-height:1.3}
+p{margin:0 0 12px}
+.lede{font-size:19px;color:var(--muted);max-width:68ch}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;margin:20px 0 22px;padding:8px 0;scrollbar-width:thin}
+nav button{flex:none;border:0;background:none;color:var(--muted);padding:9px 11px;font-size:14px;font-weight:600;border-radius:6px;cursor:pointer;min-height:40px}
+nav button[aria-selected="true"]{background:var(--accent);color:var(--bg)}
+nav button:focus-visible,.filter button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section[hidden]{display:none}
+.intro{max-width:72ch;margin-bottom:16px}
+.filter{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+.filter button{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 11px;border-radius:999px;font-size:13px;cursor:pointer;min-height:36px}
+.filter button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:15px 16px;margin-bottom:10px}
+.card p{margin:0 0 8px}
+.card p:last-child{margin-bottom:0}
+.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:9px}
+.chip{font-size:12px;font-weight:650;padding:3px 8px;border-radius:999px;background:var(--tint);color:var(--muted)}
+.chip.room{background:var(--room-soft);color:var(--room)}
+.chip.later{background:var(--later-soft);color:var(--later)}
+.chip.other{background:var(--other-soft);color:var(--other)}
+.chip.drop{background:var(--drop-soft);color:var(--drop)}
+.ref{font-size:12px;color:var(--muted)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel);margin:12px 0 22px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:15px}
+th{font-size:13px;text-align:left;background:var(--tint);padding:9px 11px;vertical-align:bottom}
+td{padding:9px 11px;border-top:1px solid var(--line);vertical-align:top}
+.note{background:var(--accent-soft);border-left:3px solid var(--accent);padding:12px 14px;border-radius:0 8px 8px 0;margin:0 0 18px;max-width:75ch}
+ul.plain{margin:0 0 14px;padding-left:20px;max-width:72ch}
+ul.plain li{margin-bottom:6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0 22px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+.stat b{display:block;font:700 26px/1.1 ui-sans-serif,system-ui,sans-serif}
+.stat span{font-size:13px;color:var(--muted)}
+.theme{float:right;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 10px;font:13px ui-sans-serif,system-ui,sans-serif;cursor:pointer;min-height:36px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<button class="theme" id="theme" type="button">Theme</button>
+<h1>What the agents actually found</h1>
+<p class="lede">The work from 1 to 7 Nov was re-read area by area against your brief, not against dollars. This is the walk-through you should have had. Nothing here is decided.</p>
+<nav role="tablist" aria-label="Sections" id="nav"></nav>
+<div id="views"></div>
+</div>
+<script>
+const TAG={room:["room","The core must leave room"],later:["later","Add later, no core change"],other:["other","Another session"],drop:["drop","Do not use as a default"]};
+const IDEAS={
+market:[
+["The MIS moves a unit between markets","A mean-reversion scalper shifts to whichever markets are mean-reverting now. That was your idea. Today the MIS can only narrow a unit's list, and the compiler refuses a unit that reads the MIS at all. A simulation on made-up bars suggests direction takes 4 to 5 hours to show on 1m and 5m, so it would work as a list for the session, not a per-trade signal.","room","Proposal","H1 idea 1"],
+["Units read readings, each with a stated fallback","A unit lists what it reads and what to do without it: compute it itself, treat it as absent, or take no new entries. Nearly every market idea needs this, and it is refused today.","room","Designed, never run","H1 idea 2"],
+["Contexts, not sessions","A unit reacts to words such as mean-reverting or stressed, with sessions as the fallback. Two positions in an overlap are then no contradiction, only one shared bet counted once. This answers your question on changing sessions.","room","Proposal","H1 idea 3"],
+["Anyone may publish a reading","Your departments need this. A macro mini app feeds an FX mini app only if a reading can come from anywhere. The planned record names only the node or the MIS as a source.","room","Your vision","H1 idea 5"],
+["Stamped history you can ask questions of","Every reading is stored when computed and never rewritten, so QMB sees what live would have seen. In simulation, a label computed afterwards claimed a 76% better edge, and the honest at-entry label gave no gain.","room","Simulation","H1 idea 8"],
+["Prove the MIS helps at all","Run a unit with and without it, or feed it shuffled readings for a week. If nothing changes, the unit never used the MIS. A per-unit meter says “no proven help” when the gap can't be told from zero.","later","Proposal","H1 idea 9"],
+["Two hourly tables per instrument","Expected move and round-trip cost by hour and session, measured from QMX's own quotes and fills, per broker, demo and live. This is your “QMX as a data analyst”: observe the cost, then act on it.","room","Strong on cost shape","H1 idea 11"],
+["Sniping windows, made honest","The research found “sniping” has no professional meaning. The real version is a time slice where one unit's net edge on one instrument is higher on later data. Agents nominate slices, QMB tests them, and every slice counts as a try. A prop-firm guide says the window itself gives no edge. Your view on gold is for the numbers talk.","later","Cost evidence strong; window sizing unstudied","H1 idea 12"],
+["SQS as a sensor and a swappable block","SQS can also feed class caution and restore rules, and a user should be able to replace it. Right now three separate spread measures exist, and the new node has no SQS at all.","room","Built rule, never run on a venue","H1 ideas 13, 15"],
+["The fast MIS is SQS generalised","Almost everything a scalper needs is “now against usual for this minute of the week”: spread, tick rate, depth, range. Overnight the MIS prepares the usual curves, and live only divides. This is the closest thing on disk to a new MIS-plus-SQS shape.","room","Proposal","H1 idea 19"],
+["Five gates: can the market fill an order now?","Before a scalper enters: spread expansion, tick speed, quote gaps, micro-volatility, slippage stability. The EA predicts fills, not direction. A related paper warns that such filters can also screen out winners.","later","Author backtest","H1 idea 16"],
+["Isolate crypto, a region or a currency","Every stop can name what it covers: class, region, currency, underlying, session. “Isolate crypto” needs a crypto scope, and none exists today.","room","Design","H1 idea 22"],
+["Your isolation protocol","Two different kinds of evidence must agree before a class stops. Modes run from no entries, to reduce, to flatten. It ends in stages, and a retrip doubles the wait. Each isolation records whether a loss actually followed. It reads as pod configuration, not a hard rule.","room","Exchange breakers are real; this form is a proposal","H1 idea 23"],
+["Unknown is not calm","If prices are stale or a venue is down, that scope's state is unknown and new entries there stop. One bad feed stops only its own scope.","room","Design logic","H1 idea 24"],
+["Agent isolation over days","Slow decay can't trip a minute-level rule. An agent reads weeks of readings and lands an expiring, evidence-backed card such as “isolate class X for a week”. Your 20-day analysis idea.","room","Proposal; the door is the core part","H1 idea 27"],
+["News as measured impact","Replace calendar colours with what each release actually does to each instrument. US CPI should block indices, gold and USD pairs, not just “USD”. HIGH is an editor's label: NFP moves 80 to 150 points, Eurozone PMI 10 to 30.","room","Strong for FX and futures; thin elsewhere","H1 idea 30; H5 idea 30"],
+["News as something to trade","You said “which means I can trade news”. A global news window would block that, so each unit needs its own exemption. No free feed gives actual values today.","room","Unit results are stock-only","H1 idea 33"],
+["ORB as a family across opens","One logic trades each open, proven as one family, with each open keeping its record. You called this breadth idea brilliant. Correlated opens on a risk-off day count once.","room","Strongest on stocks in play","H1 idea 38"],
+["Weekend crypto warns Monday","A volatile crypto weekend now predicts Monday variance in the S&P, gold and Treasuries, but only since a late-2023 break. So any cross-market rule should carry a retest date.","later","Real, short sample","H5 idea 29"],
+["Bar closes are the crowded moment","Quarter-hour minutes carry 26% more trades and larger moves in their first ten seconds. A template that enters on bar close enters exactly then, across all your units. An entry-timing offset fixes it.","room","Crypto backtest","H5 idea 34"]
+],
+sizing:[
+["Re-size a recorded trade list","Replay a unit's real or paper trades under another sizing rule, with no new backtest. You and the copilot could test any sizing idea in minutes. StrategyQuant's QuantAnalyzer does this. Every numbers talk depends on it.","room","Real product elsewhere","H2 I1"],
+["Dollars first, lots last","A rule decides dollars at risk. A small converter then speaks each instrument's unit: 0.01 lots, 1 contract, 0.001 BTC. That is the proper answer to your “why lots?”, and a neutral word such as “quantity” should replace lots at the seams.","room","Proposal over a built converter","H2 I2; H3 T4"],
+["“More units, less each” is one swappable formula","Your complaint comes from a single square-root formula. Five others are on disk: own full size under a parent limit, your day-capital split, budget by how few really trade at once, best few first, and shares that grow and shrink. The funnel scored the parent-limit option using another policy's numbers, so that option was never really tested.","room","Banks use parent limits; rest is model","H2 I3; H3 T5"],
+["House money and reverse house money are one rule","Keep one ledger of profit since a chosen start. Size = (allowance + profit) ÷ allowance. Below the start it shrinks, above it grows. Anchor it to a fixed point and it does both. Anchor it to the running peak and it only brakes.","room","Real theory; no gain on independent trades in the model","H2 I4"],
+["One row for every brake or accelerator","Each control states what it reads, whose risk, from where, which lever, how fast on and off, what it does with missing data. “5% drawdown” can no longer mean four things, and a new brake is one new row.","room","Proposal","H2 I5"],
+["Two ledgers: money for brakes, events for decay","A cut costs its size in the money ledger. Cut rate and full-stop share go in the event ledger, as early decay evidence. It needs every trade to record what closed it. Today a time exit, a signal exit and a cut all read “close”.","room","Model plus code fact","H2 I6"],
+["Risk only the cushion above a floor","Size is a share of money above a floor, so the share of equity rises as you grow and shrinks by itself as you fall. The funnel “blocked” this using ten units at full price. It was never run at one or two units.","later","Real theory","H2 I14"],
+["Ring-fence the stake","Give units only part of the money, as you said: “$100 to $200 and let them grow”. A wipe-out costs the stake. Variants include sweeping above a high and locking a share of each new high.","later","Real at funds; model here","H2 I15"],
+["Smaller losses allow bigger bets","Fast invalidation narrows the spread of results, so the same floor risk pays more dollars per trade. The catch: if the cut also catches winners, one model's +0.086R falls to +0.012R at 10% and goes negative at 20%. So it rests on a two-arm test per unit.","later","Model; no paper after costs","H2 I16"],
+["Concentrate: few units, best basket","One unit on one bet gets the full size. Fill a few slots with the best until capital allows volume, as you said on 5 Oct. The funnel rejected this as against your wishes, and your 7 Nov words reverse that.","later","Proposal","H2 I17"],
+["Press with winnings only","Extra risk comes only from realised profit since the anchor, so the scope can't end below its anchor because of the extra size. On independent trades this is a size increase in disguise.","later","Real prop rule","H2 I18"],
+["Cut hard after a bad day, so the average can sit higher","Multiply size by 0.7 after a bad day, add a little after a green one. In one script it ran at 0.79x average risk, with the same growth per unit of risk and a smaller chance of a 25% drawdown. As a pure brake capped at baseline, the same mechanism chokes.","later","Real in networking; model here","H2 I19"],
+["Reserve for the one move that really ruins","Before sizing, take off the loss if the largest bet gaps to its class's worst move. At large size this matters most, because brakes can't act inside a gap. The table of worst moves doesn't exist yet.","room","Real in other fields","H2 I21"],
+["A step ladder earned by profit","Topstep's rule: up one tier only after 10 active days, down the same day if profit falls. It is the strongest live pair the research found. No published effect.","later","Real rules","H2 I22"],
+["Stack methods by capital stage","Your logic: first a cash base, then breadth. A pod could swap sizing and split rules at a stage line. The core only needs a way to do that without a new unit identity.","room","Guess as a stack","H2 I27"],
+["Agents breed sizing profiles","Agents mutate a profile inside your ranges, judge by resize replay, count every try and put the survivor on a card. This is your hill climb. It was tagged wild and left out.","later","Guess","H2 I37"],
+["A money brake from the unit's own record","Bench at a level read from the unit's own results, so a scalper and an ORB fire at the same rate. In the model, “two full stops” keeps 18 to 65% of a healthy unit's R, and this keeps over 99%. Its job is the tail, not timing.","later","Model","H2 I10"],
+["Five states, one rank table","Active, reducing, benched, halted, restore, per scope. Today the stack can only stop. This is what “stepping down” meant, and it needs saying plainly.","room","Real in Nautilus; model","H2 I58"],
+["Losing together counts once","Five stops on one USD release are one bad event, not five strikes against five healthy units. Money still counts in full. It comes from an insurer's hours clause.","room","Real in insurance","H2 I52"],
+["One logic fading everywhere","Pool all units sharing a logic. In the harder sim, ten small units lose together before any one alarms, and a pooled watch sees it in days. At 200 units this is the main sensor.","room","Model","H2 I89"],
+["Bad luck, bad market, bad execution, or decay","A one-line sentence each morning, then four bins. Only the last feeds demotion. This is exactly what an agent can carry for you.","later","Proposal","H2 I91"]
+],
+exits:[
+["An exit stack fed with the position","Several exits at once on one position. Each sees quantity, stop, bars held and best and worst excursion, and may close all, close part or tighten. You were right that the dictionary holds the mechanisms. But the host runs only the first per-bar exit today, and its check allows only a full close. “Later” here means rework.","room","Code fact","H2 I7; H3 T13"],
+["Every unit states what would prove it wrong","A named condition, watched by code after entry, with a disaster stop beneath it. Example: an ORB back inside its range. In one study, agents graded 134 of 163 sells correct, and code grading disagreed. QML has a pre-entry invalidation role to extend.","room","Paper account, one window","H5 idea 4; H2 I71"],
+["Fast invalidation read from the unit's own winners","If 90% of winners never dip past -0.4R, a cut at -0.5R loses few. It must beat both “no cut” and “cut one bar later”. No paper tests this after costs.","later","No outside test","H2 I70"],
+["A unit with no stop","You said in October a stop may be irrelevant for a scalper, then said leave room. Today such a unit has undefined R. So R must be a declared basis on the unit, never assumed.","room","Proposal","H2 I72"],
+["Stops only where they earn","Measure the unit's persistence at its own hold. Momentum: trails are fine. Mean reversion: a wide stop plus thesis and time exits. Random walk: disaster stop only.","later","Real at daily scale","H2 I73"],
+["The dynamic stop and target, rebuilt","Your April idea, with fast invalidation replacing it for scalpers. Breakeven trigger read from the unit's own paths, and the offset covers spread. It needs the exit stack first.","later","No peer-reviewed test","H2 I74"],
+["An inventive exit shelf","Survival-model hold-or-close, half-life time exits, trails chosen by why the position opened, scale-outs from recent excursions, exit by regime state, basket cuts, triple barrier. All are blocks once the stack exists.","later","Mixed; few tests","H2 I75"],
+["Every exit change is a counted trial","Same entries, only the exit differs, and tries are counted. It needs bar-level paths kept per trade.","room","Controlled test by an author","H2 I76"]
+],
+unit:[
+["The Lab's pod is the template you described","Seven slots: inputs, guards, allocator, sizer, throttles, caps, ledger. No architecture version mentions it. It is unbuilt, and its spec leaves one job to this session: where those blocks run on the node.","room","Design only","H3 T3"],
+["Every number says how it is derived","“If you say 10%, where does it come from?” Each number names a swappable rule, its inputs, a fallback ladder and a receipt. No shipped product self-tunes risk numbers under guardrails, so this is untested ground.","room","Proposal","H3 T2"],
+["You write the spec, the machine writes status","Your edit and the machine can't overwrite each other, and old brake state can be spotted as old. This is the Kubernetes idea you liked.","room","Real elsewhere","H3 T1"],
+["A rule can run in the unit or above it","One version put every brake in a guard above the unit. Another let the unit carry its own. Under your brief the second deserves reopening: five halt blocks ship today unable to bind, and a scalper's brake differs from an ORB's.","room","Proposal plus a model test","H3 T6"],
+["Four kinds of unit, one door","Lab, QMB, workflow, mini app: “all of them can trade”. Nothing in the baseline may need a QMB card. Admission and start level become optional blocks.","room","Your ruling","H3 T7"],
+["Save only what differs from the preset","n8n's trick: store overrides and pinned block versions, so defaults can improve while old work keeps running. Storing full copies at 200 units can't be undone later.","room","Real in n8n","H3 T9"],
+["Presets, and packs from old and new systems","One schema, many presets. Packs stack sizing, brakes and exits, so versions can be literally like the first system, or take parts of both. That was your 1 Nov idea.","room","Helm is real; packs are a proposal","H3 T10, T11"],
+["Grow QML with new roles","Derivation, combiner, restore and others, each with a contract test and starter blocks. You said QML can be enhanced. I found no redesign of QML's language itself on disk.","room","Proposal","H3 T12"],
+["A pod as a shippable bundle","A signed mini app that lands documents, presets, agents and a self-test. “How do we ship pods?” Today an app has one lander, and it can't land dictionary entries.","room","Proposal","H3 T33"],
+["The Lab and live must be one evaluator","The Lab spec has its own simulator, and the guard is separate. If they differ, a size shown in the Lab can differ from live. Nobody noticed because the architecture agents never read the Lab spec.","room","Reading two documents","H3 T38"],
+["One block catalogue","Lab pod blocks and QML dictionary entries are two block worlds today. A pod block should probably pin dictionary entries.","room","Reading","H3 T39"],
+["Swap placeholders without losing the record","A forwarding map moves an old block to a new one with a parameter transform. Under today's table, a swap is a new unit with a fresh record.","room","Real elsewhere","H3 T49"],
+["A way out for many units, one netted order","Units report the volume they want, and one converter nets it. Two scalpers offsetting each other pay no spread. It is tagged wild, but a retrofit touches the money path, so keep intent separate from placement now.","room","Author backtest","H5 idea 31"],
+["Budget share travels with the deployment","Today every unit sizes from the whole account, and paper from the demo balance. The funnel marked this core, yet the final spine has no such field. It was probably lost in the fold.","room","Elsewhere","H3 T44"],
+["Agents can save a block","Today no tool saves a new block. So “the unit is what agents' ideas become” stops at drafts you save by hand.","room","Verified gap","H3 T57"]
+],
+agents:[
+["The kit for “edge never real”","Your question has an answer. Does the edge beat its costs? Does it flip when entered one bar late? Does a random-entry twin with the same exits look as good? Has this family died before? One London pattern went from t +4.30 to -2.78 on a 15-minute delay. It works mainly before live: a weak edge can't be proven dead fast. How much earlier it catches fakes is unmeasured.","other","Each check tested alone; the kit is not","H4 I-01; H5 idea 1"],
+["A machine check in days","Costs, fills, trade rate and hold time against a paper twin started the same minute, so market moves cancel. A doubled cost shows in about 50 trades. Paper has zero slippage today, which weakens this.","room","Production practice","H4 I-02"],
+["Count every try","A try costs nothing, so without a ledger agents will always find something that looks good. A 102-try winner showed Sharpe 1.69 in design and 0.18 held out. QMB counts its own tries; a try in free Python doesn't seem to be counted.","other","Strong finding","H4 I-04; H5 idea 1"],
+["Block leakage in the tools","A planted cheat with Sharpe 35 passed the deflated Sharpe and overfitting tests. So agents must compose tools that can't see the future. This is where your “one mistake is costly” lives.","room","Strong that stats miss it","H4 I-05"],
+["Blind the checker","Showing the builder's reasoning raised false acceptance of bad orders from 6.2% to 14.8%. A plain instruction to check carefully cut it to 1.6%.","other","Synthetic test","H4 I-08; H5 idea 40"],
+["A fleet watch for 200 units","Scripts compute every unit's state, an agent explains only what changed, and you see exceptions. Eight workflow templates already do pieces, and nobody has joined them into one mini app. Nothing is tested at your count.","room","Pieces built","H4 I-33"],
+["Code detects, agents explain","No paper shows an LLM monitor catching live problems sooner. In one test the best LLM scored about 71%, a simple trained detector 89%. So agents should run and improve detectors, not read P&L.","later","Synthetic data","H5 idea 2"],
+["One alarm budget across all units","With many units, false alarms are certain. Use a loose rule to rank who gets looked at and a strict one to demote. At your count, demoting on one unit's evidence gets much slower, so family streams matter more.","room","Theory plus simulation","H4 I-34"],
+["Evidence with an expiry","A unit declares what agent evidence it accepts, the largest effect and how long it lives. Expired or missing means no change. Removing “BREAKING” or a named source took one fake-news attack from 100% to 0%.","room","No end-to-end test","H4 I-52; H5 ideas 6, 41"],
+["Much of your picture already exists","Video and channel to ideas: a-fill-the-library. Reforging: u2, d3, rs6, revolution-loop. Overnight loop: l4. Cheap helpers: delegate. What blocks them: one dummy template, agents can't save blocks, and ingestion reads captions only, so it can't see a chart in a video.","other","Built; not tried on your sources","H4 I-68 to I-71, section 6"],
+["The blacksmith, honestly","Iteration raised score for all nine models in one study but sealed return for only four. Every extra hammer blow raises the bar. “Worked before COVID, failed after” is a real form: ask which condition broke.","other","Pattern built; value unproven","H4 I-69"],
+["Shepherd today","Delegate can start, list, steer and stop helpers. Missing: fork, replay with one change, select, compare. Shepherd itself is labelled early alpha.","other","Partly built","H4 I-70"],
+["Self-improvement that can't loosen anything","A policy agent rewrites analysis steps, never limits or exits. Five-day updates beat daily. In one autonomous stretch, the operator later removed 11 of 19 rules the agent added.","other","Short windows","H5 idea 38"],
+["Let the agent try its fix in a lab first","Before proposing an intervention, the agent must have run it. Lab access cut regret by 57% in one deployment. Your own 200 units are the “others” who react to each other.","later","One synthetic asset","H5 idea 44"],
+["The hard fact","With every try counted, every LLM-found strategy failed certification in one paper. Simple controls beat 31 of 36 agent runs in another. This doesn't rule out your picture. It says discovery needs the honest referee most.","other","Several papers","H4 section intro"]
+],
+papers:[
+["Logic linking as a canvas feature","Your “these guys link logic”. Each block carries its source, evidence label, classes tested, data needed and null test. Then the 80 or so unused paper combinations become recipes a user or copilot can stack.","room","Recipes untested","H5 idea 10"],
+["A null beside every statistic","Trading less always looks like safety on a loser. One classifier, 48% accurate and below chance, “cut” drawdown 93%. A new layer gets credit only if it beats a shuffle.","room","Real test design","H5 idea 12"],
+["A market with no edge in it","Grow a market from rules with nothing to find, the El Farol bar problem. A rule that “works” there is overfit by construction. Run it on 200 markets and you measure a tuner's false discovery rate.","later","Simulation by design","H5 idea 13"],
+["Immunology: gather danger before deciding","Weak signals accumulate, while clear danger acts at once. News windows raise sensitivity. It answers alarm fatigue.","later","Guess by analogy","H5 idea 15"],
+["Power grids: nearest breaker trips first","Wider layers trip only if the nearer one fails, and hard stops never wait. The warning that transfers: trading has no isolated zones, so shared causes break “local first”.","room","Engineering practice","H5 idea 16"],
+["ICUs and plants: an alert must name an action","No action and no deadline means it is a log line. One ICU study: 187 alarms per bed per day, 88.8% of annotated arrhythmia alarms false. Your 200-unit problem.","room","Real in those fields","H5 idea 17"],
+["Reinsurance: count exposure to the same event","One event hits several things beyond what correlation shows. Tags must be many-to-many: a broker outage and a USD shock are not one tree.","room","Analogy","H5 idea 18"],
+["Robotics: propose, constrain, one step, look again","Plan, fit to limits, do only the next step, replan. It met constraints 98% of the time against 49% without. In markets the error bound fails on jumps.","later","Robot simulation","H5 idea 19"],
+["Control theory: the strategy is a plant","A controller watches a strategy's outputs and grants permission to trade. One article made two losing systems profitable by trading only when both agree. It must beat a random gate.","later","Author backtests","H5 idea 21"],
+["Physics and geometry as readings","Random matrices clean correlation, curvature asks whether clusters merged, optimal transport catches shape changes. One curvature gate refused 0 of 82 signals and looked like it worked, which is a lesson in itself.","later","Mostly in-sample","H5 idea 23"],
+["Did the signal fade, or did execution get worse?","Keep one residual before costs and one for predicted against real costs. Otherwise a failing signal and a failing broker look the same.","room","Proposal","H5 idea 26"],
+["The easier a signal is to predict, the harder it is to profit from","Resting orders fill most when price moves against them. In 232,897 live orders, naive market making lost about 60% in three days. Judge fills by what price did after them.","room","Real live orders, one venue","H5 idea 33"],
+["Repeat same-side trades get worse quotes","In OTC FX the dealer is the market, so many scalpers on one broker can move their own price. Log every rejection.","room","Theory","H5 idea 32"],
+["Stamp every test with its conditions","“100% real ticks” coexisted with 33,584 of 46,252 minutes on generated ticks. A scalper result on generated ticks shouldn't advance.","room","Measured","H5 idea 37"],
+["Can this edge live long enough to be proven?","Counts aren't independence. With lag-one correlation of 0.9, about 5% of nominal observations remain. That touches your scalper thesis.","other","Model","H5 idea 46"],
+["Papers in the Library as mental models","Your idea. Parsed papers plus short “what to borrow, how it failed” cards. A failed strategy teaches more than five pretty backtests.","other","Proposal","H5 idea 11"]
+]};
+const STRATS=[
+["UB-15","Opening-range breakout only on markets unusually active at the open","Volume, sessions","Cited net Sharpe 2.81 for one period; wins under 30%"],
+["UB-18","Dollar rises before FX fixes, falls after. A real time window","Sessions","Negative at full spread; 0.12 to 1.03 Sharpe at half"],
+["UB-12","First half hour predicts last half hour","Sessions","Survives cost in a futures and ETF study; sign varies"],
+["UB-13","MNQ regime-transition entry and London signal, held 60 to 75 minutes","Sessions","t 3.11, 4.30; 53+ variants; flips on a 15-minute delay"],
+["UB-01","Order-flow imbalance, your order flow","Ticks and book","Explains about 65% of moves; forecast after cost not shown"],
+["UB-03","Auction features: volume area, cumulative delta, tape speed","Ticks, volume","Backtest on two stocks; drawdowns -27.5%, -47.8%"],
+["UB-04","Label the session, then follow or fade flow","Volume, sessions, reads","In-sample, 602 NQ sessions"],
+["UB-25","Calibrated firm news score, traded after publication","Another venue, model","Sharpe 2.85, deflated 2.19, at 5 bp"],
+["UB-30","EIA inventory surprises and OPEC decision type","Calendar, roll","Event studies, abstract level"],
+["UB-36","Fast and slow trend sized by tick tier","Roll","Fast Sharpe fell from 0.84 to 0.12 after 2008-09"],
+["UB-74","A volatile crypto weekend predicts Monday gaps elsewhere","Reads","Backtest; recent"],
+["UB-78","An agent reads charts like a trader, parked by you for the Lab","Model","Idea"],
+["UB-14","Do not propose: chasing Asia expansion, post-news drift, ORB pullback stopped 80.7%","Sessions","Negative results"],
+["UB-62","Do not propose: gold 5-minute mean reversion. One arm only, not a verdict on gold","Reads","Model plus backtest"]
+];
+const VIEWS=[
+{id:"start",label:"Start here",html:`<h2>Where it all went</h2><p class="intro">Everything is still on disk. The funnel ranked it by simulated dollars and go-live needs, so most of it never reached you. Five agents have now re-read it with your brief in hand.</p>
+<div class="stats"><div class="stat"><b>428</b><span>ideas and strategies re-judged</span></div><div class="stat"><b>302</b><span>paper texts on disk</span></div><div class="stat"><b>48</b><span>papers read closely</span></div><div class="stat"><b>3</b><span>architecture versions, one template</span></div></div>
+<div class="note"><strong>You were right about four things.</strong> The ideas touch the unit. The plans do use swappable placeholders. Little exists on SQS and MIS designs. And the dollar sim never judged the market side, so go-live thinking set those fates.</div>
+<h3>Three things you may not expect</h3><ul class="plain"><li><strong>“Just swap it out” is only true for a narrow shape.</strong> A sizer reading equity, entry, stop and record, a bars-only stop, one fixed target and a simple per-bar exit. Everything else needs the socket widened first. All five halts and six other exits are in the dictionary, and compile refuses them.</li><li><strong>Almost every strategy you care about needs something compile refuses.</strong> Order flow needs ticks, ORB and fixes need sessions, placement needs reads. Only a handful of the 78 strategies run today. None of the 78 was ever judged.</li><li><strong>Much of your agent picture already exists</strong> as workflow templates. What blocks it is mostly the unit side.</li></ul>
+<h3>How to read the tags</h3><p class="intro"><span class="chip room">The core must leave room</span> otherwise the unit gets reworked. <span class="chip later">Add later, no core change</span> a block, preset or template. <span class="chip other">Another session</span> methodology, agents, UI or MIS. Evidence sits beside each tag. Most of it is the source's own claim and hasn't been re-tested.</p><p class="ref">This page shows the strongest of each area. Full lists: tracker/risk-core/harvest/H1 to H5.</p>`},
+{id:"market",label:"Market side",ideas:"market",intro:"MIS, SQS, isolation, news, windows. Your memory is right: no agent was ever given a SQS or MIS design job. These are the pieces."},
+{id:"sizing",label:"Sizing and brakes",ideas:"sizing",intro:"Includes methods for large risk without ruin. They are parts: no run on disk compares them for that goal. That's for the numbers talk."},
+{id:"exits",label:"Exits",ideas:"exits",intro:"You said exits are where we need to be inventive. The dictionary holds the mechanisms, and the host can't run most of them yet."},
+{id:"unit",label:"Unit, QML, pods",ideas:"unit",intro:"The canvas itself. See also the architecture tab."},
+{id:"agents",label:"Agents",ideas:"agents",intro:"Most of this goes to the agentic upgrade or methodology sessions, ready to hand over. The core only needs the doors."},
+{id:"papers",label:"Papers, borrowed logic",ideas:"papers",intro:"What the alphaXiv chats and MT5 articles offer once you stop mining them only for brakes."},
+{id:"strats",label:"Strategies",html:`<h2>The unit idea bank</h2><p class="intro">78 strategies from papers and articles. None was judged, and all results are the source's own. Here is a sample of the ones closest to what you've mentioned. The “needs” column shows why they touch the core.</p><div class="table-wrap"><table><thead><tr><th>Id</th><th>Idea</th><th>Needs (refused or missing today)</th><th>What the source reports</th></tr></thead><tbody>${STRATS.map(s=>`<tr><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td><td>${s[3]}</td></tr>`).join("")}</tbody></table></div><p class="ref">Full table: harvest/H4 section 2G, and linking/UNIT-IDEA-BANK.md</p>`},
+{id:"arch",label:"Architecture versions",html:`<h2>The versions you asked for</h2><div class="note">They exist, but they are three versions of one thing. All got the same brief after the funnel had settled the contents. None shows pods, mini apps or a unit from the Lab. The comparison you wanted has never been drawn.</div>
+<div class="table-wrap"><table><thead><tr><th></th><th>Version 1</th><th>Version 2</th><th>Version 3</th></tr></thead><tbody>
+<tr><td><strong>In a line</strong></td><td>A document: people write spec, runtime writes status, small loops move numbers inside bounds</td><td>Numbers recomputed at set moments on one sheet; cuts at once, raises wait</td><td>Unit carries its own brakes; shared facts go to unit and guard</td></tr>
+<tr><td><strong>How numbers move</strong></td><td>A learner proposes, an applier moves it in the number's own mode</td><td>Refresh at set moments only</td><td>Refresh at set moments; facts move live</td></tr>
+<tr><td><strong>Where brakes live</strong></td><td>One guard above every unit</td><td>One guard, one seam</td><td>In the unit; only cross-unit rules above</td></tr>
+<tr><td><strong>Sizer</strong></td><td>Wide inputs</td><td>A rule produces dollars; a block converts to quantity</td><td>Wide inputs plus facts</td></tr>
+<tr><td><strong>Group level</strong></td><td>Named, no contract</td><td>Group document, your display name, room for a parent</td><td>Portfolio config</td></tr>
+<tr><td><strong>Own best finding</strong></td><td>Live moves earn only on a cost change</td><td>Targets should rest at the broker</td><td>42% of healthy units sent to paper under one drift rule</td></tr></tbody></table></div>
+<h3>What survives your brief</h3><ul class="plain"><li>Spec and status; every number's derivation and receipt; the mode per number; the dollars-then-quantity split; a brake as one dictionary folder; facts live, numbers at set moments; a failure never reaching an exit; shadow mode as a mechanism.</li></ul>
+<h3>What needs reopening</h3><ul class="plain"><li>“Every brake in the guard”: version 3 was rejected on go-live thinking.</li><li>Fixed laws: the second-reader refusal, the 0.75 build gate, the level ladder, start level from QMB, the fixed brake lists. Each can be a preset, a warning or an optional block.</li></ul>
+<h3>“Pod” currently means five things on disk</h3><div class="table-wrap"><table><thead><tr><th>Meaning</th><th>Buys</th><th>Costs</th></tr></thead><tbody>
+<tr><td>Compiles to Book and BMS (Lab spec)</td><td>Works with old documents</td><td>Predates units</td></tr>
+<tr><td>Compiles to a unit profile and a group</td><td>One target</td><td>Both sides unbuilt</td></tr>
+<tr><td>Compiles into the unit's own blocks</td><td>One block world</td><td>Cross-unit slots have no home</td></tr>
+<tr><td>A shippable mini app bundle</td><td>Signed, shareable</td><td>The word stretches</td></tr>
+<tr><td>A department of agents and mini apps (your “I think”)</td><td>Specialisation</td><td>No design on disk</td></tr></tbody></table></div>`},
+{id:"carry",label:"What the core must carry",html:`<h2>The list that decides the architecture</h2><p class="intro">Across all five areas, the same needs keep returning. This is much bigger than a sizer swap, and much smaller than the earlier design.</p><div class="table-wrap"><table><thead><tr><th>Need</th><th>What it unlocks</th><th>Today</th></tr></thead><tbody>
+<tr><td>Rules can read facts and readings, with fallbacks</td><td>MIS, costs, news, agents, departments</td><td>Refused at compile</td></tr>
+<tr><td>Sessions and time windows inside a unit</td><td>ORB, fixes, sniping, news-day skip</td><td>Refused at compile</td></tr>
+<tr><td>Bars with volume and time; ticks and book as a data level</td><td>Order flow, RVOL</td><td>Missing; nobody owns it</td></tr>
+<tr><td>Sizer: dollars rule, converter, wide fact surface, receipt</td><td>Any sizing idea</td><td>One stand-in; inputs refused</td></tr>
+<tr><td>Exit stack with position facts and all three verbs</td><td>Trails, partials, FI, thesis exits</td><td>First exit only, full close only</td></tr>
+<tr><td>Halts that bind, with reduce and restore</td><td>Every brake</td><td>Refused; only “stop” exists</td></tr>
+<tr><td>Numbers with derivation, mode and receipt; risk numbers able to move</td><td>Self-configuration</td><td>Risk numbers can't move</td></tr>
+<tr><td>A group or pod level: split rule, scope keys, action as a field</td><td>Pod configuration; Q1, Q4, Q5</td><td>Shells only</td></tr>
+<tr><td>Instrument record: costs, commission, underlying, venue type, tags</td><td>Multi-instrument sizing</td><td>Partial; no commission key</td></tr>
+<tr><td>Trade row: what closed it, gross and net, paths, session, readings, would-have</td><td>Replay, decay, windows, your numbers talk</td><td>Partial</td></tr>
+<tr><td>Identity: lineage, family, provenance, forwarding map</td><td>Counting tries; swaps that keep the record</td><td>Partial</td></tr>
+<tr><td>More than one position or stream; a second lane per unit; intent apart from placement</td><td>Pairs, adds, twins, canaries, netting</td><td>Refused</td></tr>
+<tr><td>Fleet read, expiring proposal door, agents saving blocks</td><td>200 units; agents carrying the load</td><td>Single-unit reads; no save</td></tr>
+<tr><td>Any publisher for readings; mini apps landing entries and presets</td><td>Departments; shipping pods</td><td>One narrow road</td></tr>
+<tr><td>Presets, diffs, pins; one evaluator for Lab and live; a developer guide</td><td>Out of the box; maintainable</td><td>One dummy; none</td></tr>
+</tbody></table></div><p class="ref">Sources: harvest/H1 to H5 section 4; unit-baseline/SWAP-CHART.md</p>`},
+{id:"holes",label:"Real holes",html:`<h2>What you asked for that nothing answers</h2><p class="intro">Not lost: never done. These are the gaps a fold can't fill, so they need agents before architecture.</p><ul class="plain">
+<li><strong>SQS and MIS designs.</strong> No agent was ever given this job. No new SQS design exists. A real MIS design exists from the unit-plan session and never reached the funnel.</li>
+<li><strong>Pod ideas and configurations.</strong> You asked. None exist.</li>
+<li><strong>Unit plus pod as one design.</strong> No version shows it.</li>
+<li><strong>About 250 of the 302 papers.</strong> On disk with no sign they were read for ideas.</li>
+<li><strong>Linking across papers and MT5.</strong> The promised pass was never run.</li>
+<li><strong>Game theory.</strong> Nothing on disk. Two articles are listed as unread.</li>
+<li><strong>Large risk without ruin.</strong> Parts exist; no run compares them. Parked for the numbers talk.</li>
+<li><strong>200 units.</strong> Sources work with about 20. No fleet design.</li>
+<li><strong>A unit from start to finish, per type.</strong> Verification only. Goes to methodology.</li>
+<li><strong>A newcomer's first day.</strong> No walk from install to a trading unit.</li>
+<li><strong>Developer guide and module map.</strong> Scattered pieces only.</li>
+<li><strong>Hill-climbing self-configuration.</strong> You suggested it; no agent attacked it.</li>
+<li><strong>Mini against micro futures; human traders by name; per-instrument studies.</strong> Nothing yet. Order-flow data has no path either, which you said can wait.</li></ul>`}
+];
+const nav=document.getElementById("nav"),views=document.getElementById("views");
+function card(i){const t=TAG[i[2]];return `<article class="card" data-tag="${i[2]}"><h3>${i[0]}</h3><p>${i[1]}</p><div class="meta"><span class="chip ${t[0]}">${t[1]}</span><span class="chip">${i[3]}</span><span class="ref">${i[4]}</span></div></article>`}
+VIEWS.forEach((v,n)=>{const b=document.createElement("button");b.textContent=v.label;b.setAttribute("role","tab");b.type="button";b.dataset.id=v.id;nav.appendChild(b);const s=document.createElement("section");s.id=v.id;s.setAttribute("role","tabpanel");if(v.ideas){const list=IDEAS[v.ideas];s.innerHTML=`<h2>${v.label}</h2><p class="intro">${v.intro}</p><div class="filter" role="group" aria-label="Filter by tag"><button type="button" data-f="all" aria-pressed="true">All ${list.length}</button><button type="button" data-f="room" aria-pressed="false">Core must leave room</button><button type="button" data-f="later" aria-pressed="false">Add later</button><button type="button" data-f="other" aria-pressed="false">Another session</button></div><div class="list">${list.map(card).join("")}</div>`;s.querySelector(".filter").addEventListener("click",e=>{const f=e.target.dataset.f;if(!f)return;s.querySelectorAll(".filter button").forEach(x=>x.setAttribute("aria-pressed",x===e.target));s.querySelectorAll(".card").forEach(c=>c.hidden=!(f==="all"||c.dataset.tag===f))})}else s.innerHTML=v.html;views.appendChild(s)});
+function show(id){VIEWS.forEach(v=>{document.getElementById(v.id).hidden=v.id!==id});nav.querySelectorAll("button").forEach(b=>b.setAttribute("aria-selected",b.dataset.id===id));window.scrollTo(0,0);try{history.replaceState(null,"","#"+id)}catch(e){}}
+nav.addEventListener("click",e=>{if(e.target.dataset.id)show(e.target.dataset.id)});
+document.getElementById("theme").addEventListener("click",()=>{const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==="dark":matchMedia("(prefers-color-scheme:dark)").matches;r.dataset.theme=dark?"light":"dark"});
+show(VIEWS.some(v=>"#"+v.id===location.hash)?location.hash.slice(1):"start");
+</script>
+<style>.card[hidden]{display:none}</style>
+</body>
+</html>
