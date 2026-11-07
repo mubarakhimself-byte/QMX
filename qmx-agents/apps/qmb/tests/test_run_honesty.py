@@ -155,7 +155,12 @@ def test_a_block_that_raises_lands_a_failed_result_with_its_reason(world: World)
     raising = source.replace(update, update + b"        return 1 / 0\n")
     fingerprint = block_fingerprint(raising).value
     kind = entry.pop("component_type")
-    face = {**entry, "entry_id": "rsi-raises", "fingerprint": fingerprint}
+    face = {
+        **entry,
+        "entry_id": "rsi-raises",
+        "aliases": ["RSI raises back over a level"],
+        "fingerprint": fingerprint,
+    }
     world.store.put(
         OPERATOR,
         Draft(
