@@ -28,8 +28,12 @@
 | 3 | Independent review, then fix | Opus, then the judge | `round-2/funnel/REVIEW.md` | done |
 | 4 | Architecture versions that really differ | Opus, up to 1 Fable | `round-2/arch/V*/`, `COMPARE.md` | done |
 | 5 | Compare, fold, check, fix | 1 Fable at a time; Opus check with BMad review | `round-2/arch/final/` | done |
-| 6 | Build plan, builder brief, orchestrator prompt | Opus | `round-2/build/` | running |
-| 7 | Walkthrough page for him; agent and UI hand-offs | lead | `round-2/WALKTHROUGH.html` | pending |
+| 6 | Build plan, builder brief, orchestrator prompt | Opus | `round-2/build/` | done |
+| 7 | Walkthrough page for him; agent and UI hand-offs | lead | `round-2/WALKTHROUGH.html` | done |
+
+## State
+
+Run finished 8 Nov. Nothing coded, merged or pushed. Waiting for him to read `WALKTHROUGH.html`. Next: his calls, then the orchestrator prompt once repair lands, then the numbers talk.
 
 ## Decisions log
 

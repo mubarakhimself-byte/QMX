@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Round Two Walkthrough</title>
+<style>
+:root{--bg:#f1f0ec;--panel:#fff;--tint:#e7e5de;--ink:#1d2326;--muted:#5c666b;--line:#d3d0c7;--accent:#8a3f1d;--soft:#f3e2d8;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#14181a;--panel:#1d2326;--tint:#272e32;--ink:#e8ebe9;--muted:#a2adb1;--line:#384247;--accent:#e6a27f;--soft:#3c291f;color-scheme:dark}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Georgia,"Iowan Old Style","Times New Roman",serif}
+.wrap{max-width:980px;margin:0 auto;padding:28px 16px 80px}
+h1,h2,h3,nav a,th,.tag{font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+h1{font-size:clamp(28px,6vw,44px);line-height:1.08;margin:0 0 10px;letter-spacing:-.02em}
+h2{font-size:25px;margin:0 0 10px;line-height:1.2;text-wrap:balance}h3{font-size:17px;margin:18px 0 6px}
+p,ul{max-width:72ch;margin:0 0 12px}ul{padding-left:20px}li{margin-bottom:6px}
+.lede{font-size:19px;color:var(--muted)}
+nav{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:2px;overflow-x:auto;margin:18px 0 8px;padding:6px 0;z-index:3}
+nav a{flex:none;color:var(--ink);text-decoration:none;padding:8px 10px;font-size:14px;font-weight:600;border-radius:6px}nav a:hover{background:var(--tint)}
+section{padding-top:22px;margin-bottom:26px;border-top:2px solid var(--line);scroll-margin-top:60px}section:first-of-type{border-top:0}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel);margin:10px 0 18px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:15px}th{font-size:13px;text-align:left;background:var(--tint);padding:9px 11px;vertical-align:bottom}td{padding:9px 11px;border-top:1px solid var(--line);vertical-align:top}
+.note{background:var(--soft);border-left:3px solid var(--accent);padding:12px 14px;border-radius:0 8px 8px 0;margin:0 0 16px;max-width:75ch}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:13px 15px;margin-bottom:9px}.card p:last-child{margin-bottom:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:9px;margin-bottom:14px}.grid .card{margin:0;font-size:15px}
+.path{font:13px ui-monospace,Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}
+.tag{font-size:12px;font-weight:700;color:var(--accent)}
+</style>
+</head>
+<body><div class="wrap">
+<h1>Round two: done again, from Tuesday</h1>
+<p class="lede">You said to pull it off one more time. It's finished on paper: a design, a plan of 69 PRs, and a prompt ready for an orchestrator. Nothing has been coded, merged or pushed.</p>
+<nav aria-label="Sections"><a href="#now">Where it stands</a><a href="#get">What you get</a><a href="#calls">Your calls</a><a href="#versions">Versions</a><a href="#overhauls">Overhauls</a><a href="#market">MIS and SQS</a><a href="#pods">Pods</a><a href="#answers">Your questions</a><a href="#ideas">Ideas</a><a href="#honest">Not proven</a><a href="#next">Next</a></nav>
+
+<section id="now"><h2>Where it stands</h2>
+<div class="tw"><table><thead><tr><th>Step you asked to redo</th><th>What ran</th><th>Result</th></tr></thead><tbody>
+<tr><td>Your words</td><td>1 Opus</td><td>Every ask through your latest messages, now a 136-item checklist. The old one stopped at Tuesday's first hour</td></tr>
+<tr><td>Tuesday's holes</td><td>5 Opus</td><td>MIS and SQS designs, 20 pod configurations, all 302 papers triaged, the linking pass, fleet watch, self-configuration, newcomer path, developer path</td></tr>
+<tr><td>Funnel, with your test instead of dollars</td><td>1 Fable, 1 Opus review, then fix</td><td>Most policy questions became settings. Six questions left for you, each with a default</td></tr>
+<tr><td>Architecture versions</td><td>3 Opus, 1 Fable, 1 Opus judge</td><td>Four shapes that truly differ, with a comparison you can read</td></tr>
+<tr><td>Fold and checks</td><td>1 Fable, 1 Opus check, 1 Opus fix</td><td>Nine blockers found by the check, some proven by running today's code, all closed on paper</td></tr>
+<tr><td>Build plan and prompt</td><td>1 Opus, 1 Opus final check</td><td>69 PRs, three stop points, a paste-ready prompt</td></tr>
+</tbody></table></div>
+<p>Fable never ran two at once, as you asked. Old work is kept and marked superseded. Nothing was deleted.</p></section>
+
+<section id="get"><h2>What you get</h2>
+<p>A unit is one document with two halves. The <strong>logic half</strong> says when to enter and exit. The <strong>risk half</strong> says how big, when to hold back and when to stop. Each half has its own fingerprint, so changing size doesn't re-prove your entries. Above the units sits one small <strong>group</strong> for shared money and limits, and it can only cut. A <strong>pod</strong> is a recipe stamped into its members. Every value is a labelled placeholder until the numbers talk.</p>
+<div class="tw"><table><thead><tr><th>Stop</th><th>PRs</th><th>What stands there</th></tr></thead><tbody>
+<tr><td><strong>A</strong></td><td>1 to 20</td><td>One unit trades on paper from zero history, with no broker and no judge verdict. It sizes itself in any account currency. A faulty block costs that unit its entries, never an exit. Brakes bind. A number moves, but at this stop only a filter number; size moves at stop B</td></tr>
+<tr><td><strong>B</strong></td><td>21 to 48</td><td>The whole single-unit baseline: three templates side by side, accelerators and house money, numbers that move, costs observed from fills, the gate, stickers for news and isolation, exits first at a busy bar, and units with no fixed stop</td></tr>
+<tr><td><strong>C</strong></td><td>49 to 66</td><td>Groups, pods, readings from any mini app, shipping through mini apps, the scripted fleet watch for 200 units, and re-testing after compiler changes</td></tr>
+<tr><td><strong>After C</strong></td><td>67 to 69</td><td>Trails, partial closes and stops at the broker, which need your demo sign-in</td></tr>
+</tbody></table></div>
+<p>A copilot can make a unit from a template, change anything, check it, explain any size, save a new block and draft a pod. Promoting, moving a live deployment and lowering the kill switch have no tool: they're your click only. A very aggressive setup still compiles and runs. It only warns, in the largest type.</p></section>
+
+<section id="calls"><h2>Your calls</h2>
+<p>Nothing waits on these. Each has a default the plan runs on.</p>
+<div class="tw"><table><thead><tr><th>Question</th><th>The default</th></tr></thead><tbody>
+<tr><td><strong>What is a pod?</strong> A recipe stamped into units plus a thin group, or one live document that governs its members? This is the biggest one. See the versions section</td><td>Recipe plus group. Decide by stop B. Switching later costs about 4 to 6 more PRs, and more if it's after stop B</td></tr>
+<tr><td><strong>One click per pod edit?</strong> And does that click cover moving up a stage later, by rule?</td><td>One click covers all members. Moving up lands a card, moving down goes by rule</td></tr>
+<tr><td><strong>“Agents never touch money.”</strong> An agent publishes a de-risk reading, and the unit's own rule cuts size inside limits you declared. Does that cross your line?</td><td>It lands as a card until you say otherwise</td></tr>
+<tr><td><strong>Demo sign-in,</strong> and may the probes run on your demo account?</td><td>Fake broker until then. Trails and partials land after</td></tr>
+<tr><td><strong>Data you'd own or pay for:</strong> volume on bars, order flow, a futures route. Order flow has no owner, and your futures week can't run without a route</td><td>FX and gold through cTrader, tick counts from quotes, nothing paid</td></tr>
+<tr><td><strong>Which branch does this land on?</strong></td><td>After the repair stack; only you move main</td></tr>
+<tr><td><strong>The word “desk”</strong> for your hedge-fund department idea, since you said “I think”</td><td>“desk” in code, “department” on screen</td></tr>
+<tr><td><strong>Who builds the installer?</strong> You want a stranger to use this, and the installer has no owner</td><td>A release session from stop A. Until then, a developer's install</td></tr>
+</tbody></table></div></section>
+
+<section id="versions"><h2>The architecture versions you asked for</h2>
+<div class="tw"><table><thead><tr><th></th><th>1. Unit owns it</th><th>2. Pod by scope</th><th>3. Live group above</th><th>4. Flat unit (attacks the premise)</th></tr></thead><tbody>
+<tr><td><strong>Idea</strong></td><td>A unit carries every rule. A pod is a recipe stamped in; a thin group holds shared caps</td><td>A pod is one live document. Each block says where it runs. No pod means an empty pod</td><td>Units say what and when, the pod says how much and whether. Like a fund's risk desk</td><td>No second object. Risk is more QML in the unit; shared numbers are live facts</td></tr>
+<tr><td><strong>You'd see</strong></td><td>One pod card, two documents behind it</td><td>Closest to your proposal screens</td><td>Pods first, units on drill-down</td><td>“Pod” as a screen word only</td></tr>
+<tr><td><strong>Best at</strong></td><td>Standing alone, least new contract, an early stop that's whole</td><td>One edit for 200 units, comparing whole setups</td><td>One place sets size for everyone</td><td>Fewest ideas to learn</td></tr>
+<tr><td><strong>Worst at</strong></td><td>A pod edit makes 200 new versions behind one click</td><td>The most contract; “can't be made small”</td><td>A unit can't trade alone; one bug stops entries for all members</td><td>Structural edits re-test everything; no answer for exits at a busy bar</td></tr>
+<tr><td><strong>Own estimate</strong></td><td>37 PRs</td><td>51 to 58</td><td>50</td><td>32</td></tr>
+</tbody></table></div>
+<div class="note"><strong>The independent judge picked version 1 with 13 parts from the others.</strong> Over version 4 it was close, since they're one family. Over version 3 it wasn't close. <strong>Over version 2 it's a real choice about what a pod is.</strong> If you picture a pod as a live thing that governs its members, choose version 2. It's the better system at 200 units with shared pods, while version 1 is the better baseline and reaches a trade sooner. The estimates grew once checks and honest PR sizes were added: the final plan is 69.</div>
+<p class="path">round-2/arch/COMPARE.md, round-2/arch/final/SPINE.md, SOLUTION.md</p></section>
+
+<section id="overhauls"><h2>Everything proposed for overhaul</h2>
+<p>You asked to go through every one.</p>
+<div class="tw"><table><thead><tr><th>Thing</th><th>From</th><th>To</th></tr></thead><tbody>
+<tr><td>SQS</td><td>One hard-wired gate with hours of warm-up</td><td>A node sensor plus a swappable gate. Default: does this entry clear what this unit allows for costs? The old rule stays as a floor for broken markets</td></tr>
+<tr><td>MIS record</td><td>Only the node or the MIS can publish</td><td>Any app, pod or agent publishes in one record under its own name</td></tr>
+<tr><td>MIS router</td><td>A board that only narrows markets</td><td>An active list a unit can choose to read, with home markets as the fallback</td></tr>
+<tr><td>Isolation, news, opens</td><td>Three separate features</td><td>One “sticker” on a market or scope, with an expiry; each unit lists kinds it ignores. The kill switch stays separate</td></tr>
+<tr><td>Sizer</td><td>Lots at the stop from four facts</td><td>A rule answers an amount; one converter spells the venue's quantity</td></tr>
+<tr><td>Brakes</td><td>Five halt blocks that can't run; only “stop” exists</td><td>Control rows: scope, verb, what happens on fire, how it comes back, what it does with no data</td></tr>
+<tr><td>Exits</td><td>First per-bar exit only, full close only</td><td>A stack of every exit, fed the position, with three verbs</td></tr>
+<tr><td>Self-configuration</td><td>A planned learner and applier</td><td>Replay finds, facts track, the built engine corrects. Every number says who may move it</td></tr>
+<tr><td>Fleet watch</td><td>About 91 cards a night for 200 healthy units (in a model)</td><td>A scripted ranked list, one incident one card. Agents go on top later</td></tr>
+<tr><td>Pods</td><td>Seven fixed slots compiling to Book and BMS</td><td>Recipes stamped in plus a thin group. Your call above</td></tr>
+<tr><td>Book and BMS</td><td>Documents and words</td><td>A group document with a parent and tags. “Book + BMS” stays as a method name</td></tr>
+<tr><td>Capital sharing</td><td>One square-root split as law</td><td>A named row. Default: own full size under a parent limit</td></tr>
+<tr><td>Lab evaluator</td><td>A separate simulator</td><td>The same handler QMB and the node share, so a size is one size everywhere</td></tr>
+<tr><td>QML</td><td>7 of 18 roles run; agents can't save a block</td><td>More roles run, with new derivation and combiner roles and a save door with a contract test</td></tr>
+<tr><td>House money</td><td>Two rules on two ledgers</td><td>One rule on one ledger; the anchor decides if it presses or only brakes</td></tr>
+<tr><td>Node loop</td><td>Entries can delay other units' exits; a long bell can kill the node</td><td>Two passes: exits first, then entries under a time budget</td></tr>
+<tr><td>Readings and physics</td><td>Five readings on H1 bars</td><td>Each reading must beat a null and a use test before it binds; 15 physics readings as content</td></tr>
+<tr><td>UI</td><td>A proposal, mostly outdated</td><td>Not overhauled here. It binds nothing, and the UI session gets a list of data needs</td></tr>
+</tbody></table></div>
+<p class="path">Full list: round-2/funnel/FUNNEL.md Appendix E</p></section>
+
+<section id="market"><h2>The MIS and SQS designs</h2>
+<p>These now exist because an agent was finally given the job. Your memory that you wanted them may be stronger than the record, which shows permission, and it doesn't matter now.</p>
+<div class="grid">
+<div class="card"><span class="tag">SQS 1</span><p>The same gate, moved and made swappable.</p></div>
+<div class="card"><span class="tag">SQS 2, shipped default</span><p>The cost hurdle: does this entry clear its allowance for costs, at this quote and this stop? Warns until costs are measured, so the first trades can happen.</p></div>
+<div class="card"><span class="tag">SQS 3, in shadow</span><p>The fillability bank: can the market fill an order now?</p></div>
+<div class="card"><span class="tag">SQS 4, off</span><p>The cost dial: size shrinks as cost rises.</p></div>
+<div class="card"><span class="tag">MIS 1, content over time</span><p>The deeper board, the unit plan's design finished.</p></div>
+<div class="card"><span class="tag">MIS 2, the shape</span><p>The open bus: the MIS is one publisher among many.</p></div>
+<div class="card"><span class="tag">MIS 3, first app on top</span><p>The finder: your router. It lists where a unit's claim is true now.</p></div>
+<div class="card"><span class="tag">MIS 4, the shape</span><p>A curve factory overnight and a stream on the node, so SQS, MIS and QMB read one “usual”.</p></div>
+</div>
+<p>One urgent fact came out of this: in the code's own description, if the board dies, a wide unit trades every market on its list. The design falls back to home markets instead. The board isn't wired up yet, so it's not live risk today.</p>
+<p class="path">round-2/expand/E1-mis-sqs.md</p></section>
+
+<section id="pods"><h2>Pod ideas you asked for</h2>
+<p>Twenty configurations ship as a gallery of ingredients, as blocks with no values. None has run.</p>
+<div class="grid">
+<div class="card"><strong>Relentless.</strong> April's system.</div><div class="card"><strong>Session relay.</strong> One pot through the day's sessions.</div><div class="card"><strong>Classic Book.</strong> The docs' ladder.</div><div class="card"><strong>Cushion pair.</strong> One rule, one ledger.</div><div class="card"><strong>Old pair.</strong> As it really was.</div><div class="card"><strong>Scalper first.</strong> Costs observed, cuts counted properly.</div><div class="card"><strong>Human mimic.</strong> Trades like a person in chosen windows.</div><div class="card"><strong>Best basket.</strong> Few units until capital allows volume.</div><div class="card"><strong>Stage switcher.</strong> Your “at 5,000 the math changes”.</div><div class="card"><strong>Prop rider.</strong> A firm's rule sheet as data.</div><div class="card"><strong>Earned tiers.</strong> Topstep's ladder.</div><div class="card"><strong>Multi-manager.</strong> Soft and hard stops, as funds do.</div><div class="card"><strong>Capped total.</strong> Answers “the more units, the less I can trade”.</div><div class="card"><strong>Run together.</strong> A pod of pods.</div><div class="card"><strong>Futures desk.</strong> Your week-long example.</div><div class="card"><strong>Model hybrid.</strong> Sized by a model under a ceiling.</div><div class="card"><strong>Watched by agents.</strong> Your 200 units.</div><div class="card"><strong>Volatility core.</strong> From the proposal screens.</div><div class="card"><strong>Canary.</strong> Smallest, for a first run.</div><div class="card"><strong>Full press.</strong> The reckless setup, expressible.</div>
+</div><p class="path">round-2/expand/E2-pods-miniapps.md</p></section>
+
+<section id="answers"><h2>Your questions</h2>
+<div class="card"><p><strong>Why lots?</strong> Lots are the broker's word for how much of one instrument. A rule speaks in money, which means the same on gold and EURUSD. Lots now exist in one place only, the converter.</p></div>
+<div class="card"><p><strong>What is a starting level?</strong> It was a fraction of normal size a unit starts at. It's no longer a rule: size can have a modifier, and how it's set is your methodology session's.</p></div>
+<div class="card"><p><strong>A rule you approve, for house money?</strong> That meant you'd sign once and size would then rise by itself. Now it's a block you add or remove. It's on in the scalper template because you asked for it, and its value stays open.</p></div>
+<div class="card"><p><strong>Unit stepping down?</strong> A unit moves between active, reducing, benched, halted and restore, read from its journal. Brakes choose which. It's configurable, and only your hand lowers the kill switch.</p></div>
+<div class="card"><p><strong>Can a rule close a position?</strong> Yes, and you were right: the dictionary has the mechanisms. The real issue was that the code runs only the first per-bar exit. The exit stack fixes that.</p></div>
+<div class="card"><p><strong>Cents per trade?</strong> Not decided here. It came from my old assumptions. Capital sharing is now a row, so your plan decides it in the numbers talk.</p></div>
+</section>
+
+<section id="ideas"><h2>The ideas</h2>
+<p>The earlier page, <span class="path">harvest/IDEA-WALK.html</span>, still holds the strongest of the first 428, in plain words. Round two added these:</p>
+<ul><li><strong>Papers:</strong> all 302 are listed with a verdict. 244 had shown no sign of being opened. About 148 of those got a conclusion or key sentences, and the rest only an abstract. So it isn't a full read. 30 new ideas and 9 unit seeds came from it. <span class="path">round-2/expand/E3-papers.md</span></li>
+<li><strong>Linking:</strong> 20 linked ideas, 12 wild ones, 54 recipes. New: every link gets its own test, because until now a link had no way to fail. <span class="path">round-2/expand/E4-linking.md</span></li>
+<li><strong>Self-configuration:</strong> tested on made-up markets, only to see that the mechanism behaves. <span class="path">round-2/expand/E5-fleet-selfconfig-dev.md</span></li></ul>
+<p>Nothing on disk measures retail FX or CFD scalping after real costs. Only QMX's own logs can do that.</p></section>
+
+<section id="honest"><h2>What isn't proven</h2>
+<ul><li><strong>None of the plan has been run.</strong> Test values are arithmetic, and the checks read code and ran small scripts. No PR exists.</li>
+<li><strong>Agents judged agents.</strong> Independent ones, but you haven't reviewed any of this yet.</li>
+<li><strong>Biggest risk:</strong> sends go one at a time on one thread, so a bar where 200 units want in may hurt fills. Exits and the node are protected, fills aren't. Real send times need your demo sign-in.</li>
+<li><strong>A named risk I accepted:</strong> a block that hangs, rather than crashes, stalls that node until a 30-second watchdog restarts it. Broker stops hold. I deferred the fix to keep the machine smaller.</li>
+<li><strong>Not done:</strong> the installer a stranger needs has no owner; game theory is still empty; the numbers talk hasn't started; the alphaXiv assistant wasn't used for linking, since you were away.</li>
+<li><strong>The word “trades”</strong> means on paper here. Going live remains your click.</li></ul></section>
+
+<section id="next"><h2>What happens next</h2>
+<ul><li><strong>You read this,</strong> and tell me if the pod default is wrong.</li>
+<li><strong>When the repair stack finishes,</strong> you paste the prompt into a fresh session. If repair isn't finished, the prompt stops and says so. The paste block is at the end of <span class="path">round-2/build/PROMPT-ORCHESTRATOR.md</span>.</li>
+<li><strong>Then we argue the numbers.</strong> Your list is waiting in <span class="path">PARKED-FOR-NUMBERS-TALK.md</span>.</li>
+<li><strong>Hand-offs are ready to paste</strong> for the agentic upgrade, methodology, UI and MIS owners and for repair: <span class="path">round-2/build/HANDOFFS.md</span>. Your agent ideas: <span class="path">handoff/AGENT-DEPARTMENT-SEEDS.md</span>.</li>
+<li><strong>The full story of what went wrong:</strong> <span class="path">review-2026-11-07/TIMELINE.md</span>.</li></ul></section>
+</div></body></html>
