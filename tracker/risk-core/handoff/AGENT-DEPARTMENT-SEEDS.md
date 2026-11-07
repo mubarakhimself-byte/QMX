@@ -51,3 +51,19 @@ Both are candidates for Library and memory content.
 ## The boundary that must hold
 
 Agents never touch money. Only he promotes a unit to live. The risk core sizes and brakes in code, and agents can only propose. The risk-and-sizing template this session designs will expose read access to risk state and a proposal door for agents (expansion layer X7), so the department can plug in later without changing the money path.
+
+## Added 7 Nov 2026 (M50, M51, verbatim at the end of `seeds/operator-words-2026-11-06.md`)
+
+He says these are rough ideas, and "I think" means exactly that. Hand this file off as seeds, not as a design.
+
+- **Specialized agents, like departments.** Some agents look for strategies, some optimize and experiment, some re-analyze failed strategies, some ingest a whole TikTok account or a set of papers, and some produce one kind of document.
+- **Mini apps as departments.** Macro structure, micro structure, and instrument-specific ones such as a futures mini app. Mini apps give output and input to each other. A macro workflow could feed an FX mini app. He thinks a hedge fund calls this kind of team a pod.
+- **A week on one market.** He and the copilot work through futures from scratch: papers, research, videos, strategies, overnight workflows. They end with sizing, times, sniping logic and units ready for paper trading. The numbers come from that work, never from the coding phase.
+- **A methodology per kind of unit.** A scalper is handled differently from an intraday strategy, start to finish. BMAD is a reference (party mode is one example step). The copilot needs a methodology and the right tools before it can work from a raw video. This belongs to the methodology session.
+- **Shepherd and self-improvement.** One agent monitors others. He also mentioned a similar DeepSeek "super agent" release. Over time the copilot, with memory and self-improvement, knows the system in and out and delegates.
+- **Personal computers for agents.** External machines, naming AMP's "Orb" and "bot.dev". Agents look at charts through MCPs and derive strategies, either by technical analysis or from streamed market data. He is unsure which is better.
+- **The blacksmith.** Agents reforge strategies that failed or partly failed (for example, working before COVID and failing after, or a YouTube strategy that partly fails). He frames it as a hill climb. He is unsure it is smart.
+- **Higher model structures, cheap model runs.** A strong model structures the knowledge from videos and other human-trader sources, then a fast cheap model uses it.
+- **Monitoring at scale.** He may have about 200 units, so an agentic workflow or mini app should carry the monitoring, not him.
+- **The unit is the final step.** Agents may start in plain Python, but what reaches QMX must be a unit, in QML. That is why QML exists, like an SDK: to avoid a pile of random Python. Python stays available for what QML can't express. A dedicated file extension is possible; he doesn't mind.
+- **His warning.** With this much information streaming in, "one single mistake in such a system is very costly."
