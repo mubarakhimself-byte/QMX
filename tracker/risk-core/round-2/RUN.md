@@ -18,13 +18,13 @@
 | # | Stage | Who | Output | State |
 |---|---|---|---|---|
 | 0 | Set-up | lead | `round-2/BRIEF-COMMON.md`, this file, `SUPERSEDED.md` notes | done |
-| 1 | Seed register through M54 | Opus | `round-2/SEEDS-2.md` | running |
-| 1 | MIS and SQS designs | Opus | `round-2/expand/E1-mis-sqs.md` | running |
-| 1 | Pods, mini apps, unit plus pod | Opus | `round-2/expand/E2-pods-miniapps.md` | running |
-| 1 | Unread papers, for ideas | Opus | `round-2/expand/E3-papers.md` | running |
-| 1 | Logic linking pass | Opus | `round-2/expand/E4-linking.md` | running |
-| 1 | Fleet watch, self-config hill climb, newcomer path, developer path | Opus | `round-2/expand/E5-fleet-selfconfig-dev.md` | running |
-| 2 | Funnel, with the new test | 1 Fable | `round-2/funnel/` | pending |
+| 1 | Seed register through M54 | Opus | `round-2/SEEDS-2.md` | done |
+| 1 | MIS and SQS designs | Opus | `round-2/expand/E1-mis-sqs.md` | done |
+| 1 | Pods, mini apps, unit plus pod | Opus | `round-2/expand/E2-pods-miniapps.md` | done |
+| 1 | Unread papers, for ideas | Opus | `round-2/expand/E3-papers.md` | done |
+| 1 | Logic linking pass | Opus | `round-2/expand/E4-linking.md` | done |
+| 1 | Fleet watch, self-config hill climb, newcomer path, developer path | Opus | `round-2/expand/E5-fleet-selfconfig-dev.md` | done |
+| 2 | Funnel, with the new test | 1 Fable | `round-2/funnel/` | running |
 | 3 | Independent review, then fix | Opus, then the judge | `round-2/funnel/REVIEW.md` | pending |
 | 4 | Architecture versions that really differ | Opus, up to 1 Fable | `round-2/arch/V*/` | pending |
 | 5 | Compare, fold, check, fix | 1 Fable at a time; Opus check with BMad review | `round-2/arch/SPINE.md` | pending |
@@ -35,3 +35,5 @@
 
 - 7 Nov: Game theory stays parked for the numbers talk, as he said; only flagged as a gap.
 - 7 Nov: alphaXiv's own assistant in his browser is not used while he's away. The linking agent uses disk material and may use the alphaXiv MCP read-only.
+
+- 7 Nov: Stage 1 done (SEEDS-2, E1 to E5). Key: one compiler bump forces new test records, so widen sockets in one bump before units deploy (E5). Pod edits move the compiled fingerprint, so logic and pod fingerprints may need splitting (E2). A wide unit trades every listed market if the board dies, `runtime.py:367-369` (E1). Self-configuration: replay finds, facts track, the built motion engine corrects (E5).
