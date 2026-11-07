@@ -62,11 +62,11 @@ edit: {Q}/check/layers.py
 edit: {Q}/unit/templates/canary.json
 edit: {Q}/unit/templates/dummy-trend-pullback.json
 new: {QT}/test_number_spec.py
-build: Add `derivation`, `authority`, `owner`, `reason`, `cautious`, `guard`, `never_self_tune`, `applies_to_open_positions`, `stage_values`.
+build: Add `derivation`, `owner`, `reason`, `cautious`, `guard`, `never_self_tune`, `stage_values` and `Origin.found_by_replay`. `applies_to_open_positions` exists. `Authority` exists with one value (`model.py:203`) and gains `off` and `at_anchor`.
 build: Make check answer by name for a missing reason or range, and label every shipped value `origin: placeholder`, owner "numbers talk".
 see: Any number can answer "why is it this and who may change it".
 test: `test_k9_5_every_number_has_a_reason_and_range`. A number with no `reason` answers the problem `number_no_reason`, and no range answers `number_no_range`.
-test: `test_a_template_number_reads_its_label`. `unit_explain` on `canary` prints `fraction`, 0.005, its range, its reason, `placeholder`.
+test: `test_a_template_number_reads_its_label`. `unit_explain` on `canary` prints `risk_fraction`, 0.005, its range, its reason, `placeholder`.
 lane3: Run `unit_check` on every shipped template | labels | every number prints a reason and a range and no problem is listed
 lens: verification-gap
 fact: Old documents upgrade through `unit/upgrade.py`, by loading the corpus fixture at the head.
@@ -118,8 +118,8 @@ build: Write `own-r-step@1`, a labelled placeholder that moves one step inside i
 build: Add K9 6's check. Answer must change when a bound number in `evidence` changes.
 see: A unit can correct itself inside a range you set, and it tells you which trade row moved it.
 test: `test_k9_6_a_block_ignoring_a_moved_number_fails`. `fixed-fraction-at-stop@1` fails with `ignores_moved_number` and `@2` passes.
-test: `test_fraction_moves_and_the_next_entry_uses_it`. With `min_trades` 20 and step 0.0001 after 20 trades at mean -0.5R, a calibration row moves `fraction` from 0.005 to 0.0049, and the next EURUSD entry at equity 100000 and stop distance 0.0050 is 0.98 lots.
-test: `test_explain_size_names_the_row`. `explain_size` prints `fraction 0.0049 default 0.005` and the calibration row id.
+test: `test_fraction_moves_and_the_next_entry_uses_it`. With `min_trades` 20 and step 0.0001 after 20 trades at mean -0.5R, a calibration row moves `risk_fraction` from 0.005 to 0.0049, and the next EURUSD entry at equity 100000 and stop distance 0.0050 is 0.98 lots.
+test: `test_explain_size_names_the_row`. `explain_size` prints `risk_fraction 0.0049 default 0.005` and the calibration row id.
 lane3: Run K9 15's scripted trades on QMB | moves-qmb | the printed quantity and target match the literals
 lens: edge-case, verification-gap
 fact: `engine.py:122` no longer skips a stamped risk trade, run on the real engine with a patched log of stamps.
@@ -141,7 +141,7 @@ build: Add `numbers_at_entry` to `PositionFacts`, filled at entry. Read a logic 
 build: Seed `_OwnJournal` (`runtime.py:1479-1491`) at start, and let the engine's watermark drop what the snapshot already read.
 build: Name the close row's `numbers_at_entry` and reason code.
 see: Stop point for self-configuration. A number moves, the next trade uses it, the trade already open keeps its own.
-test: `test_k9_15_self_configuration`. Bind `own-r-step@1` to `fraction` and `multiple`. After 20 scripted losing trades, on QMB and the fake broker, the next entry is 0.98 lots with target 1.1095, a position opened earlier keeps 1.1100, it moves with another market held, and a restart at trade 13 ends with the same two values and row ids.
+test: `test_k9_15_self_configuration`. Bind `own-r-step@1` to `risk_fraction` and `target_r`, the numbers behind the blocks' `fraction` and `multiple`. After 20 scripted losing trades, on QMB and the fake broker, the next entry is 0.98 lots with target 1.1095, a position opened earlier keeps 1.1100, it moves with another market held, and a restart at trade 13 ends with the same two values and row ids.
 lane3: Restart the fake-broker node at trade 13 of 20 | restart-count | the move lands on trade 20 and not earlier or later
 lens: edge-case, adversarial
 fact: A moved number never amends an open position's exits, by a recording venue showing zero amends.
@@ -161,7 +161,7 @@ edit: {N}/venue/ctrader_account.py
 new: {NT}/test_app_account_facts.py
 swaps: PH14 PH17
 build: Add `account.equity`, `balance`, `open_risk`, `margin_headroom`, `liquidation_distance`, `budget_share`, `realised_since`, `basis`, with the balance read on a timer as a named setting.
-build: Say `basis` plainly when equity is marked or balance only.
+build: Say `basis` plainly when equity is marked or balance only, and that `account.open_risk` counts only positions the node holds.
 see: Sizing reads your real account as it stands, and says what it read.
 test: `test_open_risk_known_answer`. Two positions risking 500 and 250 USD read `account.open_risk` 750 in both adapters.
 test: `test_a_stale_balance_is_stale`. A balance past its limit reads state `stale` with its age, never a silent old value.
@@ -458,15 +458,17 @@ new: {Q}/blocks/stdlib/count-brake/1/block.py
 new: {Q}/blocks/stdlib/count-brake/1/entry.json
 new: {Q}/blocks/stdlib/two-speed-circuit-breaker/1/block.py
 new: {Q}/blocks/stdlib/two-speed-circuit-breaker/1/entry.json
-edit: tools/lanes/k7_rehearsal.py
+edit: qmx-agents/packages/qmx-host/tests/k7_rehearsal.py
 new: {QT}/test_templates_abc.py
+new: qmx-agents/packages/qmx-host/tests/test_k7_all_templates.py
+new: {NT}/test_app_three_templates.py
 build: Write the five blocks with their dictionary pages and cold behaviour. The cut uses a fixed labelled distance until N winners exist, with the warning "unproven after costs". Circuit breaker and count brake ship present and off.
 build: Write the three template files as in FUNNEL 4.2. `scalper-mr` has its house money on at factor 1 from zero.
 see: A scalper, an intraday and a no-brakes template all trade on paper from nothing, side by side, each saying it is a shape.
-test: `test_k9_7_every_template_reaches_paper`. K7 ends with a fill for `canary`, `scalper-mr` and `intraday-trend`, with no judge run.
+test: `test_k9_7_every_template_reaches_paper`, in `test_k7_all_templates.py`. K7 ends with a fill for `canary`, `scalper-mr` and `intraday-trend`, with no judge run.
 test: `test_the_cut_uses_its_fixed_distance_cold`. Zero winners, a 3-pip adverse move at a 3-pip cut closes with reason `fi_cut`.
 test: `test_the_bench_shadows_until_n`. Below N trades the bench writes `would_have` and refuses nothing.
-test: `test_the_three_templates_share_one_account`. All three host on one fake-broker account with bar counts 60, 60 and 4 per hour on their primaries.
+test: `test_the_three_templates_share_one_account`, in `test_app_three_templates.py`. All three host on one fake-broker account with bar counts per hour of 4 for `canary`, 60 for `scalper-mr` and 4 for `intraday-trend`.
 lane3: Run K7 for each template on a fresh throwaway home | k7-all | each ends with one filled entry
 lens: edge-case, verification-gap
 fact: The two-speed breaker off changes no decision, by running with and without it.
@@ -530,7 +532,6 @@ new: {N}/app/outbox.py
 edit: {N}/app/runtime.py
 edit: {QB}/host/unit_handler.py
 edit: {Q}/protocol/unit.py
-new: {QB}/host/group_run.py
 new: {NT}/test_app_two_passes.py
 build: Make `on_instant` answer exits and proposals. Move the `price` call site from straight-after-exits to pass two.
 build: Write the outbox. Drain by bar time, then rank, then a per-bar hash. Write meters as plain rows.
@@ -559,7 +560,7 @@ build: Add the `parked:<market>` surface read at `unit.py:515`. `_Run.entries` c
 build: Expire at the start of pass one for that market to `Blocked("budget_expired")`, writing the `Skip` through `runtime.py:1705-1713`.
 build: Turn the gate's `wait` verb on. It stays parked until `expires_at`.
 see: A trade that can't go out this bar waits one bar, then is dropped with a reason.
-test: `test_k9_11_one_signal_one_send`. Pass two reaches the queue a bar late. 1 `ProtoOANewOrderReq`, 1 position at the venue, 1 in the handler. With the applied fix of the parent's AD-17 as written, 2 sends.
+test: `test_k9_11_one_signal_one_send`. Pass two reaches the queue a bar late. 1 `ProtoOANewOrderReq`, 1 position at the venue, 1 in the handler. At the parent, RC-42's outbox gives 2 sends, as `CHECK.md` B2 ran.
 test: `test_a_parked_entry_expires_by_name`. Past `expires_at` the row reads `Skip` with `budget_expired`.
 test: `test_a_parked_entry_never_reads_warming_up`. `execute_resting` answers `Ok(False)`, `None` keeps meaning warming up.
 lane3: Hold pass two across a bar on the real order path with the fake broker | parked | one send, one position

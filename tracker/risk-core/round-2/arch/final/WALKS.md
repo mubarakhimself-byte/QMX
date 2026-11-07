@@ -8,7 +8,7 @@ The 13 walks of `round-2/arch/ARENA-BRIEF.md`. **Verdict words.** HOLDS: works i
 2. Picks `canary`. A complete document appears; no pod, no group, no Lab.
 3. Check and compile: warnings only, in plain words; every number labelled.
 4. Instrument records: the template ships records for its markets, labelled `source: shipped`, so a backtest runs before a broker exists (closes E5 G8 if `unit_check` accepts them; `[ASSUMPTION]`).
-5. Backtest on synthetic bars; G record on the logic fingerprint. No judge run; a judge's `too_thin` would move nothing anyway.
+5. Backtest on the shipped practice month (RC-17); G record on the logic fingerprint. No judge run; a judge's `too_thin` would move nothing anyway.
 6. His click: `DRAFT -> PAPER` on G's safety half (AD-24). Before this row the real `fold` answered `not_in_table` (`CHECK` B3).
 7. Paper on the `practice` venue on day one: a production builder over `ConformanceAccount` and shipped bars (slice 5), no broker. On cTrader after Spotware's approval of about a day (`connect_node.py:8-9`). `canary` reads 15-minute bars, and slice 9's roll-up (AD-25) opens every other bar size.
 8. SPINE section 6 walks the rest; K7 runs it in CI from zero.
@@ -33,10 +33,10 @@ The 13 walks of `round-2/arch/ARENA-BRIEF.md`. **Verdict words.** HOLDS: works i
 1. One unit, `orb` variant of `intraday-trend`. `sessions` lists London and New York opens (S9, slice 9). `position_limit` per open (S17). Markets: index and gold.
 2. Each intent carries bet key `family:session` and driver tags (I9).
 3. A second open fires while the first is held: the unit chain's own cap reads `own.open_risk_by_bet_key`, which is this unit's own facts and so belongs in the unit chain by AD-9's test, and shrinks or refuses by the row. Same bet, counted once.
-4. Several ORB units in one family: the bet key crosses units, so the group cap counts it in the node chain, in pass 2's order, with a reservation held from send to outcome (G5), so two units at one bell cannot both take the last room.
+4. Several ORB units in one family: the bet key crosses units, so the group cap counts it in the node chain, in pass 2's order, and an unknown outcome keeps its room (AD-8), so two units at one bell cannot both take the last room.
 5. Tolerates `open`, so an `open` sticker doesn't block it.
 
-**Verdict: HOLDS** inside one unit, and for many units given a group. **Strain, smaller than V1's:** at the same bell the group's `order` block decides who gets the room; shipped content is `rank`, so the first in rank still takes it. "Take the best of those firing this bar" is now sayable as content on that slot (G13) without a socket change, but no such block ships. COMPARE §3 gave V1 "Holds; first in rank takes the room"; the fold is the same today with a named door.
+**Verdict: HOLDS** inside one unit, and for many units given a group. **Strain, smaller than V1's:** at the same bell the group's `rank` decides who gets the room, so the first in rank takes it. "Take the best of those firing this bar" waits for an additive order slot (SPINE section 11). COMPARE §3 gave V1 "Holds; first in rank takes the room"; the fold is the same.
 
 ## 4. A futures week with the copilot from papers and videos, ending in units with their own sizing
 
@@ -95,7 +95,7 @@ All three have the same document and the same path (M49). A block the node can't
 
 **One node's limits.** QML step about 55 to 60 ms for 200 units on 2 markets (V1's probe, COMPARE's rerun). **The real limit is order sends:** `client.send` holds a lock and waits up to 5 s (`ctrader_account.py:110, 679`). **Changed from V1 by G1 and F1/F2:** exits all go in pass 1 before any entry, so an entry's wait never delays another unit's exit. The first draft said a budget check meant a long bell could not trip the 30 s watchdog (`healing.py:64`); `CHECK` S1 ran it and that was false: one entry takes 26 s at the venue's worst, and pass 1 had no budget, so 6 closes at the 5 s wait used all 30 s. Now pass 2 starts an entry only if its worst case fits, and each exit send and finished entry resets the watchdog as a progress beat, so it times one stuck step. Stops at the venue hold through any restart. Leftover entries carry to the next tick and re-check caps on fresh facts. **Not fixed:** exits are serial too (F10), and 200 positions closing one venue call at a time is still 200 round trips; the meter stays, and sends off the thread reopen if measured. A parked entry no longer reads "warming up" (F7), can't be minted twice (B2), and expires at its market's next bar.
 
-**Verdict: STRAINS,** less than V1 at the bell (COMPARE gave V1 "Strains: serial sends, first-come caps"). What remains: serial sends, measured only after the demo; first-come caps until an `order` block beyond `rank` is written; the pod edit's bulk versions; **a compile pool in the same process shares the interpreter lock with the node thread during a roll, not measured (`CHECK`).**
+**Verdict: STRAINS,** less than V1 at the bell (COMPARE gave V1 "Strains: serial sends, first-come caps"). What remains: serial sends, measured only after the demo; first in rank takes the room until an order slot is added; the pod edit's bulk versions; **a compile pool in the same process shares the interpreter lock with the node thread during a roll, not measured (`CHECK`).**
 
 ## 9. Swapping a placeholder on a unit with a record and an open position
 
@@ -115,8 +115,8 @@ Promise check: "one folder, zero core edits" rests on the Library path, UNKNOWN 
 
 - **MIS down.** Readings age; each `reads` row takes its fallback; home markets. A sticker publisher down: `fail` row, a card, `prefer_not`. No shipped template needs the MIS. **HOLDS.**
 - **A raising block in a logic slot or the sizer (`CHECK` B1, which found this walk FAILED).** AD-23's plain `try`s: that market takes no entry, `exits` still runs, the unit's entries go off with a row and a card, the next unit runs, no heal. K9 test 2 runs it for 12 bars.
-- **Chain failure with open positions.** A raising link: `run_budgeted` refuses that entry with `link_fault`, stands the link's scope down, writes a row; exits were already sent in pass 1 and skip both chains; the import test proves exit code cannot reach the chain (G3). A refused frontier no longer sets STOPPED and ends exits (F3): the fault is caught inside the chain and never returns to `close_frontier`. A faulty exit block: next rank, then a `Fault` on the step and the host's `close_scope` port. **HOLDS.**
-- **A hung stage.** **STRAINS, much less than V1.** A hung chain link or control row is answered at its budget (V2's toy: 57 ms at a 50 ms budget) and refuses one entry; the other 199 units and every exit carry on. The bar step's logic phases join the wrapper in slice 10, with its Windows test; a `link_hung` marks the node for a restart at its next safe point because the thread stays burning (`CHECK` S14). Before slice 10 a block with an endless loop in a logic slot still takes the node to `StuckWatch` (`healing.py:64`, `os._exit`), the supervisor restarts, adoption brings positions back, and venue-resident stops protect in the gap. A C call holding the GIL defeats a thread budget; V3's worker process is the named next step if that is seen.
+- **Chain failure with open positions.** A raising link: a plain `try` refuses that entry with `link_fault`, stands the link's scope down, writes a row; exits were already sent in pass 1 and skip both chains; the import test proves exit code cannot reach the chain (G3). A refused frontier no longer sets STOPPED and ends exits (F3): the fault is caught inside the chain and never returns to `close_frontier`. A faulty exit block: next rank, then a `Fault` on the step and the host's `close_scope` port. **HOLDS.**
+- **A hung stage.** **STRAINS, as V1.** By the lead's trim (AD-9) no wrapper answers a hang. A block that never returns stalls that node's thread, exits included, until `StuckWatch` (`healing.py:64`, `os._exit`) acts at 30 s; the supervisor restarts, adoption brings positions back, and venue-resident stops protect in the gap. The same block can hang again until its owner stands it down. V3's worker process is the named next step if a hang is seen.
 - **Restart past an anchor.** Snapshot as a cache, then the catch-up rule: anchors settled once by a pure anchor id, stickers expired, stage selector re-read, control words rebuilt from `risk_event` and restore rows (G9), group ledger rebuilt from member journals and broker deals; until done the group cap reads UNKNOWN and refuses entries, exits free. **Cuts stand; raises wait one anchor** (G12). Each section judged by its own fingerprint. Only `risk_stop` has a restart test today; each state needs one. **HOLDS on paper; tests owed.**
 
 ## 12. House money, reverse house money and a press after wins, on and off, per pod
@@ -136,7 +136,7 @@ Same arithmetic by construction: the same `HostedUnit`, `price` and handler in b
 | Where | Backtest | Live | Status |
 |---|---|---|---|
 | A target on a wicked bar | Bar check | Node closes it (`runtime.py:1849-1857`) | F5 A's cost; waits on R24 |
-| Group caps | Solo run sees only itself (`group: none`); `group_run` sees a chosen set in the node's order with reservations | All real members | **This shape's own gap,** stamped on the run; `group_run` lands in slice 12 |
+| Group caps | Solo run sees only itself (`group: none`); `group_run` sees a chosen set in the node's order | All real members | **This shape's own gap,** stamped on the run; `group_run` lands in slice 12 |
 | Order at a bell | Declared order in `group_run`, no budget | Same order, a time budget, leftovers to the next tick | Latency; it moves fills; QMB may model the budget as a setting |
 | Entry timing | Rests for the next bar's open | Sent in pass 2 at bar close | Built; allowed as fills |
 | Equity and cash | Handler's cash port | Live surface after slice 8 | Facts differ, arithmetic doesn't |
@@ -144,9 +144,9 @@ Same arithmetic by construction: the same `HostedUnit`, `price` and handler in b
 | Stickers | Calendar tape | Real table | Same record |
 | Partials | Filled | Refused until step 3 (`runtime.py:1807-1808`) | Compile refuses by venue capability |
 | Costs | Stated profile | Measured cells | Two residuals kept apart |
-| Restart, heal, reservations | None | Real | Only on the node |
+| Restart, heal | None | Real | Only on the node |
 
-**Verdict: STRAINS** only on group caps, where one-unit backtests do not see the book, on wicks, and now on the pass-2 budget, which QMB does not model unless told to. The proposal tape (G11) lets a size search replay cheaply, exploring only; the QMB rerun is the evidence.
+**Verdict: STRAINS** only on group caps, where one-unit backtests do not see the book, on wicks, and now on the pass-2 budget, which QMB does not model unless told to. A size search that replays proposals is methodology's (AD-18); the QMB rerun is the evidence.
 
 ## Summary against COMPARE §3
 
@@ -154,7 +154,7 @@ Same arithmetic by construction: the same `HostedUnit`, `price` and handler in b
 |---|---|---|---|---|
 | 1 | Newcomer | Holds | Holds; installer missing | Shipped records (assumption); `DRAFT -> PAPER`; `practice` venue |
 | 2 | Gold scalper, no stop | Strains | Strains, three places | F6, B9: thirteen places named; B4: roll-up |
-| 3 | ORB, one bet | Holds; first in rank | Holds; door for "best" | G5 reservations; G13 order block; own bet-key fact |
+| 3 | ORB, one bet | Holds; first in rank | Holds; first in rank | An unknown outcome keeps its room; `rank`; own bet-key fact |
 | 4 | Futures week | Holds best | Holds | G8 tag membership |
 | 5 | Aggressive, stage change | Holds | Holds | G6: limit edits need no plan |
 | 6 | Lab, workflow, mini app | Holds | Holds | G10: mixed pod shown |
@@ -162,6 +162,6 @@ Same arithmetic by construction: the same `HostedUnit`, `price` and handler in b
 | 8 | 200 units | Strains | Strains less | G1 budget with beats, G6 live limits, F7 and B2 parked fix |
 | 9 | Swap with open trade | Sizer holds, exit strains | Same | `succeeds` on the deployment |
 | 10 | New brake, class, base | Holds | Holds | Atomic account brake from any Library block |
-| 11 | MIS down, fault, hang, restart | Holds except hang: strains hard | Holds; hang strains | AD-23 fault wall, G2 wrapper, G3 import test, G9, G12 |
+| 11 | MIS down, fault, hang, restart | Holds except hang: strains hard | Holds; hang strains | AD-23 fault wall, plain `try`, G3 import test, G9, G12 |
 | 12 | House money per pod | Holds; flip is a plan | Holds; one fact | `enabled` by fact |
 | 13 | Backtest vs live | Strains on group caps, wicks | Same, plus the budget | `group_run` in slice 12 |

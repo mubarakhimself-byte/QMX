@@ -16,7 +16,7 @@ Each PR section opens with the stop point and slice of `arch/final/SPINE.md`, wh
 
 The stop points, each a whole baseline he may stop at.
 
-- Stop A, after RC-20. One unit trades on paper from zero, with no broker and no judge, and brakes bind on any unit that declares them.
+- Stop A, after RC-20. One unit trades on paper from zero, with no broker and no judge, sizes itself, and brakes bind on any unit that declares them. A filter number moves by the built engine. A size or exit number first moves at RC-26, in stop B.
 - Stop B, after RC-48. The whole single-unit baseline. Three templates side by side, modifiers, numbers that move, costs from fills, gate, stickers, two passes, no-stop.
 - Stop C, after RC-66. Groups, pods, readings, shipping through mini apps, the fleet watch, re-test on every compiler bump.
 - After stop C. RC-67 to RC-69 wait for his demo sign-in, and nothing deploys live before them or a re-test.
@@ -169,8 +169,8 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The contract test h
 **Build.**
 
 - [ ] Replace `_CEILING` (`test_socket_contracts.py:57`) with a contract that reads the block's own declared `fraction` from the evidence the test passes, so 0.02 passes as readily as 0.005.
-- [ ] Feed the exit contract only evidence `HostedUnit.exits` really builds (`unit.py:671`), and stop feeding keys the host refuses.
-- [ ] Enrol every `component` Library item the fixture lands in the same parametrized contract as stdlib blocks.
+- [ ] Feed the exit contract only evidence `_Run.exits` really builds (`unit.py:671`), and stop feeding keys the host refuses.
+- [ ] Enrol every block in a `component`-shaped fixture folder (`entry.json` and `block.py`; qml's tests hold no Library) in the same parametrized contract as stdlib blocks.
 
 **You see.**
 
@@ -179,21 +179,21 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The contract test h
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `test_a_sizer_at_two_percent_meets_the_contract`. At equity 100000 and stop distance 0.0050 on a EURUSD fixture with `value_per_point` 100000, a fraction of 0.02 answers 4.00 lots and passes. At the parent this fails on the 0.005 ceiling.
-- [ ] `test_a_library_sizer_is_enrolled`. A Library `component` sizer answering a float fails the contract with the same message a stdlib block gets.
-- [ ] `test_the_exit_contract_feeds_only_host_evidence`. The contract's evidence keys equal the keys `HostedUnit.exits` builds on one real bar, compared as a literal set.
+- [ ] `test_a_library_sizer_is_enrolled`. A sizer in that fixture folder answering a float fails the contract with the same message a stdlib block gets.
+- [ ] `test_the_exit_contract_feeds_only_host_evidence`. The contract's evidence keys equal the keys `_Run.exits` builds on one real bar, compared as a literal set.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, and rerun at the parent only a test that failed. Save `rc01-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc01-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run `qml/tests/test_socket_contracts.py` with a planted always-pass sizer that answers 500 lots at equity 100000. Save `rc01-contract-bites.log`. Pass when the planted sizer fails and the shipped placeholder passes.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc01-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc01-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc01-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc01-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc01-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc01-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc01-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run `qml/tests/test_socket_contracts.py` with a planted always-pass sizer that answers 500 lots at equity 100000. Save `check-contract-bites.log`. Pass when the planted sizer fails and the shipped placeholder passes.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -204,7 +204,7 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The contract test h
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap, edge-case. The blast-radius fact is this. The shipped placeholder sizer still passes after the ceiling goes, because its own `fraction` is the value the contract now reads.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc01-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-01-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -215,7 +215,7 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The contract test h
 
 ## Name every refused field, say what each risk module is for, and start the developer guide (RC-02)
 
-Stop A, one unit trades on paper. Slice 0. **What it does.** The census test learns the new document fields, so a field nobody runs fails CI. The developer guide starts here as a generated file with a test that fails when it goes stale.
+Stop A, one unit trades on paper. Slice 0. **What it does.** The census test is proved to bite, so a field nobody runs fails CI. The developer guide starts here as a generated file with a test that fails when it goes stale.
 
 **Read.** AD-20; SPINE section 7 "EXTENDING.md", "Module map"; K9 test 4.
 
@@ -233,7 +233,7 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The census test lea
 
 **Build.**
 
-- [ ] Extend the census to `authority`, `reads`, `tags`, `stages` and `recipe`, each expected to run, refuse with a reason, or carry a label.
+- [ ] `_CENSUS` (`test_unit_refuses.py:33`) already holds `Unit.reads` and `NumberSpec.authority`. Prove it fails on an unlisted field. RC-03 adds `stages`, `tags` and `recipe` when those fields exist.
 - [ ] Write one sentence per `qmf-risk` module saying whether it belongs to the new risk world or to the wire and accounting.
 - [ ] Generate the socket list, refused fields with `_shape_problems` reasons, block answer shapes and journal kinds into `qml/EXTENDING.md`, with the written sections as headings only.
 
@@ -244,20 +244,20 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The census test lea
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `test_the_guide_fails_when_a_field_is_added`. Regenerating with one extra `Unit` field leaves a diff against the checked-in file and the test exits non-zero.
-- [ ] `test_every_unit_field_is_run_refused_or_labelled`. The census lists `stages` as refused with the code `stages_not_built` until RC-56.
+- [ ] `test_every_unit_field_is_run_refused_or_labelled`. `reads` answers the code `reads_not_built`, a literal, and a `Unit` field missing from `_CENSUS` fails the test.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `packages/qmf-risk/tests`, `tools/tests`, and rerun at the parent only a test that failed. Save `rc02-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc02-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run `tools/qml/extending.py --check` at the head and after deleting one line of `qml/EXTENDING.md`. Save `rc02-guide-stale.log`. Pass when the clean run exits 0 and the edited run exits 1 and names the line.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc02-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc02-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc02-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc02-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc02-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc02-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc02-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `packages/qmf-risk/tests`, `tools/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run `tools/qml/extending.py --check` at the head and after deleting one line of `qml/EXTENDING.md`. Save `check-guide-stale.log`. Pass when the clean run exits 0 and the edited run exits 1 and names the line.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -268,7 +268,7 @@ Stop A, one unit trades on paper. Slice 0. **What it does.** The census test lea
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. The generator imports only `qml`, so `tools/tests/test_workspace_structure.py:138` still passes.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc02-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-02-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -300,7 +300,7 @@ Stop A, one unit trades on paper. Slice 1. **What it does.** One function partit
 
 **Build.**
 
-- [ ] Add the optional fields `modifiers`, `gates`, `tolerations`, `stages`, `risk_locks`, `recipe`, `home_markets`, `tags` to `Unit`, each refused by name at compile until its own PR lifts it.
+- [ ] Add the optional fields `modifiers`, `gates`, `tolerations`, `stages`, `risk_locks`, `recipe`, `home_markets`, `tags` to `Unit`, each added to `_CENSUS` and refused by name at compile until its own PR lifts it.
 - [ ] Write `sections(document)` with AD-2's rules. A number bound in both is logic. A `reads` row bound by a logic slot is logic. A stage selector with an exit in its `stage_values` is logic. Only `recipe` sits outside both.
 - [ ] Compute `compiled_fingerprint = H(logic_fingerprint, risk_fingerprint, format, options)` at `compiler.py:1072-1079`. Set `COMPILER_FORMAT_VERSION` to 5.
 
@@ -310,22 +310,23 @@ Stop A, one unit trades on paper. Slice 1. **What it does.** One function partit
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_a_size_edit_moves_only_the_risk_fingerprint`. Editing `fraction` from 0.005 to 0.01 on the dummy leaves `logic_fingerprint` byte-equal and changes `risk_fingerprint`.
+- [ ] `test_a_size_edit_moves_only_the_risk_fingerprint`. Editing `risk_fraction`, the number bound to the sizer's `fraction`, from 0.005 to 0.01 on the dummy leaves `logic_fingerprint` byte-equal and changes `risk_fingerprint`.
 - [ ] `test_a_forgotten_field_falls_in_logic`. Each of the nine named fields (`baseline`, `claim_card`, `context_needs`, `family_id`, `lineage`, `plain_python`, `routes`, `title`, `unit_id`) appears in `LogicSection`, a literal list.
-- [ ] `test_an_exit_stage_value_makes_the_selector_logic`. A selector with `multiple` in its `stage_values` lands in the logic half.
+- [ ] `test_an_exit_stage_value_makes_the_selector_logic`. A selector with `target_r` in its `stage_values` lands in the logic half.
+- [ ] `test_a_new_field_refuses_by_name`. A document declaring `stages` answers `stages_not_built`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc03-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc03-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Compile the dummy before and after a `fraction` edit and print both fingerprints. Save `rc03-two-prints.log`. Pass when logic equal, risk different, compiled different.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc03-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc03-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc03-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc03-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc03-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc03-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc03-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Compile the dummy before and after a `risk_fraction` edit and print both fingerprints. Save `check-two-prints.log`. Pass when logic equal, risk different, compiled different.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -336,7 +337,7 @@ Stop A, one unit trades on paper. Slice 1. **What it does.** One function partit
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, structure. The blast-radius fact is this. Every shipped template and fixture compiles at format 5 with its decisions unchanged, by running the dummy through `qml/check/layer_g.py` at the parent and the head.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc03-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-03-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -376,21 +377,21 @@ Stop A, one unit trades on paper. Slice 1. **What it does.** A deployment now na
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_exits_fire_after_a_risk_only_recompile`. COMPARE's probe inverted. A held position with a time exit reads 1 exit intent over 60 bars after a `fraction` recompile. At the parent it reads 0.
+- [ ] `test_exits_fire_after_a_risk_only_recompile`. COMPARE's probe inverted. A held position with a time exit reads 1 exit intent over 60 bars after a `risk_fraction` recompile. At the parent it reads 0.
 - [ ] `test_a_logic_edit_needs_a_new_g_record`. A deployment whose logic fingerprint has no G record is refused with the name `g_record_missing`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `rc04-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc04-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Promote the dummy on the fake broker, recompile with a new `fraction`, and drive 60 bars. Save `rc04-exits-survive.log`. Pass when one exit intent fires and the journal names the logic fingerprint.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc04-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc04-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc04-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc04-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc04-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc04-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc04-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Promote the dummy on the fake broker, recompile with a new `risk_fraction`, and drive 60 bars. Save `check-exits-survive.log`. Pass when one exit intent fires and the journal names the logic fingerprint.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -401,7 +402,7 @@ Stop A, one unit trades on paper. Slice 1. **What it does.** A deployment now na
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A size-only edit moves today's compiled fingerprint and leaves the new logic fingerprint equal, run on the real compiler.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc04-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-04-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -450,16 +451,16 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** A sizer now answers
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc05-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc05-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the shipped sizer at the parent on USDJPY and the converter at the head on the same inputs. Save `rc05-jpy-fault.log`. Pass when the parent loses 500 JPY at the stop and the head loses 500 USD.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc05-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc05-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc05-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc05-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc05-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc05-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc05-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the shipped sizer at the parent on USDJPY and the converter at the head on the same inputs. Save `check-jpy-fault.log`. Pass when the parent loses 500 JPY at the stop and the head loses 500 USD.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -470,7 +471,7 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** A sizer now answers
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. `Size(lots)` still answers the same quantity through every existing caller, so the shipped placeholder keeps trading until RC-06.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc05-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-05-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -522,16 +523,16 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** `fixed-fraction-at-
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc06-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc06-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the dummy through QMB on synthetic bars at the parent and the head on a USD market. Save `rc06-same-size.log`. Pass when quantities equal on every trade for EURUSD.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc06-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc06-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc06-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc06-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc06-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc06-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc06-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the dummy through QMB on synthetic bars at the parent and the head on a USD market. Save `check-same-size.log`. Pass when quantities equal on every trade for EURUSD.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -542,7 +543,7 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** `fixed-fraction-at-
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. With a quote currency equal to the account's, `@2` through the converter gives the same quantity as `@1`, run over 50 entries on real bars from the fixture.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc06-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-06-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -589,16 +590,16 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** QMB and the node ea
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc07-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc07-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Trade USDJPY on the fake broker with the rate feed stopped mid-run. Save `rc07-stale-rate.log`. Pass when entries skip by name, the held trade closes, and no unit stops.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc07-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc07-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc07-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc07-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc07-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc07-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc07-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Trade USDJPY on the fake broker with the rate feed stopped mid-run. Save `check-stale-rate.log`. Pass when entries skip by name, the held trade closes, and no unit stops.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -609,7 +610,7 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** QMB and the node ea
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A held position's close path reads no rate, by a surface that raises on `market.rate` during `exits`, run on the real step.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc07-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-07-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -639,7 +640,7 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** The decision row ga
 - [ ] Create `qml/src/qml/receipt.py`.
 - [ ] Create `qml/tests/test_receipt.py`.
 - [ ] Create `qml/tests/conformance_tape/README.md`.
-- [ ] Create `qmb/tests/test_conformance_tape.py`.
+- [ ] Create `qmn/tests/test_conformance_tape.py`.
 
 **Build.**
 
@@ -659,16 +660,16 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** The decision row ga
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-data/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc08-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc08-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Print `explain_size` for one fake-broker trade. Save `rc08-size-trail.log`. Pass when every fact shows age and source, and the printed quantity equals the sent quantity.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc08-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc08-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc08-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc08-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc08-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc08-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc08-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-data/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Print `explain_size` for one fake-broker trade. Save `check-size-trail.log`. Pass when every fact shows age and source, and the printed quantity equals the sent quantity.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -679,7 +680,7 @@ Stop A, one unit trades on paper. Slice 2. **What it does.** The decision row ga
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap, edge-case. The blast-radius fact is this. `qml` still imports nothing from `qmf-data`, by `tools/tests/test_workspace_structure.py:138`.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc08-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-08-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -723,16 +724,16 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** `_Run.step` runs up
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-data/tests`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc09-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc09-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run a raising logic block through QMB for 100 bars. Save `rc09-fault-qmb.log`. Pass when the run finishes, exits fire, and the journal holds `unit_fault` rows.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc09-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc09-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc09-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc09-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc09-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc09-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc09-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-data/tests`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run a raising logic block through QMB for 100 bars. Save `check-fault-qmb.log`. Pass when the run finishes, exits fire, and the journal holds `unit_fault` rows.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -743,7 +744,7 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** `_Run.step` runs up
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Exit blocks hold their own instances, so a broken logic block can't corrupt them, by running the exit after 50 logic raises and comparing its state to a clean run.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc09-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-09-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -786,16 +787,16 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** `_drive` holds one 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc10-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc10-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run K9 2's scene at the parent and the head and print the drive counts. Save `rc10-drive-counts.log`. Pass when parent shows `dep-2` at 0 and head shows every unit equal.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc10-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc10-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc10-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc10-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc10-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc10-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc10-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run K9 2's scene at the parent and the head and print the drive counts. Save `check-drive-counts.log`. Pass when parent shows `dep-2` at 0 and head shows every unit equal.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -806,7 +807,7 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** `_drive` holds one 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Zero heals over the 12 bars, read from the real `Runtime` on the fake broker, not from a stub.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc10-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-10-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -851,22 +852,22 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** Every exit in `exit
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `test_k9_3_exit_code_cannot_import_the_chain`. The parsed import list of `exits.py` shares no name with the four forbidden modules. A planted import fails it.
-- [ ] `test_a_short_reads_ask_bars`. A short with a stop at 1.1000, bid high 1.0995 and ask high 1.1002 closes on that bar. At the parent it does not.
+- [ ] `test_a_short_reads_ask_bars`. `swing-stop-buffer` on a short with zero buffer, on bars whose confirmed swing high is 1.0995 on the bid and 1.1002 on the ask, answers a stop of 1.1002. At the parent it answers 1.0995, because `unit.py:574-576` feeds it bid bars. The fills already read the closing side (`fill.py:1306`), so the fault is the level.
 - [ ] `test_full_beats_partial_beats_amend`. Three exits answering on one bar give one `close_full` with the first full exit's reason code.
 - [ ] `test_a_raising_exit_falls_to_the_next`. Stack of a raising exit and a time exit. The time exit closes and one `Fault` has `phase == "exit"`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc11-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc11-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Replay a short through a 2-pip spread spike at the parent and the head. Save `rc11-short-spread.log`. Pass when head closes on the spike bar and parent does not.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc11-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc11-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc11-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc11-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc11-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc11-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc11-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Print a short's stop level on bars with a 2-pip spread at the parent and the head. Save `check-short-spread.log`. Pass when the head's level sits on the ask swing high and the parent's on the bid's.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -877,7 +878,7 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** Every exit in `exit
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A second per-bar exit never changes a unit with one exit, by comparing decisions on the dummy across the bump.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc11-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-11-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -926,16 +927,16 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** The stop, target an
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc12-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc12-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Backtest the dummy on the same synthetic months at the parent and the head. Save `rc12-exits-same.log`. Pass when every trade's exit price and reason agree except short time exits, which the log lists.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc12-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc12-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc12-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc12-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc12-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc12-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc12-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Backtest the dummy on the same synthetic months at the parent and the head. Save `check-exits-same.log`. Pass when every trade's exit price and reason agree except short time exits, which the log lists.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -946,7 +947,7 @@ Stop A, one unit trades on paper. Slice 3. **What it does.** The stop, target an
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap, edge-case. The blast-radius fact is this. Nothing but the dummy template binds the old versions in shipped files, by a repo-wide grep whose output is pasted.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc12-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-12-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -997,16 +998,16 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** `halts` becomes a l
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc13-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc13-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run all five shipped halts through QMB on a fixture with a losing run. Save `rc13-five-halts.log`. Pass when each fires on the literal trade the fixture names, and the run finishes.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc13-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc13-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc13-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc13-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc13-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc13-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc13-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run all five shipped halts through QMB on a fixture with a losing run. Save `check-five-halts.log`. Pass when each fires on the literal trade the fixture names, and the run finishes.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1017,7 +1018,7 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** `halts` becomes a l
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, structure. The blast-radius fact is this. The five shipped halts bind with no edit to their `entry.json`, by compiling a unit with each.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc13-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-13-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1061,16 +1062,16 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** One pure function f
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc14-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc14-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Restart the fake-broker node with one benched unit and its snapshot removed. Save `rc14-bench-restart.log`. Pass when the unit stays benched and takes no entry.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc14-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc14-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc14-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc14-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc14-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc14-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc14-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Restart the fake-broker node with one benched unit and its snapshot removed. Save `check-bench-restart.log`. Pass when the unit stays benched and takes no entry.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1081,7 +1082,7 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** One pure function f
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. `fold` imports no host and no `qmf-data`, by the workspace test and a parsed import list.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc14-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-14-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1128,16 +1129,16 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** Every control that 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `packages/qmf-data/tests`, `qmb/tests -k unit`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc15-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc15-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the five-halt fixture through QMB and the fake broker. Save `rc15-rows-agree.log`. Pass when the two journals hold the same `risk_event` codes in the same order.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc15-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc15-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc15-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc15-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc15-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc15-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc15-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `packages/qmf-data/tests`, `qmb/tests -k unit`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the five-halt fixture through QMB and the fake broker. Save `check-rows-agree.log`. Pass when the two journals hold the same `risk_event` codes in the same order.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1148,7 +1149,7 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** Every control that 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. The census test still reads every shipped reason text after the new family lands.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc15-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-15-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1194,16 +1195,16 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** A control row that 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc16-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc16-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run a flatten row and a lockout on the fake broker through a restart. Save `rc16-verbs-restart.log`. Pass when positions closed, lockout still in force, exits never refused.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc16-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc16-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc16-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc16-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc16-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc16-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc16-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run a flatten row and a lockout on the fake broker through a restart. Save `check-verbs-restart.log`. Pass when positions closed, lockout still in force, exits never refused.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1214,7 +1215,7 @@ Stop A, one unit trades on paper. Slice 4. **What it does.** A control row that 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. The kill switch still lowers only by his hand, by the shipped `test_app_every_way_out.py` passing unchanged.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc16-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-16-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1240,34 +1241,42 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** `canary` is a whole
 - [ ] Edit `qmx-agents/packages/qmx-tools/src/qmx_tools/unit_check.py`.
 - [ ] Create `qml/src/qml/unit/templates/canary.json`.
 - [ ] Create `qml/src/qml/numbers/shipped_records.json`.
-- [ ] Create `qml/tests/test_template_canary.py`.
+- [ ] Create `qmx-agents/packages/qmx-tools/tests/test_template_canary.py`.
+- [ ] Create `qmx-agents/apps/qmb/tests/test_practice_month.py`.
+- [ ] Create `qml/tests/test_canary_motion.py`.
+- [ ] Create `qmx-agents/packages/qmx-host/src/qmx_host/practice_start.py`.
+- [ ] Create `qmn/src/qmn/app/practice_bars/README.md`.
 
 **Build.**
 
-- [ ] Write `canary` with `fixed-fraction-at-stop@2`, the three `@2` exits, one position, the kill switch only, and `origin: placeholder` on every number with a range and a reason.
+- [ ] Write `canary` with the dummy's logic and number names, `fixed-fraction-at-stop@2`, the three `@2` exits, one position, the kill switch only, and `origin: placeholder` on every number with a range and a reason.
+- [ ] Keep `min_trend_strength` on `trend-floor-from-record@2` with motion on, so one filter number moves by the built engine from stop A. Size and exit numbers stay fixed until RC-25.
+- [ ] Ship the synthetic month now held only in `qml/tests/fixtures/slices` under `practice_bars/`, saved under dukascopy-node's names as `test_qmb_app.py` does. `practice_start.py` copies it into an empty market store as source `practice` and lands the shipped instrument records on `main`, which promote reads. Today a missing month is refused by name (`test_qmb_app.py:424`), so without this nothing can test from zero.
 - [ ] Ship records for its markets labelled `source: shipped`, including their `conversions`. Let `unit_new` list every JSON in the templates folder.
 
 **You see.**
 
-- [ ] A new person can pick a template that works, and it says plainly it is a shape and has no brakes.
+- [ ] A new person, or the copilot through `unit_new`, can pick a template that works, and it says plainly it is a shape and has no brakes.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `test_canary_compiles_from_nothing`. `unit_new("canary", {})` then `unit_check` on an empty store answers no problem, with warnings naming "no brakes" and every number labelled.
 - [ ] `test_a_new_template_is_one_json`. Dropping a second JSON in the folder lists 3 templates with no other edit.
+- [ ] `test_a_backtest_finds_bars_from_an_empty_store`. After `practice_start`, `backtest_run` with `source: practice` finishes and a G record with `safety_passed` exists for the logic fingerprint.
+- [ ] `test_canary_moves_its_filter_number`. After 20 scripted closed trades on the hosted unit, `min_trend_strength` reads 0.0001, from 0, with one calibration row.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `rc17-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc17-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. From an empty throwaway QMX folder, run `unit_new`, `unit_check` and `backtest_run` for `canary`. Save `rc17-canary-backtest.log`. Pass when the backtest finishes with a stamped run and a G record for the logic fingerprint.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc17-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc17-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc17-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc17-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc17-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc17-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc17-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-tools/tests`, `qmx-agents/apps/qmb/tests`, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. From an empty throwaway QMX folder, run `practice_start`, `unit_new`, `unit_check` and `backtest_run` with `source: practice` for `canary`. Save `check-canary-backtest.log`. Pass when the backtest finishes with a stamped run and a G record for the logic fingerprint.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1278,7 +1287,7 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** `canary` is a whole
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap, structure. The blast-radius fact is this. `unit_check` reads a shipped record through the same path as a Library record, by a recording store.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc17-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-17-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1307,7 +1316,7 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** The lifecycle gains
 - [ ] Edit `qml/tests/test_lifecycle.py`.
 - [ ] Edit `qmb/src/qmb/results/journal.py`.
 - [ ] Edit `tools/money_path_scan.py`.
-- [ ] Create `tools/tests/test_no_agent_money_door.py`.
+- [ ] Create `qmx-agents/packages/qmx-tools/tests/test_no_agent_money_door.py`.
 
 **Build.**
 
@@ -1328,16 +1337,16 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** The lifecycle gains
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-host/tests`, `tools/tests`, and rerun at the parent only a test that failed. Save `rc18-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc18-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the real promote on a throwaway home for `canary` with no judge run. Save `rc18-promote-paper.log`. Pass when the deployment is written with lane `paper` and both fingerprints.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc18-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc18-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc18-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc18-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc18-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc18-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc18-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-host/tests`, `tools/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the real promote on a throwaway home for `canary` with no judge run. Save `check-promote-paper.log`. Pass when the deployment is written with lane `paper` and both fingerprints.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1348,7 +1357,7 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** The lifecycle gains
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. `PAPER -> LIVE` still refuses unacknowledged placeholders, by `promote.py:390-395` with the shipped test passing.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc18-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-18-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1373,14 +1382,14 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** A `practice` venue 
 - [ ] Edit `qmn/src/qmn/app/paper_lane.py`.
 - [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/venue_records.py`.
 - [ ] Create `qmn/src/qmn/app/practice.py`.
-- [ ] Create `qmn/src/qmn/app/practice_bars/README.md`.
-- [ ] Create `tools/lanes/k7_rehearsal.py`.
-- [ ] Create `tools/tests/test_k7_rehearsal.py`.
+- [ ] Create `qmx-agents/packages/qmx-host/tests/k7_rehearsal.py`.
+- [ ] Create `qmx-agents/packages/qmx-host/tests/test_k7_rehearsal.py`.
 
 **Build.**
 
 - [ ] Add the production builder over `ConformanceAccount` (`runtime.py:698`) and a feed replaying shipped bars, world `paper`, kind `practice`, stated in every card and row.
-- [ ] Write K7 as a script a test runs. Its steps are `unit_new`, check, backtest, click, stage, warm up, first signal, row, fill.
+- [ ] Land one `account` with world `paper` and one `venue` row on `main` through `venue_records`, because promote refuses without them (`promote.py:378`).
+- [ ] Write K7 as a script a test runs, in the `qmx-agents` env, the only one holding `qmx_tools`, `qmx_host`, `qmn` and `qmb` together. Its steps are `practice_start`, `unit_new`, check, backtest, click, stage, warm up, first signal, row, fill.
 
 **You see.**
 
@@ -1393,16 +1402,16 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** A `practice` venue 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, `tools/tests`, and rerun at the parent only a test that failed. Save `rc19-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc19-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run `tools/lanes/k7_rehearsal.py` on a fresh throwaway home. Save `rc19-k7.log`. Pass when it prints PASS for each step and ends with one filled entry.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc19-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc19-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc19-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc19-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc19-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc19-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc19-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run `qmx-agents/packages/qmx-host/tests/k7_rehearsal.py` on a fresh throwaway home. Save `check-k7.log`. Pass when it prints PASS for each step and ends with one filled entry.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1413,7 +1422,7 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** A `practice` venue 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. The practice venue can't reach a network, by running K7 with sockets refused.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc19-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-19-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1453,16 +1462,16 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** QML changes reach t
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/apps/trading-node/tests`, `qmx-agents/packages/qmx-apps/tests`, `tools/tests`, and rerun at the parent only a test that failed. Save `rc20-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc20-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the whole-repo check at the head with `risk-ship/tools/run_tests.sh`. Save `rc20-whole-a.log`. Pass when nothing fails beyond the named baseline reds.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc20-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc20-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc20-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc20-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc20-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc20-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc20-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/apps/trading-node/tests`, `qmx-agents/packages/qmx-apps/tests`, `tools/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the whole-repo check at the head with `risk-ship/tools/run_tests.sh`. Save `check-whole-a.log`. Pass when nothing fails beyond the named baseline reds.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1473,7 +1482,7 @@ Stop A, one unit trades on paper. Slice 5. **What it does.** QML changes reach t
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. No agent or tool can sign, by a repo grep for `publish_signed` callers.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc20-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-20-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1520,16 +1529,16 @@ Stop B, the whole single-unit baseline. Slice 6. **What it does.** `modifiers` r
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc21-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc21-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Print `explain_size` for a fake-broker trade with two modifiers. Save `rc21-trail-two.log`. Pass when the trail shows base, both factors, reasons and the sent quantity.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc21-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc21-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc21-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc21-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc21-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc21-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc21-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Print `explain_size` for a fake-broker trade with two modifiers. Save `check-trail-two.log`. Pass when the trail shows base, both factors, reasons and the sent quantity.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1540,7 +1549,7 @@ Stop B, the whole single-unit baseline. Slice 6. **What it does.** `modifiers` r
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. A unit with no `modifiers` gets a size byte-equal to RC-08's, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc21-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-21-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1587,16 +1596,16 @@ Stop B, the whole single-unit baseline. Slice 6. **What it does.** House money a
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc22-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc22-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Print a day of ten fixture trades through `explain_size`. Save `rc22-cushion-day.log`. Pass when the literal factor column in the fixture matches line by line.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc22-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc22-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc22-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc22-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc22-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc22-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc22-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Print a day of ten fixture trades through `explain_size`. Save `check-cushion-day.log`. Pass when the literal factor column in the fixture matches line by line.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1607,7 +1616,7 @@ Stop B, the whole single-unit baseline. Slice 6. **What it does.** House money a
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. The ledger reads only rows, so a restart mid-day gives the same factor, by folding from a cold start.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc22-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-22-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1639,7 +1648,7 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** `NumberSpec` 
 
 **Build.**
 
-- [ ] Add `derivation`, `authority`, `owner`, `reason`, `cautious`, `guard`, `never_self_tune`, `applies_to_open_positions`, `stage_values`.
+- [ ] Add `derivation`, `owner`, `reason`, `cautious`, `guard`, `never_self_tune`, `stage_values` and `Origin.found_by_replay`. `applies_to_open_positions` exists. `Authority` exists with one value (`model.py:203`) and gains `off` and `at_anchor`.
 - [ ] Make check answer by name for a missing reason or range, and label every shipped value `origin: placeholder`, owner "numbers talk".
 
 **You see.**
@@ -1649,20 +1658,20 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** `NumberSpec` 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `test_k9_5_every_number_has_a_reason_and_range`. A number with no `reason` answers the problem `number_no_reason`, and no range answers `number_no_range`.
-- [ ] `test_a_template_number_reads_its_label`. `unit_explain` on `canary` prints `fraction`, 0.005, its range, its reason, `placeholder`.
+- [ ] `test_a_template_number_reads_its_label`. `unit_explain` on `canary` prints `risk_fraction`, 0.005, its range, its reason, `placeholder`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc23-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc23-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run `unit_check` on every shipped template. Save `rc23-labels.log`. Pass when every number prints a reason and a range and no problem is listed.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc23-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc23-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc23-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc23-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc23-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc23-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc23-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run `unit_check` on every shipped template. Save `check-labels.log`. Pass when every number prints a reason and a range and no problem is listed.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1673,7 +1682,7 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** `NumberSpec` 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. Old documents upgrade through `unit/upgrade.py`, by loading the corpus fixture at the head.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc23-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-23-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1720,16 +1729,16 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** The built mot
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc24-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc24-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the shipped `trend-floor-from-record` rule at the parent and the head. Save `rc24-floor-same.log`. Pass when `min_trend_strength` moves from 0 to 0.0001 after 20 trades in both.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc24-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc24-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc24-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc24-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc24-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc24-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc24-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the shipped `trend-floor-from-record` rule at the parent and the head. Save `check-floor-same.log`. Pass when `min_trend_strength` moves from 0 to 0.0001 after 20 trades in both.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1740,7 +1749,7 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** The built mot
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. The existing logic number moves exactly as before, by the lane above.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc24-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-24-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1786,21 +1795,21 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** Trades now ca
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `test_k9_6_a_block_ignoring_a_moved_number_fails`. `fixed-fraction-at-stop@1` fails with `ignores_moved_number` and `@2` passes.
-- [ ] `test_fraction_moves_and_the_next_entry_uses_it`. With `min_trades` 20 and step 0.0001 after 20 trades at mean -0.5R, a calibration row moves `fraction` from 0.005 to 0.0049, and the next EURUSD entry at equity 100000 and stop distance 0.0050 is 0.98 lots.
-- [ ] `test_explain_size_names_the_row`. `explain_size` prints `fraction 0.0049 default 0.005` and the calibration row id.
+- [ ] `test_fraction_moves_and_the_next_entry_uses_it`. With `min_trades` 20 and step 0.0001 after 20 trades at mean -0.5R, a calibration row moves `risk_fraction` from 0.005 to 0.0049, and the next EURUSD entry at equity 100000 and stop distance 0.0050 is 0.98 lots.
+- [ ] `test_explain_size_names_the_row`. `explain_size` prints `risk_fraction 0.0049 default 0.005` and the calibration row id.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc25-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc25-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run K9 15's scripted trades on QMB. Save `rc25-moves-qmb.log`. Pass when the printed quantity and target match the literals.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc25-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc25-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc25-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc25-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc25-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc25-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc25-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run K9 15's scripted trades on QMB. Save `check-moves-qmb.log`. Pass when the printed quantity and target match the literals.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1811,7 +1820,7 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** Trades now ca
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. `engine.py:122` no longer skips a stamped risk trade, run on the real engine with a patched log of stamps.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc25-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-25-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1851,20 +1860,20 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** A held positi
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_k9_15_self_configuration`. Bind `own-r-step@1` to `fraction` and `multiple`. After 20 scripted losing trades, on QMB and the fake broker, the next entry is 0.98 lots with target 1.1095, a position opened earlier keeps 1.1100, it moves with another market held, and a restart at trade 13 ends with the same two values and row ids.
+- [ ] `test_k9_15_self_configuration`. Bind `own-r-step@1` to `risk_fraction` and `target_r`, the numbers behind the blocks' `fraction` and `multiple`. After 20 scripted losing trades, on QMB and the fake broker, the next entry is 0.98 lots with target 1.1095, a position opened earlier keeps 1.1100, it moves with another market held, and a restart at trade 13 ends with the same two values and row ids.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc26-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc26-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Restart the fake-broker node at trade 13 of 20. Save `rc26-restart-count.log`. Pass when the move lands on trade 20 and not earlier or later.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc26-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc26-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc26-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc26-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc26-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc26-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc26-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Restart the fake-broker node at trade 13 of 20. Save `check-restart-count.log`. Pass when the move lands on trade 20 and not earlier or later.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1875,7 +1884,7 @@ Stop B, the whole single-unit baseline. Slice 7. **What it does.** A held positi
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A moved number never amends an open position's exits, by a recording venue showing zero amends.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc26-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-26-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1908,7 +1917,7 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** The node supp
 **Build.**
 
 - [ ] Add `account.equity`, `balance`, `open_risk`, `margin_headroom`, `liquidation_distance`, `budget_share`, `realised_since`, `basis`, with the balance read on a timer as a named setting.
-- [ ] Say `basis` plainly when equity is marked or balance only.
+- [ ] Say `basis` plainly when equity is marked or balance only, and that `account.open_risk` counts only positions the node holds.
 
 **You see.**
 
@@ -1921,16 +1930,16 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** The node supp
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc27-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc27-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Change the fake broker's balance mid-run. Save `rc27-balance-moves.log`. Pass when the next decision row stores the new equity with its age.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc27-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc27-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc27-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc27-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc27-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc27-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc27-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Change the fake broker's balance mid-run. Save `check-balance-moves.log`. Pass when the next decision row stores the new equity with its age.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -1941,7 +1950,7 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** The node supp
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. The timed re-read never runs on the exit path, by a recording client during pass one.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc27-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-27-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -1993,16 +2002,16 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** Cost cells pe
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qmn/tests -k app`, `packages/qmf-data/tests`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc28-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc28-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run 20 fake-broker fills and read the cell. Save `rc28-cell-calibrates.log`. Pass when the label moves from `uncalibrated` at the fixture's N with the measured value.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc28-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc28-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc28-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc28-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc28-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc28-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc28-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qmn/tests -k app`, `packages/qmf-data/tests`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run 20 fake-broker fills and read the cell. Save `check-cell-calibrates.log`. Pass when the label moves from `uncalibrated` at the fixture's N with the measured value.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2013,7 +2022,7 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** Cost cells pe
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. Every reader of `r_after_costs` moves in this PR, by a repo-wide grep showing none left.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc28-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-28-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2055,16 +2064,16 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** A pure verdic
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-tools/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc29-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc29-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the two-unit halt on the fake broker. Save `rc29-two-unit-halt.log`. Pass when both stop new entries on the same bar and exits still close.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc29-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc29-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc29-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc29-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc29-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc29-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc29-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-tools/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the two-unit halt on the fake broker. Save `check-two-unit-halt.log`. Pass when both stop new entries on the same bar and exits still close.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2075,7 +2084,7 @@ Stop B, the whole single-unit baseline. Slice 8. **What it does.** A pure verdic
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. The verdict computes through `to_quantity`, by a recording call.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc29-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-29-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2122,16 +2131,16 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** An account's 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc30-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc30-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run a 1m and a 15m unit on one fake-broker account for 60 base bars. Save `rc30-one-feed.log`. Pass when each is driven at its own bar count, 60 and 4.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc30-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc30-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc30-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc30-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc30-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc30-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc30-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run a 1m and a 15m unit on one fake-broker account for 60 base bars. Save `check-one-feed.log`. Pass when each is driven at its own bar count, 60 and 4.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2142,7 +2151,7 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** An account's 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. The default 60-second base leaves `canary`'s 15-minute decisions equal to the parent's, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc30-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-30-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2187,16 +2196,16 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `plan.stream`
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc31-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc31-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Print each unit's bar log on the fake broker. Save `rc31-streams-log.log`. Pass when no decision reads a bar with `knowable_at` after its own instant.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc31-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc31-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc31-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc31-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc31-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc31-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc31-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Print each unit's bar log on the fake broker. Save `check-streams-log.log`. Pass when no decision reads a bar with `knowable_at` after its own instant.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2207,7 +2216,7 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `plan.stream`
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Single-stream units compile to the same decisions, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc31-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-31-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2255,16 +2264,16 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `_held` and o
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc32-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc32-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Hold two positions through a fake-broker restart. Save `rc32-two-held.log`. Pass when both come back with their own stops.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc32-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc32-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc32-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc32-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc32-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc32-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc32-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Hold two positions through a fake-broker restart. Save `check-two-held.log`. Pass when both come back with their own stops.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2275,7 +2284,7 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `_held` and o
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. `_held` no longer overwrites, by rerunning the second-position overwrite that `runtime.py:1802` allowed at the parent.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc32-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-32-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2321,16 +2330,16 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `sessions` co
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc33-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc33-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run an intraday fixture across a daylight-saving change. Save `rc33-dst.log`. Pass when session hours follow the record's zone on both sides of the change.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc33-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc33-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc33-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc33-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc33-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc33-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc33-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run an intraday fixture across a daylight-saving change. Save `check-dst.log`. Pass when session hours follow the record's zone on both sides of the change.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2341,7 +2350,7 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `sessions` co
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. A unit with no sessions declared trades the same as today, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc33-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-33-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2385,16 +2394,16 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `veto`, `cool
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc34-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc34-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Compile and backtest one fixture unit per role. Save `rc34-roles.log`. Pass when each run finishes and its row names the role.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc34-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc34-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc34-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc34-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc34-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc34-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc34-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Compile and backtest one fixture unit per role. Save `check-roles.log`. Pass when each run finishes and its row names the role.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2405,7 +2414,7 @@ Stop B, the whole single-unit baseline. Slice 9. **What it does.** `veto`, `cool
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, structure. The blast-radius fact is this. A shipped unit using none of these keeps its compiled decisions, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc34-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-34-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2456,16 +2465,16 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** Each unit's 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc35-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc35-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the first ten entries of a fresh unit on the fake broker. Save `rc35-first-entries.log`. Pass when all ten place with `warn`, and the cell's n reaches 10.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc35-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc35-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc35-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc35-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc35-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc35-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc35-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the first ten entries of a fresh unit on the fake broker. Save `check-first-entries.log`. Pass when all ten place with `warn`, and the cell's n reaches 10.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2476,7 +2485,7 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** Each unit's 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Exits still skip the chain, by the import test and a recording chain showing zero calls on exits.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc35-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-35-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2526,16 +2535,16 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** A sticker is
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `packages/qmf-risk/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc36-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc36-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Play one fixture news day on the fake broker. Save `rc36-news-day.log`. Pass when entries pause in the window, exits run, and the row says why.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc36-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc36-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc36-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc36-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc36-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc36-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc36-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `packages/qmf-risk/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Play one fixture news day on the fake broker. Save `check-news-day.log`. Pass when entries pause in the window, exits run, and the row says why.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2546,7 +2555,7 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** A sticker is
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. `Kind.RISK_STOP` and the kill switch behave as at the parent, by `test_app_stand_down.py` passing unchanged.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc36-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-36-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2593,16 +2602,16 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** A node senso
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmx-agents/packages/qmx-engine/tests`, and rerun at the parent only a test that failed. Save `rc37-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc37-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the curve template on the fixture's minute rows. Save `rc37-curve.log`. Pass when one artifact per world with its age and a borrowed flag on cold start.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc37-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc37-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc37-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc37-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc37-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc37-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc37-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmx-agents/packages/qmx-engine/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the curve template on the fixture's minute rows. Save `check-curve.log`. Pass when one artifact per world with its age and a borrowed flag on cold start.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2613,7 +2622,7 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** A node senso
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. The sensor adds no send or wait on the node thread, by a recording client.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc37-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-37-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2658,16 +2667,16 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** The old SQS 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `packages/qmf-readings/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc38-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc38-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the old rule and the floor over a saved minute file. Save `rc38-floor-equal.log`. Pass when the two verdict columns are equal.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc38-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc38-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc38-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc38-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc38-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc38-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc38-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `packages/qmf-readings/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the old rule and the floor over a saved minute file. Save `check-floor-equal.log`. Pass when the two verdict columns are equal.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2678,7 +2687,7 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** The old SQS 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. Nothing calls the moved producer by its old import path, by a repo-wide grep.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc38-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-38-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2699,7 +2708,7 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** `scalper-mr`
 
 **Files.**
 
-- [ ] Edit `tools/lanes/k7_rehearsal.py`.
+- [ ] Edit `qmx-agents/packages/qmx-host/tests/k7_rehearsal.py`.
 - [ ] Create `qml/src/qml/unit/templates/scalper-mr.json`.
 - [ ] Create `qml/src/qml/unit/templates/intraday-trend.json`.
 - [ ] Create `qml/src/qml/unit/templates/intraday-trend-orb.json`.
@@ -2714,6 +2723,8 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** `scalper-mr`
 - [ ] Create `qml/src/qml/blocks/stdlib/two-speed-circuit-breaker/1/block.py`.
 - [ ] Create `qml/src/qml/blocks/stdlib/two-speed-circuit-breaker/1/entry.json`.
 - [ ] Create `qml/tests/test_templates_abc.py`.
+- [ ] Create `qmx-agents/packages/qmx-host/tests/test_k7_all_templates.py`.
+- [ ] Create `qmn/tests/test_app_three_templates.py`.
 
 **Build.**
 
@@ -2726,23 +2737,23 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** `scalper-mr`
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_k9_7_every_template_reaches_paper`. K7 ends with a fill for `canary`, `scalper-mr` and `intraday-trend`, with no judge run.
+- [ ] `test_k9_7_every_template_reaches_paper`, in `test_k7_all_templates.py`. K7 ends with a fill for `canary`, `scalper-mr` and `intraday-trend`, with no judge run.
 - [ ] `test_the_cut_uses_its_fixed_distance_cold`. Zero winners, a 3-pip adverse move at a 3-pip cut closes with reason `fi_cut`.
 - [ ] `test_the_bench_shadows_until_n`. Below N trades the bench writes `would_have` and refuses nothing.
-- [ ] `test_the_three_templates_share_one_account`. All three host on one fake-broker account with bar counts 60, 60 and 4 per hour on their primaries.
+- [ ] `test_the_three_templates_share_one_account`, in `test_app_three_templates.py`. All three host on one fake-broker account with bar counts per hour of 4 for `canary`, 60 for `scalper-mr` and 4 for `intraday-trend`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `tools/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc39-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc39-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run K7 for each template on a fresh throwaway home. Save `rc39-k7-all.log`. Pass when each ends with one filled entry.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc39-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc39-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc39-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc39-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc39-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc39-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc39-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-host/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run K7 for each template on a fresh throwaway home. Save `check-k7-all.log`. Pass when each ends with one filled entry.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2753,7 +2764,7 @@ Stop B, the whole single-unit baseline. Slice 10. **What it does.** `scalper-mr`
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. The two-speed breaker off changes no decision, by running with and without it.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc39-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-39-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2801,16 +2812,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The node cha
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc40-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc40-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the conformance tape through node and QMB. Save `rc40-admit-tape.log`. Pass when identical trails.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc40-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc40-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc40-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc40-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc40-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc40-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc40-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the conformance tape through node and QMB. Save `check-admit-tape.log`. Pass when identical trails.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2821,7 +2832,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The node cha
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Every shipped order path still passes one protection check, by `test_protection_every_order.py` unchanged.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc40-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-40-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2867,16 +2878,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The kill tab
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `rc41-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc41-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Raise the kill level on the fake broker with entries and a held trade. Save `rc41-kill-entries.log`. Pass when the entry refuses, the held trade's exit fires.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc41-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc41-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc41-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc41-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc41-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc41-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc41-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `packages/qmf-risk/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Raise the kill level on the fake broker with entries and a held trade. Save `check-kill-entries.log`. Pass when the entry refuses, the held trade's exit fires.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2887,7 +2898,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The kill tab
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. No link can raise a size, by a contract on `Shrink` above the wire quantity failing.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc41-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-41-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2912,7 +2923,6 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Pass one ste
 - [ ] Edit `qmb/src/qmb/host/unit_handler.py`.
 - [ ] Edit `qml/src/qml/protocol/unit.py`.
 - [ ] Create `qmn/src/qmn/app/outbox.py`.
-- [ ] Create `qmb/src/qmb/host/group_run.py`.
 - [ ] Create `qmn/tests/test_app_two_passes.py`.
 
 **Build.**
@@ -2932,16 +2942,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Pass one ste
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc42-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc42-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run 20 units firing together on the fake broker. Save `rc42-bell.log`. Pass when the send log shows all exits first and the meters read pass times.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc42-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc42-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc42-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc42-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc42-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc42-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc42-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run 20 units firing together on the fake broker. Save `check-bell.log`. Pass when the send log shows all exits first and the meters read pass times.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -2952,7 +2962,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Pass one ste
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. No exit reads account facts or the outbox, by the import test and a recording surface.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc42-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-42-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -2991,22 +3001,22 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** `_orders` ga
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_k9_11_one_signal_one_send`. Pass two reaches the queue a bar late. 1 `ProtoOANewOrderReq`, 1 position at the venue, 1 in the handler. With the applied fix of the parent's AD-17 as written, 2 sends.
+- [ ] `test_k9_11_one_signal_one_send`. Pass two reaches the queue a bar late. 1 `ProtoOANewOrderReq`, 1 position at the venue, 1 in the handler. At the parent, RC-42's outbox gives 2 sends, as `CHECK.md` B2 ran.
 - [ ] `test_a_parked_entry_expires_by_name`. Past `expires_at` the row reads `Skip` with `budget_expired`.
 - [ ] `test_a_parked_entry_never_reads_warming_up`. `execute_resting` answers `Ok(False)`, `None` keeps meaning warming up.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc43-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc43-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Hold pass two across a bar on the real order path with the fake broker. Save `rc43-parked.log`. Pass when one send, one position.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc43-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc43-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc43-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc43-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc43-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc43-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc43-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Hold pass two across a bar on the real order path with the fake broker. Save `check-parked.log`. Pass when one send, one position.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3017,7 +3027,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** `_orders` ga
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. `self.unknown`'s refusal (`runtime.py:1059`) still covers an unknown answer, by the shipped unknown drill.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc43-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-43-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3060,16 +3070,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Pass two sta
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc44-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc44-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run a 30-entry bell on the fake broker with a slow venue. Save `rc44-long-bell.log`. Pass when entries left over are named in the meter and the process stays up.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc44-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc44-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc44-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc44-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc44-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc44-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc44-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run a 30-entry bell on the fake broker with a slow venue. Save `check-long-bell.log`. Pass when entries left over are named in the meter and the process stays up.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3080,7 +3090,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Pass two sta
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. The virtual-clock test uses the real constants, by importing them, with no copied literal in the path under test.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc44-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-44-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3127,16 +3137,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** A unit with 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc45-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc45-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Send the entry on the fake broker and read the row. Save `rc45-no-stop-send.log`. Pass when one order, no stop, warning graded.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc45-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc45-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc45-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc45-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc45-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc45-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc45-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Send the entry on the fake broker and read the row. Save `check-no-stop-send.log`. Pass when one order, no stop, warning graded.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3147,7 +3157,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** A unit with 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Every shipped unit with a stop takes the same path as before, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc45-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-45-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3194,16 +3204,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Places 7 to 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc46-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc46-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run K9 12 and print the alarms. Save `rc46-no-stop-held.log`. Pass when no escalation, restart names it open by declaration.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc46-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc46-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc46-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc46-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc46-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc46-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc46-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run K9 12 and print the alarms. Save `check-no-stop-held.log`. Pass when no escalation, restart names it open by declaration.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3214,7 +3224,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** Places 7 to 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A lost real stop still escalates, by the second test on the real tick.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc46-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-46-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3259,16 +3269,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The copilot 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `rc47-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc47-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Ask the copilot on `haiku` why a fixture trade had its size. Save `rc47-copilot-size.log`. Pass when the answer names the row's literal quantity and fraction.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc47-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc47-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc47-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc47-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc47-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc47-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc47-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Ask the copilot on `haiku` why a fixture trade had its size. Save `check-copilot-size.log`. Pass when the answer names the row's literal quantity and fraction.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3279,7 +3289,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The copilot 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses adversarial. The blast-radius fact is this. Every new row declares `direction`, by a test over the catalog.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc47-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-47-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3327,16 +3337,16 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The rip-out 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `tools/tests`, `qml/tests`, `qmx-agents/apps/trading-node/tests`, `qmx-agents/packages/qmx-apps/tests`, and rerun at the parent only a test that failed. Save `rc48-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc48-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the whole-repo check at the head. Save `rc48-whole-b.log`. Pass when nothing fails beyond the named baseline reds.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc48-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc48-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc48-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc48-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc48-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc48-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc48-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `tools/tests`, `qml/tests`, `qmx-agents/apps/trading-node/tests`, `qmx-agents/packages/qmx-apps/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the whole-repo check at the head. Save `check-whole-b.log`. Pass when nothing fails beyond the named baseline reds.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3347,7 +3357,7 @@ Stop B, the whole single-unit baseline. Slice 11. **What it does.** The rip-out 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. K7 for all three templates and K9 2, 11, 12, 15, 16, 17 all pass at this head, in one run.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc48-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-48-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3395,16 +3405,16 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** A group is a docu
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-library/tests`, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, `packages/qmf-risk/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc49-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc49-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Edit a limit on the fake lane with a unit trading. Save `rc49-limit-live.log`. Pass when the next row stores the new limit with its age.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc49-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc49-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc49-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc49-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc49-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc49-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc49-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-library/tests`, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, `packages/qmf-risk/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Edit a limit on the fake lane with a unit trading. Save `check-limit-live.log`. Pass when the next row stores the new limit with its age.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3415,7 +3425,7 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** A group is a docu
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. No member document changes on a group edit, by hashing the 200 documents before and after.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc49-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-49-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3466,16 +3476,16 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** Caps are control 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc50-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc50-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run two units at one bell on the fake broker. Save `rc50-shared-cap.log`. Pass when fills sum to the limit.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc50-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc50-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc50-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc50-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc50-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc50-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc50-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run two units at one bell on the fake broker. Save `check-shared-cap.log`. Pass when fills sum to the limit.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3486,7 +3496,7 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** Caps are control 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Caps are atomic because nothing else runs on the node thread, by asserting the thread name in the runner during the test.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc50-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-50-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3537,16 +3547,16 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** The default group
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc51-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc51-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Kill and restart the fake-broker node mid-day. Save `rc51-restart-day.log`. Pass when cuts stand, exits free, raises wait.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc51-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc51-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc51-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc51-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc51-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc51-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc51-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Kill and restart the fake-broker node mid-day. Save `check-restart-day.log`. Pass when cuts stand, exits free, raises wait.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3557,7 +3567,7 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** The default group
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Settling anchors is idempotent, by running recovery twice over the same rows and comparing.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc51-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-51-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3578,11 +3588,11 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** `group_run` repla
 
 **Files.**
 
-- [ ] Edit `qmb/src/qmb/host/group_run.py`.
 - [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`.
 - [ ] Edit `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`.
 - [ ] Edit `qmx-agents/packages/qmx-tools/tests/test_tools.py`.
-- [ ] Create `qmb/tests/test_group_run.py`.
+- [ ] Create `qmb/src/qmb/host/group_run.py`.
+- [ ] Create `qmn/tests/test_app_group_run.py`.
 - [ ] Create `qmn/tests/test_app_group_200.py`.
 
 **Build.**
@@ -3601,16 +3611,16 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** `group_run` repla
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc52-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc52-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run 200 members for 100 bars on the fake broker. Save `rc52-group-200.log`. Pass when it finishes with no heal, and the meters are printed.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc52-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc52-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc52-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc52-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc52-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc52-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc52-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, `qmb/tests -k unit`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run 200 members for 100 bars on the fake broker. Save `check-group-200.log`. Pass when it finishes with no heal, and the meters are printed.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3621,7 +3631,7 @@ Stop C, groups, pods and shipping. Slice 12. **What it does.** `group_run` repla
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. QMB's single-unit results are unchanged by `group_run`, over the conformance tape.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc52-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-52-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3671,16 +3681,16 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** `expand(unit, pod
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-library/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc53-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc53-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Stamp a gallery-shaped pod onto all three templates and compile. Save `rc53-stamp-three.log`. Pass when three fingerprints, logic unchanged on each.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc53-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc53-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc53-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc53-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc53-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc53-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc53-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-library/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Stamp a gallery-shaped pod onto all three templates and compile. Save `check-stamp-three.log`. Pass when three fingerprints, logic unchanged on each.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3691,7 +3701,7 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** `expand(unit, pod
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. `expand` never changes `logic_fingerprint`, as a property over the corpus fixture.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc53-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-53-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3740,16 +3750,16 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** `roll_plan` stamp
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-host/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `rc54-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc54-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Plan and click for 200 fixture members on the fake lane. Save `rc54-plan-200.log`. Pass when one hash, literal counts, time recorded.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc54-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc54-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc54-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc54-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc54-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc54-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc54-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-host/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Plan and click for 200 fixture members on the fake lane. Save `check-plan-200.log`. Pass when one hash, literal counts, time recorded.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3760,7 +3770,7 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** `roll_plan` stamp
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Nothing in the plan path writes to a live deployment before the click, by a recording store.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc54-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-54-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3805,16 +3815,16 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** `HostedUnit.move_
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `rc55-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc55-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Flip a plan on the fake broker with trades open. Save `rc55-flip.log`. Pass when every open position's exits still fire.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc55-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc55-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc55-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc55-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc55-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc55-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc55-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Flip a plan on the fake broker with trades open. Save `check-flip.log`. Pass when every open position's exits still fire.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3825,7 +3835,7 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** `HostedUnit.move_
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. No host ever runs a different compiled fingerprint over a held trade except by `move_risk` or a drain, by a test asserting at the host seam.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc55-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-55-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3863,22 +3873,22 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** A risk half may d
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_a_stage_moves_at_the_anchor`. Equity 5100 at the anchor with threshold 5000 and hysteresis 200 moves up. 5100 mid-day doesn't, and 4900 back doesn't.
+- [ ] `test_a_stage_moves_at_the_anchor`. Equity 5100 at the anchor with threshold 5000 and hysteresis 200 moves up. 5100 mid-day doesn't, and 4900 back doesn't, because down needs below 4800.
 - [ ] `test_a_card_waits_and_the_old_stage_trades`. Move up is `card`. Rows stay on stage 1 until the answer.
 - [ ] `test_no_new_version_on_a_move`. Both fingerprints equal across a move.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc56-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc56-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Walk equity across a level on the fake broker. Save `rc56-stage.log`. Pass when one `stage_move` row with the literal anchor.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc56-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc56-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc56-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc56-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc56-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc56-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc56-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Walk equity across a level on the fake broker. Save `check-stage.log`. Pass when one `stage_move` row with the literal anchor.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3889,7 +3899,7 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** A risk half may d
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. A stage with exit `stage_values` is logic, so a risk edit can't move an exit number, by RC-03's rule on a real document.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc56-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-56-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3929,16 +3939,16 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** E2's twenty pod c
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc57-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc57-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Land the gallery on a throwaway home. Save `rc57-gallery.log`. Pass when 20 drafts land and none is deployed.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc57-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc57-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc57-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc57-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc57-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc57-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc57-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Land the gallery on a throwaway home. Save `check-gallery.log`. Pass when 20 drafts land and none is deployed.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -3949,7 +3959,7 @@ Stop C, groups, pods and shipping. Slice 13. **What it does.** E2's twenty pod c
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses structure. The blast-radius fact is this. Landing items never touches a deployment, by a recording store.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc57-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-57-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -3999,16 +4009,16 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** `reads` compiles 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, `packages/qmf-data/tests`, and rerun at the parent only a test that failed. Save `rc58-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc58-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Stop the MIS mid-run on the fake broker. Save `rc58-mis-down.log`. Pass when readings age, home markets trade, no unit stops.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc58-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc58-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc58-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc58-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc58-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc58-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc58-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, `packages/qmf-data/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Stop the MIS mid-run on the fake broker. Save `check-mis-down.log`. Pass when readings age, home markets trade, no unit stops.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4019,7 +4029,7 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** `reads` compiles 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. No shipped template needs a reading to trade, by K7 with the relay off.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc58-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-58-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4068,16 +4078,16 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** A mini app's `lib
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-library/tests`, `qmx-agents/packages/qmx-apps/tests`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `rc59-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc59-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Save a Library sizer through the tool on `haiku`. Save `rc59-block-save.log`. Pass when the block lands with its test result.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc59-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc59-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc59-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc59-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc59-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc59-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc59-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-library/tests`, `qmx-agents/packages/qmx-apps/tests`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-tools/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Save a Library sizer through the tool on `haiku`. Save `check-block-save.log`. Pass when the block lands with its test result.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4088,7 +4098,7 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** A mini app's `lib
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses adversarial, edge-case. The blast-radius fact is this. Saved block code can't reach `qmn`, by layer F's scan refusing a planted import.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc59-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-59-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4111,8 +4121,8 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** This proves "one 
 
 - [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/promote.py`.
 - [ ] Edit `qmn/src/qmn/app/runtime.py`.
-- [ ] Create `qmn/tests/test_app_library_block_trades.py`.
-- [ ] Create `tools/lanes/library_block_trace.py`.
+- [ ] Create `qmx-agents/packages/qmx-host/tests/test_library_block_trades.py`.
+- [ ] Create `qmx-agents/packages/qmx-host/tests/library_block_trace.py`.
 
 **Build.**
 
@@ -4129,16 +4139,16 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** This proves "one 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, `tools/tests`, and rerun at the parent only a test that failed. Save `rc60-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc60-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the trace script on a throwaway home. Save `rc60-block-trace.log`. Pass when it prints PASS at save, compile, promote, deploy and fill.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc60-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc60-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc60-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc60-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc60-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc60-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc60-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the trace script on a throwaway home. Save `check-block-trace.log`. Pass when it prints PASS at save, compile, promote, deploy and fill.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4149,7 +4159,7 @@ Stop C, groups, pods and shipping. Slice 14. **What it does.** This proves "one 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. The block travels through the lock without a money-app bump, by comparing the node's folder hash before and after.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc60-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-60-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4193,16 +4203,16 @@ Stop C, groups, pods and shipping. Slice 15. **What it does.** An app's `data_re
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-apps/tests`, `qmx-agents/packages/qmx-library/tests`, and rerun at the parent only a test that failed. Save `rc61-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc61-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Install an example app with a journal read on a throwaway home. Save `rc61-app-read.log`. Pass when it reads and its card shows in "Needs you".
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc61-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc61-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc61-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc61-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc61-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc61-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc61-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-apps/tests`, `qmx-agents/packages/qmx-library/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Install an example app with a journal read on a throwaway home. Save `check-app-read.log`. Pass when it reads and its card shows in "Needs you".
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4213,7 +4223,7 @@ Stop C, groups, pods and shipping. Slice 15. **What it does.** An app's `data_re
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses adversarial, edge-case. The blast-radius fact is this. The shipped breaker and road tests pass unchanged.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc61-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-61-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4268,16 +4278,16 @@ Stop C, groups, pods and shipping. Slice 15. **What it does.** `fleet-watch` rea
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-engine/tests`, `qmx-agents/packages/qmx-tools/tests`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-apps/tests`, `tools/tests`, `qmx-agents/apps/fleet-watch/tests`, and rerun at the parent only a test that failed. Save `rc62-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc62-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Install `fleet-watch` on a throwaway home with a fixture store. Save `rc62-fleet.log`. Pass when it starts, ranks, and stops the units on nothing.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc62-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc62-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc62-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc62-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc62-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc62-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc62-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmx-agents/packages/qmx-engine/tests`, `qmx-agents/packages/qmx-tools/tests`, `qmx-agents/packages/qmx-control/tests`, `qmx-agents/packages/qmx-apps/tests`, `tools/tests`, `qmx-agents/apps/fleet-watch/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Install `fleet-watch` on a throwaway home with a fixture store. Save `check-fleet.log`. Pass when it starts, ranks, and stops the units on nothing.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4288,7 +4298,7 @@ Stop C, groups, pods and shipping. Slice 15. **What it does.** `fleet-watch` rea
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, verification-gap. The blast-radius fact is this. Stopping the app changes no unit, by trading through a stop on the fake broker.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc62-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-62-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4331,16 +4341,16 @@ Stop C, groups, pods and shipping. Slice 15. **What it does.** `MotionSwitch` re
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, `packages/qmf-data/tests`, and rerun at the parent only a test that failed. Save `rc63-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc63-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the dummy with motion on through QMB. Save `rc63-two-arms.log`. Pass when both arms print.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc63-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc63-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc63-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc63-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc63-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc63-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc63-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, `packages/qmf-data/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the dummy with motion on through QMB. Save `check-two-arms.log`. Pass when both arms print.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4351,7 +4361,7 @@ Stop C, groups, pods and shipping. Slice 15. **What it does.** `MotionSwitch` re
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. The effective-tries count is unchanged, by the judge's shipped tests.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc63-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-63-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4399,16 +4409,16 @@ Stop C, groups, pods and shipping. Slice 16. **What it does.** A forwarding map 
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `rc64-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc64-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Swap a placeholder on the fake lane with a trade open. Save `rc64-swap.log`. Pass when the old drains, the new enters, one record.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc64-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc64-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc64-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc64-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc64-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc64-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc64-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, `qmx-agents/packages/qmx-host/tests`, `qmn/tests -k app`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Swap a placeholder on the fake lane with a trade open. Save `check-swap.log`. Pass when the old drains, the new enters, one record.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4419,7 +4429,7 @@ Stop C, groups, pods and shipping. Slice 16. **What it does.** A forwarding map 
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. Old trade rows read correctly after RC-28's rename, by the forwarding test on a stored journal.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc64-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-64-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4459,16 +4469,16 @@ Stop C, groups, pods and shipping. Slice 16. **What it does.** After a format bu
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `rc65-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc65-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run a bump over 5 fixture deployments. Save `rc65-retest.log`. Pass when report written, node accepts after it.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc65-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc65-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc65-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc65-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc65-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc65-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc65-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmx-agents/packages/qmx-host/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run a bump over 5 fixture deployments. Save `check-retest.log`. Pass when report written, node accepts after it.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4479,7 +4489,7 @@ Stop C, groups, pods and shipping. Slice 16. **What it does.** After a format bu
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case. The blast-radius fact is this. The re-test touches no live deployment, by a recording store.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc65-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-65-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4520,16 +4530,16 @@ Stop C, groups, pods and shipping. Slice 16. **What it does.** The developer gui
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `tools/tests`, `qml/tests`, `qmx-agents/apps/trading-node/tests`, `qmx-agents/packages/qmx-apps/tests`, and rerun at the parent only a test that failed. Save `rc66-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc66-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. Run the whole-repo check at the head. Save `rc66-whole-c.log`. Pass when nothing fails beyond the named baseline reds.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc66-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc66-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc66-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc66-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc66-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc66-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc66-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `tools/tests`, `qml/tests`, `qmx-agents/apps/trading-node/tests`, `qmx-agents/packages/qmx-apps/tests`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. Run the whole-repo check at the head. Save `check-whole-c.log`. Pass when nothing fails beyond the named baseline reds.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4540,7 +4550,7 @@ Stop C, groups, pods and shipping. Slice 16. **What it does.** The developer gui
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses verification-gap. The blast-radius fact is this. No PR in this program gave an agent a path to money, by `tools/money_path_scan.py` and K9 8 at the head.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc66-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-66-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4585,16 +4595,16 @@ After stop C, the demo facts. Slice 17. **What it does.** Stop distance is signe
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `packages/qmf-venue/tests`, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc67-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc67-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. After G-DEMO, run the amend probe on his demo account. Save `rc67-demo-amend.log`. Pass when the read-back equals what was sent.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc67-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc67-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc67-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc67-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc67-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc67-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc67-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `packages/qmf-venue/tests`, `qmn/tests -k app`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. After G-DEMO, run the amend probe on his demo account. Save `check-demo-amend.log`. Pass when the read-back equals what was sent.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4605,7 +4615,7 @@ After stop C, the demo facts. Slice 17. **What it does.** Stop distance is signe
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. `abs(entry - new_stop)` is gone from every path, by grep.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc67-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-67-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4651,16 +4661,16 @@ After stop C, the demo facts. Slice 17. **What it does.** The node executes `clo
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc68-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc68-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. After G-DEMO, take a partial on his demo account. Save `rc68-demo-partial.log`. Pass when the venue's position equals the handler's.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc68-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc68-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc68-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc68-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc68-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc68-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc68-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `qmn/tests -k app`, `qmb/tests -k unit`, `qml/tests`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. After G-DEMO, take a partial on his demo account. Save `check-demo-partial.log`. Pass when the venue's position equals the handler's.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4671,7 +4681,7 @@ After stop C, the demo facts. Slice 17. **What it does.** The node executes `clo
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A close on a position already gone doesn't raise, by R24's probe answer once known, otherwise by the fake.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc68-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-68-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4717,16 +4727,16 @@ After stop C, the demo facts. Slice 17. **What it does.** Targets may rest at th
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set and most need no model. Lanes 5 to 10 are the menu, and the coordinator runs one only if the done line depends on it.
 
-- [ ] Lane 1. Touched suites at the head, `packages/qmf-venue/tests`, `qmn/tests -k app`, `packages/qmf-risk/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `rc69-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
-- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `rc69-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
-- [ ] Lane 3. After G-DEMO, run the wick probe on his demo account. Save `rc69-demo-wick.log`. Pass when the target fills at its level.
-- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `rc69-fact.log`. Pass when the script exits 0 and prints the fact.
-- [ ] Lane 5. Run the PR's new tests three times in a row. Save `rc69-repeat.log`. Pass when the three runs agree.
-- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `rc69-leak.log`. Pass when none appears.
-- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `rc69-boot.log`. Pass when it answers and stops clean.
-- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `rc69-scans.log`. Pass when both exit 0.
-- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `rc69-k7.log`. Pass when it ends in a filled paper entry.
-- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `rc69-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+- [ ] Lane 1. Touched suites at the head, `packages/qmf-venue/tests`, `qmn/tests -k app`, `packages/qmf-risk/tests`, `qml/tests`, `qmb/tests -k unit`, `qmn/tests/test_app_runtime.py`, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.
+- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.
+- [ ] Lane 3. After G-DEMO, run the wick probe on his demo account. Save `check-demo-wick.log`. Pass when the target fills at its level.
+- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.
+- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.
+- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.
+- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.
+- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.
+- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -4737,7 +4747,7 @@ After stop C, the demo facts. Slice 17. **What it does.** Targets may rest at th
 
 **Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case, adversarial. The blast-radius fact is this. A market entry with no `OrderSpec` is byte-equal on the wire to before.
 
-- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc69-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact. It writes `review/rc-69-check-<head8>.md`, first line CLEAN or NOT CLEAN.
 - [ ] No screenshot or video is made, because no PR in this program changes a screen. The operator reviews the whole stack when he lands it.
 
 **Merge.**
@@ -4770,7 +4780,7 @@ Unproven until its PR runs. Real send times at a bell. Real throughput at 200 un
 
 ## Appendix C. Which PRs can run beside which
 
-Generated from every Files block and the dependency graph. The second column lists the PRs neither of which depends on the other and which share no path. Two PRs in the third column never run at once. A PR that adds a setting may also edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py` for its default, so the coordinator treats that file as shared by every such PR, and the builder names the edit in its PR body.
+Generated from every Files block and the dependency graph. The second column lists the PRs neither of which depends on the other and which share no path. Two PRs in the third column never run at once. A PR that adds a setting may also edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py` for its default, so the coordinator treats that file as shared by every such PR, and the builder names the edit in its PR body. `qml/tests/test_unit_refuses.py` moves with any PR that adds a schema field or lifts a refusal, listed or not, so it is shared the same way.
 
 | PR | Can run beside (neither depends on the other, no shared path) | Shares a path with | The shared paths |
 |---|---|---|---|
@@ -4792,7 +4802,7 @@ Generated from every Files block and the dependency graph. The second column lis
 | RC-16 | RC-12, RC-29 | RC-04, RC-06, RC-07, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-15, RC-18, RC-19, RC-21, RC-22, RC-24, RC-25, RC-26, RC-27, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qml/src/qml/lifecycle/machine.py`, `qml/src/qml/protocol/controls.py`, `qml/src/qml/protocol/unit.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-17 | RC-21, RC-22, RC-27, RC-30, RC-31, RC-32, RC-33, RC-34 | RC-05, RC-23, RC-28, RC-29, RC-47, RC-52, RC-54, RC-59, RC-62 | `qml/src/qml/numbers/records.py`, `qml/src/qml/unit/templates/canary.json`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/unit_check.py` |
 | RC-18 | RC-21, RC-22, RC-23, RC-24, RC-26, RC-27, RC-29, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-38, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-47 | RC-04, RC-08, RC-15, RC-16, RC-25, RC-28, RC-49, RC-54, RC-60, RC-63, RC-64 | `qmb/src/qmb/results/journal.py`, `qml/src/qml/lifecycle/machine.py`, `qmx-agents/packages/qmx-host/src/qmx_host/lifecycle.py`, `qmx-agents/packages/qmx-host/src/qmx_host/promote.py` |
-| RC-19 | RC-21, RC-22, RC-23, RC-24, RC-25, RC-28, RC-29, RC-33, RC-34, RC-35, RC-38, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-14, RC-15, RC-16, RC-26, RC-27, RC-30, RC-31, RC-32, RC-36, RC-37, RC-39, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmn/src/qmn/app/paper_lane.py`, `qmn/src/qmn/app/runtime.py`, `tools/lanes/k7_rehearsal.py` |
+| RC-19 | RC-21, RC-22, RC-23, RC-24, RC-25, RC-28, RC-29, RC-33, RC-34, RC-35, RC-38, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-14, RC-15, RC-16, RC-26, RC-27, RC-30, RC-31, RC-32, RC-36, RC-37, RC-39, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmn/src/qmn/app/paper_lane.py`, `qmn/src/qmn/app/runtime.py`, `qmx-agents/packages/qmx-host/tests/k7_rehearsal.py` |
 | RC-20 | RC-21, RC-22, RC-23, RC-24, RC-25, RC-26, RC-27, RC-28, RC-29, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-38, RC-39, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-47, RC-49, RC-50, RC-51, RC-52, RC-53, RC-54, RC-55, RC-56, RC-57, RC-58, RC-59, RC-60, RC-61, RC-63, RC-64, RC-65, RC-67, RC-68, RC-69 | RC-48, RC-62, RC-66 | `qmx-agents/apps/trading-node/app.toml`, `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py` |
 | RC-21 | RC-12, RC-15, RC-17, RC-18, RC-19, RC-20, RC-27, RC-28, RC-29, RC-30, RC-37, RC-38, RC-41, RC-44, RC-46, RC-47, RC-63 | RC-03, RC-04, RC-05, RC-06, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-16, RC-22, RC-23, RC-24, RC-25, RC-26, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-40, RC-42, RC-43, RC-45, RC-53, RC-55, RC-56, RC-58, RC-68, RC-69 | `qml/src/qml/blocks/api.py`, `qml/src/qml/compile/compiler.py`, `qml/src/qml/protocol/unit.py`, `qml/src/qml/receipt.py` |
 | RC-22 | RC-12, RC-15, RC-17, RC-18, RC-19, RC-20, RC-23, RC-27, RC-28, RC-29, RC-30, RC-36, RC-37, RC-38, RC-40, RC-44, RC-46, RC-47, RC-63 | RC-04, RC-06, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-16, RC-21, RC-24, RC-25, RC-26, RC-31, RC-32, RC-33, RC-34, RC-35, RC-41, RC-42, RC-43, RC-45, RC-50, RC-55, RC-56, RC-58, RC-68 | `packages/qmf-risk/src/qmf/risk/controls.py`, `qml/src/qml/fold.py`, `qml/src/qml/protocol/unit.py` |
@@ -4812,10 +4822,10 @@ Generated from every Files block and the dependency graph. The second column lis
 | RC-36 | RC-18, RC-20, RC-22, RC-29, RC-38, RC-63 | RC-03, RC-04, RC-06, RC-07, RC-08, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-23, RC-24, RC-26, RC-27, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-37, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-53, RC-55, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qml/src/qml/compile/compiler.py`, `qml/src/qml/protocol/controls.py`, `qml/src/qml/protocol/entry_chain.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-37 | RC-18, RC-20, RC-21, RC-22, RC-29, RC-39, RC-47, RC-48, RC-52, RC-53, RC-54, RC-56, RC-57, RC-59, RC-61, RC-62, RC-63, RC-66 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-14, RC-15, RC-16, RC-19, RC-26, RC-27, RC-28, RC-30, RC-31, RC-32, RC-36, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-49, RC-50, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmn/src/qmn/app/facts.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-38 | RC-18, RC-19, RC-20, RC-21, RC-22, RC-26, RC-29, RC-36, RC-39, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-47, RC-48, RC-49, RC-50, RC-51, RC-52, RC-53, RC-54, RC-55, RC-56, RC-57, RC-58, RC-59, RC-60, RC-61, RC-62, RC-63, RC-64, RC-65, RC-66, RC-67, RC-68, RC-69 | RC-35 | `qml/src/qml/blocks/stdlib/sqs-floor/1/block.py` |
-| RC-39 | RC-20, RC-29, RC-37, RC-38, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-47, RC-63 | RC-19 | `tools/lanes/k7_rehearsal.py` |
+| RC-39 | RC-20, RC-29, RC-37, RC-38, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-47, RC-63 | RC-19 | `qmx-agents/packages/qmx-host/tests/k7_rehearsal.py` |
 | RC-40 | RC-18, RC-20, RC-22, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-01, RC-04, RC-05, RC-06, RC-07, RC-08, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-25, RC-26, RC-27, RC-28, RC-30, RC-31, RC-32, RC-33, RC-34, RC-36, RC-37, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmb/src/qmb/host/unit_handler.py`, `qml/src/qml/blocks/api.py`, `qml/tests/test_socket_contracts.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-41 | RC-18, RC-20, RC-21, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-13, RC-14, RC-15, RC-16, RC-19, RC-22, RC-26, RC-27, RC-30, RC-31, RC-32, RC-36, RC-37, RC-40, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `packages/qmf-risk/src/qmf/risk/controls.py`, `qmn/src/qmn/app/node_links.py`, `qmn/src/qmn/app/runtime.py` |
-| RC-42 | RC-18, RC-20, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-22, RC-24, RC-25, RC-26, RC-27, RC-28, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-40, RC-41, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-52, RC-55, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmb/src/qmb/host/group_run.py`, `qmb/src/qmb/host/unit_handler.py`, `qml/src/qml/protocol/unit.py`, `qmn/src/qmn/app/outbox.py` and more |
+| RC-42 | RC-18, RC-20, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-22, RC-24, RC-25, RC-26, RC-27, RC-28, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-40, RC-41, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmb/src/qmb/host/unit_handler.py`, `qml/src/qml/protocol/unit.py`, `qmn/src/qmn/app/outbox.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-43 | RC-18, RC-20, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-22, RC-24, RC-25, RC-26, RC-27, RC-28, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-40, RC-41, RC-42, RC-44, RC-45, RC-46, RC-50, RC-51, RC-55, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmb/src/qmb/host/unit_handler.py`, `qml/src/qml/protocol/unit.py`, `qmn/src/qmn/app/outbox.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-44 | RC-18, RC-20, RC-21, RC-22, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-14, RC-15, RC-16, RC-19, RC-26, RC-27, RC-30, RC-31, RC-32, RC-36, RC-37, RC-40, RC-41, RC-42, RC-43, RC-45, RC-46, RC-50, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmn/src/qmn/app/outbox.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-45 | RC-18, RC-20, RC-29, RC-38, RC-39, RC-47, RC-63 | RC-03, RC-04, RC-05, RC-06, RC-07, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-22, RC-23, RC-24, RC-25, RC-26, RC-27, RC-28, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-40, RC-41, RC-42, RC-43, RC-44, RC-46, RC-50, RC-51, RC-53, RC-55, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmb/src/qmb/host/unit_handler.py`, `qml/src/qml/compile/compiler.py`, `qml/src/qml/numbers/convert.py`, `qml/src/qml/protocol/unit.py` and more |
@@ -4825,7 +4835,7 @@ Generated from every Files block and the dependency graph. The second column lis
 | RC-49 | RC-20, RC-38, RC-53, RC-58, RC-59, RC-61, RC-63 | RC-04, RC-07, RC-18, RC-27, RC-28, RC-37, RC-54, RC-60, RC-64 | `qmn/src/qmn/app/facts.py`, `qmx-agents/packages/qmx-host/src/qmx_host/promote.py` |
 | RC-50 | RC-20, RC-38, RC-53, RC-54, RC-56, RC-57, RC-59, RC-61, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-14, RC-15, RC-16, RC-19, RC-22, RC-26, RC-27, RC-30, RC-31, RC-32, RC-36, RC-37, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-51, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qml/src/qml/fold.py`, `qmn/src/qmn/app/node_links.py`, `qmn/src/qmn/app/outbox.py`, `qmn/src/qmn/app/runtime.py` |
 | RC-51 | RC-20, RC-38, RC-53, RC-54, RC-56, RC-57, RC-59, RC-61, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-10, RC-14, RC-15, RC-16, RC-19, RC-26, RC-27, RC-30, RC-31, RC-32, RC-36, RC-37, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-55, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qmn/src/qmn/app/runtime.py` |
-| RC-52 | RC-20, RC-37, RC-38, RC-53, RC-55, RC-56, RC-57, RC-58, RC-60, RC-61, RC-63, RC-64, RC-65 | RC-17, RC-42, RC-47, RC-54, RC-59, RC-62 | `qmb/src/qmb/host/group_run.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qmx-tools/tests/test_tools.py` |
+| RC-52 | RC-20, RC-37, RC-38, RC-53, RC-55, RC-56, RC-57, RC-58, RC-60, RC-61, RC-63, RC-64, RC-65 | RC-17, RC-47, RC-54, RC-59, RC-62 | `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qmx-tools/tests/test_tools.py` |
 | RC-53 | RC-20, RC-37, RC-38, RC-49, RC-50, RC-51, RC-52, RC-61, RC-62, RC-63 | RC-03, RC-06, RC-11, RC-13, RC-21, RC-23, RC-24, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-45, RC-56, RC-58, RC-68, RC-69 | `qml/src/qml/compile/compiler.py`, `qml/src/qml/unit/model.py` |
 | RC-54 | RC-20, RC-37, RC-38, RC-50, RC-51, RC-58, RC-61, RC-63 | RC-04, RC-17, RC-18, RC-47, RC-49, RC-52, RC-55, RC-59, RC-60, RC-62, RC-64 | `qml/src/qml/identity/table.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-host/src/qmx_host/promote.py`, `qmx-agents/packages/qmx-host/src/qmx_host/roll.py` and more |
 | RC-55 | RC-20, RC-38, RC-52, RC-57, RC-59, RC-61, RC-62, RC-63 | RC-04, RC-06, RC-07, RC-08, RC-09, RC-10, RC-11, RC-13, RC-14, RC-15, RC-16, RC-19, RC-21, RC-22, RC-24, RC-25, RC-26, RC-27, RC-30, RC-31, RC-32, RC-33, RC-34, RC-35, RC-36, RC-37, RC-40, RC-41, RC-42, RC-43, RC-44, RC-45, RC-46, RC-50, RC-51, RC-54, RC-56, RC-58, RC-60, RC-64, RC-65, RC-67, RC-68, RC-69 | `qml/src/qml/protocol/unit.py`, `qmn/src/qmn/app/runtime.py`, `qmx-agents/packages/qmx-host/src/qmx_host/roll.py` |
@@ -5085,16 +5095,16 @@ Each has the default this plan took. None waits.
 | # | What is open | Default in this plan | Whose |
 |---|---|---|---|
 | 1 | What a pod is. Past stop B, a later switch to a governing pod (V2) also throws away RC-53 to RC-55 | The build continues on recipes, and tells him at RC-48 once. To save that work he says so by stop B | Him |
-| 2 | The spine says the group replaces the `book` and `bms` shells, with no migration | RC-49 makes both kinds read-only and adds no migration, since the shells hold no live data at the tip (UNKNOWN on his real folder until he lands) | Lead or him |
-| 3 | The templates' extra blocks (fast-invalidation cut, thesis exit, own-percentile bench, count brake, two-speed breaker) have no slice in section 10, and slice 9 says templates A and B compile before the gate slot exists | RC-39 adds them after the gate, so K9 17 uses fixture units and the templates land one slice later than section 10 says | This plan |
-| 4 | No gate for his signature was found in `release_gate.py` or `build_release.py` | RC-20, RC-48 and RC-66 bump versions and write a note. No new gate is built | Release session |
-| 5 | A block that hangs again after each restart has no stand-down rule, now that hung-link protection is deferred | Named risk only. A hang restarts the node, and the owner stands the block down. Reopens with the worker process | Lead |
-| 6 | Agents with cTrader's MCP on the node's own demo account can open positions no unit holds. The older note wanted a `foreign` scope, and the fold has none | Not built. Handed to the agentic upgrade in `HANDOFFS.md`. RC-27's `account.open_risk` counts only positions the node holds, and says so in `basis` | Agentic session |
+| 2 | The spine says the group replaces the `book` and `bms` shells, with no migration | Settled by the code. RC-49 makes both kinds read-only and adds no migration. At the tip only their schemas and the registry migration name them (`from_registry.py:35-36`). UNKNOWN on his real folder until he lands | Him, on his folder only |
+| 3 | The templates' extra blocks (fast-invalidation cut, thesis exit, own-percentile bench, count brake, two-speed breaker) had no slice in section 10 | Settled. RC-39 adds them after the gate. K9 17 uses fixture units, and SPINE section 10 now says so | This plan |
+| 4 | No gate for his signature exists in `tools/release_gate.py` or `tools/build_release.py` (grep, 7 Nov) | Settled as a fact. RC-20, RC-48 and RC-66 bump versions and write a note. No new gate is built | Release session |
+| 5 | A block that hangs again after each restart has no stand-down rule, now that hung-link protection is deferred | Settled by AD-9 and SPINE section 11. Named risk only. A hang restarts the node, and the owner stands the block down. Reopens with the worker process | Lead, done |
+| 6 | Agents with cTrader's MCP on the node's own demo account can open positions no unit holds. The older note wanted a `foreign` scope, and the fold has none | Not built. Handed to the agentic upgrade in `HANDOFFS.md`. RC-27's `account.open_risk` counts only positions the node holds, and says so in `basis`, now a box there | Agentic session |
 | 7 | The two old repair notes were written against the superseded first spine (SQS in a guard package, targets rest at the venue, kill level meanings fixed) | The fold wins. `HANDOFFS.md` restates them. `gross_r` and `net_r` from the note are kept (RC-28) | Repair session |
-| 8 | `OPEN.md` rows 14, 21, 22 and `WALKS.md` 3, 8, 11 still speak of what the lead trimmed | Not edited, per the brief. `arch/final/FIXES.md` says `SPINE.md` wins | Lead |
-| 9 | Where the practice venue's bars ship, and whether `venue_records` accepts a venue with no broker | RC-19 ships them beside `practice.py`. Fallback in its section | This plan |
+| 8 | `OPEN.md` rows 14, 21, 22 and `WALKS.md` 3, 8, 11, 13 spoke of what the lead trimmed | Settled. Both were corrected on 7 Nov (`build/FINAL-CHECK.md`). `SPINE.md` still wins | Lead, done |
+| 9 | Where the practice venue's bars ship, and whether `venue_records` accepts a venue with no broker | Bars settled. RC-17 ships them in `qmn/app/practice_bars/`, and they serve both the backtest and the feed. Landing stays unproven. `venue_records` is cTrader only at the tip, so RC-19 widens it, with the fallback in its section | This plan |
 | 10 | "System 1 over System 2", N8N and white label appear in the older list and nowhere in the fold | Named in Appendix G to methodology and release. Nothing is built | Methodology, release |
-| 11 | PR count. Section 10 estimated 52 and this plan has 69, from splitting to one builder's size and adding three release PRs, the templates PR, the tool rows and the gallery | Honest count. Unmeasured how long a PR takes here | Lead |
+| 11 | PR count. Section 10 estimated 52 and this plan has 69 | Settled. 17 more, 6 added (release RC-20, RC-48, RC-66, templates RC-39, tool rows RC-47, gallery RC-57) and 11 splits to one builder's size. No split adds a seat the spine lacks. Unmeasured how long a PR takes here | Lead, done |
 
 ## Appendix I. CHECK's proven faults, each a named test
 
@@ -5149,9 +5159,9 @@ INFO 69 PR sections, code tree D:/QMX-worktrees/bld-repair-24 at 351e7521
 PASS every dependency names a PR that exists: 89 edges
 PASS no PR depends on itself or a later PR, so no cycle exists
 PASS a depth-first walk of the graph finds no cycle
-PASS every path marked new is absent from the code tree: 179 new paths
+PASS every path marked new is absent from the code tree: 184 new paths
 PASS no path is created twice
-PASS every edited path exists in the tree or is created by a PR this one depends on: 275 edits, 33 on paths an earlier PR creates
+PASS every edited path exists in the tree or is created by a PR this one depends on: 274 edits, 32 on paths an earlier PR creates
 PASS swap ledger holds all 31 placeholders and 18 sockets, each with a PR or a stated none: 52 rows
 PASS each ledger row names exactly the PRs whose sections declare that swap
 PASS coverage table holds every H line of SEEDS-2 Part C, each with a PR or a named session: 136 H lines, 16 older lines

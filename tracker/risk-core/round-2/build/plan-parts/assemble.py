@@ -84,7 +84,7 @@ def suites(pr):
 
 
 def section(pr):
-    low = pr["id"].lower().replace("-", "")
+    low = pr["id"].lower()
     out = [f"## {pr['title']} ({pr['id']})", ""]
     out.append(f"{STOP_NAME[pr['stop']]}. Slice {pr['slice']}. **What it does.** {pr['what']}")
     out.append("")
@@ -105,16 +105,16 @@ def section(pr):
     scenario, slug, passes = [s.strip() for s in pr["lane3"].split(" | ")]
     named = ", ".join(f"`{s}`" for s in suites(pr))
     out += [
-        f"- [ ] Lane 1. Touched suites at the head, {named}, and rerun at the parent only a test that failed. Save `{low}-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.",
-        f"- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `{low}-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.",
-        f"- [ ] Lane 3. {scenario}. Save `{low}-{slug}.log`. Pass when {passes}.",
-        f"- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `{low}-fact.log`. Pass when the script exits 0 and prints the fact.",
-        f"- [ ] Lane 5. Run the PR's new tests three times in a row. Save `{low}-repeat.log`. Pass when the three runs agree.",
-        f"- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `{low}-leak.log`. Pass when none appears.",
-        f"- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `{low}-boot.log`. Pass when it answers and stops clean.",
-        f"- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `{low}-scans.log`. Pass when both exit 0.",
-        f"- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `{low}-k7.log`. Pass when it ends in a filled paper entry.",
-        f"- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `{low}-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.",
+        f"- [ ] Lane 1. Touched suites at the head, {named}, and rerun at the parent only a test that failed. Save `check-suites.log`. Pass when the head fails nothing the parent passes, beyond the baseline reds in Appendix E.",
+        f"- [ ] Lane 2. Run this PR's new tests at the parent, with the test files copied in, and at the head. Save `check-red-green.log`. Pass when the behaviour tests fail at the parent and pass at the head.",
+        f"- [ ] Lane 3. {scenario}. Save `check-{slug}.log`. Pass when {passes}.",
+        f"- [ ] Lane 4. Run the blast-radius fact in the review gate at the head with a real script. Save `check-fact.log`. Pass when the script exits 0 and prints the fact.",
+        f"- [ ] Lane 5. Run the PR's new tests three times in a row. Save `check-repeat.log`. Pass when the three runs agree.",
+        f"- [ ] Lane 6. Grep every lane log of this PR for key, token and password values. Save `check-leak.log`. Pass when none appears.",
+        f"- [ ] Lane 7. Start the host at the head on a fresh throwaway QMX folder through `safe_host.py`, read its health route, then stop it. Save `check-boot.log`. Pass when it answers and stops clean.",
+        f"- [ ] Lane 8. Run `tools/money_path_scan.py` and `tools/secret_scan.py` at the head. Save `check-scans.log`. Pass when both exit 0.",
+        f"- [ ] Lane 9. Run K7 on a throwaway folder, once RC-19 is stacked. Save `check-k7.log`. Pass when it ends in a filled paper entry.",
+        f"- [ ] Lane 10. Remove the throwaway folders and the check copy, then list processes. Save `check-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.",
     ]
     perf = pr.get("perf", "Wall time of this PR's new tests, recorded, no fail rule.")
     out += ["", f"**Verify, perf.** {RULE}", "", f"- [ ] Metric. {perf}", "- [ ] Probe. Time the run at the parent and the head, interleaved.", "- [ ] Baseline. The parent's value, measured first.", "- [ ] Rule. No fail rule unless the metric above names one. Recorded for the trail."]

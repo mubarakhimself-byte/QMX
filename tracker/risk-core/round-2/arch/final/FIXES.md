@@ -72,7 +72,7 @@ Whether cTrader takes a no-stop market order (OPEN 24). Real send times and real
 
 ## The lead's trims, 7 Nov (`RUN.md` decisions log, on `CHECK.md`'s "Too much machine")
 
-Applied to `SPINE.md` and `SOLUTION.md`. AD ids are unchanged. `WALKS.md` and `OPEN.md` were not edited; where they still say `run_budgeted`, reservations, the group `order` block or the proposal tape (OPEN rows 14, 21 and 22, WALKS 3, 8 and 11), `SPINE.md` wins.
+Applied to `SPINE.md` and `SOLUTION.md`. AD ids are unchanged. `WALKS.md` and `OPEN.md` were corrected afterwards by `build/FINAL-CHECK.md` (OPEN rows 14, 21 and 22, WALKS 3, 8, 11 and 13). Older rows above still describe the design before these trims; `SPINE.md` wins.
 
 | Trim | What changed and where | Slice | Cost, named |
 |---|---|---|---|

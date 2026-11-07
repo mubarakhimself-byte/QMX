@@ -15,7 +15,7 @@ The program is `P/build/PLAN.md`. It holds 69 PRs. RC-01 to RC-20 end at stop A,
 The stack roots on the repair stack's tip, and repair runs in another session. Check this before anything else, and write nothing until it passes.
 
 1. `R/RESUME.md`'s first section after its opening lines reads `## CLOSED`, and `R/STACK-LIST.md`'s Counts line reads `24 built, 24 gated`.
-2. `git ls-remote origin build/repair-24` equals the R24 head in `R/STACK-LIST.md`'s table, `351e7521` when this was written. If the head is newer, take it and log it.
+2. `git ls-remote origin build/repair-24` equals the R24 head in `R/STACK-LIST.md`'s table, `351e7521` when this was written. If the head is newer, take it as the root and write it in `S/RESUME.md` when you arm.
 3. No repair job is live. `R/ledger.tsv`'s last row is R24 with a CLEAN verdict, and no tick is armed for that store.
 
 If any of the three fails, stop cleanly. Create nothing, dispatch nothing, and say exactly this to him, filling the bracket.
@@ -31,7 +31,7 @@ The two named baseline reds, the two red quality gates, and R24's lanes 5 and 6 
 3. `P/build/PLAN.md`. Read to the end of "Program checklist" and Appendices C to E, H and J yourself. Read a PR's own section only when you dispatch or check it. It is on branch `plan/risk-core`, and `.gitignore` ignores `build/`, so read it from disk.
 4. `P/BRIEF-COMMON.md`, then `P/RUN.md`'s decisions log, then `P/arch/final/OPEN.md`. Every OPEN row runs on its default.
 
-Do not read the architecture in full. Builders read what their section names. Never read old Hermes logs, which hold credentials. Do not touch `R` beyond copying its tools.
+Do not read the architecture in full. Builders read what their section names. Never read old Hermes logs, which hold credentials. Do not touch `R` beyond copying its tools. `P` is read-only too: progress lives in `S`, never in the plan's boxes.
 
 ## Arm the program
 
@@ -78,6 +78,8 @@ Do not read the architecture in full. Builders read what their section names. Ne
 7. At each stop point, tell him in plain words what now works, the one thing he can run or ask the copilot that shows it, and the one line he signs. At stop B, tell him once that this is the moment to choose what a pod is, and that the build goes on with recipes unless he says otherwise. Then keep building.
 
 ## Builder prompt template
+
+In both templates `{id}` is `rc-<nn>` in lower case, the name the gate and the evidence folder use.
 
 ```text
 Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents.
@@ -129,11 +131,11 @@ Re-read D:/QMX-worktrees/risk-ship/RESUME.md and the head of the plan at D:/QMX-
 
 - **It checks repair first.** If the repair stack isn't finished, it tells you so and stops, with nothing changed. Paste it again later.
 - **It never stops to ask you.** It takes the plan's default and writes what it chose, and how to undo it, in `QUESTIONS-FOR-OPERATOR.md` in `D:/QMX-worktrees/risk-ship/`. Bugs go to `BACKLOG.md`, ideas to `IDEAS.md`, and anything you ask for mid-run to `QUEUE.md`.
-- **Commit first.** The plan and these prompts must be committed on the plan branch before you paste, with `git add -f`, because `build/` folders are ignored.
+- **Commit first.** The lead commits the plan and these prompts on the plan branch before you paste, with `git add -f`, because `build/` folders are ignored. You only paste.
 - **Nothing merges.** You land the stack yourself, bottom to top, after the repair stack and the 94 earlier PRs. `STACK-LIST.md` is the list for the agent that lands it.
 - **One signature per stop point.** QML reaches the trading node, so each of the three stop points gives you one new version of the node to sign. The build doesn't wait for it, but a stop point isn't reached until you've signed. No code checks this today.
 - **One big choice, by stop B.** A pod as a recipe stamped into each unit, plus a small group above them (what this builds), or a pod as one live thing that governs its members. The walkthrough page explains it. Switching costs 4 to 6 PRs if you say so by stop B, and more after, because the build goes on with recipes.
-- **You may stop at any stop point.** Each leaves a whole thing. Stop A, one unit trades on paper. Stop B, the whole single-unit baseline. Stop C, groups, pods and the fleet watch.
+- **You may stop at any stop point.** Each leaves a whole thing. Stop A, one unit trades on paper from nothing and sizes itself, and a filter number can move. Its size and exit numbers first move in stop B. Stop B, the whole single-unit baseline. Stop C, groups, pods and the fleet watch.
 - **One cTrader demo sign-in, later.** On cTrader's own page, after you land. The signed stop, partials, trails and venue targets wait for it, as does a real check of costs. Nothing else does.
 - **No money, ever.** No live account is bound in this build. Every value is a labelled placeholder. A trade on paper here proves the machine works, not that any strategy does.
 - **A known risk you can overrule.** A block that hangs forever, rather than raising an error, restarts the node after 30 seconds. Your stops at the broker hold through it. Protecting against that needs more machinery, so it was left out on purpose until a hang is seen.

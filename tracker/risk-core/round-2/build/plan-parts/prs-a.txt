@@ -9,12 +9,12 @@ edit: {QT}/test_socket_contracts.py
 new: {QT}/test_library_block_enrolment.py
 swaps: E9 E10 E11
 build: Replace `_CEILING` (`test_socket_contracts.py:57`) with a contract that reads the block's own declared `fraction` from the evidence the test passes, so 0.02 passes as readily as 0.005.
-build: Feed the exit contract only evidence `HostedUnit.exits` really builds (`unit.py:671`), and stop feeding keys the host refuses.
-build: Enrol every `component` Library item the fixture lands in the same parametrized contract as stdlib blocks.
+build: Feed the exit contract only evidence `_Run.exits` really builds (`unit.py:671`), and stop feeding keys the host refuses.
+build: Enrol every block in a `component`-shaped fixture folder (`entry.json` and `block.py`; qml's tests hold no Library) in the same parametrized contract as stdlib blocks.
 see: Nothing changes for him. A real sizer stops failing a test that was written for a stand-in.
 test: `test_a_sizer_at_two_percent_meets_the_contract`. At equity 100000 and stop distance 0.0050 on a EURUSD fixture with `value_per_point` 100000, a fraction of 0.02 answers 4.00 lots and passes. At the parent this fails on the 0.005 ceiling.
-test: `test_a_library_sizer_is_enrolled`. A Library `component` sizer answering a float fails the contract with the same message a stdlib block gets.
-test: `test_the_exit_contract_feeds_only_host_evidence`. The contract's evidence keys equal the keys `HostedUnit.exits` builds on one real bar, compared as a literal set.
+test: `test_a_library_sizer_is_enrolled`. A sizer in that fixture folder answering a float fails the contract with the same message a stdlib block gets.
+test: `test_the_exit_contract_feeds_only_host_evidence`. The contract's evidence keys equal the keys `_Run.exits` builds on one real bar, compared as a literal set.
 lane3: Run `qml/tests/test_socket_contracts.py` with a planted always-pass sizer that answers 500 lots at equity 100000 | contract-bites | the planted sizer fails and the shipped placeholder passes
 lens: verification-gap, edge-case
 fact: The shipped placeholder sizer still passes after the ceiling goes, because its own `fraction` is the value the contract now reads.
@@ -22,7 +22,7 @@ fact: The shipped placeholder sizer still passes after the ceiling goes, because
 @@ RC-02 | Name every refused field, say what each risk module is for, and start the developer guide
 stop: A
 slice: 0
-what: The census test learns the new document fields, so a field nobody runs fails CI. The developer guide starts here as a generated file with a test that fails when it goes stale.
+what: The census test is proved to bite, so a field nobody runs fails CI. The developer guide starts here as a generated file with a test that fails when it goes stale.
 read: AD-20; SPINE section 7 "EXTENDING.md", "Module map"; K9 test 4.
 gates: None.
 depends: RC-01
@@ -31,12 +31,12 @@ new: packages/qmf-risk/MODULES.md
 new: tools/qml/extending.py
 new: tools/tests/test_extending.py
 new: qml/EXTENDING.md
-build: Extend the census to `authority`, `reads`, `tags`, `stages` and `recipe`, each expected to run, refuse with a reason, or carry a label.
+build: `_CENSUS` (`test_unit_refuses.py:33`) already holds `Unit.reads` and `NumberSpec.authority`. Prove it fails on an unlisted field. RC-03 adds `stages`, `tags` and `recipe` when those fields exist.
 build: Write one sentence per `qmf-risk` module saying whether it belongs to the new risk world or to the wire and accounting.
 build: Generate the socket list, refused fields with `_shape_problems` reasons, block answer shapes and journal kinds into `qml/EXTENDING.md`, with the written sections as headings only.
 see: A developer has one guide to open. It says today's truth and fails CI when it stops being true.
 test: `test_the_guide_fails_when_a_field_is_added`. Regenerating with one extra `Unit` field leaves a diff against the checked-in file and the test exits non-zero.
-test: `test_every_unit_field_is_run_refused_or_labelled`. The census lists `stages` as refused with the code `stages_not_built` until RC-56.
+test: `test_every_unit_field_is_run_refused_or_labelled`. `reads` answers the code `reads_not_built`, a literal, and a `Unit` field missing from `_CENSUS` fails the test.
 lane3: Run `tools/qml/extending.py --check` at the head and after deleting one line of `qml/EXTENDING.md` | guide-stale | the clean run exits 0 and the edited run exits 1 and names the line
 lens: verification-gap
 fact: The generator imports only `qml`, so `tools/tests/test_workspace_structure.py:138` still passes.
@@ -56,14 +56,15 @@ edit: {Q}/compile/compiler.py
 new: {QT}/test_unit_sections.py
 edit: {QT}/test_unit_refuses.py
 edit: {QT}/test_compile_dummy.py
-build: Add the optional fields `modifiers`, `gates`, `tolerations`, `stages`, `risk_locks`, `recipe`, `home_markets`, `tags` to `Unit`, each refused by name at compile until its own PR lifts it.
+build: Add the optional fields `modifiers`, `gates`, `tolerations`, `stages`, `risk_locks`, `recipe`, `home_markets`, `tags` to `Unit`, each added to `_CENSUS` and refused by name at compile until its own PR lifts it.
 build: Write `sections(document)` with AD-2's rules. A number bound in both is logic. A `reads` row bound by a logic slot is logic. A stage selector with an exit in its `stage_values` is logic. Only `recipe` sits outside both.
 build: Compute `compiled_fingerprint = H(logic_fingerprint, risk_fingerprint, format, options)` at `compiler.py:1072-1079`. Set `COMPILER_FORMAT_VERSION` to 5.
 see: Nothing changes for him yet. Changing how big a unit trades will no longer re-prove when it enters.
-test: `test_a_size_edit_moves_only_the_risk_fingerprint`. Editing `fraction` from 0.005 to 0.01 on the dummy leaves `logic_fingerprint` byte-equal and changes `risk_fingerprint`.
+test: `test_a_size_edit_moves_only_the_risk_fingerprint`. Editing `risk_fraction`, the number bound to the sizer's `fraction`, from 0.005 to 0.01 on the dummy leaves `logic_fingerprint` byte-equal and changes `risk_fingerprint`.
 test: `test_a_forgotten_field_falls_in_logic`. Each of the nine named fields (`baseline`, `claim_card`, `context_needs`, `family_id`, `lineage`, `plain_python`, `routes`, `title`, `unit_id`) appears in `LogicSection`, a literal list.
-test: `test_an_exit_stage_value_makes_the_selector_logic`. A selector with `multiple` in its `stage_values` lands in the logic half.
-lane3: Compile the dummy before and after a `fraction` edit and print both fingerprints | two-prints | logic equal, risk different, compiled different
+test: `test_an_exit_stage_value_makes_the_selector_logic`. A selector with `target_r` in its `stage_values` lands in the logic half.
+test: `test_a_new_field_refuses_by_name`. A document declaring `stages` answers `stages_not_built`.
+lane3: Compile the dummy before and after a `risk_fraction` edit and print both fingerprints | two-prints | logic equal, risk different, compiled different
 lens: edge-case, structure
 fact: Every shipped template and fixture compiles at format 5 with its decisions unchanged, by running the dummy through `qml/check/layer_g.py` at the parent and the head.
 
@@ -85,9 +86,9 @@ build: Make `opened_by` (`unit.py:672-674`) the logic fingerprint.
 build: Make `_g_record` and the node's gate (`runtime.py:2756`) ask for the logic fingerprint, and record the risk fingerprint and its click on the deployment.
 build: Refuse any host swap of a different compiled fingerprint over a held trade, except through a later `move_risk` or a drain.
 see: Nothing on a screen. A size edit will not cost a re-test of when the unit trades.
-test: `test_exits_fire_after_a_risk_only_recompile`. COMPARE's probe inverted. A held position with a time exit reads 1 exit intent over 60 bars after a `fraction` recompile. At the parent it reads 0.
+test: `test_exits_fire_after_a_risk_only_recompile`. COMPARE's probe inverted. A held position with a time exit reads 1 exit intent over 60 bars after a `risk_fraction` recompile. At the parent it reads 0.
 test: `test_a_logic_edit_needs_a_new_g_record`. A deployment whose logic fingerprint has no G record is refused with the name `g_record_missing`.
-lane3: Promote the dummy on the fake broker, recompile with a new `fraction`, and drive 60 bars | exits-survive | one exit intent fires and the journal names the logic fingerprint
+lane3: Promote the dummy on the fake broker, recompile with a new `risk_fraction`, and drive 60 bars | exits-survive | one exit intent fires and the journal names the logic fingerprint
 lens: edge-case, adversarial
 fact: A size-only edit moves today's compiled fingerprint and leaves the new logic fingerprint equal, run on the real compiler.
 
@@ -185,7 +186,7 @@ edit: {Q}/protocol/unit.py
 new: {Q}/receipt.py
 new: {QT}/test_receipt.py
 new: {QT}/conformance_tape/README.md
-new: {BT}/test_conformance_tape.py
+new: {NT}/test_conformance_tape.py
 edit: {D}/journal_kinds/unit.py
 edit: {QB}/results/journal.py
 edit: {N}/app/runtime.py
@@ -268,10 +269,10 @@ build: Lift `exit_not_built` for a second per-bar exit. Bump the compiler format
 build: Add the import test, parsing `protocol/exits.py` to prove it imports nothing from `entry_chain`, `node_chain`, `fold` or the readings feed.
 see: A short's stop now feels the spread, and every close says why it closed.
 test: `test_k9_3_exit_code_cannot_import_the_chain`. The parsed import list of `exits.py` shares no name with the four forbidden modules. A planted import fails it.
-test: `test_a_short_reads_ask_bars`. A short with a stop at 1.1000, bid high 1.0995 and ask high 1.1002 closes on that bar. At the parent it does not.
+test: `test_a_short_reads_ask_bars`. `swing-stop-buffer` on a short with zero buffer, on bars whose confirmed swing high is 1.0995 on the bid and 1.1002 on the ask, answers a stop of 1.1002. At the parent it answers 1.0995, because `unit.py:574-576` feeds it bid bars. The fills already read the closing side (`fill.py:1306`), so the fault is the level.
 test: `test_full_beats_partial_beats_amend`. Three exits answering on one bar give one `close_full` with the first full exit's reason code.
 test: `test_a_raising_exit_falls_to_the_next`. Stack of a raising exit and a time exit. The time exit closes and one `Fault` has `phase == "exit"`.
-lane3: Replay a short through a 2-pip spread spike at the parent and the head | short-spread | head closes on the spike bar and parent does not
+lane3: Print a short's stop level on bars with a 2-pip spread at the parent and the head | short-spread | the head's level sits on the ask swing high and the parent's on the bid's
 lens: edge-case, adversarial
 fact: A second per-bar exit never changes a unit with one exit, by comparing decisions on the dummy across the bump.
 
@@ -410,13 +411,21 @@ new: {Q}/numbers/shipped_records.json
 edit: {Q}/numbers/records.py
 edit: {T}/functions.py
 edit: {T}/unit_check.py
-new: {QT}/test_template_canary.py
-build: Write `canary` with `fixed-fraction-at-stop@2`, the three `@2` exits, one position, the kill switch only, and `origin: placeholder` on every number with a range and a reason.
+new: qmx-agents/packages/qmx-tools/tests/test_template_canary.py
+new: qmx-agents/apps/qmb/tests/test_practice_month.py
+new: {QT}/test_canary_motion.py
+new: {H}/practice_start.py
+new: {N}/app/practice_bars/README.md
+build: Write `canary` with the dummy's logic and number names, `fixed-fraction-at-stop@2`, the three `@2` exits, one position, the kill switch only, and `origin: placeholder` on every number with a range and a reason.
+build: Keep `min_trend_strength` on `trend-floor-from-record@2` with motion on, so one filter number moves by the built engine from stop A. Size and exit numbers stay fixed until RC-25.
+build: Ship the synthetic month now held only in `qml/tests/fixtures/slices` under `practice_bars/`, saved under dukascopy-node's names as `test_qmb_app.py` does. `practice_start.py` copies it into an empty market store as source `practice` and lands the shipped instrument records on `main`, which promote reads. Today a missing month is refused by name (`test_qmb_app.py:424`), so without this nothing can test from zero.
 build: Ship records for its markets labelled `source: shipped`, including their `conversions`. Let `unit_new` list every JSON in the templates folder.
-see: A new person can pick a template that works, and it says plainly it is a shape and has no brakes.
+see: A new person, or the copilot through `unit_new`, can pick a template that works, and it says plainly it is a shape and has no brakes.
 test: `test_canary_compiles_from_nothing`. `unit_new("canary", {})` then `unit_check` on an empty store answers no problem, with warnings naming "no brakes" and every number labelled.
 test: `test_a_new_template_is_one_json`. Dropping a second JSON in the folder lists 3 templates with no other edit.
-lane3: From an empty throwaway QMX folder, run `unit_new`, `unit_check` and `backtest_run` for `canary` | canary-backtest | the backtest finishes with a stamped run and a G record for the logic fingerprint
+test: `test_a_backtest_finds_bars_from_an_empty_store`. After `practice_start`, `backtest_run` with `source: practice` finishes and a G record with `safety_passed` exists for the logic fingerprint.
+test: `test_canary_moves_its_filter_number`. After 20 scripted closed trades on the hosted unit, `min_trend_strength` reads 0.0001, from 0, with one calibration row.
+lane3: From an empty throwaway QMX folder, run `practice_start`, `unit_new`, `unit_check` and `backtest_run` with `source: practice` for `canary` | canary-backtest | the backtest finishes with a stamped run and a G record for the logic fingerprint
 lens: verification-gap, structure
 fact: `unit_check` reads a shipped record through the same path as a Library record, by a recording store.
 
@@ -435,7 +444,7 @@ edit: tools/tests/test_first_real_start.py
 edit: {QT}/test_lifecycle.py
 edit: {QB}/results/journal.py
 edit: tools/money_path_scan.py
-new: tools/tests/test_no_agent_money_door.py
+new: qmx-agents/packages/qmx-tools/tests/test_no_agent_money_door.py
 fault: B3
 build: Add `Transition(DRAFT, PAPER, HIS_CLICK)` at `machine.py:105-117`. Keep `_admit`'s demand for a G record with `safety_passed` (`promote.py:376, 565-578`).
 build: Change `first_real_start.py`'s header (`:8`), which says a unit reaches a node by passing the judge.
@@ -457,19 +466,19 @@ read: SPINE section 6 steps 3 to 6 and "Day one for a stranger"; `FIXES.md` S8; 
 gates: Fallback if practice can't bind through the promote path, K7 ends on the fake broker and the PR body says the stranger path is short by that.
 depends: RC-18
 new: {N}/app/practice.py
-new: {N}/app/practice_bars/README.md
 edit: {N}/app/runtime.py
 edit: {N}/app/paper_lane.py
 edit: {H}/venue_records.py
-new: tools/lanes/k7_rehearsal.py
-new: tools/tests/test_k7_rehearsal.py
+new: qmx-agents/packages/qmx-host/tests/k7_rehearsal.py
+new: qmx-agents/packages/qmx-host/tests/test_k7_rehearsal.py
 fault: B3b
 build: Add the production builder over `ConformanceAccount` (`runtime.py:698`) and a feed replaying shipped bars, world `paper`, kind `practice`, stated in every card and row.
-build: Write K7 as a script a test runs. Its steps are `unit_new`, check, backtest, click, stage, warm up, first signal, row, fill.
+build: Land one `account` with world `paper` and one `venue` row on `main` through `venue_records`, because promote refuses without them (`promote.py:378`).
+build: Write K7 as a script a test runs, in the `qmx-agents` env, the only one holding `qmx_tools`, `qmx_host`, `qmn` and `qmb` together. Its steps are `practice_start`, `unit_new`, check, backtest, click, stage, warm up, first signal, row, fill.
 see: Stop point A. A person with no broker picks `canary`, clicks once, and watches one filled paper trade, labelled practice.
 test: `test_k9_7_canary_reaches_a_filled_paper_entry`. From an empty store with no judge run, K7 ends with 1 fill, 1 decision row written before the send, and the row's quantity equal to the fill's.
 test: `test_practice_says_it_is_practice`. Every row and card from this venue carries `world == "paper"` and `venue_kind == "practice"`.
-lane3: Run `tools/lanes/k7_rehearsal.py` on a fresh throwaway home | k7 | it prints PASS for each step and ends with one filled entry
+lane3: Run `qmx-agents/packages/qmx-host/tests/k7_rehearsal.py` on a fresh throwaway home | k7 | it prints PASS for each step and ends with one filled entry
 lens: edge-case, verification-gap
 fact: The practice venue can't reach a network, by running K7 with sockets refused.
 perf: Seconds for K7 end to end, recorded as the program's first baseline.

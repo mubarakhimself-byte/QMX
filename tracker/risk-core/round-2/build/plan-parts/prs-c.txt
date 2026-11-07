@@ -87,11 +87,11 @@ what: `group_run` replays many units in QMB with the node's pass-two order, stam
 read: SPINE section 6 "One evaluator"; OPEN row 20; K9 test 13.
 gates: None.
 depends: RC-51
-edit: {QB}/host/group_run.py
+new: {QB}/host/group_run.py
 edit: {CTL}/catalog.py
 edit: {T}/functions.py
 edit: qmx-agents/packages/qmx-tools/tests/test_tools.py
-new: {BT}/test_group_run.py
+new: {NT}/test_app_group_run.py
 new: {NT}/test_app_group_200.py
 build: Drive several `HostedUnit`s with one ledger in QMB, in rank order.
 build: Measure pass one, pass two and rows per bar at 200 units and record them, with no fail rule the first time.
@@ -195,7 +195,7 @@ edit: {QT}/test_unit_refuses.py
 new: {QT}/test_stages.py
 build: Lift `stages`. Compile all rows into the plan. Selector fact read at its anchor only.
 see: A unit changes how it sizes at a level you declared, with one click covering all of it up front.
-test: `test_a_stage_moves_at_the_anchor`. Equity 5100 at the anchor with threshold 5000 and hysteresis 200 moves up. 5100 mid-day doesn't, and 4900 back doesn't.
+test: `test_a_stage_moves_at_the_anchor`. Equity 5100 at the anchor with threshold 5000 and hysteresis 200 moves up. 5100 mid-day doesn't, and 4900 back doesn't, because down needs below 4800.
 test: `test_a_card_waits_and_the_old_stage_trades`. Move up is `card`. Rows stay on stage 1 until the answer.
 test: `test_no_new_version_on_a_move`. Both fingerprints equal across a move.
 lane3: Walk equity across a level on the fake broker | stage | one `stage_move` row with the literal anchor
@@ -281,10 +281,10 @@ what: This proves "one folder, zero core edits" by trading a Library sizer on th
 read: OPEN row 11; SPINE section 10 slice 14; SEEDS H-05, H-72 to H-75.
 gates: Fallback if the trace fails, a stdlib path with his signature until fixed, and the promise is withdrawn from the guide.
 depends: RC-58, RC-59
-new: {NT}/test_app_library_block_trades.py
+new: qmx-agents/packages/qmx-host/tests/test_library_block_trades.py
 edit: {H}/promote.py
 edit: {N}/app/runtime.py
-new: tools/lanes/library_block_trace.py
+new: qmx-agents/packages/qmx-host/tests/library_block_trace.py
 build: Fix whatever the trace finds on the promote and node path, inside these files. Anything bigger is a finding.
 see: A new sizer written today trades tonight, on paper, with no one touching the core.
 test: `test_a_library_sizer_trades_on_the_fake_broker`. Library sizer answering `Amount(money_at_risk, 200)` gives 0.40 lots on EURUSD at stop distance 0.0050.

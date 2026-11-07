@@ -16,7 +16,7 @@ Each PR section opens with the stop point and slice of `arch/final/SPINE.md`, wh
 
 The stop points, each a whole baseline he may stop at.
 
-- Stop A, after RC-20. One unit trades on paper from zero, with no broker and no judge, and brakes bind on any unit that declares them.
+- Stop A, after RC-20. One unit trades on paper from zero, with no broker and no judge, sizes itself, and brakes bind on any unit that declares them. A filter number moves by the built engine. A size or exit number first moves at RC-26, in stop B.
 - Stop B, after RC-48. The whole single-unit baseline. Three templates side by side, modifiers, numbers that move, costs from fills, gate, stickers, two passes, no-stop.
 - Stop C, after RC-66. Groups, pods, readings, shipping through mini apps, the fleet watch, re-test on every compiler bump.
 - After stop C. RC-67 to RC-69 wait for his demo sign-in, and nothing deploys live before them or a re-test.

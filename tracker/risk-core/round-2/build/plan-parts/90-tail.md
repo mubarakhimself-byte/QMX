@@ -22,7 +22,7 @@ Unproven until its PR runs. Real send times at a bell. Real throughput at 200 un
 
 ## Appendix C. Which PRs can run beside which
 
-Generated from every Files block and the dependency graph. The second column lists the PRs neither of which depends on the other and which share no path. Two PRs in the third column never run at once. A PR that adds a setting may also edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py` for its default, so the coordinator treats that file as shared by every such PR, and the builder names the edit in its PR body.
+Generated from every Files block and the dependency graph. The second column lists the PRs neither of which depends on the other and which share no path. Two PRs in the third column never run at once. A PR that adds a setting may also edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py` for its default, so the coordinator treats that file as shared by every such PR, and the builder names the edit in its PR body. `qml/tests/test_unit_refuses.py` moves with any PR that adds a schema field or lifts a refusal, listed or not, so it is shared the same way.
 
 {{BESIDE}}
 
@@ -61,16 +61,16 @@ Each has the default this plan took. None waits.
 | # | What is open | Default in this plan | Whose |
 |---|---|---|---|
 | 1 | What a pod is. Past stop B, a later switch to a governing pod (V2) also throws away RC-53 to RC-55 | The build continues on recipes, and tells him at RC-48 once. To save that work he says so by stop B | Him |
-| 2 | The spine says the group replaces the `book` and `bms` shells, with no migration | RC-49 makes both kinds read-only and adds no migration, since the shells hold no live data at the tip (UNKNOWN on his real folder until he lands) | Lead or him |
-| 3 | The templates' extra blocks (fast-invalidation cut, thesis exit, own-percentile bench, count brake, two-speed breaker) have no slice in section 10, and slice 9 says templates A and B compile before the gate slot exists | RC-39 adds them after the gate, so K9 17 uses fixture units and the templates land one slice later than section 10 says | This plan |
-| 4 | No gate for his signature was found in `release_gate.py` or `build_release.py` | RC-20, RC-48 and RC-66 bump versions and write a note. No new gate is built | Release session |
-| 5 | A block that hangs again after each restart has no stand-down rule, now that hung-link protection is deferred | Named risk only. A hang restarts the node, and the owner stands the block down. Reopens with the worker process | Lead |
-| 6 | Agents with cTrader's MCP on the node's own demo account can open positions no unit holds. The older note wanted a `foreign` scope, and the fold has none | Not built. Handed to the agentic upgrade in `HANDOFFS.md`. RC-27's `account.open_risk` counts only positions the node holds, and says so in `basis` | Agentic session |
+| 2 | The spine says the group replaces the `book` and `bms` shells, with no migration | Settled by the code. RC-49 makes both kinds read-only and adds no migration. At the tip only their schemas and the registry migration name them (`from_registry.py:35-36`). UNKNOWN on his real folder until he lands | Him, on his folder only |
+| 3 | The templates' extra blocks (fast-invalidation cut, thesis exit, own-percentile bench, count brake, two-speed breaker) had no slice in section 10 | Settled. RC-39 adds them after the gate. K9 17 uses fixture units, and SPINE section 10 now says so | This plan |
+| 4 | No gate for his signature exists in `tools/release_gate.py` or `tools/build_release.py` (grep, 7 Nov) | Settled as a fact. RC-20, RC-48 and RC-66 bump versions and write a note. No new gate is built | Release session |
+| 5 | A block that hangs again after each restart has no stand-down rule, now that hung-link protection is deferred | Settled by AD-9 and SPINE section 11. Named risk only. A hang restarts the node, and the owner stands the block down. Reopens with the worker process | Lead, done |
+| 6 | Agents with cTrader's MCP on the node's own demo account can open positions no unit holds. The older note wanted a `foreign` scope, and the fold has none | Not built. Handed to the agentic upgrade in `HANDOFFS.md`. RC-27's `account.open_risk` counts only positions the node holds, and says so in `basis`, now a box there | Agentic session |
 | 7 | The two old repair notes were written against the superseded first spine (SQS in a guard package, targets rest at the venue, kill level meanings fixed) | The fold wins. `HANDOFFS.md` restates them. `gross_r` and `net_r` from the note are kept (RC-28) | Repair session |
-| 8 | `OPEN.md` rows 14, 21, 22 and `WALKS.md` 3, 8, 11 still speak of what the lead trimmed | Not edited, per the brief. `arch/final/FIXES.md` says `SPINE.md` wins | Lead |
-| 9 | Where the practice venue's bars ship, and whether `venue_records` accepts a venue with no broker | RC-19 ships them beside `practice.py`. Fallback in its section | This plan |
+| 8 | `OPEN.md` rows 14, 21, 22 and `WALKS.md` 3, 8, 11, 13 spoke of what the lead trimmed | Settled. Both were corrected on 7 Nov (`build/FINAL-CHECK.md`). `SPINE.md` still wins | Lead, done |
+| 9 | Where the practice venue's bars ship, and whether `venue_records` accepts a venue with no broker | Bars settled. RC-17 ships them in `qmn/app/practice_bars/`, and they serve both the backtest and the feed. Landing stays unproven. `venue_records` is cTrader only at the tip, so RC-19 widens it, with the fallback in its section | This plan |
 | 10 | "System 1 over System 2", N8N and white label appear in the older list and nowhere in the fold | Named in Appendix G to methodology and release. Nothing is built | Methodology, release |
-| 11 | PR count. Section 10 estimated 52 and this plan has 69, from splitting to one builder's size and adding three release PRs, the templates PR, the tool rows and the gallery | Honest count. Unmeasured how long a PR takes here | Lead |
+| 11 | PR count. Section 10 estimated 52 and this plan has 69 | Settled. 17 more, 6 added (release RC-20, RC-48, RC-66, templates RC-39, tool rows RC-47, gallery RC-57) and 11 splits to one builder's size. No split adds a seat the spine lacks. Unmeasured how long a PR takes here | Lead, done |
 
 ## Appendix I. CHECK's proven faults, each a named test
 
