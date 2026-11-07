@@ -13,6 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
+from qmb.host.behaviour import check_behaviour
 from qmb.host.replay import (
     WINDOW_MEMORY_TOLERANCE,
     Bar,
@@ -23,7 +24,6 @@ from qmb.host.replay import (
     replay_feed,
     window_size,
 )
-from qmb.host.behaviour import check_behaviour
 from qmb.host.unit_runner import load_unit_folder, run_loaded
 from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
