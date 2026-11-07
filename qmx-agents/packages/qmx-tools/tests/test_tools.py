@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import runpy
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -419,7 +420,9 @@ DAY = datetime(2025, 1, 2, tzinfo=UTC)
 WINDOW = {"start": "2025-01-02T07:00:00Z", "end": "2025-01-02T09:00:00Z"}
 
 
-def _envelope(kind: str, minute: int, body: dict[str, object], **facts: object) -> dict[str, Any]:
+def _envelope(
+    kind: str, minute: int, body: Mapping[str, object], **facts: object
+) -> dict[str, Any]:
     return {
         "kind": kind,
         "record_id": f"node@this-pc/{kind}-{minute}",
