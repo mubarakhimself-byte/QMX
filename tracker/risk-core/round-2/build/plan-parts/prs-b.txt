@@ -1,0 +1,686 @@
+@@ RC-21 | Give size its named modifiers
+stop: B
+slice: 6
+what: `modifiers` runs as an ordered list on the risk half, each answering a factor inside a declared range with a reason on the receipt. The level is one named modifier with no ladder law, and a modifier may raise.
+read: AD-11; SPINE section 3 `ModifierInstance`; SWAP-CHART row E2; FUNNEL row S2.
+gates: None.
+depends: RC-08
+edit: {Q}/protocol/unit.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/blocks/api.py
+edit: {Q}/receipt.py
+new: {Q}/blocks/stdlib/level-factor/1/block.py
+new: {Q}/blocks/stdlib/level-factor/1/entry.json
+new: {QT}/test_modifiers.py
+swaps: E2
+build: Run the `sizing_modifier` role in `price`. Combine by product or a declared combiner. A `cap` row takes the lowest.
+build: Refuse a factor outside its declared range at the row, by name. Print each factor in `explain_size`.
+see: Anything that changes a size has a name, a range and a reason you can read.
+test: `test_two_modifiers_multiply`. Factors 0.5 and 1.5 on 500 money at risk at stop distance 0.0050 on EURUSD give 375 and 0.75 lots, and the trail prints both.
+test: `test_a_factor_outside_its_range_is_refused_by_name`. A factor of 3 on a range of 0 to 2 answers `factor_out_of_range`, and that modifier reads neutral with its fail mode.
+lane3: Print `explain_size` for a fake-broker trade with two modifiers | trail-two | the trail shows base, both factors, reasons and the sent quantity
+lens: edge-case
+fact: A unit with no `modifiers` gets a size byte-equal to RC-08's, over the conformance tape.
+
+@@ RC-22 | Make house money one rule on one ledger, and switch rows on by a fact
+stop: B
+slice: 6
+what: House money and reverse house money become one `cushion-rule` modifier reading one cushion ledger, kept as a scope of the fold. Any row may bind `enabled` to a fact, so one group fact can switch a modifier for a whole pod later.
+read: AD-8 "enabled", AD-11, AD-18; FUNNEL D13; SEEDS H-54, H-55.
+gates: None. The ledger presses on realised winnings only.
+depends: RC-14, RC-21
+edit: {Q}/fold.py
+edit: {R}/controls.py
+edit: {Q}/protocol/unit.py
+new: {Q}/blocks/stdlib/cushion-rule/1/block.py
+new: {Q}/blocks/stdlib/cushion-rule/1/entry.json
+new: {Q}/blocks/stdlib/press-gate/1/block.py
+new: {Q}/blocks/stdlib/press-gate/1/entry.json
+new: {QT}/test_cushion_rule.py
+build: Add the cushion ledger with an anchor to the fold. A fixed anchor presses and brakes, and a running-peak anchor only brakes.
+build: Read `enabled` as a bool or a fact name on every row.
+see: Your house money idea and your reverse of it are one thing with one switch.
+test: `test_a_fixed_anchor_presses_and_brakes`. Anchor at the day, realised +100 on a base of 100 gives factor above 1 at strength 1 (1.5 in the fixture), realised -50 gives factor 0.75.
+test: `test_a_peak_anchor_only_brakes`. Same trades with a running-peak anchor give factors 1 and 0.75.
+test: `test_open_profit_never_presses`. An unrealised +500 leaves factor 1.
+lane3: Print a day of ten fixture trades through `explain_size` | cushion-day | the literal factor column in the fixture matches line by line
+lens: edge-case, adversarial
+fact: The ledger reads only rows, so a restart mid-day gives the same factor, by folding from a cold start.
+
+@@ RC-23 | Give every number its derivation, range, authority and reason
+stop: B
+slice: 7
+what: `NumberSpec` gains who may move a number and why it holds its value, and `unit_check` refuses a number with no reason or range. A replay's find records `Origin.found_by_replay`.
+read: AD-14; SPINE section 3 "Numbers"; K9 test 5; SEEDS H-23 to H-27.
+gates: None.
+depends: RC-17
+edit: {Q}/unit/model.py
+edit: {Q}/unit/qmx.unit.1.schema.json
+edit: {Q}/unit/parse.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/check/layers.py
+edit: {Q}/unit/templates/canary.json
+edit: {Q}/unit/templates/dummy-trend-pullback.json
+new: {QT}/test_number_spec.py
+build: Add `derivation`, `authority`, `owner`, `reason`, `cautious`, `guard`, `never_self_tune`, `applies_to_open_positions`, `stage_values`.
+build: Make check answer by name for a missing reason or range, and label every shipped value `origin: placeholder`, owner "numbers talk".
+see: Any number can answer "why is it this and who may change it".
+test: `test_k9_5_every_number_has_a_reason_and_range`. A number with no `reason` answers the problem `number_no_reason`, and no range answers `number_no_range`.
+test: `test_a_template_number_reads_its_label`. `unit_explain` on `canary` prints `fraction`, 0.005, its range, its reason, `placeholder`.
+lane3: Run `unit_check` on every shipped template | labels | every number prints a reason and a range and no problem is listed
+lens: verification-gap
+fact: Old documents upgrade through `unit/upgrade.py`, by loading the corpus fixture at the head.
+
+@@ RC-24 | Widen the built engine to risk numbers, with a bounded memory
+stop: B
+slice: 7
+what: The built motion engine can now bind sizer, exit and control numbers, reads a bounded window, keeps its cadence at an anchor, and its constants become editable rows. Track arrives as a `scaled` number following a fact each bar.
+read: AD-14 steps 1 and 2; SWAP-CHART rows 7, E12, E18; `engine.py:39-44, 122, 124`.
+gates: None. Presets stay off for size.
+depends: RC-23
+edit: {Q}/motion/engine.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/unit/model.py
+edit: {Q}/protocol/unit.py
+new: {QT}/test_motion_widened.py
+swaps: PH7 E12 E18
+build: Widen `_bound_on` and the stamp search (`compiler.py:510-516, 620-631`) to sizer, control and exit bindings.
+build: Bound `SlowState.read` to `Motion.window`. Add `cadence.at`, `min_trades`, `shrink_k`, `scaled_fact`.
+build: Give the rule evidence `stamp`, beside `strength` and declared facts.
+see: Nothing on a screen. Next it can learn a size inside a range you set.
+test: `test_memory_is_bounded`. Window 20 after 1000 trades holds `len(read) == 20`. At the parent it holds 1000.
+test: `test_a_scaled_number_follows_its_fact`. Multiple 2 on a fact of 0.0010 reads 0.0020 on this bar and 0.0040 when the fact reads 0.0020.
+test: `test_shuffle_control`. Over a seeded shuffled outcome list the number stays inside its range and within one step of its seed on average, labelled mechanism only.
+lane3: Run the shipped `trend-floor-from-record` rule at the parent and the head | floor-same | `min_trend_strength` moves from 0 to 0.0001 after 20 trades in both
+lens: edge-case
+fact: The existing logic number moves exactly as before, by the lane above.
+
+@@ RC-25 | Let a sizing number and an exit number really move, and show it on the receipt
+stop: B
+slice: 7
+what: Trades now carry the value in force as a stamp `number:<name>`, so the engine stops skipping them, and `own-r-step@1` ships so there is a real rule to run. Any block that ignores a moved number fails the contract, and `explain_size` prints the calibration row that set it.
+read: AD-14 steps 1 to 4; K9 test 6; `FIXES.md` "Self-configuration, end to end"; SWAP-CHART row 3.
+gates: None.
+depends: RC-24
+edit: {QB}/host/unit_handler.py
+edit: {Q}/protocol/unit.py
+edit: {Q}/motion/engine.py
+edit: {Q}/receipt.py
+edit: {QB}/results/journal.py
+new: {Q}/blocks/stdlib/own-r-step/1/block.py
+new: {Q}/blocks/stdlib/own-r-step/1/entry.json
+edit: {QT}/test_socket_contracts.py
+new: {QT}/test_number_moves.py
+swaps: PH3 PH7
+fault: MOVE1
+build: Stamp from `numbers_in_force` into the trade row's `entry_stamps`, beside `_stamps` (`unit_handler.py:223-231`).
+build: Write `own-r-step@1`, a labelled placeholder that moves one step inside its range by the mean R of its own trades, toward `cautious` when below zero.
+build: Add K9 6's check. Answer must change when a bound number in `evidence` changes.
+see: A unit can correct itself inside a range you set, and it tells you which trade row moved it.
+test: `test_k9_6_a_block_ignoring_a_moved_number_fails`. `fixed-fraction-at-stop@1` fails with `ignores_moved_number` and `@2` passes.
+test: `test_fraction_moves_and_the_next_entry_uses_it`. With `min_trades` 20 and step 0.0001 after 20 trades at mean -0.5R, a calibration row moves `fraction` from 0.005 to 0.0049, and the next EURUSD entry at equity 100000 and stop distance 0.0050 is 0.98 lots.
+test: `test_explain_size_names_the_row`. `explain_size` prints `fraction 0.0049 default 0.005` and the calibration row id.
+lane3: Run K9 15's scripted trades on QMB | moves-qmb | the printed quantity and target match the literals
+lens: edge-case, verification-gap
+fact: `engine.py:122` no longer skips a stamped risk trade, run on the real engine with a patched log of stamps.
+
+@@ RC-26 | Keep open trades on their numbers, and survive a restart mid-count
+stop: B
+slice: 7
+what: A held position keeps the numbers it opened with, so a sizer or exit number needs no flat unit and moves with other markets held. `_OwnJournal` is seeded from trade rows, so a restart mid-count ends in the same move.
+read: AD-14 steps 5 and 6; K9 test 15; SWAP-CHART rows 8, 22, E15.
+gates: None. `applies_to_open_positions` lifts in RC-68.
+depends: RC-25
+edit: {Q}/protocol/unit.py
+edit: {N}/app/runtime.py
+edit: {QB}/host/unit_handler.py
+new: {NT}/test_app_number_moves.py
+swaps: PH8 PH22 E15
+fault: MOVE
+build: Add `numbers_at_entry` to `PositionFacts`, filled at entry. Read a logic number's flat rule per market at `unit.py:543`.
+build: Seed `_OwnJournal` (`runtime.py:1479-1491`) at start, and let the engine's watermark drop what the snapshot already read.
+build: Name the close row's `numbers_at_entry` and reason code.
+see: Stop point for self-configuration. A number moves, the next trade uses it, the trade already open keeps its own.
+test: `test_k9_15_self_configuration`. Bind `own-r-step@1` to `fraction` and `multiple`. After 20 scripted losing trades, on QMB and the fake broker, the next entry is 0.98 lots with target 1.1095, a position opened earlier keeps 1.1100, it moves with another market held, and a restart at trade 13 ends with the same two values and row ids.
+lane3: Restart the fake-broker node at trade 13 of 20 | restart-count | the move lands on trade 20 and not earlier or later
+lens: edge-case, adversarial
+fact: A moved number never amends an open position's exits, by a recording venue showing zero amends.
+
+@@ RC-27 | Give the node a live account surface
+stop: B
+slice: 8
+what: The node supplies equity by a timed balance re-read, open risk at the stops, margin, liquidation distance and each deployment's budget share, each a fact with a basis. QMB supplies the same names from replay, with a known-answer test.
+read: AD-15; SPINE section 3 "Chains and facts"; SWAP-CHART rows 14, 17.
+gates: Venue fields are checked on demo after G-DEMO. Until then the fake broker supplies them and the row says so.
+depends: RC-07
+edit: {N}/app/facts.py
+edit: {QB}/host/facts.py
+edit: {R}/facts.py
+edit: {N}/app/runtime.py
+edit: {N}/venue/ctrader_account.py
+new: {NT}/test_app_account_facts.py
+swaps: PH14 PH17
+build: Add `account.equity`, `balance`, `open_risk`, `margin_headroom`, `liquidation_distance`, `budget_share`, `realised_since`, `basis`, with the balance read on a timer as a named setting.
+build: Say `basis` plainly when equity is marked or balance only.
+see: Sizing reads your real account as it stands, and says what it read.
+test: `test_open_risk_known_answer`. Two positions risking 500 and 250 USD read `account.open_risk` 750 in both adapters.
+test: `test_a_stale_balance_is_stale`. A balance past its limit reads state `stale` with its age, never a silent old value.
+lane3: Change the fake broker's balance mid-run | balance-moves | the next decision row stores the new equity with its age
+lens: edge-case
+fact: The timed re-read never runs on the exit path, by a recording client during pass one.
+
+@@ RC-28 | Observe costs from fills and let the sizer read them
+stop: B
+slice: 8
+what: Cost cells per instrument, broker, hour, session and world are written from fills, labelled `uncalibrated` until enough exist, with a stressed fallback. The fill record and trade row v2 keep net and gross R apart, and the grown sizer reads cost in its denominator.
+read: AD-15 "Costs are observed facts"; FUNNEL rows R2, R7; SWAP-CHART rows 1, 13, 16, E13; `handoff/FOR-REPAIR-SOCKET.md` section 2; K9 test 10.
+gates: None.
+depends: RC-25, RC-27
+edit: {QB}/results/journal.py
+edit: {QB}/host/unit_handler.py
+edit: {N}/app/facts.py
+edit: {QB}/host/facts.py
+edit: {D}/journal_kinds/unit.py
+edit: {Q}/numbers/records.py
+edit: {Q}/motion/engine.py
+new: {Q}/blocks/stdlib/fixed-fraction-at-stop/3/block.py
+new: {Q}/blocks/stdlib/fixed-fraction-at-stop/3/entry.json
+new: {BT}/test_cost_cells.py
+swaps: PH1 PH13 PH16 PH29 E13
+build: Rename `r_after_costs`, which holds gross, to `gross_r`, and add `net_r` as a new field with its reader in `engine.py:57,120` moved in the same PR.
+build: Write the fill record (decision quote, arrival quote, fill, partial, reject, requote, markouts) and cost cells from it.
+build: Add the commission key on the record. Add `market.gap_factor` and funding as facts a block may read.
+see: QMX acts as a data analyst on costs. It knows what each market costs you, by hour, from your own fills.
+test: `test_k9_10_known_answer_cost`. A long filled 2 pips over a decision quote with commission 7 USD per lot at 1 lot on EURUSD records spread and commission as 20 and 7 USD, cell labelled `uncalibrated` at n=1.
+test: `test_gross_and_net_stay_apart`. Money 500, cash -7, risk 500 gives `gross_r` 1.00 and `net_r` 0.986.
+test: `test_the_sizer_reads_a_measured_cell`. A measured 0.0002 cost beside stop distance 0.0050 gives 0.96 lots from 500 money at risk, against 1.00 with none.
+lane3: Run 20 fake-broker fills and read the cell | cell-calibrates | the label moves from `uncalibrated` at the fixture's N with the measured value
+lens: edge-case, verification-gap
+fact: Every reader of `r_after_costs` moves in this PR, by a repo-wide grep showing none left.
+
+@@ RC-29 | Add the feasibility verdict and re-test account brakes across two units
+stop: B
+slice: 8
+what: A pure verdict says whether one minimum lot at this stop fits the unit's share, shown on its card and re-run at anchors. The account-scope halts are re-tested with two units, removing their one-unit label.
+read: FUNNEL row I17; `CHECK.md` B7; SPINE section 4 row I17.
+gates: None. Shed, concentrate or borrow rules are content.
+depends: RC-27
+new: {Q}/numbers/feasible.py
+edit: {T}/unit_check.py
+new: {QT}/test_feasible.py
+new: {NT}/test_app_account_halts_two_units.py
+build: Write the verdict through the one converter.
+build: Remove the one-unit label after the two-unit test passes.
+see: A unit too small for the market says so plainly before it trades.
+test: `test_one_lot_fits_or_says_not`. Share 5 USD on EURUSD at stop distance 0.0050 and minimum lot 0.01 (risk 5.00) answers `fits`. Share 4.99 answers `below_min_lot` with the shortfall 0.01.
+test: `test_account_halt_binds_across_two_units`. Two fake-broker units losing 300 each against a limit of 500 fire `account-daily-loss-halt` for both on the second loss.
+lane3: Run the two-unit halt on the fake broker | two-unit-halt | both stop new entries on the same bar and exits still close
+lens: edge-case
+fact: The verdict computes through `to_quantity`, by a recording call.
+
+@@ RC-30 | Build one base bar on a feed and roll every stream up from it
+stop: B
+slice: 9
+what: An account's feed builds one small base bar, its default moving from 900 to 60 seconds, and one pure function rolls it up to each unit's stream. Handler and node windows key by stream and market, so a 1-minute and a 15-minute unit stop refusing each other.
+read: AD-25 "Base bar", "Roll-up", "Keys"; `CHECK.md` B4; OPEN row 23.
+gates: None. Feed load is measured by a plain row.
+depends: RC-10
+new: {Q}/feed/rollup.py
+new: {Q}/feed/__init__.py
+edit: {N}/venue/ctrader_account.py
+edit: {N}/app/runtime.py
+edit: {QB}/host/unit_handler.py
+new: {QT}/test_rollup.py
+new: {NT}/test_app_one_feed.py
+fault: B4a
+build: Write `roll_up(base_bars, seconds)` with both quote sides, epoch-aligned buckets, `knowable_at` at the bucket's end, and a bucket not seen from its start dropped.
+build: Change `_host` (`runtime.py:2774`) to refuse only a stream that isn't a whole multiple of the base, by name.
+build: Key `_bars` and handler windows by `(stream, market)`. A unit hosted on a bar it doesn't read isn't driven.
+see: A scalper and an intraday unit can share one account.
+test: `test_rolled_bars_equal_direct_bars`. Fifteen 1-minute bars with open 1.1000, high 1.1020, low 1.0990, close 1.1010 across them roll to one 15-minute bar of those values on both sides.
+test: `test_a_partial_bucket_is_never_emitted`. A feed joining at minute 3 emits nothing for that bucket and the next bucket whole.
+test: `test_one_feed_hosts_1m_and_15m`. Both units host and trade on the fake broker. At the parent the second refuses.
+lane3: Run a 1m and a 15m unit on one fake-broker account for 60 base bars | one-feed | each is driven at its own bar count, 60 and 4
+lens: edge-case, adversarial
+fact: The default 60-second base leaves `canary`'s 15-minute decisions equal to the parent's, over the conformance tape.
+
+@@ RC-31 | Let a unit read a second stream with no look-ahead
+stop: B
+slice: 9
+what: `plan.stream` becomes `plan.streams` with a primary, the fastest. A unit steps when its primary closes and reads a slower stream at its last closed bar.
+read: AD-25 "Keys"; SWAP-CHART row `streams_not_built`; K9 test 17.
+gates: None.
+depends: RC-30
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+edit: {QB}/host/unit_handler.py
+edit: {N}/app/runtime.py
+new: {QT}/test_second_stream.py
+swaps: STREAMS
+fault: B4
+build: Lift `streams_not_built`. Count warm-up per stream. Add the `bars:<stream>:<market>` surface.
+build: Bump the compiler format.
+see: A scalper can look at 5-minute bars while it trades 1-minute ones.
+test: `test_k9_17_one_feed`. A 1-minute, a 5-minute and a 15-minute unit trade from one feed on the fake broker. A two-stream unit reading m5 at minute 7 sees the bar closed at minute 5.
+test: `test_a_slower_bar_is_never_seen_early`. At minute 9 the m5 bar visible has `knowable_at` minute 5. Moving the evidence one minute forward changes no decision.
+lane3: Print each unit's bar log on the fake broker | streams-log | no decision reads a bar with `knowable_at` after its own instant
+lens: edge-case, adversarial
+fact: Single-stream units compile to the same decisions, over the conformance tape.
+
+@@ RC-32 | Let a unit hold more than one position per market
+stop: B
+slice: 9
+what: `_held` and open positions key by position id, and `own_position:<market>` answers a tuple. `position_limit` compares open plus parked per market and per open, and each exit carries its position.
+read: AD-25 "Positions"; `CHECK.md` S3, S9; SWAP-CHART rows E3, E4; WALKS 3.
+gates: Above 1 on a netting venue is refused at compile by venue capability.
+depends: RC-31
+edit: {QB}/host/unit_handler.py
+edit: {Q}/protocol/unit.py
+edit: {Q}/compile/compiler.py
+edit: {N}/app/runtime.py
+edit: {R}/unit_intent.py
+new: {QT}/test_many_positions.py
+new: {NT}/test_app_many_positions.py
+swaps: E3 E4
+build: Move every reader of `own_position` to the tuple in this PR, with no compatibility layer.
+build: Add the bet key and driver tags on intents, and `own.open_risk_by_bet_key`, which is why the one-bet check belongs in the unit chain.
+see: A unit can scale into a market where its type allows, and each trade keeps its own exits.
+test: `test_two_positions_get_their_own_exits`. Two longs on EURUSD with stops 1.0950 and 1.0960. The bar that hits 1.0955 closes the second only, by its `position_ref`.
+test: `test_position_limit_counts_every_open`. Limit 2 with 2 open answers `suppressed_limit` on a third signal.
+test: `test_same_bet_counts_once`. Two units' positions on one bet key read one bet in `own.open_risk_by_bet_key`'s unit view.
+lane3: Hold two positions through a fake-broker restart | two-held | both come back with their own stops
+lens: edge-case, adversarial
+fact: `_held` no longer overwrites, by rerunning the second-position overwrite that `runtime.py:1802` allowed at the parent.
+
+@@ RC-33 | Run sessions and per-market settings
+stop: B
+slice: 9
+what: `sessions` compiles with the record's clock, and a unit can go flat before a session closes. Each market may carry its own settings through the override chain's market key.
+read: SWAP-CHART rows E5, E6; FUNNEL rows S9, I16.
+gates: None.
+depends: RC-32
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+edit: {Q}/unit/model.py
+edit: {QB}/host/unit_handler.py
+new: {QT}/test_sessions.py
+swaps: E5 E6a
+build: Lift `sessions` and per-market settings. Add the window card kind.
+build: Add forced flat with a buffer as an exit reason `forced_flat`.
+see: An intraday unit keeps to its hours and can be set per market.
+test: `test_a_session_refuses_outside_its_hours`. London 08:00 to 16:00 in the record's zone, a signal at 16:05 answers `outside_session`, and at 15:55 it enters.
+test: `test_flat_before_the_close`. A buffer of 15 minutes closes a held trade on the bar at 15:45 with reason `forced_flat`.
+test: `test_a_market_keeps_its_own_number`. `stop_buffer` 2 on EURUSD and 30 on XAUUSD each read their own.
+lane3: Run an intraday fixture across a daylight-saving change | dst | session hours follow the record's zone on both sides of the change
+lens: edge-case
+fact: A unit with no sessions declared trades the same as today, over the conformance tape.
+
+@@ RC-34 | Run the remaining logic roles
+stop: B
+slice: 9
+what: `veto`, `cooldown`, `invalidation`, `re_entry`, `arming`, `timeout` and `regime_detector` run in logic slots instead of refusing. `derivation` and `combiner` join, with `combiner` gaining `product` and `min`.
+read: FUNNEL row S12; SWAP-CHART row E2; `compiler.py:896-1014`.
+gates: None.
+depends: RC-33
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+edit: {Q}/blocks/api.py
+new: {QT}/test_logic_roles.py
+swaps: E2
+build: Lift each role with its answer type and its place in `_Run.entries`.
+build: Enrol each in the census.
+see: The dictionary's closing and filtering blocks stop being refused.
+test: `test_each_role_changes_a_decision`. One parametrized fixture per role. `cooldown` of 3 bars suppresses a signal on bar 2 and lets one through on bar 4, `veto` refuses with its reason, and so on with a literal per role.
+test: `test_the_census_counts_no_refused_role`. The role list refused at compile is empty.
+lane3: Compile and backtest one fixture unit per role | roles | each run finishes and its row names the role
+lens: edge-case, structure
+fact: A shipped unit using none of these keeps its compiled decisions, over the conformance tape.
+
+@@ RC-35 | Make the SQS a gate slot, cost hurdle first
+stop: B
+slice: 10
+what: Each unit's entry chain gets a gate slot with the verbs block, shrink, wait, warn, shadow and none. The cost hurdle ships as the default, warning while its cost cell is uncalibrated, with the old rule as a floor for broken markets.
+read: AD-9, AD-16; FUNNEL D-row SQS-2 and 4.1 Gate; SWAP-CHART row E7; OPEN.
+gates: None.
+depends: RC-28, RC-34
+new: {Q}/protocol/entry_chain.py
+new: {R}/chain.py
+new: {RT}/test_chain.py
+edit: {Q}/protocol/unit.py
+edit: {Q}/compile/compiler.py
+new: {Q}/blocks/stdlib/cost-hurdle/1/block.py
+new: {Q}/blocks/stdlib/cost-hurdle/1/entry.json
+new: {Q}/blocks/stdlib/sqs-floor/1/block.py
+new: {Q}/blocks/stdlib/sqs-floor/1/entry.json
+new: {QT}/test_gate_slot.py
+swaps: E7
+build: Write `Verdict` and the unit chain with a plain `try` per link. `block` is the chain's `refuse`, `shrink` rewrites the quantity, `wait` keeps the proposal parked once RC-43 lands and passes with a row until then, `warn`, `shadow` and `none` pass with a row.
+build: Add the placement test to the module's docstring and to the compile check.
+see: The spread gate becomes a slot you can swap, and the first trades aren't blocked by a gate waiting on the trades.
+test: `test_the_hurdle_warns_on_an_uncalibrated_cell`. Cell `uncalibrated`, the entry places and the row reads verdict `warn`.
+test: `test_the_hurdle_refuses_only_on_a_measured_bad_cell`. Measured cost 0.0060 beside stop distance 0.0050 reads `refuse` with code `net_edge_below_zero`.
+test: `test_a_raising_gate_refuses_the_entry_and_stops_no_exit`. A raising gate answers `link_fault` and the held position's exit fires.
+lane3: Run the first ten entries of a fresh unit on the fake broker | first-entries | all ten place with `warn`, and the cell's n reaches 10
+lens: edge-case, adversarial
+fact: Exits still skip the chain, by the import test and a recording chain showing zero calls on exits.
+
+@@ RC-36 | Put isolation, news and caution on one sticker, with tolerations
+stop: B
+slice: 10
+what: A sticker is a row with scope, kind, strength, expiry, resume rule, why and who, and a unit's `tolerations` lists the kinds it ignores. News calendars write stickers, a dead calendar lands a card and reads `prefer_not`, and a spec change writes one too.
+read: AD-16; FUNNEL D27, S10; SWAP-CHART rows 15, E7; SEEDS H-40, H-64; `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md`.
+gates: None. The kill switch is not a sticker.
+depends: RC-35
+edit: {N}/app/stand_down.py
+edit: {N}/app/runtime.py
+edit: {N}/data/news_calendar.py
+edit: {N}/protection/windows.py
+edit: {R}/control_window.py
+edit: {Q}/protocol/entry_chain.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/controls.py
+new: {NT}/test_app_stickers.py
+swaps: PH15 E7
+build: Add scope keys, kinds and strengths to the stand-down table. Add the `fail` row per source. A `flatten` sticker runs the control runner's `flatten` on each member it scopes.
+build: Tag both FX legs. Wire record change to `Runtime.stand_down(SPEC_CHANGE, ...)`.
+see: You can keep a unit off an instrument on its news day, and an ORB can ignore the session-open caution.
+test: `test_a_news_sticker_refuses_and_a_toleration_passes`. Sticker `news` strength `no_new_entries` on USD refuses a EURUSD entry with reason `sticker:news`, and the same unit with `tolerations: ["news"]` enters.
+test: `test_a_dead_calendar_lands_one_card`. Calendar stale gives one card and reads `prefer_not`, with no entry refused.
+test: `test_an_expired_sticker_settles_after_a_restart`. A sticker expiring while down is gone on start with a row.
+lane3: Play one fixture news day on the fake broker | news-day | entries pause in the window, exits run, and the row says why
+lens: edge-case, adversarial
+fact: `Kind.RISK_STOP` and the kill switch behave as at the parent, by `test_app_stand_down.py` passing unchanged.
+
+@@ RC-37 | Measure spread and quote gaps on the node, and make one curve per world
+stop: B
+slice: 10
+what: A node sensor publishes spread, tick rate and quote gaps with source `node`. An overnight job makes one "usual level" curve artifact per world, with an age word, read by SQS, node, MIS and QMB.
+read: AD-16; FUNNEL row I6; `E1-mis-sqs.md`; F3 B.
+gates: Workflow engine changes need a core reason. This adds a template only.
+depends: RC-35
+new: {N}/app/sensor.py
+edit: {N}/app/runtime.py
+edit: {N}/app/facts.py
+new: {ENG}/curve-factory/definition.json
+new: {ENG}/curve-factory/scripts/curve.py
+new: {ENG}/curve-factory/README.md
+new: {NT}/test_app_sensor.py
+swaps: E7
+build: Publish `market.spread`, `tick_rate`, `quote_gap`, `curve` as facts.
+build: Flag a borrowed cold start on the curve.
+see: The node knows when a market's quote is unusually wide right now.
+test: `test_the_sensor_reads_spread_and_gap`. Quotes 1.1000 over 1.1002 then none for 30 s read spread 0.0002 and gap 30.
+test: `test_an_old_curve_says_old`. A curve 3 days past its limit reads age word `old` and state `stale`.
+lane3: Run the curve template on the fixture's minute rows | curve | one artifact per world with its age and a borrowed flag on cold start
+lens: edge-case
+fact: The sensor adds no send or wait on the node thread, by a recording client.
+
+@@ RC-38 | Move the SQS rule and producer before the old gate goes
+stop: B
+slice: 10
+what: The old SQS rule text and baseline producer move to the gate's floor, because the repair's deletion sweep reads them as dead. C-20 can then remove the old gate with nothing lost.
+read: `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md`; `grounding/G12-audit-and-repair-for-risk.md` section 2; `decision_root.py:493-510`.
+gates: None.
+depends: RC-37
+edit: {N}/host/sqs_baseline_producer.py
+edit: {N}/host/decision_root.py
+edit: {N}/replay/port.py
+edit: {N}/config/registry_catalog.py
+edit: packages/qmf-readings/src/qmf/readings/labelers.py
+edit: {Q}/blocks/stdlib/sqs-floor/1/block.py
+new: {NT}/test_app_sqs_floor.py
+build: Fold the eight named settings (`registry_catalog.py:158-241`) to rows the floor reads, each labelled.
+build: Keep DEC-0230 and DEC-0153 as they stand. A demo baseline never satisfies a live environment, and a bar-sampled reading never satisfies a live decision.
+see: Nothing on a screen. Nothing you built is lost in the cleanup.
+test: `test_the_floor_says_what_the_old_rule_said`. On the rule's own fixture inputs at `decision_root.py:493-510` both answer the same verdict and reason for each of the literal rows.
+test: `test_a_demo_baseline_never_satisfies_live`. A demo-conditioned baseline on a live lane reads `no_baseline`.
+lane3: Run the old rule and the floor over a saved minute file | floor-equal | the two verdict columns are equal
+lens: verification-gap
+fact: Nothing calls the moved producer by its old import path, by a repo-wide grep.
+
+@@ RC-39 | Ship the scalper and intraday templates, and prove each reaches paper
+stop: B
+slice: 10
+what: `scalper-mr` and `intraday-trend`, with an `orb` variant in two rows, ship with the blocks they name. K7 runs all of them to a filled paper entry, and the templates host side by side on one account.
+read: FUNNEL 4.1, 4.2; SPINE section 6 "Shipped on"; K9 test 7; SEEDS H-20 to H-22, H-47, H-57.
+gates: New block values are labelled placeholders. The spine prices no PR for these blocks, so this one adds them.
+depends: RC-19, RC-22, RC-26, RC-36
+new: {Q}/unit/templates/scalper-mr.json
+new: {Q}/unit/templates/intraday-trend.json
+new: {Q}/unit/templates/intraday-trend-orb.json
+new: {Q}/blocks/stdlib/fast-invalidation-cut/1/block.py
+new: {Q}/blocks/stdlib/fast-invalidation-cut/1/entry.json
+new: {Q}/blocks/stdlib/thesis-invalidation-exit/1/block.py
+new: {Q}/blocks/stdlib/thesis-invalidation-exit/1/entry.json
+new: {Q}/blocks/stdlib/own-percentile-bench/1/block.py
+new: {Q}/blocks/stdlib/own-percentile-bench/1/entry.json
+new: {Q}/blocks/stdlib/count-brake/1/block.py
+new: {Q}/blocks/stdlib/count-brake/1/entry.json
+new: {Q}/blocks/stdlib/two-speed-circuit-breaker/1/block.py
+new: {Q}/blocks/stdlib/two-speed-circuit-breaker/1/entry.json
+edit: tools/lanes/k7_rehearsal.py
+new: {QT}/test_templates_abc.py
+build: Write the five blocks with their dictionary pages and cold behaviour. The cut uses a fixed labelled distance until N winners exist, with the warning "unproven after costs". Circuit breaker and count brake ship present and off.
+build: Write the three template files as in FUNNEL 4.2. `scalper-mr` has its house money on at factor 1 from zero.
+see: A scalper, an intraday and a no-brakes template all trade on paper from nothing, side by side, each saying it is a shape.
+test: `test_k9_7_every_template_reaches_paper`. K7 ends with a fill for `canary`, `scalper-mr` and `intraday-trend`, with no judge run.
+test: `test_the_cut_uses_its_fixed_distance_cold`. Zero winners, a 3-pip adverse move at a 3-pip cut closes with reason `fi_cut`.
+test: `test_the_bench_shadows_until_n`. Below N trades the bench writes `would_have` and refuses nothing.
+test: `test_the_three_templates_share_one_account`. All three host on one fake-broker account with bar counts 60, 60 and 4 per hour on their primaries.
+lane3: Run K7 for each template on a fresh throwaway home | k7-all | each ends with one filled entry
+lens: edge-case, verification-gap
+fact: The two-speed breaker off changes no decision, by running with and without it.
+
+@@ RC-40 | Give the node one admit seam, called by both hosts
+stop: B
+slice: 11
+what: The node chain's runner and `AdmitPort` live in `qml`, and hosts inject the links. `CrossUnitHook` and `PASS_EVERY_ORDER` are deleted, so the one call site in `UnitSliceHandler.mint_intents` runs the same seam on the node and in QMB.
+read: AD-9, AD-21; SWAP-CHART row 6; `FIXES.md` S11.
+gates: None.
+depends: RC-35
+new: {Q}/chain/node_chain.py
+new: {Q}/chain/__init__.py
+new: {QT}/test_node_chain.py
+edit: {Q}/blocks/api.py
+edit: {QB}/host/unit_handler.py
+edit: {N}/app/runtime.py
+edit: {QT}/test_socket_contracts.py
+swaps: PH6
+build: Write `AdmitPort.admit(wire, at)` and the chain runner with a plain `try` per link. A raise refuses that entry with `link_fault`, and nothing returns a refusal into `close_frontier`.
+build: Migrate `guard`, `cross_unit_hook` and the protection gate behind the seam (`runtime.py:1100-1106, 2623-2675`). Delete the hook in the same PR.
+see: Nothing on a screen. One door for every order.
+test: `test_a_raising_link_refuses_and_keeps_trading`. A raising link answers `link_fault`, the phase stays `TRADING`, and the unit's exits fire on the next bar.
+test: `test_a_shrink_rewrites_the_wire`. A link shrinking 1.00 to 0.60 sends 0.60, and both verdicts are on the one row.
+test: `test_qml_imports_nothing_from_qmn`. The parsed imports of `chain/` hold no `qmn`.
+lane3: Run the conformance tape through node and QMB | admit-tape | identical trails
+lens: edge-case, adversarial
+fact: Every shipped order path still passes one protection check, by `test_protection_every_order.py` unchanged.
+
+@@ RC-41 | Apply kill effects to entries and give every veto an off switch
+stop: B
+slice: 11
+what: The kill table's effects now apply to entries as well as closes, through injected node links. Margin, order rate, size band and a stop past liquidation become rows with `enabled`, and protection that can't be placed answers by a row.
+read: AD-9, AD-20 table; SWAP-CHART rows 14, 18, 19; `FIXES.md` S7.
+gates: Kill level meanings stay open values, owner numbers talk. Only his hand lowers a level.
+depends: RC-40
+new: {N}/app/node_links.py
+edit: {N}/protection/effect_matrix.py
+edit: {N}/app/runtime.py
+edit: {R}/controls.py
+new: {NT}/test_app_node_links.py
+swaps: PH14 PH18 PH19
+build: Write links for `stop_entries`, `cancel_resting_entries`, margin headroom, worst-step reserve, size band, order rate and venue stop or declared basis.
+build: Move the protection constants (`runtime.py:179-187`) to settings and add the `protection_escalation` row, `close` or `alarm`.
+see: At a raised kill level no new trade goes out, and every safety veto beyond the fixed lines can be switched to a warning.
+test: `test_entries_read_the_kill_effect`. At a level whose effect has `stop_entries`, an entry answers `refuse` with `kill_effect` and a close goes out. At the parent the entry places.
+test: `test_a_veto_off_is_a_warning`. Margin veto with `enabled: false` passes with verdict `warn` in the row.
+test: `test_a_stop_past_liquidation_refuses`. Stop beyond `liquidation_distance` answers `past_liquidation` with the row on.
+lane3: Raise the kill level on the fake broker with entries and a held trade | kill-entries | the entry refuses, the held trade's exit fires
+lens: edge-case, adversarial
+fact: No link can raise a size, by a contract on `Shrink` above the wire quantity failing.
+
+@@ RC-42 | Run the node in two passes, exits first
+stop: B
+slice: 11
+what: Pass one steps every unit on every account and sends its exits at once. Pass two takes parked proposals, prices them on fresh facts and sends, so an entry's wait can never delay another unit's exit.
+read: AD-1, AD-17; `runtime.py:1727-1733, 3013-3018`; K9 test 13.
+gates: None. Sends stay serial, the known limit in AD-17.
+depends: RC-41
+new: {N}/app/outbox.py
+edit: {N}/app/runtime.py
+edit: {QB}/host/unit_handler.py
+edit: {Q}/protocol/unit.py
+new: {QB}/host/group_run.py
+new: {NT}/test_app_two_passes.py
+build: Make `on_instant` answer exits and proposals. Move the `price` call site from straight-after-exits to pass two.
+build: Write the outbox. Drain by bar time, then rank, then a per-bar hash. Write meters as plain rows.
+see: A slow entry can't hold up another unit's stop-out.
+test: `test_exits_go_before_any_entry`. A venue recording send order on a bar with 3 exits and 3 entries reads the 3 closes first, every time.
+test: `test_a_slow_venue_entry_never_delays_an_exit`. Entry send held for 5 s, the next unit's exit is sent before it starts.
+test: `test_k9_13_tape_two_passes`. Tape through QMB and node at the head is equal.
+lane3: Run 20 units firing together on the fake broker | bell | the send log shows all exits first and the meters read pass times
+lens: edge-case, adversarial
+fact: No exit reads account facts or the outbox, by the import test and a recording surface.
+
+@@ RC-43 | Give a parked entry a lifetime and never send it twice
+stop: B
+slice: 11
+what: `_orders` gains `Parked(expires_at)`, and `execute_resting` returns `Ok(False)` for it, so waiting no longer reads as warming up. While parked, the unit reads `parked:<market>` and writes `suppressed_limit`, so one signal is one send.
+read: AD-17 "Parked entry", "No second order"; `CHECK.md` B2; K9 test 11.
+gates: None. `expires_at` defaults to the next bar of its market, a labelled placeholder.
+depends: RC-42
+edit: {N}/app/runtime.py
+edit: {N}/app/outbox.py
+edit: {Q}/protocol/unit.py
+edit: {QB}/host/unit_handler.py
+new: {NT}/test_app_parked_entry.py
+fault: B2
+build: Add the `parked:<market>` surface read at `unit.py:515`. `_Run.entries` compares open plus parked with the limit.
+build: Expire at the start of pass one for that market to `Blocked("budget_expired")`, writing the `Skip` through `runtime.py:1705-1713`.
+build: Turn the gate's `wait` verb on. It stays parked until `expires_at`.
+see: A trade that can't go out this bar waits one bar, then is dropped with a reason.
+test: `test_k9_11_one_signal_one_send`. Pass two reaches the queue a bar late. 1 `ProtoOANewOrderReq`, 1 position at the venue, 1 in the handler. With the applied fix of the parent's AD-17 as written, 2 sends.
+test: `test_a_parked_entry_expires_by_name`. Past `expires_at` the row reads `Skip` with `budget_expired`.
+test: `test_a_parked_entry_never_reads_warming_up`. `execute_resting` answers `Ok(False)`, `None` keeps meaning warming up.
+lane3: Hold pass two across a bar on the real order path with the fake broker | parked | one send, one position
+lens: edge-case, adversarial
+fact: `self.unknown`'s refusal (`runtime.py:1059`) still covers an unknown answer, by the shipped unknown drill.
+
+@@ RC-44 | Bound the entries pass in time and beat the watchdog honestly
+stop: B
+slice: 11
+what: Pass two starts an entry only if elapsed time plus that entry's worst case fits the budget, worked out from the same constants. `watch.began` resets as a progress beat after each exit send and each finished entry, so the watchdog times one stuck step.
+read: AD-17 "Time, in what takes the time"; `FIXES.md` S1; `runtime.py:179-187, 2192`; `ctrader_account.py:110`; `healing.py:64`.
+gates: The budget is a labelled placeholder. Test on Windows. Hung blocks remain the watchdog's, AD-9's named risk.
+depends: RC-43
+edit: {N}/app/runtime.py
+edit: {N}/app/outbox.py
+edit: {N}/app/healing.py
+new: {NT}/test_app_entry_budget.py
+fault: S1
+build: Compute the worst case from the constants and refuse at start, by name, a worst case longer than the watchdog's limit.
+build: Add the beats.
+see: A busy moment leaves some entries for the next bar. The node stays up.
+test: `test_a_long_bell_leaves_entries_over_and_the_node_lives`. On a virtual clock with a venue answering at its limit, one entry takes 26 s, budget 30. The first entry goes, the second parks, `os._exit` is never called. At the parent's path the same bell passes 30 s.
+test: `test_six_slow_closes_beat_the_watchdog`. Six closes at 5 s each with a beat after each never read stuck.
+test: `test_a_worst_case_above_the_limit_refuses_at_start`. Constants giving 40 s against a 30 s limit refuse with `budget_impossible`.
+lane3: Run a 30-entry bell on the fake broker with a slow venue | long-bell | entries left over are named in the meter and the process stays up
+lens: edge-case, adversarial
+fact: The virtual-clock test uses the real constants, by importing them, with no copied literal in the path under test.
+
+@@ RC-45 | Let a declared no-stop entry compile, size and send
+stop: B
+slice: 11
+what: A unit with no price stop declares `basis: tail_budget` on its sizer row and the send carries `stop_kind: none_declared`. Places 1 to 6 and 11 of AD-22's table read that field.
+read: AD-22 rows 1 to 6 and 11; SWAP-CHART row 11; `unit_intent.py:69-73`.
+gates: Whether cTrader accepts it is UNKNOWN and joins the demo probes. The shipped default stays a far stop.
+depends: RC-44
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+edit: {QB}/host/unit_handler.py
+edit: {N}/app/runtime.py
+edit: {Q}/numbers/convert.py
+new: {QT}/test_no_stop_entry.py
+swaps: PH11
+build: Lift `stop_not_built` for a declared basis. Refuse target levels needing a stop, at compile.
+build: Read `none_declared` in `enter`, the handler, the node entry and the veto, and skip `_protected`. Keep `held.risk` as the sizer's declared money.
+see: Your reckless scalper with no stop can be written. It warns in the largest type.
+test: `test_a_declared_no_stop_sends_one_order_with_no_stop`. Fake broker receives quantity 1.00 from `tail_budget` 500 on distance 0.0050 with no `stopLoss`, and the row reads `none_declared`.
+test: `test_r_stands_with_no_stop`. Close at money -250 on declared 500 gives R -0.50.
+test: `test_undeclared_no_stop_stays_refused`. No basis still reads `stop_not_built`.
+lane3: Send the entry on the fake broker and read the row | no-stop-send | one order, no stop, warning graded
+lens: edge-case, adversarial
+fact: Every shipped unit with a stop takes the same path as before, over the conformance tape.
+
+@@ RC-46 | Keep a declared no-stop position alive through ticks, restart and reconcile
+stop: B
+slice: 11
+what: Places 7 to 10, 12 and 13 of AD-22 ask the declared field before treating a missing stop as a fault. K9 test 12 holds a stopless entry for N bars and through a restart, and this ends the whole no-stop path.
+read: AD-22 rows 7 to 10, 12, 13 and "The test"; `CHECK.md` B9.
+gates: Fallback if the venue refuses at the demo probe, capability refuses the true no-stop form there by name, and the far stop stays.
+depends: RC-45
+edit: {N}/app/runtime.py
+edit: {N}/app/reconciler.py
+edit: {N}/app/paper_lane.py
+edit: {N}/venue/ctrader_account.py
+edit: {N}/order/path.py
+edit: {N}/venue/live.py
+new: {NT}/test_app_no_stop_held.py
+swaps: PH11
+fault: B9
+build: Make `_restore_stops` (`runtime.py:2358-2386`), `NodeUnit.adopt`, reconcile (`reconciler.py:379-390`), `safe_to_restart` and the adapter's `no-stop` rejection read `none_declared`.
+build: One test for each other order path.
+see: Nothing else closes it behind your back. Its own cut closes it.
+test: `test_k9_12_a_stopless_entry_survives`. Held for 10 bars on the fake broker, through a restart, still open, zero `protection_escalation`, then closed by its own cut. At the parent the first tick closes it.
+test: `test_a_position_with_a_lost_stop_still_escalates`. A position whose send row had a stop, missing at the venue, still closes and alarms.
+lane3: Run K9 12 and print the alarms | no-stop-held | no escalation, restart names it open by declaration
+lens: edge-case, adversarial
+fact: A lost real stop still escalates, by the second test on the real tick.
+
+@@ RC-47 | Give the copilot its doors for one unit
+stop: B
+slice: 11
+what: The copilot gains the tool rows the single-unit baseline needs, each declaring read, propose or run. It can patch a draft, read any scope's risk state, explain any size, replay a decision and propose a sticker as a card.
+read: SPINE section 8; AD-20; `E5` flaw 15; `qmx-tools/tests/test_tools.py`.
+gates: None. No row reaches money. The count test moves on purpose.
+depends: RC-36
+edit: {CTL}/catalog.py
+edit: {T}/functions.py
+edit: {T}/servers.py
+edit: qmx-agents/packages/qmx-tools/tests/test_tools.py
+new: qmx-agents/packages/qmx-tools/tests/test_unit_tool_rows.py
+edit: qmx-agents/plugin/skills/build-unit/SKILL.md
+build: Add `unit_patch`, `risk_state`, `explain_size`, `replay_decision`, `sticker_propose`, `card_land`. Add `direction` on each row, read, propose or run.
+build: Change the skill's order so it matches what a chat does, and say a block can't be saved until RC-59.
+see: You can ask the copilot "why this size?" and "why didn't it trade?" and get the row.
+test: `test_explain_size_tool_returns_the_trail`. On a stored row the tool returns the literal quantity and the steps.
+test: `test_a_sticker_proposal_applies_nothing`. `sticker_propose` lands one card and the stand-down table is unchanged.
+test: `test_k9_8_still_holds`. The tool table reaches no money door.
+lane3: Ask the copilot on `haiku` why a fixture trade had its size | copilot-size | the answer names the row's literal quantity and fraction
+lens: adversarial
+fact: Every new row declares `direction`, by a test over the catalog.
+
+@@ RC-48 | Finish the single-unit guide and ready stop point B
+stop: B
+slice: 11
+what: The rip-out list widens past blocks to rows, the developer guide is filled for the single-unit baseline, and the money app's version moves once. This is stop point B, the whole single-unit baseline.
+read: SPINE section 5 closing paragraph, section 7 "`EXTENDING.md`", section 10; OPEN rows 1, 8, 8a.
+gates: G-SIGN. By this point he may rule on what a pod is (OPEN row 1). The build continues on the default and logs it in `QUESTIONS-FOR-OPERATOR.md`.
+depends: RC-39, RC-46, RC-47, RC-29
+edit: tools/qml/placeholders.py
+edit: tools/tests/test_placeholders.py
+edit: tools/qml/extending.py
+edit: qml/EXTENDING.md
+edit: {APPS}/trading-node/app.toml
+edit: {AT}/test_shipped_apps.py
+new: tools/lanes/release_note_stop_b.md
+swaps: PH30
+build: List PH 5, 6, 18, 19, 20 rows in `placeholders.py`, and prove the rip-out list empties.
+build: Write the "why each seat exists", the traps and the three tiers of change in the guide.
+build: Bump version rows and digests. Write the plain note.
+see: Stop point B. One unit, three templates, no pod, no group, whole. One line to sign.
+test: `test_the_rip_out_list_reaches_rows`. A fixture unit lists `session-loss-limit-halt`'s placeholder values with row ids, a literal line.
+test: `test_the_guide_is_current`. `tools/qml/extending.py --check` exits 0.
+lane3: Run the whole-repo check at the head | whole-b | nothing fails beyond the named baseline reds
+lens: verification-gap
+fact: K7 for all three templates and K9 2, 11, 12, 15, 16, 17 all pass at this head, in one run.

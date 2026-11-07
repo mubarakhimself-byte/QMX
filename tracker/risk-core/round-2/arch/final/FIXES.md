@@ -63,9 +63,24 @@
 | FUNNEL 3.8: second deployment of one version lost its seat | Fixed: section 4's S14 row keeps a deployment key; slice 13 tests it |
 | Part C items not holding (H-01, H-06, H-08, H-17, H-43; H-21, H-33; H-30, H-31; H-50; H-98) | Closed through the fixes above, except the installer in H-01 and H-43's stranger path, which stay with release. SOLUTION says so |
 | Compile pool shares the interpreter lock during a roll | Named in WALKS 8, unmeasured |
-| "Too much machine": group `order` block, reservations as a type, proposal tape, `run_budgeted` on every row, "The pieces" | **Not changed; the lead's call.** They are part of the taken grafts, and changing them is outside a fix round. `run_budgeted` is OPEN row 22. The Lab driver is cut (S6) |
+| "Too much machine": group `order` block, reservations as a type, proposal tape, `run_budgeted` on every row, "The pieces" | Not changed in the fix round; the lead then trimmed them, see "The lead's trims" below |
 | Older list: breakeven, System 1, multiple Books, N8N or white label | Not touched; `CHECK.md` did not call them faults |
 
 ## Left open, stated
 
 Whether cTrader takes a no-stop market order (OPEN 24). Real send times and real 200-unit throughput (OPEN 9, 20). The base bar's real feed load (OPEN 23). Whether a judge `fail` should allow his click to paper, handed to methodology with the default `PARKED` stays parked. PR counts remain estimates.
+
+## The lead's trims, 7 Nov (`RUN.md` decisions log, on `CHECK.md`'s "Too much machine")
+
+Applied to `SPINE.md` and `SOLUTION.md`. AD ids are unchanged. `WALKS.md` and `OPEN.md` were not edited; where they still say `run_budgeted`, reservations, the group `order` block or the proposal tape (OPEN rows 14, 21 and 22, WALKS 3, 8 and 11), `SPINE.md` wins.
+
+| Trim | What changed and where | Slice | Cost, named |
+|---|---|---|---|
+| The group `order` block goes, a `rank` field stays | AD-8, AD-17, section 3 `Group`, module map, slice 12, section 11 row, section 12 | 12 | "Best of those firing" waits for an additive slot |
+| Reservations are not a type | AD-8 rule "an unknown outcome keeps its room"; removed from AD-9, section 3, section 6, section 7, section 9, slice 12, section 12; section 11 row | 12 | None on one thread; reopens if caps ever run off it |
+| The proposal tape goes to methodology, row shape reserved | AD-18, section 3 rows, PH 26, slice 15, section 11 row | 15 | The fixed-size rerun and the size search are methodology's. K9 13's conformance tape is a test fixture and stays |
+| The Lab driver waits until a Lab exists | Already so since S6; no change | none | None |
+| `run_budgeted` is not on every row | AD-9 retitled, a plain `try` on every block, time budget on the entries pass only (AD-17), hung-link protection deferred with the worker process; section 3, conventions, stack, section 4 S6, module map, K9 2, slice 10, section 11, section 13 | 3, 10, 11 | **Risk named in AD-9:** a block that never returns stalls that node's thread, exits included, until `StuckWatch` restarts it at 30 s. Venue stops hold. FUNNEL S6's "a hung link refuses entries only" is not met; `CHECK` said this one needed the lead's call, and he made it |
+| `SOLUTION.md`'s "The pieces" stays | No change, for his reading | none | None |
+
+The PR count in SPINE section 10 now points at `round-2/build/PLAN.md`: 69 PRs, with stop points at RC-20, RC-48 and RC-66. SOLUTION's and section 10's slice numbers still hold.

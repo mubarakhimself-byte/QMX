@@ -1,0 +1,498 @@
+@@ RC-49 | Write the group document and publish its limits as live facts
+stop: C
+slice: 12
+what: A group is a document with a selector by unit id or tag, money, limits, caps, a ledger and a rank, and it touches no member. Every number in `limits` and `money` is published on scope `group:<id>`, so one edit reaches 200 units at their next decision.
+read: AD-2 tiers, AD-5 last lines, AD-8, AD-21; SPINE section 3 "Pod and group"; FUNNEL row K5.
+gates: The `book` and `bms` kinds become read-only shells, the spine's "replaces" with no migration stated. See Appendix H.
+depends: RC-48
+new: {R}/group.py
+new: {RT}/test_group_types.py
+new: {Q}/group/__init__.py
+new: {LIB}/kinds/group.schema.json
+edit: {LIB}/kinds/bms.schema.json
+edit: {LIB}/kinds/book.schema.json
+edit: {H}/promote.py
+edit: {N}/app/facts.py
+new: {NT}/test_app_group_limits.py
+build: Add `Group`, `Selector`, `LedgerSpec`, `CapAnswer`. Membership is by selector, and a deployment may also name `group_id`.
+build: Publish limits at edit and at each anchor. The edit is his click on the group row's version, bound to one hash.
+see: You change one limit once, and every member reads it at its next trade with no recompile.
+test: `test_one_edit_reaches_members_with_no_recompile`. A 200-unit fixture reads `group.limit.day_stop` 100 then 80 after one edit, and zero compiled fingerprints move.
+test: `test_a_stale_click_is_refused`. A click on an old row version answers `stale_click`.
+test: `test_many_to_many_selector`. A unit tagged `fx` and `scalper` belongs to both groups.
+lane3: Edit a limit on the fake lane with a unit trading | limit-live | the next row stores the new limit with its age
+lens: edge-case, adversarial
+fact: No member document changes on a group edit, by hashing the 200 documents before and after.
+
+@@ RC-50 | Run group caps that can only cut, on one ledger
+stop: C
+slice: 12
+what: Caps are control rows of scope `group`, answering pass, shrink or refuse at two moments, on an entry in pass two and after each ledger fold. An unknown outcome keeps its room, and rank sorts the outbox.
+read: AD-8, AD-9 placement test, AD-18; SWAP-CHART row 27; K9 test 9.
+gates: None.
+depends: RC-49
+new: {Q}/group/caps.py
+new: {Q}/group/ledger.py
+new: {QT}/test_group_caps.py
+edit: {Q}/fold.py
+edit: {N}/app/node_links.py
+edit: {N}/app/outbox.py
+edit: {N}/app/runtime.py
+new: {NT}/test_app_group_caps.py
+swaps: PH27
+build: Write the cap runner with a plain `try`. A cap never raises a size, by contract.
+build: Fold group scope. Expose `group.day_pnl`, `open_risk`, `raise_ok`, `cushion`, `members`, `limit.<name>`.
+build: Count an unknown venue answer in `group.open_risk` until settled.
+see: Units share a limit, and two firing on one bar can't overrun it.
+test: `test_two_units_cannot_overrun_a_shared_cap`. Limit 1000, each wants 600 at one bar. The higher rank gets 600, the second shrinks to 400, and open risk reads 1000.
+test: `test_an_unknown_answer_keeps_its_room`. An unknown 600 leaves 400 for the next until settled, then 1000 if blocked.
+test: `test_a_day_stop_fires_with_no_entry_pending`. The fold crossing -500 fires `on_fire` with no entry in the outbox.
+test: `test_a_cap_never_raises_a_size`. A cap answering 2.00 on a wanted 1.00 fails the contract.
+lane3: Run two units at one bell on the fake broker | shared-cap | fills sum to the limit
+lens: edge-case, adversarial
+fact: Caps are atomic because nothing else runs on the node thread, by asserting the thread name in the runner during the test.
+
+@@ RC-51 | Ship the default group rows, the kill line and restart rules
+stop: C
+slice: 12
+what: The default group row is own size under a parent limit plus a portfolio day stop that stands everything down until the day boundary, and the kill line becomes a cap on a floor that survives restart. Recovery folds journals and broker deals before answering any entry, and cuts stand while a raise waits for the next anchor.
+read: AD-8, AD-18 "Restart rules"; SWAP-CHART row 20; FUNNEL 4.1 Group row; SEEDS H-65.
+gates: The old `qmn/capital/kill_line.py` is subtracted after its replacement passes, per `handoff/FOR-REPAIR-CLAIMS-BEFORE-C20.md`.
+depends: RC-50
+new: {Q}/blocks/stdlib/parent-limit/1/block.py
+new: {Q}/blocks/stdlib/parent-limit/1/entry.json
+new: {Q}/blocks/stdlib/portfolio-day-stop/1/block.py
+new: {Q}/blocks/stdlib/portfolio-day-stop/1/entry.json
+new: {Q}/blocks/stdlib/kill-line-cap/1/block.py
+new: {Q}/blocks/stdlib/kill-line-cap/1/entry.json
+edit: {N}/capital/kill_line.py
+edit: {N}/app/runtime.py
+new: {NT}/test_app_group_restart.py
+swaps: PH20
+build: Make an anchor id a pure function of clock and time. Settle anchors passed while down once, latest wins, marked `restart_late`.
+build: Until the ledger is rebuilt, caps read UNKNOWN and refuse entries, and exits are free.
+see: The floor you set survives a restart. A restart never gives size back early.
+test: `test_a_restart_is_no_reset`. Cut to 0.5 at 10:00, restart at 11:00, the factor stays 0.5. A raise earned at 10:30 waits for the next anchor.
+test: `test_anchors_settle_once`. Two anchors passed while down write one row each, latest wins, `restart_late` true.
+test: `test_the_floor_survives`. Floor 300 reads 300 after a restart with its snapshot gone.
+test: `test_unknown_ledger_refuses_entries_only`. Before rebuild an entry answers `refuse`, and an exit closes.
+lane3: Kill and restart the fake-broker node mid-day | restart-day | cuts stand, exits free, raises wait
+lens: edge-case, adversarial
+fact: Settling anchors is idempotent, by running recovery twice over the same rows and comparing.
+
+@@ RC-52 | Replay several units together and prove the group at 200
+stop: C
+slice: 12
+what: `group_run` replays many units in QMB with the node's pass-two order, stamped `group: merged`. A 200-member test measures real throughput on the fake broker, and the copilot gets `group_draft` and `group_check`.
+read: SPINE section 6 "One evaluator"; OPEN row 20; K9 test 13.
+gates: None.
+depends: RC-51
+edit: {QB}/host/group_run.py
+edit: {CTL}/catalog.py
+edit: {T}/functions.py
+edit: qmx-agents/packages/qmx-tools/tests/test_tools.py
+new: {BT}/test_group_run.py
+new: {NT}/test_app_group_200.py
+build: Drive several `HostedUnit`s with one ledger in QMB, in rank order.
+build: Measure pass one, pass two and rows per bar at 200 units and record them, with no fail rule the first time.
+see: You can backtest a group and it behaves as the node would.
+test: `test_replay_order_equals_node_order`. A 3-unit tape reads the same send order in QMB and on the fake broker.
+test: `test_a_solo_run_is_stamped_none`. One unit reads `group: none` and two read `merged`.
+lane3: Run 200 members for 100 bars on the fake broker | group-200 | it finishes with no heal, and the meters are printed
+lens: verification-gap
+fact: QMB's single-unit results are unchanged by `group_run`, over the conformance tape.
+perf: Milliseconds per pass at 200 members, recorded in OPEN row 20's place. Reopen the design note if a bar's pass one exceeds the bar itself.
+
+@@ RC-53 | Make a pod a recipe, stamped in by a pure function, with drift reported
+stop: C
+slice: 13
+what: `expand(unit, pod)` fills the risk half from a saved recipe and records the recipe and what it displaced, so leaving a pod restores them. A row touching logic is refused by name, and a drift report lists members that no longer follow their recipe.
+read: AD-4; SPINE section 3 "Pod and group"; SWAP-CHART row 31; OPEN row 1.
+gates: OPEN row 1. If he picks a governing pod, this PR and RC-54, RC-55 are replaced per SPINE section 12.
+depends: RC-48
+new: {Q}/pods/__init__.py
+new: {Q}/pods/expand.py
+new: {Q}/pods/drift.py
+edit: {LIB}/kinds/pod.schema.json
+edit: {LIB}/kinds/pod-block.schema.json
+edit: {Q}/compile/compiler.py
+edit: {Q}/unit/model.py
+new: {QT}/test_pods_expand.py
+swaps: PH31
+build: Write `expand` as deterministic and idempotent. Honour `risk_locks`.
+build: Give `kinds/pod` a real schema and retire `pod-block` into `component`.
+see: Change one recipe and you know exactly who follows it.
+test: `test_expand_is_idempotent`. Twice gives the byte-equal document.
+test: `test_leaving_a_pod_restores_the_rows`. The unit's own sizer returns after removing the recipe, and the fingerprint equals the original.
+test: `test_a_recipe_touching_an_exit_is_refused`. Answers `recipe_touches_logic` with the field name.
+test: `test_drift_lists_by_row`. 14 members, 2 hand-edited. "12 of 14 follow the recipe" with the two rows listed.
+lane3: Stamp a gallery-shaped pod onto all three templates and compile | stamp-three | three fingerprints, logic unchanged on each
+lens: edge-case, adversarial
+fact: `expand` never changes `logic_fingerprint`, as a property over the corpus fixture.
+
+@@ RC-54 | Turn one pod edit into one plan and one click
+stop: C
+slice: 13
+what: `roll_plan` stamps, checks and compiles every member off the node and sorts each as risk-only, unchanged, locked, logic-touching or refused. His one click binds to the plan's hash through the money door, and a stale plan is refused.
+read: AD-5; SPINE section 4 row S14 (deployment key); FUNNEL row K5; OPEN row 2.
+gates: Agents and the copilot write drafts and plans only.
+depends: RC-53, RC-49
+new: {Q}/pods/roll.py
+new: {H}/roll.py
+edit: {H}/promote.py
+edit: {Q}/identity/table.py
+edit: {CTL}/catalog.py
+edit: {T}/functions.py
+edit: qmx-agents/packages/qmx-tools/tests/test_tools.py
+new: {QT}/test_pods_roll.py
+build: Compute `H(pod hash, sorted (deployment, new risk fingerprint))`. A plan may cover a subset, as a canary. A `logic_touch` member stays out and is named.
+build: Keep the deployment key as unit version, market, lane and recipe hash, so two paper twins keep their seats. Add the identity table's section column.
+build: Add `pod_draft`, `pod_check`, `pod_explain`, `roll_plan`, `drift_report`.
+see: One edit, one plan, one click, for 200 units.
+test: `test_a_plan_sorts_members`. Fixture of 5 reads `risk_only` 2, `unchanged` 1, `locked` 1, `logic_touch` 1 with the plan hash a literal.
+test: `test_a_stale_plan_is_refused`. A member changing after the plan answers `stale_plan`.
+test: `test_two_deployments_of_one_version`. Paper twins both deploy, and `promote.py:422-447` stays green.
+test: `test_no_tool_clicks`. The catalog has no row applying a plan.
+lane3: Plan and click for 200 fixture members on the fake lane | plan-200 | one hash, literal counts, time recorded
+lens: edge-case, adversarial
+fact: Nothing in the plan path writes to a live deployment before the click, by a recording store.
+
+@@ RC-55 | Move risk in place, with open trades and logic state untouched
+stop: C
+slice: 13
+what: `HostedUnit.move_risk` keeps logic instances, derived numbers and open positions and rebuilds only risk instances. The node compiles members on its one worker, then flips all of them on one tick.
+read: AD-3, AD-6, AD-12; `unit.py:990-991`; `runtime.py:2098`.
+gates: None.
+depends: RC-54
+edit: {Q}/protocol/unit.py
+edit: {N}/app/runtime.py
+edit: {H}/roll.py
+new: {QT}/test_move_risk.py
+new: {NT}/test_app_move_risk.py
+build: Split snapshots into two parts, each judged by its own fingerprint in `_cold_reason`.
+build: Keep a control row's state by matching row id, pin and params, or rebuild it from the fold.
+build: Write `risk_move` rows.
+see: A recipe change lands with no cold start. Open trades keep their exits.
+test: `test_a_size_edit_moves_in_place`. Logic state hash equal, an open position's stop and target equal, next entry 0.50 lots against 1.00.
+test: `test_a_logic_change_is_refused`. A different logic fingerprint answers `Refused("logic_changed")`.
+test: `test_all_flip_on_one_tick`. 50 members read the new risk fingerprint on the same tick, none between.
+lane3: Flip a plan on the fake broker with trades open | flip | every open position's exits still fire
+lens: edge-case, adversarial
+fact: No host ever runs a different compiled fingerprint over a held trade except by `move_risk` or a drain, by a test asserting at the host seam.
+
+@@ RC-56 | Compile stages in, so "at 5,000 the math changes" is a state
+stop: C
+slice: 13
+what: A risk half may declare stages with a selector, anchor, hysteresis and the rows in force for each. A stage move is a state change at an anchor with a `stage_move` row, by rule or card per direction.
+read: AD-7; OPEN row 2; SEEDS H-34.
+gates: Templates ship `card` up and `rule` down, the OPEN default. Only his answer moves a card.
+depends: RC-55
+edit: {Q}/unit/model.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+edit: {Q}/unit/sections.py
+edit: {QT}/test_unit_refuses.py
+new: {QT}/test_stages.py
+build: Lift `stages`. Compile all rows into the plan. Selector fact read at its anchor only.
+see: A unit changes how it sizes at a level you declared, with one click covering all of it up front.
+test: `test_a_stage_moves_at_the_anchor`. Equity 5100 at the anchor with threshold 5000 and hysteresis 200 moves up. 5100 mid-day doesn't, and 4900 back doesn't.
+test: `test_a_card_waits_and_the_old_stage_trades`. Move up is `card`. Rows stay on stage 1 until the answer.
+test: `test_no_new_version_on_a_move`. Both fingerprints equal across a move.
+lane3: Walk equity across a level on the fake broker | stage | one `stage_move` row with the literal anchor
+lens: edge-case
+fact: A stage with exit `stage_values` is logic, so a risk edit can't move an exit number, by RC-03's rule on a real document.
+
+@@ RC-57 | Seed the pod gallery as ingredients
+stop: C
+slice: 13
+what: E2's twenty pod configurations ship as `pod` and `group` Library items, each listing the blocks it needs. Nothing proves them, and they say so.
+read: `E2-pods-miniapps.md` section on the twenty pods; SOLUTION "Pods and mini apps"; SEEDS H-71.
+gates: Blocks marked `n:` are content someone writes. An item needing one says which and compiles once it exists.
+depends: RC-54
+new: {Q}/pods/gallery/README.md
+new: {Q}/pods/gallery/index.json
+new: {QT}/test_pod_gallery.py
+build: Write the twenty items as JSON under `pods/gallery/`. Write `index.json` naming each item, its method and its needs.
+see: You can browse twenty ready ideas, each saying what it needs and that none has run.
+test: `test_the_gallery_has_twenty`. 20 items with names from Relentless to Full press, a literal list.
+test: `test_each_compiles_or_names_its_missing_block`. Each item with all `s:` blocks compiles with `expand` against each template, and the others name their missing block.
+lane3: Land the gallery on a throwaway home | gallery | 20 drafts land and none is deployed
+lens: structure
+fact: Landing items never touches a deployment, by a recording store.
+
+@@ RC-58 | Open the readings bus, with a publisher and a fallback on every read
+stop: C
+slice: 14
+what: `reads` compiles with publisher, fallback, stale limit and `valid_until`, and the host stamps the source. The fallback of any market list is home markets, closing the fault where a wide unit trades everything on a dead board.
+read: AD-16; SWAP-CHART rows E1, E6; `runtime.py:367-369`; `E1-mis-sqs.md`.
+gates: Fifteen new physics readings and the finder's internals belong to the MIS owner.
+depends: RC-48
+edit: {Q}/unit/model.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+edit: {N}/app/runtime.py
+edit: {H}/feed_relay.py
+edit: {D}/journal_kinds/unit.py
+new: {NT}/test_app_reads_bus.py
+new: {QT}/test_reads.py
+swaps: E1 E6b
+build: Lift `reads`. Add the `reading:<id>:<market>` surface, `Read.publisher`, `valid_until_s`, `STAND_ASIDE`, `context_needs`.
+build: Write the reading record with `knows_at`. Let the relay carry any publisher, with `source` set by the host.
+build: Fix the fallback to home markets.
+see: Any app can publish a reading a unit may choose to trust. If it stops, the unit knows.
+test: `test_a_dead_board_falls_back_to_home`. Markets 40, home 3, board stale. Entries only on the 3. At the parent, all 40.
+test: `test_a_forged_source_is_replaced`. A publisher claiming `node` reads `app:x` on the record.
+test: `test_a_stale_reading_takes_its_fallback`. Each of the four fallbacks gives its literal behaviour.
+lane3: Stop the MIS mid-run on the fake broker | mis-down | readings age, home markets trade, no unit stops
+lens: edge-case, adversarial
+fact: No shipped template needs a reading to trade, by K7 with the relay off.
+
+@@ RC-59 | Land pods, presets, blocks and templates from a mini app, and save a block through a door
+stop: C
+slice: 14
+what: A mini app's `library-items` lander lands its items as drafts at publish, and `template` becomes a real kind holding overrides only. `blocks_save` lets an agent or user save a Library block with its contract test.
+read: SPINE section 8; FUNNEL row S16, I9; `E5` flaw 11; SOLUTION "Pods and mini apps".
+gates: Stdlib still needs his signature, Library does not. `plain_python` stays refused.
+depends: RC-53
+edit: {LIB}/kinds/template.schema.json
+edit: {LIB}/kinds/component.schema.json
+edit: {LIB}/landing.py
+edit: {APP}/manifest.py
+edit: {CTL}/catalog.py
+edit: {T}/functions.py
+edit: qmx-agents/packages/qmx-tools/tests/test_tools.py
+edit: qmx-agents/plugin/skills/build-unit/SKILL.md
+new: qmx-agents/packages/qmx-tools/tests/test_block_save.py
+new: qmx-agents/packages/qmx-library/tests/test_library_items_lander.py
+build: Add `blocks_save(entry, source)`, scanned by layer F and enrolled in the contract test. Add `template_save(json)`.
+build: Add provenance, claim and generation stamp on saved items.
+see: The copilot can add a new sizer or brake, tested before it saves.
+test: `test_a_bad_block_is_refused_with_its_contract_failure`. A sizer answering a float is refused, and nothing lands.
+test: `test_a_preset_holds_only_what_differs`. A template item with one override resolves to the base plus that row.
+test: `test_a_mini_app_lands_a_pod_at_publish`. Publishing lands one pod draft and no deployment.
+lane3: Save a Library sizer through the tool on `haiku` | block-save | the block lands with its test result
+lens: adversarial, edge-case
+fact: Saved block code can't reach `qmn`, by layer F's scan refusing a planted import.
+
+@@ RC-60 | Trace a Library block to a node deploy, and a mini app's reading to a unit
+stop: C
+slice: 14
+what: This proves "one folder, zero core edits" by trading a Library sizer on the fake broker. A mini app's reading reaches a unit through the same path, and if either trace fails, the fallback is named.
+read: OPEN row 11; SPINE section 10 slice 14; SEEDS H-05, H-72 to H-75.
+gates: Fallback if the trace fails, a stdlib path with his signature until fixed, and the promise is withdrawn from the guide.
+depends: RC-58, RC-59
+new: {NT}/test_app_library_block_trades.py
+edit: {H}/promote.py
+edit: {N}/app/runtime.py
+new: tools/lanes/library_block_trace.py
+build: Fix whatever the trace finds on the promote and node path, inside these files. Anything bigger is a finding.
+see: A new sizer written today trades tonight, on paper, with no one touching the core.
+test: `test_a_library_sizer_trades_on_the_fake_broker`. Library sizer answering `Amount(money_at_risk, 200)` gives 0.40 lots on EURUSD at stop distance 0.0050.
+test: `test_a_mini_apps_reading_reaches_a_unit`. Published reading 1.5 appears in the decision row's `readings_used` with `app:x`.
+lane3: Run the trace script on a throwaway home | block-trace | it prints PASS at save, compile, promote, deploy and fill
+lens: edge-case, verification-gap
+fact: The block travels through the lock without a money-app bump, by comparing the node's folder hash before and after.
+
+@@ RC-61 | Let an app read journals and the fold, and raise a card
+stop: C
+slice: 15
+what: An app's `data_reads` widens past `market` to `journals` and `fold`. The app-to-"Needs you" card path is traced and fixed where it fails.
+read: SPINE section 8 "Apps"; FUNNEL row K2; `E5` flaws 3, 4, 9; `supervisor.py:891`.
+gates: The mini-app core is his. Change only this read and this path, with the reason in one line.
+depends: RC-48
+edit: {APP}/supervisor.py
+edit: {APP}/manifest.py
+edit: {APP}/artifacts.py
+edit: {LIB}/kinds/proposal-card.schema.json
+new: qmx-agents/packages/qmx-apps/tests/test_data_reads_journals.py
+build: Grant read-only roots by declaration.
+build: Add a "look at this" ask to the card list, and an incident card by root-cause key.
+see: A mini app can see your units' records, read-only, and raise one card.
+test: `test_an_app_reads_journals_and_cannot_write`. Read gives rows, and a write to the root is refused.
+test: `test_an_undeclared_app_reads_nothing`. No `data_reads` row answers refused.
+test: `test_one_incident_one_card`. Ten raises with one key land 1 card.
+lane3: Install an example app with a journal read on a throwaway home | app-read | it reads and its card shows in "Needs you"
+lens: adversarial, edge-case
+fact: The shipped breaker and road tests pass unchanged.
+
+@@ RC-62 | Ship the scripted fleet watch as a mini app and turn off the decay flood
+stop: C
+slice: 15
+what: `fleet-watch` reads the fold once a night and on demand, with one ranked row per unit, two lists, one incident one card and a morning digest, and no agent in it. The shipped decay rule's per-unit nightly card is switched off in the same PR.
+read: SPINE section 8 "The scripted fleet watch"; `E5` section 1; SWAP-CHART row 28; `FIXES.md` S16.
+gates: K and the strict bar are labelled placeholders. Agent layers belong to the agentic session.
+depends: RC-61, RC-51
+new: {APPS}/fleet-watch/app.toml
+new: {APPS}/fleet-watch/server.py
+new: {APPS}/fleet-watch/pyproject.toml
+new: {APPS}/fleet-watch/tests/test_fleet_watch.py
+new: {ENG}/fleet-fold/definition.json
+new: {ENG}/fleet-fold/scripts/fold.py
+new: {ENG}/fleet-fold/README.md
+edit: {ENG}/dc-decay-and-limit-report/scripts/land.py
+edit: {T}/functions.py
+edit: {CTL}/catalog.py
+edit: qmx-agents/packages/qmx-tools/tests/test_tools.py
+edit: {AT}/test_shipped_apps.py
+edit: tools/test_all.py
+swaps: PH28
+build: Package through the manifest with `data_reads`. It installs, stops and swaps like any other app.
+build: Add `fleet_read()` and read it in the digest. From zero every row reads "too thin to judge".
+see: You don't have to monitor. 200 units read as one ranked list and a morning note.
+test: `test_one_row_per_unit`. 200 fixtures give 200 rows ranked, and the first's distance is a literal.
+test: `test_two_lists`. Look-at holds K items, act-on only those past the strict bar.
+test: `test_from_zero_every_row_is_too_thin`. An empty store with 3 units reads "too thin to judge" three times, and no card.
+test: `test_the_decay_card_is_off`. The decay template lands 0 per-unit cards.
+lane3: Install `fleet-watch` on a throwaway home with a fixture store | fleet | it starts, ranks, and stops the units on nothing
+lens: edge-case, verification-gap
+fact: Stopping the app changes no unit, by trading through a stop on the fake broker.
+
+@@ RC-63 | Report with and without motion, stamp run arms, and reserve the proposal row
+stop: C
+slice: 15
+what: `MotionSwitch` reports every run with and without motion, and run records gain arm id, link id and parent. The `proposal` row's shape is reserved with no writer, for methodology.
+read: AD-14, AD-18; SWAP-CHART row 26; FUNNEL row R8.
+gates: The judge rule and the fixed-size rerun are methodology's.
+depends: RC-25
+edit: {QB}/results/journal.py
+edit: {Q}/motion/engine.py
+edit: {D}/journal_kinds/unit.py
+new: {BT}/test_run_arms.py
+swaps: PH26
+build: Add the report and the fields. `tries.py` keeps counting until methodology changes it.
+see: Reports show what a learned number added, and what it cost.
+test: `test_a_run_reports_both_arms`. A run reads `motion_on` and `motion_off` with their literal trade counts.
+test: `test_the_proposal_row_has_no_writer`. Its shape exists, and a grep of the writers finds none.
+lane3: Run the dummy with motion on through QMB | two-arms | both arms print
+lens: verification-gap
+fact: The effective-tries count is unchanged, by the judge's shipped tests.
+
+@@ RC-64 | Keep a unit's record when a placeholder is swapped
+stop: C
+slice: 16
+what: A forwarding map declares old block version to new with a parameter transform, and the identity table is wired so promote and the judge classify a swap. A sizer-only swap keeps the logic record, an exit change is a counted try, and a deployment gains `succeeds`.
+read: SPINE section 7 "Versions and migrations"; SWAP-CHART rows 1, E16; FUNNEL row R17.
+gates: None.
+depends: RC-55, RC-28
+new: {Q}/identity/forward.py
+edit: {Q}/identity/table.py
+edit: {H}/promote.py
+edit: {H}/lifecycle.py
+edit: {N}/app/runtime.py
+edit: {Q}/check/layers.py
+new: {QT}/test_forwarding.py
+swaps: PH1 E16
+build: Declare `fixed-fraction-at-stop@1 -> @3`.
+build: Call `classify` from promote and the judge. A new version may enter while the old keeps only its exits until flat.
+see: Replacing a stand-in doesn't throw away what a unit already proved.
+test: `test_a_sizer_swap_keeps_the_logic_record`. Trade count before and after equal, money record new.
+test: `test_an_exit_change_is_a_counted_try`. Tries +1.
+test: `test_succeeds_drains_the_old`. Old takes no entry and its exits fire until flat.
+lane3: Swap a placeholder on the fake lane with a trade open | swap | the old drains, the new enters, one record
+lens: edge-case, adversarial
+fact: Old trade rows read correctly after RC-28's rename, by the forwarding test on a stored journal.
+
+@@ RC-65 | Re-test every deployed unit after a compiler bump
+stop: C
+slice: 16
+what: After a format bump, G reruns per deployed unit on its recorded slice on a worker pool, and the report says which changed behaviour. The node refuses the bump until the report exists.
+read: SPINE section 7 "Re-test workflow"; FUNNEL row K8; OPEN row 13.
+gates: Wall time may push this to a nightly schedule. Never inline.
+depends: RC-64
+new: {H}/retest.py
+edit: {N}/app/runtime.py
+new: qmx-agents/packages/qmx-host/tests/test_retest.py
+build: Write the workflow and the refusal.
+see: Upgrading the compiler can't silently change what's trading.
+test: `test_a_bump_with_no_report_is_refused`. Format 6 on a unit recorded at 5 answers `retest_missing`.
+test: `test_a_changed_unit_is_named`. Two units, one block changed, the report names one.
+lane3: Run a bump over 5 fixture deployments | retest | report written, node accepts after it
+lens: edge-case
+fact: The re-test touches no live deployment, by a recording store.
+
+@@ RC-66 | Finish the guide and ready stop point C
+stop: C
+slice: 16
+what: The developer guide gets its add-a-thing pages, each ending in the test that proves it. The money app's version moves once and the whole-repo check runs, and this PR is stop point C.
+read: SPINE section 7; OPEN rows 8, 8a.
+gates: G-SIGN.
+depends: RC-52, RC-56, RC-57, RC-60, RC-62, RC-63, RC-65
+edit: tools/qml/extending.py
+edit: qml/EXTENDING.md
+edit: {APPS}/trading-node/app.toml
+edit: {AT}/test_shipped_apps.py
+new: tools/lanes/release_note_stop_c.md
+build: Finish the seven "Adding" pages, and bump rows and digests.
+see: Stop point C. The baseline with groups, pods and shipping. One line to sign, and nothing live until slice 17 or a re-test.
+test: `test_each_adding_page_names_its_test`. Each of the seven pages ends in a test path that exists, a literal check.
+lane3: Run the whole-repo check at the head | whole-c | nothing fails beyond the named baseline reds
+lens: verification-gap
+fact: No PR in this program gave an agent a path to money, by `tools/money_path_scan.py` and K9 8 at the head.
+
+@@ RC-67 | Sign the stop and amend it with a read-back
+stop: D
+slice: 17
+what: Stop distance is signed at the venue encoder only, and stops only tighten unless `allow_widen` is set. Amends go out with read-back, and `Blocked` for a stop past entry lifts.
+read: AD-13 step 3; SWAP-CHART row 9; `handoff/FOR-REPAIR-SOCKET.md` sections 3 and 4; R24's probes.
+gates: G-DEMO. Built on the fake broker, and its demo lane runs after he signs in. Until R24 answers whether an amend wipes the other level, every amend sends both levels.
+depends: RC-66
+edit: packages/qmf-venue/src/qmf/venue/encode.py
+edit: {N}/app/runtime.py
+edit: {N}/order/amend.py
+edit: {Q}/protocol/exits.py
+new: {NT}/test_app_signed_stop.py
+swaps: PH9
+build: Move `_move_stop` to an absolute level with the encoder signing it. Restore a lost stop from the latest accepted amend row.
+see: A trade can move its stop past breakeven, and the node checks the broker took it.
+test: `test_a_short_past_entry_encodes_signed`. A short entered at 1.1000 with new stop 1.0990 encodes the signed distance -0.0010.
+test: `test_widen_refuses_unless_allowed`. Answers `stop_widen` with `allow_widen` false.
+test: `test_an_amend_sends_both_levels`. The recorded message carries stop and target.
+lane3: After G-DEMO, run the amend probe on his demo account | demo-amend | the read-back equals what was sent
+lens: edge-case, adversarial
+fact: `abs(entry - new_stop)` is gone from every path, by grep.
+
+@@ RC-68 | Close part of a position and trail on the node
+stop: D
+slice: 17
+what: The node executes `close_partial` with a quantity, and trails run through `amend_protection`. A moved number may now reach an open position where its row says `applies_to_open_positions`.
+read: AD-13 step 3, AD-14; SWAP-CHART rows 2, 3, 8, 10.
+gates: G-DEMO for its demo lane. A rest under the minimum lot closes in full.
+depends: RC-67
+edit: {N}/app/runtime.py
+edit: {QB}/host/unit_handler.py
+edit: {Q}/protocol/exits.py
+edit: {Q}/compile/compiler.py
+edit: {Q}/protocol/unit.py
+new: {NT}/test_app_partials.py
+swaps: PH2 PH3 PH8 PH10
+build: Close with a quantity at `runtime.py:1807-1808`. Lift `fraction < 1`.
+see: A unit can take part off and let the rest run.
+test: `test_half_off_leaves_half`. 1.00 lots with fraction 0.5 closes 0.50 and 0.50 remains, R booked for the half.
+test: `test_a_rest_under_min_closes_in_full`. 0.015 at min 0.01 with fraction 0.5 closes all with reason `partial_full`.
+test: `test_a_trail_moves_the_stop_each_bar`. Trail 10 pips reads the literal stop column.
+lane3: After G-DEMO, take a partial on his demo account | demo-partial | the venue's position equals the handler's
+lens: edge-case, adversarial
+fact: A close on a position already gone doesn't raise, by R24's probe answer once known, otherwise by the fake.
+
+@@ RC-69 | Rest targets at the venue, add entry forms, and set netting per venue
+stop: D
+slice: 17
+what: Targets may rest at the venue per R24's facts, entries may be limit or stop through `OrderSpec`, and two units on one netting symbol stay refused until attribution exists. This ends the program.
+read: AD-13, FUNNEL row S18; SWAP-CHART rows 21, E14; `handoff/FOR-REPAIR-SOCKET.md` section 4.
+gates: G-DEMO. If R24 shows node-closed targets don't lose on wicks, the venue target stays deferred and this PR ships only `OrderSpec`.
+depends: RC-68
+edit: packages/qmf-venue/src/qmf/venue/encode.py
+edit: {N}/venue/ctrader_account.py
+edit: {N}/app/runtime.py
+edit: {R}/unit_intent.py
+edit: {Q}/compile/compiler.py
+new: {NT}/test_app_venue_targets.py
+swaps: PH21 E14
+build: Add `relativeTakeProfit` to the encoder and `OrderSpec` on the intent.
+see: Live and backtest agree on where a target fills.
+test: `test_a_target_rests_with_the_entry`. The message carries the target distance 0.0100.
+test: `test_a_limit_entry_keeps_its_price`. `OrderSpec(limit, 1.0990)` sends that price.
+test: `test_two_units_on_one_netting_symbol_refuse`. Answers `netting_not_attributed`.
+lane3: After G-DEMO, run the wick probe on his demo account | demo-wick | the target fills at its level
+lens: edge-case, adversarial
+fact: A market entry with no `OrderSpec` is byte-equal on the wire to before.

@@ -1,0 +1,152 @@
+H-01 | RC-19, RC-39
+H-02 | RC-06, RC-07
+H-03 | RC-24, RC-26
+H-04 | RC-17, RC-39
+H-05 | RC-59, RC-60
+H-06 | RC-19, RC-39
+H-07 | RC-17, RC-23
+H-08 | RC-19, and the installer in the release session
+H-09 | RC-48, RC-66
+H-10 | RC-41, RC-45, RC-57
+H-11 | RC-59, RC-60
+H-12 | RC-41, RC-57
+H-13 | RC-23, RC-53
+H-14 | RC-48, RC-66
+H-15 | RC-02, RC-48, RC-66
+H-16 | RC-21, RC-22
+H-17 | RC-46, RC-67, RC-68, RC-69, then his click
+H-18 | RC-02, RC-65
+H-19 | RC-48, and the lead's trims
+H-20 | RC-39, RC-59
+H-21 | RC-31, RC-39
+H-22 | RC-39
+H-23 | RC-23
+H-24 | RC-23, RC-24
+H-25 | RC-24, RC-25
+H-26 | RC-23
+H-27 | RC-23
+H-28 | RC-06, RC-23, values in the numbers talk
+H-29 | RC-21, values in the numbers talk
+H-30 | RC-05, RC-07
+H-31 | RC-05
+H-32 | RC-05
+H-33 | RC-32
+H-34 | RC-22, RC-56
+H-35 | RC-16, RC-51
+H-36 | RC-24, RC-29
+H-37 | RC-13, RC-59
+H-38 | RC-28
+H-39 | RC-28, RC-35
+H-40 | RC-36
+H-41 | RC-24, the rule in the agentic upgrade session
+H-42 | RC-08, RC-18
+H-43 | RC-17, and first boot in the release session
+H-44 | The lead's run, through `unit-baseline/SWAP-CHART.md`
+H-45 | RC-48, and Appendix F of this plan
+H-46 | RC-12, RC-34
+H-47 | RC-39
+H-48 | RC-12, RC-45
+H-49 | RC-12, RC-68
+H-50 | RC-09, RC-10, RC-11, RC-42
+H-51 | RC-13, RC-39
+H-52 | RC-39, RC-57
+H-53 | RC-13, RC-57
+H-54 | RC-22
+H-55 | RC-22
+H-56 | RC-13, RC-21, RC-57
+H-57 | RC-39
+H-58 | RC-62, the test in the methodology session
+H-59 | RC-14, RC-15
+H-60 | RC-13, RC-59
+H-61 | RC-23, RC-39
+H-62 | RC-15, the reading in the methodology session
+H-63 | RC-14, RC-27
+H-64 | RC-36
+H-65 | RC-51, the value in the numbers talk
+H-66 | The methodology session
+H-67 | RC-14, RC-49, RC-50
+H-68 | RC-49, RC-53
+H-69 | RC-49, RC-58, the optimiser in the agentic upgrade session
+H-70 | RC-53, RC-59
+H-71 | RC-57
+H-72 | RC-58, RC-60
+H-73 | RC-59
+H-74 | RC-58
+H-75 | RC-19, RC-60
+H-76 | RC-03, RC-53
+H-77 | RC-49, RC-53, RC-59
+H-78 | RC-59, as a Library block only, never free Python
+H-79 | RC-47, RC-59
+H-80 | RC-47, RC-59
+H-81 | RC-59
+H-82 | RC-34, RC-39, RC-59
+H-83 | RC-59
+H-84 | RC-57, RC-59, the routing in the agentic upgrade session
+H-85 | RC-37, RC-58
+H-86 | RC-35, RC-58
+H-87 | RC-35
+H-88 | RC-58, the content with the MIS owner
+H-89 | RC-58, the content with the MIS owner
+H-90 | The MIS owner, as content
+H-91 | RC-33, RC-36
+H-92 | The MIS owner, blocked on volume on bars (OPEN row 5)
+H-93 | RC-42, RC-44
+H-94 | RC-49
+H-95 | RC-67, and a venue adapter row for Hyperliquid in the unit build's C-16
+H-96 | RC-62
+H-97 | RC-52, RC-62
+H-98 | RC-61, RC-62
+H-99 | RC-62, the test in the methodology session
+H-100 | RC-08, RC-42
+H-101 | RC-14, RC-62
+H-102 | RC-23
+H-103 | RC-02
+H-104 | RC-47, RC-61, then the agentic upgrade session
+H-105 | RC-17, RC-47, then the agentic upgrade session
+H-106 | RC-47, then the agentic upgrade session
+H-107 | RC-18, RC-54
+H-108 | The agentic upgrade session
+H-109 | The agentic upgrade session
+H-110 | RC-59, then the agentic upgrade session
+H-111 | The agentic upgrade session and the methodology session
+H-112 | RC-59, then the agentic upgrade session
+H-113 | RC-63, then the methodology session
+H-114 | The methodology session
+H-115 | The methodology session
+H-116 | The UI session, through `HANDOFFS.md`
+H-117 | The UI session
+H-118 | The UI session
+H-119 | RC-56, then the numbers talk
+H-120 | RC-29, then the numbers talk
+H-121 | RC-41, RC-45, then the numbers talk
+H-122 | The methodology session
+H-123 | The lead's run
+H-124 | The lead's run
+H-125 | The lead's run
+H-126 | The lead's run
+H-127 | The lead's run
+H-128 | The lead's run
+H-129 | The lead's run
+H-130 | The lead's run
+H-131 | The lead's run
+H-132 | The lead's run
+H-133 | This plan and `PROMPT-ORCHESTRATOR.md`
+H-134 | The lead's run
+H-135 | The lead's run
+H-136 | The lead's run
+Old 2 | Extensibility the way N8N handles things, and white label | RC-59, white label in the release session
+Old 3 | Types include mean-reverting scalper, ORB, trend-following | RC-39
+Old 11 | Edge-led sizing stays expressible | RC-59, as a block
+Old 14 | Kelly after costs, half or full open | RC-59, values in the numbers talk
+Old 16 | One-shot breakeven needs its own thought | RC-68, as a block off by default
+Old 19 | Same-bet positions count once | RC-32, RC-50
+Old 20 | System 1 over System 2 | The methodology session. See Appendix H
+Old 22 | A losing-run brake per type | RC-39
+Old 26 | Kill switch and SQS as outside parts | RC-36, RC-41
+Old 29 | Multiple Books register on the BMS | RC-49
+Old 37 | Where it runs, node and his PC | RC-49
+Old 39 | What QMB hands over and what the MIS publishes | RC-58
+Old 41 | Microstructure and macro as numbers from agents | RC-58, then the agentic upgrade session
+Old 44 | Borrowed designs | The lead's run
+Old 53 | Other industries' solutions | The lead's run
+Old 55 | Tooling, replaced by his later words | The lead's run

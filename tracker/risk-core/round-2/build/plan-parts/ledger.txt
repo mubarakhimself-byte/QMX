@@ -1,0 +1,52 @@
+PH 1 | Sizer `fixed-fraction-at-stop@1` | WIDEN then SWAP | none
+PH 2 | Stop `swing-stop-buffer@1` | WIDEN | none
+PH 3 | Target `target-r-multiple@1` | WIDEN | none
+PH 4 | Time exit `time-exit-bars@1` | WIDEN | none
+PH 5 | Halts | WIRE and WIDEN | none
+PH 6 | Cross-unit hook | WIDEN and WIRE | none
+PH 7 | Motion of risk numbers | WIDEN | none
+PH 8 | Moved values and open positions | WIDEN | none
+PH 9 | Stop amendments | WIRE and WIDEN | none
+PH 10 | Partial closes | WIRE, WIDEN | none
+PH 11 | No price stop | WIDEN | none
+PH 12 | Rounding, minimum lot | WIDEN | none
+PH 13 | Gap through the stop | KEEP, a fact | none
+PH 14 | Margin and liquidation | WIRE then WIDEN | none
+PH 15 | Leverage and spec changes | WIRE | none
+PH 16 | Funding and swaps | KEEP, a fact | none
+PH 17 | Account facts | WIDEN | none
+PH 18 | Kill effects per level | WIDEN | none
+PH 19 | Protection that cannot be placed | WIDEN | none
+PH 20 | Kill line's verb | WIRE | none
+PH 21 | Two units on one netting symbol | WIDEN | none
+PH 22 | Starting numbers for live | SWAP | none
+PH 23 | The one automatic move | WIRE | none
+PH 24 | Paper after a risk stop | SWAP | none
+PH 25 | Risk events in journals | WIRE | none
+PH 26 | Judge with unit sizer and fixed size | WIRE | none
+PH 27 | Correlated judging | KEEP | none
+PH 28 | Decay alarm | SWAP and WIRE | none
+PH 29 | Fields to replay sizing | WIRE | none
+PH 30 | Size the venue receives | KEEP, test kept | none
+PH 31 | Pods | Built here | none
+E1 | `reads` refused | WIDEN | none
+E2 | Eleven roles do not run | WIDEN per role | none
+E3 | Exits at unit or account scope | WIDEN, stays at account | none
+E4 | One position per market | WIDEN | none
+E5 | Per-market settings | WIDEN | none
+E6a | `sessions` | WIDEN | none
+E6b | `context_needs` | WIDEN | none
+E6c | `routes`, `plain_python`, `roll` | stays refused | None. One venue, the Library block is the Python door, and `roll` waits on a futures route (Q2)
+`streams_not_built` | Second stream | WIDEN | none
+E7 | Spread, SQS, news in `guard` | WIRE | none
+E8 | Sizer slot has no type check or ceiling | WIDEN | none
+E9 | `_CEILING = 0.005` in the contract test | WIDEN | none
+E10 | Exit contract test feeds refused evidence | WIDEN | none
+E11 | Library blocks not enrolled | WIDEN | none
+E12 | Motion rule gets only strength and R | WIDEN | none
+E13 | `r_after_costs` holds no costs | WIDEN | none
+E14 | Market entries only | WIDEN | none
+E15 | `OwnPosition` lacks facts | WIDEN | none
+E16 | Identity table unwired | WIRE | none
+E17 | Too-thin count | value | None. A value, owned by the numbers talk and methodology
+E18 | Motion constants | WIDEN | none
