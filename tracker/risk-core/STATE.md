@@ -4,6 +4,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
+**7 Nov evening, READ FIRST: round two is running on his word (M54). Go to `round-2/RUN.md`.**
+
 **7 Nov, READ FIRST: he rejected the template (M49). See `REVIEW-2026-11-07.md`. The next step, on his go, is a recut around unit plus pod. Q1-Q9 are withdrawn. Numbers and methodology stay out.**
 
 
