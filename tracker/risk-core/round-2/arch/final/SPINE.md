@@ -8,14 +8,14 @@ scope: 'Risk and sizing of the unit, the pod and the group level; MIS, SQS, node
 status: final
 created: '2026-11-07'
 updated: '2026-11-07'
-binds: ['FUNNEL section 3 core rows (51)', 'FUNNEL section 4 first baseline', 'COMPARE section 4 grafts 1-13', 'COMPARE section 5 findings 1-12', 'SWAP-CHART rows 1-31 and E1-E18', 'SEEDS-2 Part C']
+binds: ['FUNNEL section 3 core rows (51)', 'FUNNEL section 4 first baseline', 'COMPARE section 4 grafts 1-13', 'COMPARE section 5 findings 1-12', 'SWAP-CHART rows 1-31 and E1-E18', 'SEEDS-2 Part C', 'final/CHECK.md blockers B1-B9 and should-fixes S1-S17']
 sources: ['round-2/arch/COMPARE.md', 'round-2/arch/V1-unit-owns (base)', 'round-2/arch/V2-pod-by-scope, V3-group-above, V4-premise (grafts)', 'round-2/funnel/FUNNEL.md', 'round-2/funnel/QUESTIONS.md', 'round-2/expand/E1, E2, E5', 'unit-baseline/SWAP-CHART.md', 'round-2/SEEDS-2.md', 'D:/QMX-worktrees/bld-repair-24 at 351e7521']
-companions: ['SOLUTION.md', 'WALKS.md', 'OPEN.md']
+companions: ['SOLUTION.md', 'WALKS.md', 'OPEN.md', 'FIXES.md']
 ---
 
 # The fold: the unit owns it, with thirteen grafts
 
-Written headless, 7 Nov 2026, as the fold of four architecture versions under `round-2/arch/COMPARE.md`. Base is V1; the thirteen grafts and twelve findings of COMPARE sections 4 and 5 are taken, each named where it lands. Paths are under `D:\QMX-worktrees\risk-plan\tracker\risk-core\` unless they start with a package name; package paths are under `D:\QMX-worktrees\bld-repair-24\`, tip `351e7521`, where every code line cited here was re-read today. `PH n` is a row of `RISK-SIZING-PLACEHOLDERS.md`; `SWAP n` and `En` are rows of `unit-baseline/SWAP-CHART.md`; `S1`, `I2`, `R9`, `K7`, `V1` are core rows of `round-2/funnel/FUNNEL.md` section 3; `G n` is a graft of COMPARE section 4; `F n` is a finding of COMPARE section 5; `Mn` is his message. Numbers are labelled placeholders, owner "numbers talk"; none is argued here. `[ASSUMPTION]` marks an inference nobody confirmed; UNKNOWN marks what was not verified.
+Written headless, 7 Nov 2026, as the fold of four architecture versions under `round-2/arch/COMPARE.md`, then corrected by the final fix round against `CHECK.md` (`B n` and `CHECK S n` name its findings; `FIXES.md` lists each one). Base is V1; the thirteen grafts and twelve findings of COMPARE sections 4 and 5 are taken, each named where it lands. Paths are under `D:\QMX-worktrees\risk-plan\tracker\risk-core\` unless they start with a package name; package paths are under `D:\QMX-worktrees\bld-repair-24\`, tip `351e7521`, where every code line cited here was re-read today. `PH n` is a row of `RISK-SIZING-PLACEHOLDERS.md`; `SWAP n` and `En` are rows of `unit-baseline/SWAP-CHART.md`; `S1`, `I2`, `R9`, `K7`, `V1` are core rows of `round-2/funnel/FUNNEL.md` section 3; `G n` is a graft of COMPARE section 4; `F n` is a finding of COMPARE section 5; `Mn` is his message. Numbers are labelled placeholders, owner "numbers talk"; none is argued here. `[ASSUMPTION]` marks an inference nobody confirmed; UNKNOWN marks what was not verified.
 
 **Fork answers held (from V1, grafts in brackets):** F1 A compiled in plus a thin group [G6: group limits as live facts; G13: group order as a block]; F2 C find, track, correct; F3 B node sensor, unit gate slot, one curve; F4 A one process, one node thread [G1: time budget; G2: one wrapper]; F5 A exits on the unit, fixed order, the node closes targets; F6 B small core widened in slices; F7 C two chains [G4: one decision row written before the send].
 
@@ -73,13 +73,13 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** S1, S2, S4, S6, S13, S14, V7, V10.
 - **Prevents:** a second evaluator above the unit; a size computed in two places; "no pod" as a special case.
-- **Rule:** at trade time everything a member obeys that reads only its own facts or market facts is in its compiled document and runs in `HostedUnit`, the code QMB and the node already share through `UnitSliceHandler` (`qmb/src/qmb/host/unit_handler.py:1-7`). Nothing above a unit computes a size. A template or a mini-app unit with no pod and no group is the normal case. **Door kept open at low cost:** sizing is a separate call, `HostedUnit.price(proposal)`, invoked by the host right after `on_instant` on the same tick; if he later picks a pod that governs (section 12), only the caller of `price` moves.
+- **Rule:** at trade time everything a member obeys that reads only its own facts or market facts is in its compiled document and runs in `HostedUnit`, the code QMB and the node already share through `UnitSliceHandler` (`qmb/src/qmb/host/unit_handler.py:1-7`). Nothing above a unit computes a size. A template or a mini-app unit with no pod and no group is the normal case. **Sizing is pass 2 [B8]:** sizing is a separate call, `HostedUnit.price(proposal, facts, admit)`, made by the host in pass 2 (AD-17), never in pass 1, so account facts stay out of the exit pass and a parked entry is sized on fresh facts. Until slice 11 lands the outbox, the host makes that call straight after the unit's exits went out, where placing happens today (`runtime.py:1727-1733`); slice 11 moves the one call site. QMB's one-unit run and `qml/check/layer_g.py` call it the same way. If he later picks a pod that governs (section 12), only what `price` receives changes.
 
 ### AD-2 One document, two sections, two fingerprints; three tiers of change
 
 - **Binds:** S14, I9, R17, `qml/unit/sections.py` (new), every builder who asks "does this need a click?" [G7, V4 AD-2].
 - **Prevents:** builders disagreeing about what a pod edit may touch; a size edit re-proving logic; a live edit that bypasses the click by calling itself configuration.
-- **Rule:** one function partitions the document. **Logic section:** `markets`, `streams`, `direction`, `logic`, `exit_set`, `sessions`, `position_limit`, and every number bound by a logic slot or an exit, with their pins. **Risk section:** `sizer`, `modifiers`, `gates`, `halts`, `reads`, `tolerations`, `stages`, and every number bound only there. A number bound in both is logic. `compiled_fingerprint = H(logic_fingerprint, risk_fingerprint, format, options)` (today the whole document hashes in at `compiler.py:1072-1079`). **Three tiers, the builders' rule:** a *fact* changes live and reaches the unit at its next decision with its age; a *number* moves by its own rule inside its declared range with no click; a change of *structure* (a block, a binding, a range, a default) is a new version. Group limit values are facts (AD-8). A thing that must flip live is a fact; a thing that changes what runs is a version.
+- **Rule:** one function partitions the document. **Logic section:** `markets`, `streams`, `direction`, `logic`, `exit_set`, `sessions`, `position_limit`, and every number bound by a logic slot or an exit, with their pins. **Risk section:** `sizer`, `modifiers`, `gates`, `halts`, `reads`, `tolerations`, `stages`, and every number bound only there. **Anything not named as risk is logic,** so a new or forgotten field can't fall between the two (`baseline`, `claim_card`, `context_needs`, `family_id`, `lineage`, `plain_python`, `routes`, `title`, `unit_id` included); only `recipe` sits outside both. A number bound in both is logic. A `reads` row bound by a logic slot is logic. A `stages` selector with any exit in its `stage_values` is logic, so a risk edit can never move an exit number unproven [CHECK S4]. `compiled_fingerprint = H(logic_fingerprint, risk_fingerprint, format, options)` (today the whole document hashes in at `compiler.py:1072-1079`). **Three tiers, the builders' rule:** a *fact* changes live and reaches the unit at its next decision with its age; a *number* moves by its own rule inside its declared range with no click; a change of *structure* (a block, a binding, a range, a default) is a new version. Group limit values are facts (AD-8). A thing that must flip live is a fact; a thing that changes what runs is a version.
 
 ### AD-3 The node tests logic and trusts a click for risk; never a new fingerprint over a held trade
 
@@ -97,7 +97,7 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** S14, K5, V4, Q6, `qml/pods/roll.py`, `qmx_host/roll.py`.
 - **Prevents:** 200 hand moves; drafts reaching a live deployment; a click on something that has since changed.
-- **Rule:** `roll_plan(pod@new, members)` stamps, checks and compiles every member off the node and sorts each into `risk_only`, `unchanged`, `locked`, `logic_touch` or `refused`. The plan hash is `H(pod hash, sorted (deployment, new risk fingerprint))`. The owner's one click binds to that hash through the money door (K5); a stale plan is refused. `refused` and `locked` members stay on their old version and are named. A plan may cover a subset, which is a canary. Each member gets a new unit version; the identity table (R17) gets a section column so a risk-section edit keeps the logic record and starts a new money record. A group document edit (AD-8) is a separate click on that row's version and touches no member document. Agents and the copilot write drafts and plans only.
+- **Rule:** `roll_plan(pod@new, members)` stamps, checks and compiles every member off the node and sorts each into `risk_only`, `unchanged`, `locked`, `logic_touch` or `refused`. The plan hash is `H(pod hash, sorted (deployment, new risk fingerprint))`. The owner's one click binds to that hash through the money door (K5); a stale plan is refused. `refused` and `locked` members stay on their old version and are named. A `logic_touch` member is handled the same way: it stays out of the plan hash, stays on its old version, and is named as needing its own new version and G run; the click never carries it [CHECK S13]. A plan may cover a subset, which is a canary. Each member gets a new unit version; the identity table (R17) gets a section column so a risk-section edit keeps the logic record and starts a new money record. A group document edit (AD-8) is a separate click on that row's version and touches no member document. Agents and the copilot write drafts and plans only.
 
 ### AD-6 A risk move happens in place
 
@@ -109,7 +109,7 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** I10, S2, S13, `qml/unit/model.py` `Stages`.
 - **Prevents:** a stage change that mints a new identity or wipes a record; "at 5,000 the math changes" (M51) needing a new unit.
-- **Rule:** a risk section may declare `stages`: a selector (a fact, or a block), the anchor it is read at, hysteresis, and for each stage the sizer, modifiers, control rows and number values in force. All stages compile into the plan, so the risk fingerprint covers them and one click covered them. A stage move is a state change at an anchor with a `stage_move` row, never a new version. `move` is `rule` or `card`, per direction; templates ship `card` going up and `rule` going down (COMPARE §6 row 2 default). An undeclared stage is a pod edit (AD-5). Exit numbers may vary by stage but sit in the logic section, so adding them costs a G run per member once.
+- **Rule:** a risk section may declare `stages`: a selector (a fact, or a block), the anchor it is read at, hysteresis, and for each stage the sizer, modifiers, control rows and number values in force. All stages compile into the plan, so the risk fingerprint covers them and one click covered them. A stage move is a state change at an anchor with a `stage_move` row, never a new version. `move` is `rule` or `card`, per direction; templates ship `card` going up and `rule` going down (COMPARE §6 row 2 default). While a `card` waits, the old stage keeps trading; only his answer moves it [CHECK S13]. An undeclared stage is a pod edit (AD-5). Exit numbers may vary by stage but sit in the logic section, so adding them costs a G run per member once.
 
 ### AD-8 The thin group: caps as live facts, a ledger, an order; nothing else
 
@@ -121,13 +121,13 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** S6, V1, R1, `qml/protocol/entry_chain.py` (unit chain), `qml/chain/node_chain.py` (node chain runner), `qmf/risk/chain.py` (verdict types) [G2 V2 AD-9, G3 V2 AD-8, G4 V2 AD-6; F3, F8].
 - **Prevents:** a link with no home; two receipts that cannot be joined; a chain that can stop an exit; a refused frontier ending that unit's exits (`runtime.py:3040-3046` sets STOPPED today); a hung link taking down the node; a crash between stages leaving a row with no order or an order with no row.
-- **Rule:** the unit chain runs inside the unit; the node chain in the host. **Placement test:** a link that reads only this unit's facts and market facts it may tolerate goes in the unit chain (stickers not tolerated, the gate slot, its own caps). A link that reads the account or other units goes in the node chain (kill effects, group caps, reservations, order veto: margin headroom, worst-step reserve, size band, order rate, venue stop or declared no-stop basis). The node chain is called from one seam, `UnitSliceHandler.mint_intents`, through an injected `AdmitPort`, so both hosts call it; the node's `guard`, `cross_unit_hook` and protection gate become links or stay directly behind it (`runtime.py:1100-1106, 2623-2675`). **One wrapper:** `run_budgeted(fn, budget)` runs every chain link and control row on a worker thread with a time limit; a raise or an overrun refuses that entry with `link_fault` or `link_hung`, stands that link's scope down, and never returns a refusal into `close_frontier`. The unit's own bar step is wrapped once the wrapper is tested on Windows; until then `StuckWatch` stays the backstop (`healing.py:64`). **One row:** both chains append to one in-memory trail; the decision row is journalled once, after the last link and before any order leaves, with every input stored (facts as read with age and source, group facts included), so it replays alone. **Import test:** exit code (`qml/protocol/exits.py`) imports nothing from `entry_chain`, `node_chain`, `fold` or the readings feed; a test parses its imports. Exits never enter either chain, by property test including a faulty block and a hung link.
+- **Rule:** the unit chain runs inside the unit; the node chain in the host. **Placement test:** a link that reads only this unit's facts and market facts it may tolerate goes in the unit chain (stickers not tolerated, the gate slot, its own caps). A link that reads the account or other units goes in the node chain (kill effects, group caps, reservations, order veto: margin headroom, worst-step reserve, size band, order rate, venue stop or declared no-stop basis). **The runner and the `AdmitPort` protocol live in `qml`; links that need `qmn` (kill effects, protection) live in `qmn/app/node_links.py` and are injected,** so `qml` imports nothing from the node [CHECK S11]. The node chain is called from one seam, `UnitSliceHandler.mint_intents`, through an injected `AdmitPort`, so both hosts call it; the node's `guard`, `cross_unit_hook` and protection gate become links or stay directly behind it (`runtime.py:1100-1106, 2623-2675`). **One wrapper:** `run_budgeted(fn, budget)` runs every chain link and control row, and from slice 10 the bar step's `update` and `entries` phases (AD-23), on one shared worker pool with a time limit; a raise or an overrun refuses that entry with `link_fault` or `link_hung`, stands that link's scope down, and never returns a refusal into `close_frontier`. A `link_hung` also leaves a thread burning (`CHECK` toy: main-thread work 3.8 times slower with 5 of them), so it marks the node for a restart at the next point `safe_to_restart` allows, with a row and a card [CHECK S14]. Raises don't need this wrapper: AD-23's plain `try` catches them from slice 3. Before slice 10, and for a C call holding the GIL, `StuckWatch` stays the backstop (`healing.py:64`). **Words:** a gate's `block` is the chain verdict `refuse`; `shrink` rewrites the wire quantity; `wait` keeps the proposal parked until its `expires_at` (AD-17), with no send; `warn`, `shadow` and `none` pass with a row [CHECK S13]. **One row:** both chains append to one in-memory trail; the decision row is journalled once, after the last link and before any order leaves, with every input stored (facts as read with age and source, group facts included), so it replays alone. **Import test:** exit code (`qml/protocol/exits.py`) imports nothing from `entry_chain`, `node_chain`, `fold` or the readings feed; a test parses its imports. Exits never enter either chain, by property test including a faulty block, a raising logic slot, a raising sizer and a hung link.
 
 ### AD-10 A sizer answers a typed amount; one converter spells the venue's quantity
 
 - **Binds:** S1, I1, PH 1, 12, 30, `qml/blocks/api.py` `Amount`, `qml/numbers/convert.py`.
-- **Prevents:** a socket change per base; lots in design; a 5,000-lot answer passing (`SWAP` S1c); a trigger bound as a sizer (`SWAP` S3); the USDJPY fault (`fixed-fraction-at-stop/1/block.py:52-53`).
-- **Rule:** a sizer returns `Amount(kind: money_at_risk | notional | quantity, value, basis)` or a `Skip`. Today's `Size(lots)` reads as `quantity`, so the placeholder still passes. One converter reads the amount, the declared R basis and the instrument record (value per point, lot step and bounds, conversion) and spells the venue's quantity, rounding down by default with real residue; hosts stop re-rounding after their first check. The compiler checks the slot's face (`output: amount`). The size band and per-trade cap live in one row, applied after the converter. A sizer gets `side` and reads moved numbers from `evidence`. **Why lots (M49):** lots are the venue's word for a quantity of one instrument; a rule speaks in money at risk or notional, which is the same across instruments; the converter is the only place lots exist, and the wire already says `quantity`.
+- **Prevents:** a socket change per base; lots in design; a 5,000-lot answer passing (`SWAP` S1c); a trigger bound as a sizer (`SWAP` S3); the USDJPY fault, where a size meant in the account's currency loses that figure in JPY (`fixed-fraction-at-stop/1/block.py:52-53`, ran in `CHECK` B5); two builders each solving conversion their own way; a stale rate with no stated behaviour.
+- **Rule:** a sizer returns `Amount(kind: money_at_risk | notional | quantity, value, basis)` or a `Skip`. Today's `Size(lots)` reads as `quantity`, so the placeholder still passes. One converter reads the amount, the declared R basis, the instrument record (value per point, lot step and bounds) and a **rate** and spells the venue's quantity, rounding down by default with real residue; hosts stop re-rounding after their first check. **Currency [B5]:** `value_per_point` is in the record's quote currency (`records.py:51`), so `quantity = money / (distance * value_per_point * rate)`, where `rate` is account currency per one unit of quote currency. The rate is an ordinary `Fact` (`market.rate:<quote>`). The record gains `conversions: Mapping[account_currency, ConversionRef(market_id, invert)]`; quote equal to account is rate 1 with no lookup. The host subscribes each named market beside the unit's traded ones and never drives the unit on it, so a cross such as EURJPY needs no `context_needs`. A stale (past `rate_stale_s`, a labelled placeholder) or absent rate gives a named skip, `rate_stale` or `rate_absent`, on that entry. **Exits never read it:** a close is sent regardless; `_money` (`unit_handler.py:216-220`) keeps the quote-currency figure and stamps the last rate with its age on the row, and `_account()` (`:372`) sums converted money. QMB reads the same fact from the conversion market's replay bars; a backtest missing them skips by the same name and says so on its run stamp. `Size(lots)` skips the converter because it states a quantity, so **every shipped template binds `fixed-fraction-at-stop@2`, which answers `Amount(money_at_risk)`;** `@1` stays only as the old row forwarded by R17. The compiler checks the slot's face (`output: amount`). The size band and per-trade cap live in one row, applied after the converter. A sizer gets `side` and reads moved numbers from `evidence` (AD-14). **Why lots (M49):** lots are the venue's word for a quantity of one instrument; a rule speaks in money at risk or notional, which is the same across instruments; the converter is the only place lots exist, and the wire already says `quantity`.
 
 ### AD-11 Named modifiers; the level is one of them
 
@@ -139,19 +139,27 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** S4, S10, S11, S12, PH 5, 18 to 20, 23 to 25, 28 [G9 V4 3.4, V2 AD-16; F9].
 - **Prevents:** each brake as custom code; a brake that needs the node to exist in a backtest; a brake state lost on restart because the snapshot writes only when a calibrated number moves (`runtime.py:2919-2927`); state copied by hand on a pod edit.
-- **Rule:** `halts` stays the seat and each entry is a control row: required `reads`, `scope`, `verb` (`none`, `no_new_entries`, `reduce(factor)`, `flatten`), `on_fire` (stand down at a scope, raise a kill level, card), `restore` (rule or hand), `until_n` (cold behaviour: warn, shadow, or a fixed labelled fallback), `shadow`; the rest defaulted (attack, release, counting, fail mode, money series, class, healthy fire rate). FUNNEL's `placement` field is struck: a row runs where its document says, the unit or the group. The control runner in `_Run.step` feeds each row its declared facts and writes `risk_event` (and `would_have` when shadowed or when it refused). **The five words ACTIVE, REDUCING, BENCHED, HALTED, RESTORE per scope are derived by the fold (AD-18) from `risk_event` and restore rows; the node keeps the fold incrementally and the snapshot caches it; a restart or a `move_risk` rebuilds state from rows and copies nothing.** A row that says `wait for hand` calls `Runtime.risk_stop` (`runtime.py:2696`), its first producer. Only that row and the kill switch wait for a person. `flatten` mints exit intents through the unit's own exit path. The shipped five halts bind unchanged once their `own.*` statistics exist.
+- **Rule:** `halts` stays the seat and each entry is a control row: required `reads`, `scope`, `verb` (`none`, `no_new_entries`, `reduce(factor)`, `flatten`), `on_fire` (stand down at a scope, raise a kill level, card), `restore` (rule or hand), `until_n` (cold behaviour: warn, shadow, or a fixed labelled fallback), `shadow`; the rest defaulted (attack, release, counting, fail mode, money series, class, healthy fire rate). FUNNEL's `placement` field is struck: a row runs where its document says, the unit or the group. The control runner in `_Run.step` feeds each row its declared facts and writes `risk_event` (and `would_have` when shadowed or when it refused). **The five words ACTIVE, REDUCING, BENCHED, HALTED, RESTORE per scope are derived by the fold (AD-18) from `risk_event` and restore rows; the node keeps the fold incrementally and the snapshot caches it; a restart or a `move_risk` rebuilds state from rows and copies nothing.** A row that says `wait for hand` calls `Runtime.risk_stop` (`runtime.py:2696`), its first producer. Only that row and the kill switch wait for a person. `flatten` mints exit intents through the unit's own exit path. The shipped five halts bind unchanged once their `own.*` statistics exist. Slice 4 lands the fold at unit scope, because it is what these words come from.
 
 ### AD-13 Exits stay on the unit in a fixed order; shaped for a quote clock
 
 - **Binds:** S3, I13, V1, V6, F5, PH 2 to 4, 9 to 11 [F12].
 - **Prevents:** a pod changing what R means under a record; a faulty exit stopping an exit; a later tick lane reworking the exit answer.
-- **Rule:** every exit in `exit_set` runs per bar, fed `PositionFacts` and market evidence, on its side. Answers: `close_full`, `close_partial`, `amend_protection`, each with a reason code; a `target_position` type is reserved. On one bar, full beats partial beats amend, and the earlier binding breaks a tie; this is compiled, not configured. The node closes targets as today (`runtime.py:1849-1857`). A raising exit block is skipped with a row and the next runs; if none can run, `_close_scope` (`runtime.py:2451`). R is a declared basis on the sizer row, gross at the disaster stop by default; stops tighten unless `allow_widen` is set. A pod never touches `exit_set`. **Step 2 now:** stack, `PositionFacts`, side, reasons, fault fall-through. **Step 3 after the demo facts:** signed stop distance, amends, partials on the node, trails, venue-resting targets. **Shaped for later:** `ExitInstance.update` takes an `evidence` mapping whose clock is a field, so a quote clock feeds it later with no answer-type change; the stream input widening (`compiler.py:976-981`) is deferred, not designed around.
+- **Rule:** every exit in `exit_set` runs per bar, fed `PositionFacts` and market evidence, on its side: **an exit reads the bars of the quote that closes it, bid for a long, ask for a short,** so a short's stop sees the spread (today both sides get bid, `unit.py:574-576`) [CHECK S15]. Answers: `close_full`, `close_partial`, `amend_protection`, each with a reason code; a `target_position` type is reserved. On one bar, full beats partial beats amend, and the earlier binding breaks a tie; this is compiled, not configured. The node closes targets as today (`runtime.py:1849-1857`). A raising exit block is skipped with a row and the next runs; if none can run, the step answers a `Fault` and the host's `close_scope` port acts on it: `_close_scope` on the node (`runtime.py:2451`), a close at the next bar's open in QMB. `qml` never imports node code [CHECK S10]. R is a declared basis on the sizer row, gross at the disaster stop by default; stops tighten unless `allow_widen` is set. A pod never touches `exit_set`. **Step 2 now:** stack, `PositionFacts`, side, reasons, fault fall-through. **Step 3 after the demo facts:** signed stop distance, amends, partials on the node, trails, venue-resting targets. **Shaped for later:** `ExitInstance.update` takes an `evidence` mapping whose clock is a field, so a quote clock feeds it later with no answer-type change; the stream input widening (`compiler.py:976-981`) is deferred, not designed around.
 
 ### AD-14 Numbers: find, track, correct, on the built engine; authority on every number
 
 - **Binds:** S13, I16, D15 to D17, PH 7, 8, 22, E12, E18.
 - **Prevents:** a second moving part; a number nobody can explain; unbounded memory (`engine.py:124`); a learned number touching open trades unasked.
-- **Rule:** no applier object. **Find** is a replay in the Lab or at birth, ending in a new version with `Origin.found_by_replay`. **Track** is a `scaled` number, fact times multiple, computed each bar. **Correct** is the built engine (`qml/motion/engine.py`), widened: `_bound_on` and the stamp search (`compiler.py:510-516, 620-631`) accept sizer, control and exit bindings; a bounded window on `SlowState.read`; may run with no logic stamp; takes `cadence.at`; its constants (`min_trades`, `shrink_k`, cadence) are editable rows. **Every number carries:** `derivation` (rule block or fact), `range`, `authority` (`off`, `motion_inside_range`, `at_anchor`), `owner` (`user`, `template`, `learner`), `reason` on the resolved value, `cautious` direction, `guard` (revert and freeze after trips), `never_self_tune`, `applies_to_open_positions`, and a per-change record. A move inside range is a calibration row; outside it a new version. `MotionSwitch` reports with and without. Presets per type turn correct on for filters and off for size. **Evidence stated once:** E5's tables show only that the mechanism behaved as described and did not run away (MODEL); they do not prove the default.
+- **Rule:** no applier object. **Find** is a replay in the Lab or at birth, ending in a new version with `Origin.found_by_replay`. **Track** is a `scaled` number, fact times multiple, computed each bar. **Correct** is the built engine (`qml/motion/engine.py`), widened: `_bound_on` and the stamp search (`compiler.py:510-516, 620-631`) accept sizer, control and exit bindings; a bounded window on `SlowState.read`; takes `cadence.at`; its constants (`min_trades`, `shrink_k`, cadence) are editable rows.
+- **The whole path, so a number truly moves [CHECK "Does a number really move"]:**
+  1. **Stamp.** For a sizer, exit or control number the stamp is the number's own value in force at entry, `number:<name>`, written to the decision row's `numbers_in_force` and carried to the trade row's `entry_stamps`. Today `_stamps` reads logic slots only (`unit_handler.py:223-231`), and `engine.py:122` skips every trade without the stamp, so a compiled risk number would never move. The rule's evidence gains `stamp` beside today's `strength` (`engine.py` `calibrate`) and its declared facts (E12).
+  2. **Rule.** One rule ships: `own-r-step@1`, a labelled placeholder that moves its number one step inside its range by the mean R of its own trades, toward `cautious` when that is below zero. It binds to a sizing number and an exit number alike, so slice 7 has something real to run. Presets still ship motion off for size; turning it on is a pointer edit.
+  3. **Block.** A block reads every number from `evidence`; `make` only seeds. The shipped `fixed-fraction-at-stop`, `target-r-multiple`, `time-exit-bars` and `swing-stop-buffer` hold the `make` value and ignore a moved one (`block.py:24`, ran in `CHECK`); slices 2 and 3 replace them with new versions, and K9 test 6 fails any block, stdlib or Library, whose answer doesn't change when a bound number in `evidence` changes.
+  4. **Receipt.** `numbers_in_force` carries value, default and the calibration row id that set it. `explain_size(row)` prints them, for the sizer's numbers and for the exits' numbers fixed at this entry. The close row names the exit's reason code and the `numbers_at_entry` it used.
+  5. **Open positions.** A held position keeps `numbers_at_entry` (`applies_to_open_positions` false), so a sizer or exit number needs no flat unit and moves on its cadence with other markets held. A logic number keeps today's flat rule, read per market, not across all markets (`unit.py:543`), so a many-market scalper can't starve its cadence.
+  6. **Restart.** `_OwnJournal` (`runtime.py:1479-1491`) is seeded from the unit's trade rows at start; the engine's watermark drops what the snapshot already read, so `SlowState.read` comes back whether or not a value moved (`runtime.py:2926-2927`).
+- **Also in the rule:** **Every number carries:** `derivation` (rule block or fact), `range`, `authority` (`off`, `motion_inside_range`, `at_anchor`), `owner` (`user`, `template`, `learner`), `reason` on the resolved value, `cautious` direction, `guard` (revert and freeze after trips), `never_self_tune`, `applies_to_open_positions`, and a per-change record. A move inside range is a calibration row; outside it a new version. `MotionSwitch` reports with and without. Presets per type turn correct on for filters and off for size. **Evidence stated once:** E5's tables show only that the mechanism behaved as described and did not run away (MODEL); they do not prove the default.
 
 ### AD-15 One fact surface with a stated supply and a fail mode
 
@@ -163,13 +171,13 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** S8, S9, S10, I5, I6, R13, F3, Q4, V3, V7.
 - **Prevents:** forged `source`; a stale feed reading as calm; a dead desk parking the book; a wide unit trading its whole universe on a stale board (`runtime.py:366-369` docstring).
-- **Rule:** `reads` compiles with `publisher`, `fallback` (`compute_here`, `treat_as_absent`, `no_new_entries`, `stand_aside`), stale limit and `valid_until`; the host stamps `source` (`node`, `mis`, `app:<id>`, `agent:<id>`); inputs are named on each record. The relay (`qmx_host/feed_relay.py`) carries any publisher's readings to the node. A node sensor publishes spread, tick rate and quote gaps with source `node`; an overnight job makes one curve artifact per world with an age word and a flagged borrowed cold start, read by SQS, node, MIS and QMB. **Three market lists:** `markets` (allowed), `home_markets`, and `active` as a reading; the fallback of any list or board is home markets, never every listed market. A sticker is a row in the stand-down table (`qmn/app/stand_down.py`) with scope key, kind, strength (`prefer_not`, `no_new_entries`, `flatten`), expiry, resume rule, why, who; a unit's `tolerations` are in its risk section and a pod may stamp them. The kill switch is not a sticker. Each sticker source has a `fail` row; the default is a card and `prefer_not`. An agent-placed sticker can only reduce risk and must expire; under Q4's default it lands a card and applies nothing.
+- **Rule:** `reads` compiles with `publisher`, `fallback` (`compute_here`, `treat_as_absent`, `no_new_entries`, `stand_aside`), stale limit and `valid_until`; the host stamps `source` (`node`, `mis`, `app:<id>`, `agent:<id>`); inputs are named on each record. The relay (`qmx_host/feed_relay.py`) carries any publisher's readings to the node. A node sensor publishes spread, tick rate and quote gaps with source `node`; an overnight job makes one curve artifact per world with an age word and a flagged borrowed cold start, read by SQS, node, MIS and QMB. **Three market lists:** `markets` (allowed), `home_markets`, and `active` as a reading; the fallback of any list or board is home markets, never every listed market. A sticker is a row in the stand-down table (`qmn/app/stand_down.py`) with scope key, kind, strength (`prefer_not`, `no_new_entries`, `flatten`), expiry, resume rule, why, who; a `flatten` sticker is executed by the control runner's `flatten` verb on each member it scopes, through the unit's own exit path (AD-12) [CHECK S13]; a unit's `tolerations` are in its risk section and a pod may stamp them. The kill switch is not a sticker. Each sticker source has a `fail` row; the default is a card and `prefer_not`. An agent-placed sticker can only reduce risk and must expire; under Q4's default it lands a card and applies nothing.
 
 ### AD-17 One thread, two passes, an outbox with a time budget
 
-- **Binds:** F4, S18, `runtime.py:2157` (one thread), `:3013-3018` (`_drive`), `:1727-1733` (mint then place), `:1182-1190` (`_protected`), `:1701-1714` (parked entry), `healing.py:64` (30 s watchdog) [G1 V2 AD-7; F1, F2, F7, F10].
-- **Prevents:** a shared cap that needs a lock; an entry's venue wait delaying another unit's exit; a long bell killing the node; a parked entry reading as "warming up" and being dropped.
-- **Rule:** per node, one `node-runtime` thread hosts all units; caps are atomic because nothing else runs. **Pass 1** steps every unit on every account and sends its exit intents at once; no chain, fold or feed is reachable from exit code (AD-9). Entry proposals are parked in the outbox with `not_before`. **Pass 2** drains the outbox by bar time, then the group's `order` answer (rank, then per-bar hash), runs the unit chain and node chain on each, writes the row, sends, and **stops at a time budget** (a labelled placeholder well under the watchdog's 30 s); what is left waits for the next tick and passes both chains again on fresh facts. **Parked-entry fix [F7]:** an entry not yet placed is neither skipped nor marked done; `execute_resting` treats a parked entry like an `Unknown` (returns `Ok(False)`) until pass 2 reaches it or its `not_before` expires, and then writes a `Skip` with reason `budget_expired`. QMB's `group_run` driver uses the same order. **Known limit:** `client.send` holds a lock and waits up to 5 s (`ctrader_account.py:110, 679`), so entries and exits at one bell go out in series; the budget protects the node, not the fills; meters (pass 1 time, pass 2 time, entries left over, sends per bar) are plain rows, and sends off the thread reopen if measured delay harms fills (section 11).
+- **Binds:** F4, S18, `runtime.py:2157` (one thread), `:3013-3018` (`_drive`), `:1727-1733` (mint then place), `:1182-1190` (`_protected`), `:1701-1714` (parked entry), `healing.py:64` (30 s watchdog), `unit.py:746-749` (the mint) [G1 V2 AD-7; F1, F2, F7, F10; B2, CHECK S1].
+- **Prevents:** a shared cap that needs a lock; an entry's venue wait delaying another unit's exit; a long bell killing the node; a parked entry reading as "warming up" and being dropped; a second order for one signal; a parked entry with no lifetime.
+- **Rule:** per node, one `node-runtime` thread hosts all units; caps are atomic because nothing else runs. **Pass 1** steps every unit on every account and sends its exit intents at once; no chain, fold or feed is reachable from exit code (AD-9). Entry proposals are parked in the outbox with `not_before` (the bar's own time, an earliest time) and `expires_at`. **Pass 2** drains the outbox by bar time, then the group's `order` answer (rank, then per-bar hash), calls `price` (AD-1), runs the unit chain and node chain on each, writes the row, sends, and **stops at a time budget** (a labelled placeholder); what is left waits for the next tick and passes both chains again on fresh facts. **Time, in what takes the time [CHECK S1]:** one entry on a venue answering at its limit takes 26 s (4 sends, 3 confirm waits, ran). So pass 2 starts an entry only if elapsed plus that entry's worst case, worked out from the same constants (`runtime.py:179-187`, `ctrader_account.py:110`), fits the budget; and `watch.began` (`runtime.py:2192`) is reset as a progress beat after each exit send and each finished entry, so the watchdog times one stuck step, not a long honest pass. A worst case longer than the watchdog's limit is refused at start, by name. **Parked entry [F7, B2]:** an entry not yet placed is neither skipped nor marked done. `_orders` gains a `Parked(expires_at)` state beside `Unknown`, and `execute_resting` returns `Ok(False)` for it (`runtime.py:1703-1704`); `None` keeps meaning warming up. `expires_at` defaults to the next bar of its market, a labelled placeholder. At the start of pass 1 for that market, an expired entry becomes `Blocked("budget_expired")`, which writes the `Skip` through the existing path (`:1705-1713`). **No second order:** while parked, `own_position` still reads `None`, so the unit would mint again (`unit.py:746-749`; ran in `CHECK` B2: 2 sends, 2 positions at the venue, 1 in the handler). So a `parked:<market>` surface joins the facts `_Run.step` reads (`unit.py:515`), and `_Run.entries` writes `suppressed_limit`, "an entry is parked", when open plus parked reaches the market's limit. The existing `self.unknown` refusal (`runtime.py:1059`) already covers an unknown answer. QMB's `group_run` driver uses the same order. **Known limit:** `client.send` holds a lock and waits up to 5 s (`ctrader_account.py:110, 679`), so entries and exits at one bell go out in series; the budget protects the node, not the fills; meters (pass 1 time, pass 2 time, entries left over, sends per bar) are plain rows, and sends off the thread reopen if measured delay harms fills (section 11).
 
 ### AD-18 One decision row and one fold; restart is no reset
 
@@ -181,37 +189,93 @@ Each is a call two builders could make incompatibly. `[ADOPTED]` means the code 
 
 - **Binds:** F6, K7, K8, K9, D41.
 - **Prevents:** half-shapes reaching a deployed unit; a frozen compiler.
-- **Rule:** the order in section 10. Each slice ends in something a test or K7 shows. Format bumps are free until the first live deployment and happen only when a compiled decision changes; format 5 lands in slice 1. Step 3 lands before the first live deploy or pays a re-test through K8. Three stop points (A, B, C) each leave a whole baseline.
+- **Rule:** the order in section 10. Each slice ends in something a test or K7 shows. Format bumps are free until the first live deployment, and there is one per changed compiled decision, so no G record goes stale silently; format 5 lands in slice 1, and later slices bump when they change a decision (slice 3's side-correct bars and time exit do) [CHECK S5]. Step 3 lands before the first live deploy or pays a re-test through K8. Three stop points (A, B, C) each leave a whole baseline.
 
 ### AD-20 The fixed lines are tests; everything else warns
 
 - **Binds:** V1 to V6, V9, K5, K9.
 - **Prevents:** the lines resting on good behaviour; a canvas that refuses reckless paintings.
-- **Rule:** exits never blocked (property test); only the owner lowers a kill level; agents never place, size up, lower a kill level or promote, by tool table (`tools/money_path_scan.py`); a click binds to a hash; no channel the copilot or agents can read carries the promote door; a protected field list (floor, kill level, `never_self_tune`, plan hash) has no agent write path. Every other reckless setting (no kill line, no caps, full Kelly, a widened stop, a stopless live unit) warns and grades in the largest type and never refuses.
+- **Rule:** exits never blocked (property test); only the owner lowers a kill level; agents never place, size up, lower a kill level or promote, by tool table (`tools/money_path_scan.py`); a click binds to a hash; no channel the copilot or agents can read carries the promote door; a protected field list (floor, kill level, `never_self_tune`, plan hash) has no agent write path. Every other reckless setting (no kill line, no caps, full Kelly, a widened stop, a stopless live unit) warns and grades in the largest type and never refuses. **What else refuses, each with its way out [CHECK S7]:**
+
+| Refusal | Way out |
+|---|---|
+| Margin headroom, order rate and size band vetoes, a stop past liquidation (PH 14) | One row each in the node chain, with `enabled`; off makes it a warning |
+| A stop past entry | `allow_widen` on the row |
+| A recipe touching an exit or a logic-bound number (AD-4) | Not a safety line: it is a logic edit, so make a new version and G run |
+| `routes`, `plain_python`, `roll` | Not built or no venue: `plain_python`'s door is a Library block; `roll` waits on Q2 |
+| A minimum lot, a closed market, an order form the venue lacks, a missing rate on a size in money | What the venue or arithmetic can't do; a named skip, never a law |
 
 ### AD-21 Who owns what: block-running code lives in `qml`; `qmf-risk` holds types
 
 - **Binds:** every module in section 7 [F8].
-- **Prevents:** a runner in `qmf-risk` that cannot import `qml.blocks.api` (`packages/qmf-risk/pyproject.toml` depends only on `qmf-core`; `qml/pyproject.toml` depends on `qmf-risk`).
-- **Rule:** the dependency direction is fixed as drawn. Verdict, fact, control-row and group types live in `qmf-risk` so both hosts and the wire share them. Anything that runs a block (the control runner, the unit chain, the node chain runner, group caps, `expand`, `roll_plan`, `explain_size`, the fold's row readers) lives in `qml`. Hosts (`qmb`, `qmn`) import `qml` and adapt facts, ports and lanes. `qmx-host` and apps import `qml` for plans and the fold, never the hosts.
+- **Prevents:** a runner in `qmf-risk` that cannot import `qml.blocks.api` (`packages/qmf-risk/pyproject.toml` depends only on `qmf-core`; `qml/pyproject.toml` depends on `qmf-risk`); `qml` gaining `qmf-data` and with it `pyarrow` and `duckdb` (`tools/workspace_meta.py:72` and `tools/tests/test_workspace_structure.py:138` forbid it, DEC-0180).
+- **Rule:** the dependency direction is fixed as drawn. Verdict, fact, control-row and group types live in `qmf-risk` so both hosts and the wire share them. Anything that runs a block (the control runner, the unit chain, the node chain runner, group caps, `expand`, `roll_plan`, `explain_size`, `fold`) lives in `qml`. **`qml` allows only `qmf-core`, `qmf-registry` and `qmf-risk`. Row shapes live in `qml` (`DecisionRow`, `unit.py:153`, as today) or `qmf-risk`; `fold` and `explain_size` take plain mappings; hosts own journal kinds and reading [B6].** Hosts (`qmb`, `qmn`) import `qml` and `qmf-data` and adapt facts, ports, lanes and journals. `qmx-host` and apps import `qml` for plans and the fold, never the hosts.
 
 ```mermaid
 flowchart LR
   CORE["qmf-core"] --> RISK["qmf-risk: wire, verdict, fact, row, group types"]
   CORE --> DATA["qmf-data: journal kinds, codes"]
-  RISK --> QML["qml: document, compiler, HostedUnit, chains, controls, exits, convert, motion, pods, fold readers, explain_size"]
-  DATA --> QML
+  RISK --> QML["qml: document, compiler, HostedUnit, chains, controls, exits, convert, motion, pods, fold, explain_size"]
   QML --> QMB["qmb: UnitSliceHandler, replay facts, group_run"]
-  QML --> QMN["qmn: runtime two passes, node facts, sensor, stand-down, outbox"]
+  QML --> QMN["qmn: runtime two passes, node facts, node links, sensor, stand-down, outbox"]
   QML --> HOST["qmx-host: promote, roll, relay, landers"]
+  DATA --> QMB
+  DATA --> QMN
+  DATA --> HOST
   HOST --> APPS["qmx-apps, qmx-engine templates, copilot tools"]
 ```
 
-### AD-22 The no-stop path is one declared basis through six places
+### AD-22 The no-stop path is one declared basis through every place that reads a stop
 
-- **Binds:** PH 11, I13, S6, `compiler.py:500-506`, `unit.py:764-766`, `unit_handler.py:560`, `runtime.py:1065, 1102-1106, 1182-1190`, `qmn/order/path.py:561`, `venue/live.py:1012` [F6].
-- **Prevents:** a stopless entry compiling, sending, and then being closed at once by the protection wait; a gate on another order path refusing what the entry path accepted.
-- **Rule:** a unit with no price stop declares `basis: tail_budget` on its sizer row. The same declared basis must pass: (1) compile, lifting `stop_not_built`; (2) `enter`, which stops skipping on no stop; (3) the handler and node entry, which read `none_declared` (already on the wire, `unit_intent.py:69-73`) instead of a `Decimal`; (4) the node chain's venue-stop veto, which accepts a declared basis and warns in large type; (5) **the post-send protection wait `_protected`, which must not expect a stop for a no-stop entry and must not call `_escalate`;** (6) every other order path that carries the gate (`order/path.py`, `venue/live.py`), each checked by one test that a stopless entry survives. The converter divides money at risk by the declared distance. The shipped template default is a far disaster stop with the cut in front; the true no-stop form is expressible and warned.
+- **Binds:** PH 11, I13, S6, and every place listed in the Rule [F6, B9].
+- **Prevents:** a stopless entry compiling, sending, and then being closed by the protection wait, by the next tick's stop restore, or by the reconcile; a gate on another order path refusing what the entry path accepted; R with nothing to divide by.
+- **Rule:** a unit with no price stop declares `basis: tail_budget` on its sizer row. The send row carries `stop_kind: none_declared` (already on the wire, `unit_intent.py:69-73`), and **every reader asks that field before it treats a missing stop as a fault**. "Six places" was wrong; `CHECK` B9 ran a stopless position through one real tick and it was closed. The list, each one with a test:
+
+| # | Place | Today | With the declared basis |
+|---|---|---|---|
+| 1 | Compile, `compiler.py:500-506` | `stop_not_built` | Lifted for a declared basis |
+| 2 | `enter`, `unit.py:764-766` | Skips on no stop | Proposes with no stop; target levels that need a stop are refused at compile |
+| 3 | Handler entry, `unit_handler.py:560` | `Decimal(protection["stop"])` | Reads `none_declared` |
+| 4 | Node entry, `runtime.py:1065` | Same, then measures a distance | Reads `none_declared`; no measured distance |
+| 5 | Veto, `runtime.py:1102-1106` | Refuses unless the venue's stop form is proven | Accepts the basis; warns in large type |
+| 6 | Post-send wait `_protected`, `runtime.py:1182-1190` | Closes and alarms | Not entered |
+| 7 | Each tick, `_restore_stops`, `runtime.py:2358-2386`, calling `restore_stop(None)`, `:1192-1212` | **Closes, raises `protection_escalation` (ran)** | A declared position isn't `missing` |
+| 8 | `NodeUnit.adopt`, `runtime.py:1636` | `send["stop"]` | Adopts with no stop, through a restart |
+| 9 | Reconcile, `reconciler.py:379-390` | Unprotected: alarm and close | Declared on its send row counts as protected |
+| 10 | `safe_to_restart`, `runtime.py:2288-2289` | "has no stop at the venue" | Names it "open, no stop by declaration" |
+| 11 | `_money`, `_close`, `unit_handler.py:578, 669-673` | Risk from the stop | `held.risk` is the sizer's declared money at risk at fill, so R stands |
+| 12 | Venue adapter, `ctrader_account.py:1454-1456`; `paper_lane.py`; `ConformanceAccount`, `runtime.py:698` | Rejects `no-stop` (the first) | Sends with no stop where the venue allows it |
+| 13 | Other order paths, `order/path.py:561`, `venue/live.py:1012` | Gate | Each checked by one test |
+
+The converter divides money at risk by the declared distance. **UNKNOWN: whether cTrader accepts a market order with no stop;** it joins R24's probes. If it does not, venue capability refuses the true no-stop form at compile on that venue, by name, and the far stop stays the form there. The shipped template default is a far disaster stop with the cut in front; the true no-stop form is expressible and warned. **The test (K9 12):** a stopless entry held for N bars on the fake broker, then through a restart, still open, with no `protection_escalation`, then closed by its own cut.
+
+### AD-23 A fault costs its own unit's entries, never an exit, never another unit
+
+- **Binds:** V1, `runtime.py:3013-3018, 3040-3046, 2193-2200`, `unit.py:530-536`, K9 test 2 [B1].
+- **Prevents:** one raising block stopping exits in its own unit and in every unit hosted after it (`CHECK` B1 ran it: 12 bars, `dep-1` driven 11 times, `dep-2` zero times, 11 heals, both still read `trading`).
+- **Rule:** plain `try`, no threads, from slice 3.
+  1. **Inside the unit.** `_Run.step` runs `update`, `exits`, `entries` and `motion` as separate phases. A raise in `update`, `entries` or `motion`, and in `price` (sizer, modifier, converter), becomes a `Fault(block, phase, code)` on the answer: that market takes no entry on this bar, `exits` still runs, and its intents survive. Exit blocks hold their own instances, so a broken logic block can't corrupt them.
+  2. **Across units.** `_drive` holds one `try` per unit. A raise past `_Run.step`, from host or handler code, is a `Fault` for that unit, and the next unit runs. A refusal from `close_frontier` caused by a fault is a `Fault`, not `Phase.STOPPED`, so the driver keeps stepping it (`runtime.py:3014-3015`). `step()`'s heal stays for what is outside `_drive`.
+  3. **What a fault does.** It writes `risk_event` with code `unit_fault`, turns that unit's entries off inside `HostedUnit` (so both hosts behave alike), and lands one card per root-cause key. The fold reads the word BENCHED. The phase stays `TRADING`. Entries come back by rule after `fault_clean_bars` clean bars, a labelled placeholder; `hand` is one field away.
+  4. **Last fall-through.** If a held position's exits could not run for `exit_fault_bars` bars in a row (a labelled placeholder), the host's `close_scope` port closes it (AD-13). Venue stops hold in the gap.
+- **The test (K9 2):** one logic slot raises on `dep-1`, one sizer raises on `dep-3`, `dep-2` and `dep-4` hosted behind them, 12 bars on the fake broker. Every unit is driven on every bar, zero heals, `dep-1`'s own time exit fires, `dep-2`'s per-bar exit and node-closed target fire, `dep-1` mints no new entry, the fault row and the card exist, and entries come back after the clean bars.
+
+### AD-24 A draft reaches paper on his click, with the safety half of G and no judge pass
+
+- **Binds:** `qml/lifecycle/machine.py:105-117`, `promote.py:376, 565-578`, K7, section 6 [B3].
+- **Prevents:** a template that "can trade" refused at its first promote (`CHECK` B3 ran it: `not_in_table`; `TESTED` needs a judge `pass`, whose default needs 100 trades, `presets.py:45`); his M49 line "All of them can trade. No one is refusing them" waiting on the methodology session.
+- **Rule:** the table gains one row, `Transition(DRAFT, PAPER, HIS_CLICK)`. It needs what `Promoter._admit` already demands on every lane: a G record with `safety_passed` for this logic fingerprint (`promote.py:376, 565-578`). Paper touches no money. `TESTED` and the judge keep their meaning and path. `PAPER -> LIVE` stays his click with placeholders acknowledged (`machine.py:109`, `promote.py:390-395`). The card says "a shape, not an edge" either way. `tools/first_real_start.py`'s header, which says a unit reaches a node by passing the judge (`:8`), changes with it. **The test:** K7 with no judge run reaches a filled paper entry.
+
+### AD-25 One feed builds one base bar; streams roll up; positions are keyed by position
+
+- **Binds:** S17, E4, `streams_not_built`, `runtime.py:2774`, `ctrader_account.py:115, 1371`, `unit_handler.py:261, 286`, `runtime.py:1802`, `unit.py:517` [B4, CHECK S9].
+- **Prevents:** a 1-minute and a 15-minute unit refusing each other on one account (`CHECK` B4 ran it both ways); templates that compile and then refuse at the node; two builders inventing two meanings of "second stream"; a second position overwriting the first in `_held`.
+- **Rule:**
+  - **Base bar.** An account's feed builds one base bar, `[node] ctrader_bar_s` (`ctrader_account.py:115`), whose labelled default moves from 900 to 60 seconds. `_host` refuses only a stream that isn't a whole multiple of the base, by name.
+  - **Roll-up.** `qml/feed/rollup.py` is one pure function both hosts call: base bars in, a closed `QuoteBar` or nothing out. Both quote sides. Buckets align to epoch as the feed's own do (`:1371`). `knowable_at` is the bucket's end. A bucket closes on the first base bar at or past its end. A bucket not seen from its start (restart, reconnect, `:1317`) is dropped and never emitted, so no partial bar reaches a block.
+  - **Keys.** Handler and node windows key by `(stream, market)`; the stream id on the accumulator names both. `plan.stream` becomes `plan.streams` with a `primary`, the fastest: the unit steps when the primary closes, and reads a slower stream at its last closed bar, with no look-ahead (`unit.py:524`). Warm-up counts per stream. A unit hosted on a bar it doesn't read isn't driven.
+  - **Positions.** `_held` and `open_positions` key by position id. `own_position:<market>` answers a tuple. `position_limit` compares open plus parked (AD-17), per market and per open. Each exit intent carries its `position_ref` (`runtime.py:1802-1803` reads it already). `position_limit` above 1 on a netting venue is refused at compile by venue capability (`nets_positions`).
+- **The test (K9 17):** a 1-minute, a 5-minute and a 15-minute unit on one account of the fake broker all trade from one feed; a two-stream unit reads no future bar; rolled bars match bars built directly; two positions on one market each get their own exits.
 
 ## 3. Contracts, sketched
 
@@ -232,8 +296,10 @@ class Factor: value: Decimal; range: tuple[Decimal, Decimal]; reason: str
 class ModifierInstance(Instance):
     def update(self, evidence) -> Factor | None: ...        # None is neutral, with its fail mode
 
-def to_quantity(amount, entry, stop_or_basis, record, rule: RoundRule) -> Converted
-class Converted: quantity: Decimal; residue_r: Decimal; skipped: str | None
+def to_quantity(amount, entry, stop_or_basis, record, rate: Fact, rule: RoundRule) -> Converted
+class Converted: quantity: Decimal; residue_r: Decimal; skipped: str | None   # rate_stale, rate_absent, below_min_lot...
+class ConversionRef: market_id: str; invert: bool
+class InstrumentRecord: conversions: Mapping[str, ConversionRef] = {}         # key: account currency; records.py:46
 ```
 
 ### Exits (`qml/blocks/api.py`, `qml/protocol/exits.py`, new)
@@ -246,7 +312,7 @@ class ExitAction:
     kind: Literal["close_full", "close_partial", "amend_protection", "target_position"]   # last reserved
     fraction: Decimal | None; new_stop: Decimal | None; reason_code: str
 class ExitInstance(Instance):
-    def update(self, evidence) -> Decimal | Signal | ExitAction | None: ...   # evidence.clock is a field
+    def update(self, evidence) -> Decimal | Signal | ExitAction | None: ...   # evidence.clock is a field; series is the closing quote's side
 ```
 
 ### Controls (`qmf/risk/controls.py` types; runner in `qml/protocol/controls.py`, new)
@@ -258,6 +324,9 @@ class ControlRow(ScopedBinding):   # lands in Halts; scope gains GROUP, TAG
     # defaulted: attack, release, counting, fail_mode, money_series, klass, healthy_fire_rate
 class Answer: verb: Verb; factor: Decimal | None; reason: str; code: str
 class ScopeState: word: Literal["ACTIVE","REDUCING","BENCHED","HALTED","RESTORE"]; since; reason   # derived by fold
+class Fault: block: str; phase: Literal["update","entries","price","motion","exit","host"]; code: str   # on UnitStep; AD-23
+class HostPort(Protocol):
+    def close_scope(self, unit: str, why: str) -> None: ...   # node: _close_scope; QMB: close at the next bar's open
 ```
 
 `HaltInstance` keeps `update(evidence) -> Halt | None`; `Halt.action` gains `reduce` (`blocks/api.py:168-179`).
@@ -276,6 +345,8 @@ class Motion:                      # adds
     scaled_fact: str | None; window: int | None; anchor: CadenceAt | None
     min_trades: int; shrink_k: Decimal        # were constants (engine.py:39-44)
 class SlowState: read bounded to Motion.window
+class SlowNumber: stamp: str                  # a slot binding name, or number:<name> for a sizer, exit or control number
+# rule evidence: trades [{stamp, strength, r}], current, declared facts      # own-r-step@1 ships; strength stays for trend-floor
 ```
 
 ### Document additions (`qml/unit/model.py`, `qml/unit/sections.py`)
@@ -298,8 +369,12 @@ def sections(document) -> tuple[LogicSection, RiskSection]      # the one partit
 class CompiledUnit: logic_fingerprint; risk_fingerprint          # beside compiled_fingerprint
 class HostedUnit:
     def on_instant(...) -> tuple[ExitIntents, Proposals]        # pass 1
-    def price(self, proposal, facts, admit: AdmitPort) -> Decision   # pass 2; the one door a governing pod would move
+    def price(self, proposal, facts, admit: AdmitPort) -> Decision   # pass 2; a raise is a Fault (AD-23)
     def move_risk(self, new_compiled) -> Moved | Refused
+class UnitStep: faults: tuple[Fault, ...]                         # beside today's fields, unit.py:187
+class Parked: expires_at: Instant                                 # beside Placed, Blocked, Unknown in _orders (qmn)
+def roll_up(base_bars, seconds) -> QuoteBar | None                # qml/feed/rollup.py, AD-25
+# surfaces: bars:<stream>:<market>, own_position:<market> (a tuple), parked:<market>
 ```
 
 ### Pod and group (`qml/pods/`, `qmf/risk/group.py` types, `qml/group/caps.py` runner; Library kinds `pod`, `group`, `template`)
@@ -338,39 +413,40 @@ class AdmitPort(Protocol):
     def admit(self, wire: Mapping, at: Instant) -> Admitted | Refused: ...    # wire quantity rewritten on shrink
 def run_budgeted(fn, budget_ms) -> Result | Fault      # one wrapper; Fault = link_fault | link_hung
 # Facts: Fact(value, ts, fail_mode, source, state: ok | stale | absent | uncalibrated)
-# account.* equity, balance, open_risk, open_risk_by_bet_key, margin_headroom, liquidation_distance,
+# account.* currency, equity, balance, open_risk, open_risk_by_bet_key, margin_headroom, liquidation_distance,
 #           budget_share, realised_since(anchor), basis
 # own.*     session_loss_r, loss_streak, losing_day_streak, session_fills, spread_r, edge_band,
-#           cut_distribution, trade_rate, record_n
-# market.*  quote, spread, tick_rate, quote_gap, cost_cell(hour, world), curve, gap_factor,
+#           cut_distribution, trade_rate, record_n, open_risk_by_bet_key
+# market.*  rate:<quote>, quote, spread, tick_rate, quote_gap, cost_cell(hour, world), curve, gap_factor,
 #           sticker(kind), session_state, event_clock
 # group.*   day_pnl, open_risk, members, cushion, raise_ok, share, stage, limit.<name>
 # node.*    kill_level, paused, venue_ready
 def fold(rows, scope, clock) -> RiskState
 ```
 
-### Status and records (`packages/qmf-data/.../journal_kinds/unit.py`)
+### Status and records (shapes in `qml` and `qmf-risk`; journal kinds in `qmf-data`, read and written by hosts, AD-21)
 
 ```python
 class RiskState: scope; word; since; reason; stamp; money; open_risk; drawdowns; control_distances
                  cushion; stage; reservations; unknown: tuple[str, ...]
-class DecisionRow:   # existing, adds
+class DecisionRow:   # existing, qml/protocol/unit.py:153, adds
+    numbers_in_force: Mapping[str, NumberUsed]   # value, default, calibration row id
     inputs: Mapping[str, Fact]; steps: Wanted, Approved, Filled; verdicts: tuple[Verdict, ...]; binding: str
     logic_fp; risk_fp; recipe; group_id; stage; readings_used; trace_id; propensity; placeholders
     written_before_send: bool
 ```
 
-Rows written: decision row v2, trade row v2 (R2 plus `stage`, `pod_version`, `risk_fp`, `target_held_by`), `would_have` (with `propensity`), `risk_event` (root-cause key, event id, alert fields, appendable codes), calibration row, `stage_move`, `risk_move` (plan hash, member, old and new risk), `reservation`, fill record (R7: decision quote, arrival quote, fill, partial, reject, requote, markouts), reading record (R13, stamped at compute, as-of query), run stamp (R8, `group: none | alone | merged`), `proposal` tape, `drift`. `explain_size(row) -> Trail` lives in `qml/receipt.py`.
+Rows written: decision row v2, trade row v2 (R2 plus `stage`, `pod_version`, `risk_fp`, `target_held_by`, `entry_stamps` and `numbers_at_entry`, those two from slice 7), `would_have` (with `propensity`), `risk_event` (root-cause key, event id, alert fields, appendable codes, `unit_fault` first, in slice 3), calibration row, `stage_move`, `risk_move` (plan hash, member, old and new risk), `reservation`, fill record (R7: decision quote, arrival quote, fill, partial, reject, requote, markouts), reading record (R13, stamped at compute, as-of query), run stamp (R8, `group: none | alone | merged`), `proposal` tape, `drift`. `explain_size(row) -> Trail` lives in `qml/receipt.py`.
 
 ### Consistency conventions
 
 | Concern | Convention |
 |---|---|
 | Time | Every fact and row carries an `Instant`; readings carry `knows_at` beside event time; an anchor id is a pure function of clock and time |
-| Money | `Decimal`; USD at the seam; one conversion in the converter; every money figure passes it, `_account()` included |
+| Money | `Decimal`; the account's currency at the seam; one conversion, by the `market.rate` fact (AD-10); every money figure passes it, `_account()` included; rows keep the quote figure and the rate used |
 | Codes | Closed, appendable reason codes; a new family per user block; a new text without a code fails QMB as R15 says; live writes `unlisted` |
 | Writers | Spec is written by people and drafts; status, rows and the fold by the runtime; `source` by the host, never the publisher |
-| Failure | Typed refusals in the block protocol; `run_budgeted` turns a raise or overrun into a `Fault`; nothing raises past the wrapper into `close_frontier` |
+| Failure | Typed refusals in the block protocol; a raise is a `Fault` by plain `try` (AD-23), an overrun by `run_budgeted` (AD-9); nothing raises into `close_frontier` |
 | Labels | Every shipped value carries `origin: placeholder`, a reason, a range and the owner "numbers talk"; the card shows the label |
 | Words | Unit, block, recipe (a pod document), pod (on screen: recipe plus group), pod version, method, group, desk, sticker, toleration, fold, trail. "Book + BMS" is a method name; "Classic Book" a recipe name |
 | Windows | First class: `spawn` only, whole-then-replace file writes, no POSIX-only calls, `tzdata` pinned; the wrapper and the budget are tested on Windows before they guard the bar step |
@@ -383,36 +459,60 @@ No new runtime dependency. Standard-library threads for the budget.
 | Name | Version |
 |---|---|
 | Python | 3.14, as pinned at the tip (`requires-python >=3.14,<3.15`) |
-| QML compiler format | 4 at the tip; 5 once, in slice 1 |
+| QML compiler format | 4 at the tip; 5 in slice 1; free bumps, one per changed decision, until the first live deployment |
 | uv build backend | 0.12, as pinned at the tip |
 
 ## 4. The core list, in this shape
 
 Every live row of FUNNEL section 3 lands or is struck with a reason.
 
-| Rows | Here | Struck or changed, and what replaces it |
-|---|---|---|
-| S1, S2, S3 | AD-10, AD-11, AD-13 | None |
-| S4 | AD-12 | `placement` struck: a row runs where its document says (unit or group). States derived by the fold, not a state machine |
-| S6 | AD-9, AD-17 | "One chain" struck: two chains, one row, one wrapper. "Group stage" becomes the group-cap link plus reservations in the node chain |
-| S8, S9, S10, S11 | AD-16; S9 `sessions` compiled and a window card kind; S11 is the scope list on rows and fold keys | None |
-| S12 | Roles run in the logic section, except `sizing_modifier` (AD-11) and `derivation` (AD-14); `combiner` gains `product`, `min` | None |
-| S13 | AD-14 | None |
-| S14 | AD-2 to AD-7 | Empty pod struck: no recipe is the default. Pod reference on the deployment struck: `recipe` in the document, `group_id` or selector on the group. "Two fingerprints" are logic and risk. Slot composition rules live in `PodSlots` and AD-11. Click rule kept |
-| S15 | `HostedUnit` plus `UnitSliceHandler` are the evaluator; node, paper, QMB, Lab replay are drivers through `AdmitPort`, `FactSource`, exec port; conformance tape in K9; `group_run` for multi-unit replay | Needs list stays (AD-15) |
-| S16 | `library-items` lander, real `pod`, `group`, `template` kinds, `blocks_save` door, Library block traced end to end before "one folder" is promised | None |
-| S17 | Slice 9: `position_limit` per market and per open, second stream, per-market settings through I16's market key | None |
-| S18 | `OrderSpec` on the intent, `not_before` as the timing offset, partial close on the node (step 3), netting as a setting, venue capability from I4 at compile | None |
-| I1 to I4, I7, I9, I13, I16, I17 | AD-15, AD-10, AD-22, I9 adds `tags`, I17 a shown verdict at anchors | None |
-| I5 | AD-16 three lists, home fallback | None |
-| I6 | AD-16 one curve artifact (F3 B held) | None |
-| I10 | AD-7, AD-8 | "Pod may change rows at an anchor" becomes compiled-in stages or a live group fact |
-| R1 to R4, R7 to R9, R13, R17 | AD-18, AD-5, section 9 | R1 gains `written_before_send` and stored inputs |
-| K2 | Section 8 doors: app read door widened to journals and the fold; card path to "Needs you" | None |
-| K5, K7, K8, K9 | AD-20, section 5, section 7, section 10 | K9 adds: import test on exit code; parked-entry test; no-stop path survives six places |
-| V1 to V7, V9, V10 | AD-20, AD-1, AD-9, AD-13 | V10 holds for arithmetic; group facts differ in a solo run (stamped `group: none`) |
+| Rows | Here | Slice | Struck or changed, and what replaces it |
+|---|---|---|---|
+| S1 | AD-10 | 2 | None |
+| S2 | AD-11 | 6 | None |
+| S3 | AD-13 | 3, 17 | None |
+| S4 | AD-12 | 4 | `placement` struck: a row runs where its document says (unit or group). States derived by the fold, not a state machine |
+| S6 | AD-9, AD-17 | 10, 11 | "One chain" struck: two chains, one row, one wrapper. "Group stage" becomes the group-cap link plus reservations in the node chain, slice 12 |
+| S8 | AD-16 | 14 | None |
+| S9 | `sessions` compiled and a window card kind | 9 | None |
+| S10 | AD-16 | 10 | None |
+| S11 | Scope list on rows and fold keys | 4; 10 stickers; 12 tag | None |
+| S12 | Roles run in the logic section, except `sizing_modifier` (AD-11) and `derivation` (AD-14); `combiner` gains `product`, `min` | 6, 7, 9 | None |
+| S13 | AD-14 | 7 | None |
+| S14 | AD-2 to AD-7 | 1, 13 | Empty pod struck: no recipe is the default. Pod reference on the deployment struck: `recipe` in the document, `group_id` or selector on the group. **The deployment key stays, as unit version, market, lane and recipe hash, so a second deployment of one version keeps its seat for paper twins (FUNNEL 3.8, `promote.py:422-447`).** "Two fingerprints" are logic and risk. Slot composition rules live in `PodSlots` and AD-11. Click rule kept |
+| S15 | `HostedUnit` plus `UnitSliceHandler` are the evaluator; node, paper and QMB are drivers through `AdmitPort`, `FactSource`, exec port; conformance tape in K9; `group_run` for multi-unit replay. Lab replay joins as a driver when a Lab exists | 2, 11, 12 | Needs list stays (AD-15) |
+| S16 | `library-items` lander, real `pod`, `group`, `template` kinds, `blocks_save` door, Library block traced end to end before "one folder" is promised | 13, 14 | None |
+| S17 | AD-25, `position_limit` per market and per open, second stream, per-market settings through I16's market key | 9 | None |
+| S18 | `OrderSpec` on the intent, `not_before` as the timing offset, partial close on the node (step 3), netting as a setting, venue capability from I4 at compile | 9, 11, 17 | None |
+| I1 | AD-15 | 2 (type, rate), 8 | None |
+| I2 | AD-15 | 8 | None |
+| I3 | AD-10 (conversion), section 5 PH 17 | 2, 8 | None |
+| I4 | AD-10, shipped records, record keys | 2, 5, 8 | None |
+| I5 | AD-16 three lists, home fallback | 14 | None |
+| I6 | AD-16 one curve artifact (F3 B held) | 10 | None |
+| I7 | `knows_at` beside event time on every reading record; bars gain time of day; volume or tick count on bars waits on Q2 with the field reserved | 14 | Additive: no core rework if the rest arrives later |
+| I9 | Identity on every row | 1 fingerprints apart; 5 `tags`, family, world; 9 bet key and driver tags on intents; 14 provenance, claim, generation stamp with the save door | None |
+| I10 | AD-7, AD-8 | 12, 13 | "Pod may change rows at an anchor" becomes compiled-in stages or a live group fact |
+| I13 | AD-10, AD-22 | 2, 11 | None |
+| I16 | Override chain's market key | 9 | None |
+| I17 | A pure verdict (can one minimum lot at this stop fit the share, through the one converter), shown on the unit's card and re-run at anchors; its shed, concentrate or borrow rules are content | 8 | None |
+| R1 | AD-18 | 2 | Gains `written_before_send`, stored inputs and `numbers_in_force` |
+| R2 | AD-18 | 7 stamps, 8 | None |
+| R3 | AD-18 | 4 | None |
+| R4 | AD-18, AD-23 | 3 first writer, 4 | None |
+| R7 | Fill record | 8 | None |
+| R8 | Run stamp (`group`, quote source, gate settings, costs, real-tick share) on every run; arm id, link id and parent on run records | 5 stamp; 15 arms | Arms are additive; `tries.py` keeps counting until then |
+| R9 | AD-18 | 4 unit, 12 group, 13 pod | None |
+| R13 | AD-16 | 14 | None |
+| R17 | AD-5 section column; forwarding map | 13, 16 | None |
+| K2 | Section 8 doors: app read door widened to journals and the fold; card path to "Needs you" | 15 | None |
+| K5 | AD-20: protected field list and channel isolation test on the promote door; extended to the group row's click and the plan hash | 5; 12, 13 | None |
+| K7 | Section 6, AD-24 | 5; 10 every template | None |
+| K8 | Section 7 | 16 | None |
+| K9 | Section 7's list, each test named with its slice | 0 onward | Adds: import test on exit code; parked-entry test; no-stop survival; self-configuration; currency; one feed |
+| V1 to V7, V9, V10 | AD-20, AD-1, AD-9, AD-13, AD-23 | With the tests above: V1 3, 11; V2 to V6 5, 12; V7 5; V9 2; V10 2 | V10 holds for arithmetic; group facts differ in a solo run (stamped `group: none`) |
 
-Refusals (FUNNEL 3.8): all placed as that table says; `routes`, `plain_python` and `roll` stay refused for the reasons there; a stop past entry stays refused unless `allow_widen`; the census carries the table.
+Refusals (FUNNEL 3.8): all placed as that table says, with AD-20's way out for each; the census carries the table.
 
 ## 5. The swap: 31 placeholders and 18 extra sockets
 
@@ -420,18 +520,18 @@ Refusals (FUNNEL 3.8): all placed as that table says; `routes`, `plain_python` a
 
 | PH | Placeholder | Verdict | How, in this shape | Slice |
 |---|---|---|---|---|
-| 1 | Sizer `fixed-fraction-at-stop@1` | WIDEN then SWAP | `Amount`, converter, face check, receipt from the answer; grown block reads `account.*` and `market.cost_cell`; forwarding map `@1 -> real@1` (R17) | 2, 8, 16 |
-| 2 | Stop `swing-stop-buffer@1` | WIDEN | An exit block fed `PositionFacts`; may `amend_protection` at step 3 | 3, 17 |
-| 3 | Target `target-r-multiple@1` | WIDEN | Second target and fractions after step 3; one fixed level stays valid | 3, 17 |
+| 1 | Sizer `fixed-fraction-at-stop@1` | WIDEN then SWAP | `Amount`, converter with its rate, face check, receipt from the answer; `@2` answers money at risk and reads `fraction` from evidence; grown block reads `account.*` and `market.cost_cell`; forwarding map `@1 -> real@1` (R17) | 2, 8, 16 |
+| 2 | Stop `swing-stop-buffer@1` | WIDEN | An exit block fed `PositionFacts`, the closing quote's bars, its number from evidence; may `amend_protection` at step 3 | 3, 17 |
+| 3 | Target `target-r-multiple@1` | WIDEN | Reads `multiple` from evidence, so a moved one lands on the next entry; second target and fractions after step 3; one fixed level stays valid | 3, 7, 17 |
 | 4 | Time exit `time-exit-bars@1` | WIDEN | Side passed (`unit.py:450`), real evidence (`:686`), the block's own reason (`:690, 701`) | 3 |
 | 5 | Halts | WIRE and WIDEN | Five shipped blocks bind as control rows; `own.*` statistics computed in QML; `risk_stop` producer | 4 |
 | 6 | Cross-unit hook | WIDEN and WIRE | Replaced by `AdmitPort` and the node chain, called in both hosts; `PASS_EVERY_ORDER` deleted | 11 |
-| 7 | Motion of risk numbers | WIDEN | AD-14: `_bound_on` and stamp search accept sizer, exit and control bindings | 7 |
+| 7 | Motion of risk numbers | WIDEN | AD-14's six steps; `own-r-step@1` ships | 7 |
 | 8 | Moved values and open positions | WIDEN | `applies_to_open_positions` lifts once `amend_protection` runs | 7, 17 |
 | 9 | Stop amendments | WIRE and WIDEN | `amend_protection` answer; `allow_widen` row; signed distance (repair's `known-1`) first | 3 (answer type), 17 |
 | 10 | Partial closes | WIRE (QMB), WIDEN (node) | Answer type now; node close with a quantity at step 3 (`runtime.py:1807-1808`) | 3, 17 |
-| 11 | No price stop | WIDEN | AD-22: six places | 11 |
-| 12 | Rounding, minimum lot | WIDEN | The one converter with a `RoundRule`; hosts stop re-rounding after their first check; residue real | 2 |
+| 11 | No price stop | WIDEN | AD-22: all thirteen places | 11 |
+| 12 | Rounding, minimum lot | WIDEN | The one converter with a `RoundRule` and a rate; hosts stop re-rounding after their first check; residue real | 2 |
 | 13 | Gap through the stop | KEEP | `market.gap_factor` fact a sizer may read | 8 |
 | 14 | Margin and liquidation | WIRE then WIDEN | `account.margin_headroom`, `liquidation_distance` facts; order veto refuses a stop past liquidation | 8, 11 |
 | 15 | Leverage and spec changes | WIRE | Record change calls `Runtime.stand_down(SPEC_CHANGE, ...)`; writes a `spec_change` sticker | 10 |
@@ -457,21 +557,21 @@ Refusals (FUNNEL 3.8): all placed as that table says; `routes`, `plain_python` a
 | E1 | `reads` refused | WIDEN | AD-16 `reads` with publisher, fallback, stale, `valid_until`; `reading:<id>:<market>` surface | 14 |
 | E2 | Eleven roles do not run | WIDEN per role | `sizing_modifier` in the risk section (slice 6); `veto`, `cooldown`, `invalidation`, `re_entry`, `arming`, `timeout`, `regime_detector` in logic slots; `derivation`, `combiner` added | 6, 9 |
 | E3 | Exits at unit or account scope | WIDEN / stays | Unit scope lifts with S17; account scope stays an exit refusal: it is the control verb `flatten` | 9 |
-| E4 | One position per market | WIDEN | `position_limit` per market and per open | 9 |
+| E4 | One position per market | WIDEN | AD-25; `position_limit` per market and per open | 9 |
 | E5 | Per-market settings | WIDEN | `settings_record` per market through I16's market key | 9 |
 | E6 | `sessions` | WIDEN | Compiled with the record's clock; window card kind | 9 |
-| E6 | `context_needs` | WIDEN | A read on a second instrument with aligned clocks | 14 |
+| E6 | `context_needs` | WIDEN | A read on a second instrument with aligned clocks; currency conversion doesn't wait for it (AD-10) | 14 |
 | E6 | `routes`, `plain_python`, `roll` | stays refused | One venue; the Library block is the Python door; `roll` waits on a futures route (Q2); the record field is reserved on I4 | none |
-| `streams_not_built` | Second stream | WIDEN | Template A's 1m and 5m | 9 |
+| `streams_not_built` | Second stream | WIDEN | AD-25; template A's 1m and 5m | 9 |
 | E7 | Spread, SQS, news in `guard` | WIRE | Gate slot in the unit chain; node sensor; stickers | 10 |
 | E8 | Sizer slot has no type check or ceiling | WIDEN | Face check; size band in one row | 2 |
 | E9 | `_CEILING = 0.005` in the contract test | WIDEN | Fixed first | 0 |
 | E10 | Exit contract test feeds refused evidence | WIDEN | Fixed first | 0 |
 | E11 | Library blocks not enrolled | WIDEN | Enrolled in the contract test | 0 |
-| E12 | Motion rule gets only `{strength, r}` | WIDEN | Rule reads R and declared facts | 7 |
+| E12 | Motion rule gets only `{strength, r}` | WIDEN | Rule reads stamp, R and declared facts | 7 |
 | E13 | `r_after_costs` holds no costs | WIDEN | Trade row v2; R17 says what old rows mean | 8 |
 | E14 | Market entries only | WIDEN | `OrderSpec` on the intent; limit and stop entries at step 3 | 17 |
-| E15 | `OwnPosition` lacks facts | WIDEN | `PositionFacts` from `HeldPosition` | 3 |
+| E15 | `OwnPosition` lacks facts | WIDEN | `PositionFacts` from `HeldPosition`; `numbers_at_entry` filled in slice 7 | 3, 7 |
 | E16 | Identity table unwired | WIRE | R17 forwarding map, `classify` called by promote and the judge | 16 |
 | E17 | Too-thin count | value | Numbers talk and methodology | none |
 | E18 | Motion constants | WIDEN | Editable rows on `Motion` | 7 |
@@ -480,12 +580,12 @@ Refusals (FUNNEL 3.8): all placed as that table says; `routes`, `plain_python` a
 
 ## 6. The first baseline, from zero trades and zero fills
 
-Empty store, fake broker (K7), template `canary` first, then `scalper-mr`. Values are labelled placeholders, owner numbers talk; every card says "a shape, not an edge".
+Empty store, fake broker (K7) or the practice venue (below), template `canary` first, then `scalper-mr`. `canary` reads 15-minute bars, so it runs before slice 9 changes the feed. Values are labelled placeholders, owner numbers talk; every card says "a shape, not an edge".
 
 1. `unit_new("canary", {})`. No pod, no group. The template is a complete document: logic blocks, exits, a risk section (fixed money per trade, one position, kill switch only, labelled "no brakes" in the largest type), labelled numbers, `origin: placeholder`. Instrument records for the template's markets ship with it, labelled `source: shipped`, so day one needs no broker (`[ASSUMPTION]`: closes E5 G8; `unit_check` accepts a shipped record).
 2. `unit_check`, then compile. `needs ⊆ provides` or a named fallback; two fingerprints.
-3. `backtest_run` on synthetic bars. The host writes a G record against the logic fingerprint; the run is stamped `group: none`.
-4. Promote click to paper. `Deployment(logic_fp, risk_fp, group_id: none, lane: paper, budget_share)`.
+3. `backtest_run` on synthetic bars. QMB runs G (`qmb/host/behaviour.py`) and the host writes the G record against the logic fingerprint; the run is stamped `group: none`. No judge run is needed, and a judge's `too_thin` moves nothing.
+4. His promote click to paper: the `DRAFT -> PAPER` row (AD-24), on G's safety half. `Deployment(logic_fp, risk_fp, group_id: none, lane: paper, budget_share)`.
 5. The node stages, compiles, warms up by the warm-up count.
 6. First signal, pass 1: exits none; a proposal parks. Pass 2: unit chain (no stickers; gate warns on an `uncalibrated` cell; sizer answers money at risk; converter spells quantity or a named skip); node chain (kill GREEN, no group, veto passes); the row is written with every input; the send. The fake broker fills. Fill row; first measured cost in the cell; one row in the fleet fold reading "too thin to judge".
 7. `scalper-mr` repeats the walk with control rows: session-loss and account-daily halts bind at zero; the own-percentile bench in shadow until N trades, writing `would_have`; the cushion rule at zero profit gives factor 1; the fast-invalidation cut uses a fixed labelled distance until N winners exist.
@@ -495,7 +595,9 @@ Empty store, fake broker (K7), template `canary` first, then `scalper-mr`. Value
 
 **How anything changes.** Copilot or user: `unit_new(template, overrides)` by JSON pointer; `unit_patch` on a draft; `pod_draft` then `roll_plan` for many; `group_draft` for shared caps, money and the kill line; `blocks_save` for a new block; a new JSON in the templates folder or a `template` Library item for a new template. Live moves take the owner's click on one hash. Inside a range, numbers move by their own rule. A group limit edit is one click on the row and reaches members at their next decision.
 
-**One evaluator, four drivers.** The evaluator is `HostedUnit` (`on_instant`, `price`, `move_risk`) behind `UnitSliceHandler`, the code QMB and the node already share. A driver supplies only an `AdmitPort` (the node chain), a `FactSource` (node facts or replay facts) and an execution port. Four drivers: node live, paper lane, QMB, Lab replay. QMB with one unit uses an immediate admit and `group: none`, stamped on the run; several units replay through `group_run` with the node's pass-2 order and reservations. The Lab previews `expand(sample, pod)` and drives replay through the same seams, so its size trail is the decision row. One conformance tape (recorded proposals and facts) runs through all four drivers in CI with an identical trail required; only fills, costs and latency may differ (V10). A block the Lab can run and the node cannot is an unmet need by name, never a Lab-only block by nature.
+**Day one for a stranger [CHECK S8].** Paper needs a bound venue and its prices (`paper_lane.py:1-9`, `runtime.py:2763`), and `ConformanceAccount` (`runtime.py:698`) has no production builder today. Slice 5 adds a venue kind, `practice`: a production builder over that account and a feed replaying the shipped synthetic bars, world `paper`, no broker and no sign-in. So day one reaches a filled paper entry and says plainly it is practice; a real broker's prices come on day two, after its approval. The installer itself is the release lane's (`OPEN.md`).
+
+**One evaluator, three drivers now.** The evaluator is `HostedUnit` (`on_instant`, `price`, `move_risk`) behind `UnitSliceHandler`, the code QMB and the node already share. A driver supplies only an `AdmitPort` (the node chain), a `FactSource` (node facts or replay facts) and an execution port. Three drivers now: node live, paper lane, QMB; Lab replay joins when a Lab exists (`qmx_control/lab.py` says none does) [CHECK S6]. QMB with one unit uses an immediate admit and `group: none`, stamped on the run; several units replay through `group_run` with the node's pass-2 order and reservations. The Lab previews `expand(sample, pod)` and drives replay through the same seams, so its size trail is the decision row. One conformance tape (recorded proposals and facts) runs through every driver that exists in CI with an identical trail required; only fills, costs and latency may differ (V10). A block the Lab can run and the node cannot is an unmet need by name, never a Lab-only block by nature.
 
 ## 7. How a developer adds things, and keeps it maintainable
 
@@ -506,20 +608,21 @@ Empty store, fake broker (K7), template `canary` first, then `scalper-mr`. Value
 | `unit/model.py`, `unit/sections.py`, `unit/upgrade.py`, schema | `qml` | The document, the one partition, the upgrader chain |
 | `compile/compiler.py`, `compile/group.py` | `qml` | Lifted refusals, needs check, face check, both fingerprints, format 5 |
 | `protocol/unit.py`; new `exits.py`, `controls.py`, `entry_chain.py` | `qml` | `HostedUnit`, `on_instant`, `price`, `move_risk`; 1,134 lines today, split as it widens |
-| `chain/node_chain.py`, `chain/budget.py` | `qml` | Node chain links, reservations, `run_budgeted` |
+| `chain/node_chain.py`, `chain/budget.py` | `qml` | Node chain runner and `AdmitPort` protocol, reservations, `run_budgeted` |
 | `group/caps.py`, `group/ledger.py` | `qml` | Group cap runner, ledger fold, order block runner |
 | `motion/engine.py` | `qml` | Correct, widened |
-| `numbers/convert.py`, `numbers/records.py` | `qml` | The one converter; record keys |
+| `numbers/convert.py`, `numbers/records.py` | `qml` | The one converter; record keys; `conversions` |
+| `feed/rollup.py` | `qml` | The one roll-up from base bars to a unit's streams (AD-25) |
 | `receipt.py`, `fold.py` | `qml` | `explain_size`, `replay_decision`, `fold` |
 | `pods/expand.py`, `pods/roll.py`, `pods/drift.py` | `qml` | Recipe stamping, plans, drift. Pure, no I/O |
 | `blocks/stdlib/` and the Library | `qml`, host | Content; stdlib needs his signature (Call 11), Library does not |
 | `risk/chain.py`, `risk/facts.py`, `risk/controls.py`, `risk/group.py`, `risk/unit_intent.py` | `qmf-risk` | Verdict, fact, row, group types; the wire (`none_declared`, signed stop) |
-| `data/journal_kinds/unit.py` | `qmf-data` | Row kinds, appendable codes |
+| `data/journal_kinds/unit.py` | `qmf-data` | Row kinds and appendable codes, used by hosts; `qml` never imports it |
 | `host/unit_handler.py`, new `host/facts.py`, `host/group_run.py` | `qmb` | Admit seam, replay facts, multi-unit replay driver with the node's order |
-| `app/runtime.py`, new `app/outbox.py`, `app/facts.py`, `app/sensor.py`, `app/stand_down.py`, `protection/effect_matrix.py` | `qmn` | Two passes, outbox and budget, node facts, sensor, stickers, kill effects on entries |
+| `app/runtime.py`, new `app/outbox.py`, `app/node_links.py`, `app/practice.py`, `app/facts.py`, `app/sensor.py`, `app/stand_down.py`, `protection/effect_matrix.py` | `qmn` | Two passes, outbox and budget, fault wall, injected node links, the practice venue, node facts, sensor, stickers, kill effects on entries |
 | `promote.py`, new `roll.py`, `retest.py`, `feed_relay.py` | `qmx-host` | The click and its binding, re-test workflow, relay for any publisher |
 | `kinds/pod`, `group`, `template` (un-retired), `pod-block` retired into `component` | `qmx-library` | Real schemas |
-| templates `fleet-fold`, `curve-factory` | `qmx-engine` | Scripted watch, curves |
+| templates `fleet-fold`, `curve-factory` | `qmx-engine` | Scripted watch's steps, curves; `fleet-fold` ships inside the `fleet-watch` mini app (section 8) |
 | `catalog.py`, `functions.py` | `qmx-control`, `qmx-tools` | Tool rows in section 8 |
 
 **One statement per `qmf-risk` module** says which world it belongs to (new risk through QML blocks, or the wire and accounting); what the swap retires (`qmn/capital/*`, old `control_*`) is subtracted in the owning lane once the conformance tape passes.
@@ -528,7 +631,7 @@ Empty store, fake broker (K7), template `canary` first, then `scalper-mr`. Value
 
 | Adding | Files touched | Tests |
 |---|---|---|
-| **A sizer** | One folder in the Library (`component` with `entry.json` `output: amount`, `reads`, `block.py`) or `blocks/stdlib/<id>/1/` with a dictionary page. No core edit | Auto-enrolled contract test (reads a moved value from `evidence`), golden case, `same-decision-in-both-hosts`, `replay_decision` on a row |
+| **A sizer** | One folder in the Library (`component` with `entry.json` `output: amount`, `reads`, `block.py`) or `blocks/stdlib/<id>/1/` with a dictionary page. No core edit | Auto-enrolled contract test (its answer changes when a moved value in `evidence` changes), golden case, `same-decision-in-both-hosts`, `replay_decision` on a row |
 | **A brake** | One folder; face declares `reads` and verbs; one row in a template or recipe; a reason code row (appendable) | Contract; `would_have` in shadow; cold behaviour; exits-never-blocked property |
 | **A group cap** | One folder, `component_type: group_cap`; a row in a group document | Same, plus a two-member `group_run` case |
 | **An instrument class** | Record rows and keys in `numbers/records.py`; a calendar package under `extensions/`; venue adapter only for a new venue; cost pool rows. No branch | A test that fails on `instrument_class` branching in the money path; known-answer cost check per class |
@@ -542,11 +645,29 @@ Empty store, fake broker (K7), template `canary` first, then `scalper-mr`. Value
 
 ### Contract tests (K9), in order
 
-1. Same decision in both hosts, by socket (block, bar sequence, expected answer through QMB and the node). 2. Exits never blocked, as a property, including a faulty exit block, a hung chain link, a dead fold. 3. Exit code cannot import the chain, fold or feed. 4. Every refused field runs, refuses with a reason, or is labelled; the census extended to `authority`, `reads`, `tags`, `stages`, `recipe`. 5. Every number has a reason and range at check. 6. Motion: range, step, flat, bounded state, shuffled-outcome control. 7. Every template reaches paper on rehearsal (K7). 8. No agent path to money, by tool table. 9. `RiskState` from one fold in every reader. 10. Known-answer cost check per cost block. 11. A parked entry waits and never reads "warming up". 12. A stopless entry survives all six places (AD-22). 13. The conformance tape through four drivers. 14. `_CEILING` and the exit-evidence test faults fixed before any real block lands.
+Each test lands with the slice in brackets and stays on.
+
+1. Same decision in both hosts, by socket (block, bar sequence, expected answer through QMB and the node). [2]
+2. Exits never blocked, as a property, including a faulty exit block, a raising logic slot, a raising sizer, a hung chain link, a dead fold; one unit's raise stops no other unit (AD-23's test). [3, widened 10, 11]
+3. Exit code cannot import the chain, fold or feed. [3]
+4. Every refused field runs, refuses with a reason, or is labelled; the census extended to `authority`, `reads`, `tags`, `stages`, `recipe`. [0]
+5. Every number has a reason and range at check. [7]
+6. Motion: range, step, flat, bounded state, shuffled-outcome control; any block whose answer ignores a bound number moved in `evidence` fails. [7]
+7. Every template reaches paper on rehearsal (K7), with no judge run. [5, 10]
+8. No agent path to money, by tool table. [5]
+9. `RiskState` from one fold in every reader. [4]
+10. Known-answer cost check per cost block. [8]
+11. A parked entry waits, never reads "warming up", is never minted a second time (one signal, one send, one position at the venue and in the handler), and past `expires_at` writes `Skip` with `budget_expired`. [11]
+12. A stopless entry held for N bars on the fake broker, then through a restart, survives all of AD-22's places. [11]
+13. The conformance tape through every driver that exists: node, paper, QMB. [2, widened 11]
+14. `_CEILING` and the exit-evidence test faults fixed before any real block lands. [0]
+15. **Self-configuration, end to end, one sizing number and one exit number.** On QMB and on the fake broker, bind `own-r-step@1` to the sizer's `fraction` and to the target's `multiple` and run scripted trades. A calibration row shows each move, inside its range. The next entry's quantity is the literal the converter gives at the moved `fraction`, through the shipped sizer. The next target is the literal at the moved `multiple`; a position already open keeps its old target. `explain_size` on that row prints both moved values and the calibration row ids. It moves with another market held. A restart in the middle of a count ends in the same move. [7]
+16. **Currency.** Known answers: the loss at the stop equals the intended amount in the account's currency on a quote-is-account market, on gold, on USDJPY and on EURJPY. A stale or absent rate gives its named skip; an exit in the same state still closes; QMB and the node agree. [2]
+17. **One feed.** AD-25's test. [9]
 
 ### Versions and migrations
 
-`COMPILER_FORMAT_VERSION` 4 to 5 once, in slice 1, before any unit deploys. A census test fails on any new schema field until it is run, refused or labelled. The upgrader chain and the "newer than I read" refusal stay. Snapshots carry two parts, each judged by its own fingerprint; a cold restore of risk state is rebuilt from `risk_event` and calibration rows by the fold, so nothing is lost. A forwarding map (`qml/identity/forward.py`) declares `old@v -> new@v` with a parameter transform; the identity table is wired so promote and the judge classify a swap (sizer-only keeps the logic record; an exit change is a counted try). The deployment gains `succeeds` so a new version may enter while the old one keeps only its exits until flat. A `.qmxunit` or `.qmxpod` name for the JSON is tooling config, no core change. **Re-test workflow (K8):** after any format bump, rerun G per deployed unit on its recorded slice on a worker pool, report which units changed behaviour, and refuse the bump at the node until the report exists.
+`COMPILER_FORMAT_VERSION` 4 to 5 in slice 1, before any unit deploys, then one bump per changed decision until the first live deployment (AD-19). A census test fails on any new schema field until it is run, refused or labelled. The upgrader chain and the "newer than I read" refusal stay. Snapshots carry two parts, each judged by its own fingerprint; a cold restore of risk state is rebuilt from `risk_event` and calibration rows by the fold, so nothing is lost. A forwarding map (`qml/identity/forward.py`) declares `old@v -> new@v` with a parameter transform; the identity table is wired so promote and the judge classify a swap (sizer-only keeps the logic record; an exit change is a counted try). The deployment gains `succeeds` so a new version may enter while the old one keeps only its exits until flat. A `.qmxunit` or `.qmxpod` name for the JSON is tooling config, no core change. **Re-test workflow (K8):** after any format bump, rerun G per deployed unit on its recorded slice on a worker pool, report which units changed behaviour, and refuse the bump at the node until the report exists.
 
 ### `EXTENDING.md`
 
@@ -560,7 +681,7 @@ One page per thing added, each ending in the test that proves it. **Generated,**
 
 **Apps.** `data_reads` widens past `market` (`supervisor.py:891`) to `journals` and `fold`; a card-landing path to "Needs you" is traced (K2; UNKNOWN today); `library-items` lander lands pods, presets, blocks and templates at publish; a published reading travels by the relay with host-stamped `source`.
 
-**The scripted fleet watch** (replaces the decay flood): template `fleet-fold` reads the fold once a night and on demand: one ranked row per unit (state, distance to lines, drift from recipe, money since anchor), two lists (who gets looked at, by rank under K; who gets acted on, by a strict bar under one fleet budget), one incident one card by root-cause key, a morning digest; no agent; the shipped decay rule's per-unit nightly card is switched off in the same slice. From zero every row reads "too thin to judge".
+**The scripted fleet watch** (replaces the decay flood): a mini app, `fleet-watch`, packaged through the manifest with `data_reads` on journals and the fold (`qmx_apps/manifest.py:113`), so it installs, stops and swaps like any other ("As a mini app also", M49) [CHECK S16]. Its engine template `fleet-fold` reads the fold once a night and on demand: one ranked row per unit (state, distance to lines, drift from recipe, money since anchor), two lists (who gets looked at, by rank under K; who gets acted on, by a strict bar under one fleet budget), one incident one card by root-cause key, a morning digest; no agent; the shipped decay rule's per-unit nightly card is switched off in the same slice. From zero every row reads "too thin to judge".
 
 ## 9. Observability
 
@@ -568,30 +689,30 @@ One page per thing added, each ending in the test that proves it. **Generated,**
 
 ## 10. Build order, in slices
 
-About **44 PRs**, stacked, one check per PR, light verification per PR. A PR is about one review's worth; the split is an estimate, unmeasured. "Sign-in" is his demo sign-in (Q1). Three stop points each leave a whole baseline.
+About **52 PRs**, stacked, one check per PR, light verification per PR. A PR is about one review's worth; the split is an estimate, unmeasured. "Sign-in" is his demo sign-in (Q1). Three stop points each leave a whole baseline. **His signature:** QML in the node's lock bumps the money app and needs his signature (`SWAP` 2.2), and slices 2, 3 and 7 change stdlib blocks. One signed release per stop point covers everything up to it; a stop point isn't reached until he has signed [CHECK S17]. UNKNOWN: no gate for this found in `release_gate.py` or `build_release.py`.
 
 | # | Slice | PRs | Ends in, verifiable | Sign-in |
 |---|---|---|---|---|
 | 0 | Tests first: `_CEILING`, exit evidence, Library enrol, census extended; one statement per `qmf-risk` module; `EXTENDING.md` skeleton with staleness test | 2 | CI honest; a real sizer passes | Before |
-| 1 | Sections, two fingerprints, `opened_by` to logic, node and promote gates, format 5 | 2 | COMPARE's probe inverted: exits fire after a risk-only recompile | Before |
-| 2 | `Amount`, converter, face check, size band, `price` as its own call, real receipt, decision row v2 with stored inputs written before send, `explain_size`, `replay_decision`, USDJPY fix | 3 | Same decision in both hosts; replay equals row | Before |
-| 3 | Exit step 2: stack, `PositionFacts`, side, reasons, fault fall-through; import test | 2 | Six shipped exits compile that fit; property test | Before |
-| 4 | Control rows, `own.*` stats, words from the fold, restore, shadow, `risk_event` and `would_have` writers, `risk_stop` producer | 3 | Five halts run in QMB and on the fake broker; restart keeps a bench from rows | Before |
-| 5 | Templates `canary`, shipped instrument records, K7 rehearsal | 2 | **First filled paper entry from zero (about PR 14). Stop point A: one unit trades on paper with brakes** | Before |
-| 6 | Modifiers, cushion ledger, fold at unit scope, `enabled` by fact | 2 | Size trail with a press and a brake | Before |
-| 7 | Number spec, engine widened, `scaled`, window, `authority`, editable constants, found-by-replay | 2 | A risk number moves in range; shuffle control | Before |
-| 8 | Facts: account surface, record keys and commission, cost cells from fills, fill record, trade row v2 | 3 | Sizer reads a measured cell | Before; venue fields checked after |
-| 9 | Sessions, second stream, per-market settings, `position_limit`, roles, window card | 2 | Templates A and B compile | Before |
-| 10 | Unit chain: gate slot, stickers and tolerations, scope keys, node sensor, curve factory, `run_budgeted` on links; SQS rule and producer moved before C-20 | 3 | Hurdle warns then bites; `scalper-mr` and `intraday-trend` pass K7 | Before |
-| 11 | Node chain, outbox two passes, time budget, parked-entry fix, kill effects on entries, order veto, no-stop path through six places | 3 | Exits-first test; a long bell leaves entries over and the node lives; a stopless entry survives. **Stop point B: the whole single-unit baseline, three templates, no group, no pod** (about PR 29) | Before |
+| 1 | Sections with AD-2's partition, two fingerprints, `opened_by` to logic, node and promote gates (`_g_record` on the logic fingerprint), format 5 | 2 | COMPARE's probe inverted: exits fire after a risk-only recompile | Before |
+| 2 | `Amount`; converter with `rate`; the `Fact` type and `market.rate` in both hosts; `conversions` on the record, conversion markets subscribed; `fixed-fraction-at-stop@2`; `_money` stamped, `_account()` converted; face check, size band; `price` as its own call (AD-1), `layer_g` included; real receipt; decision row v2 with `numbers_in_force` and stored inputs written before send; `explain_size`, `replay_decision` | 4 | K9 1, 13, 16: same decision in both hosts; replay equals row; USDJPY and EURJPY lose the intended amount; a stale rate skips by name | Before |
+| 3 | **Fault wall (AD-23):** phases in `_Run.step`, `try` per unit in `_drive`, `Fault`, `risk_event` kind with `unit_fault`, entries off and back, `close_scope` port. Exit step 2: stack, `PositionFacts`, side, closing quote's bars, reasons, fault fall-through; shipped exit blocks read numbers from evidence; import test | 3 | K9 2, 3: a raising logic slot and a raising sizer stop no exit and no other unit, over 12 bars, zero heals; six shipped exits compile that fit | Before |
+| 4 | Control rows, `own.*` stats, `fold.py` at unit scope, words from the fold, restore, shadow, `risk_event` and `would_have` writers, `risk_stop` producer | 4 | K9 9; five halts run in QMB and on the fake broker; restart keeps a bench from rows. Account-scope halts read the account facts the node has today, labelled one-unit until slice 8 | Before |
+| 5 | Template `canary` on 15-minute bars, shipped instrument records, the `DRAFT -> PAPER` row (AD-24), `practice` venue kind, run stamp, K5 protected list and channel test, K7 rehearsal | 3 | K9 7, 8: **first filled paper entry from zero with no judge run (about PR 18). Stop point A: one unit trades on paper; brakes bind on any unit that declares them** | Before |
+| 6 | Modifiers, cushion ledger as a scope of the fold, `enabled` by fact | 2 | Size trail with a press and a brake | Before |
+| 7 | Number spec, engine widened, `scaled`, window, `authority`, editable constants, found-by-replay; **AD-14's six steps:** stamps, `own-r-step@1`, numbers from evidence enforced, receipt, no flat for sizer and exit numbers, `_OwnJournal` seeded | 3 | K9 5, 6, 15: **a sizing number and an exit number each move, the block reads it, the receipt shows it**, on QMB and the fake broker, through a restart; shuffle control | Before |
+| 8 | Facts: account surface, record keys and commission, cost cells from fills, fill record, trade row v2, I17 verdict | 3 | K9 10; sizer reads a measured cell; slice 4's account halts re-tested across two units | Before; venue fields checked after |
+| 9 | AD-25, four PRs: (a) base bar, `roll_up`, `(stream, market)` keys; (b) second stream compiled; (c) positions keyed by id, `position_limit`, bet key on intents; (d) sessions, window card, per-market settings, roles | 4 | K9 17: a 1m, a 5m and a 15m unit trade on one account of the fake broker; templates A and B compile **and host** | Before |
+| 10 | Unit chain: gate slot, stickers and tolerations, scope keys, node sensor, curve factory, `run_budgeted` on links, control rows and the bar step's phases, tested on Windows; SQS rule and producer moved before C-20 | 3 | Hurdle warns then bites; a hung logic slot stops no exit; `scalper-mr` and `intraday-trend` pass K7 | Before |
+| 11 | Node chain with injected links, outbox two passes, time budget and beats, `Parked`, `parked:<market>`, kill effects on entries, order veto rows with `enabled`, no-stop path through all of AD-22's places | 4 | K9 11, 12: exits-first test; a long bell leaves entries over and the node lives; one signal, one send; a stopless entry survives bars and a restart. **Stop point B: the whole single-unit baseline, three templates, no group, no pod** (about PR 37) | Before |
 | 12 | Group: document with selector, limits as facts, caps, ledger, reservations, `order` block (rank), default parent limit and day stop, `group_run` driver, restart rules | 4 | Two-member and 200-member cap on the fake broker; one limit edit reaches members with no recompile; restart holds cuts and defers raises | Before |
-| 13 | Pod: real kinds, `expand`, `roll_plan`, click, `move_risk`, stages, drift report, gallery seed | 3 | One edit, 200 members, one click on the fake lane; drift listed | Before |
-| 14 | Reads bus, publisher, home markets, `library-items` lander, `blocks_save`, `template` un-retired, Library block traced to a node deploy | 3 | A mini app's reading reaches a unit; a Library sizer trades on the fake broker | Before |
-| 15 | Fleet fold, app read door and card path, decay card off, proposal tape, fixed-size rerun | 2 | One ranked row per unit; a size search replays a tape | Before |
-| 16 | R17 forwarding, identity table wired, `succeeds`, K8 re-test workflow | 1 | Placeholder rip-out keeps a record. **Stop point C: the whole baseline with group, pods, shipping** (about PR 42) | Before |
+| 13 | Pod: real kinds, `expand`, `roll_plan`, click, `move_risk`, stages, drift report, deployment key, gallery seed | 3 | One edit, 200 members, one click on the fake lane; drift listed; two deployments of one version | Before |
+| 14 | Reads bus, publisher, home markets, reading record with `knows_at`, `library-items` lander, `blocks_save`, `template` un-retired, provenance and claim fields, Library block traced to a node deploy | 3 | A mini app's reading reaches a unit; a Library sizer trades on the fake broker | Before |
+| 15 | `fleet-watch` mini app over the fold, app read door and card path, decay card off, proposal tape, fixed-size rerun, run arms | 2 | One ranked row per unit, installed as a mini app; a size search replays a tape | Before |
+| 16 | R17 forwarding, identity table wired, `succeeds`, K8 re-test workflow | 1 | Placeholder rip-out keeps a record. **Stop point C: the whole baseline with group, pods, shipping** (about PR 50) | Before |
 | 17 | Step 3: signed stop, amends with read-back, partials on the node, trails, venue-resting targets per R24 | 2 | Wick and partial tests on demo | **After** |
 
-Paper trading from `canary` starts after slice 5; `scalper-mr` after slice 10. Nothing deploys live before slice 17 or K8. If "too much machine" turns out true at stop point B, slices 12 to 16 are opt-in and the single-unit baseline stands alone.
+Paper trading from `canary` starts after slice 5; `scalper-mr` after slice 10, which needs slice 9's feed. Nothing deploys live before slice 17 or K8. If "too much machine" turns out true at stop point B, slices 12 to 16 are opt-in and the single-unit baseline stands alone.
 
 ## 11. Deferred, and what reopens each
 
@@ -599,6 +720,7 @@ Paper trading from `canary` starts after slice 5; `scalper-mr` after slice 10. N
 |---|---|
 | Content for the group `order` block beyond `rank` (best of those firing) | A recipe needs it; the field exists |
 | Sends off the tick thread, or a thread per account | Measured send delay at a bell harms fills, or exit delay exceeds what he accepts |
+| Lab replay as a driver | A Lab package exists; the seams are ready |
 | A worker process per pod (V3 AD-7) | Hung blocks happen in practice despite the wrapper, or a C call holding the GIL defeats it |
 | Group across places as one atomic cap | A second node holds one account |
 | Applier object, bandits, pooled priors | A number needs motion between anchors that facts cannot give |
@@ -620,13 +742,13 @@ COMPARE §4: "If you picture the pod as a live thing that governs its members, c
 |---|---|---|---|
 | 0 to 9 | Nothing. The second fingerprint is named `stack` instead of `risk`; the partition function is the same | All | None |
 | 10 | Each row gains `runs_at: unit | group | anchor`, read by one function; links are the same | All links, wrapper, sensor | One field, one reader: under 1 PR |
-| 11 | The node chain's link set becomes the pod's `runs_at: group` rows; `price` is called from pass 2 instead of right after `on_instant` (AD-1 kept that door) | Outbox, budget, parked-entry fix, veto, no-stop path | Half a PR: move one call |
+| 11 | The node chain's link set becomes the pod's `runs_at: group` rows; `price` is already called from pass 2 (AD-1) | Outbox, budget, parked-entry fix, veto, no-stop path, the `price` call | None |
 | 12 | The group document is absorbed into a house pod (a pod every other pod has as `parent`); limits-as-facts, caps, ledger, reservations, order all stay | Caps runner, ledger, reservations, order block, `group_run` | 1 to 2 PRs: kind rename, selector becomes member rows |
 | 13 | **The real fork.** `expand`, `roll_plan`, `move_risk` and the drift report are replaced by `resolve(unit, pod, house) -> Stack`, a stack fingerprint, a pod reference on the deployment, and a click on the pod hash | Kinds, click binding, stages (as pod rows), G on logic only | 3 PRs dropped, about 4 built |
 | 14 to 17 | Nothing | All | None |
 
-**Net:** about 48 to 51 PRs instead of 44, and a merge lane for multi-unit replay arrives a slice later. **Decide by stop point B.** Everything before it is shared; only slices 12 and 13 differ. What you gain: one pod is one document; a pod edit writes one document, not 200 versions; comparing two whole setups is plainer; a pod on screen is one thing on disk. What you lose: a unit alone pays one group call that answers nothing; the early stopping point stays, but the pod machinery is bigger once you pass it.
+**Net:** about 56 to 58 PRs instead of 52, and a merge lane for multi-unit replay arrives a slice later. **Decide by stop point B.** Everything before it is shared; only slices 12 and 13 differ. What you gain: one pod is one document; a pod edit writes one document, not 200 versions; comparing two whole setups is plainer; a pod on screen is one thing on disk. What you lose: a unit alone pays one group call that answers nothing; the early stopping point stays, but the pod machinery is bigger once you pass it.
 
 ## 13. Assumptions and open items
 
-See `OPEN.md` for every open item with the default the build runs on and who decides. Assumptions carried in this spine: G's behaviour half is not re-required under a new risk section (Q6 default); a stage move covered by the original click satisfies REVIEW M2; 200 unit versions per pod edit are acceptable to the Library; a worker thread suffices to budget Python block code on Windows; shipped instrument records are accepted by `unit_check`; a G run per unit is cheap enough to batch for K8. UNKNOWN until measured: real node throughput at 200 units with journals and a venue; real compile time per member; whether a Library block reaches a live node end to end (slice 14 traces it); real send times (demo).
+See `OPEN.md` for every open item with the default the build runs on and who decides. Assumptions carried in this spine: G's behaviour half is not re-required under a new risk section (Q6 default); a stage move covered by the original click satisfies REVIEW M2; 200 unit versions per pod edit are acceptable to the Library; a worker thread suffices to budget Python block code on Windows (tested in slice 10); a 60-second base bar's extra feed work is small; shipped instrument records are accepted by `unit_check`; a G run per unit is cheap enough to batch for K8. UNKNOWN until measured: real node throughput at 200 units with journals and a venue; real compile time per member; whether a Library block reaches a live node end to end (slice 14 traces it); real send times (demo); whether cTrader accepts a market order with no stop (R24).
