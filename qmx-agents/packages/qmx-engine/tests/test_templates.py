@@ -1551,7 +1551,7 @@ def test_a_true_verdict_of_an_earlier_run_is_refused(
     world: World, judged_on_a_small_record: None
 ) -> None:
     earlier = judge_one_sweep(world)
-    its_results = world.store.get(HIM, earlier["verdict_id"]).fields["results"]
+    its_results = cast("list[str]", world.store.get(HIM, earlier["verdict_id"]).fields["results"])
 
     report, finished = real_u1(
         world,
