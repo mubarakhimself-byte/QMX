@@ -261,7 +261,9 @@ WALLS: Final[tuple[Check, ...]] = (
         1,
         "A wheel-built node loads the alarm list and a real alarm reaches a loopback ntfy",
         (
-            _root("qmn/tests/test_qmn_failures_gate.py::test_the_installed_layout_gives_a_push_sender"),
+            _root(
+                "qmn/tests/test_qmn_failures_gate.py::test_the_installed_layout_gives_a_push_sender"
+            ),
             _root(
                 "qmn/tests/test_qmn_failures_gate.py::"
                 "test_status_says_alarms_off_while_the_register_will_not_load"
@@ -457,9 +459,7 @@ WALLS: Final[tuple[Check, ...]] = (
                 "qmn/tests/test_app_connections.py::"
                 "test_an_hour_of_refused_socket_stays_under_a_set_count_of_sign_ins"
             ),
-            _root(
-                "qmn/tests/test_app_connections.py::test_a_weekend_reads_closed_not_stopped"
-            ),
+            _root("qmn/tests/test_app_connections.py::test_a_weekend_reads_closed_not_stopped"),
             _root(
                 "qmn/tests/test_app_deployed_runs.py::test_a_five_minute_unit_is_refused_by_name"
             ),
