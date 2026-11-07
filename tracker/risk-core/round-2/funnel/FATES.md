@@ -11,7 +11,9 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 - **parked: numbers**: a value or an argument about values.
 - **dropped: <reason>**: with the reason; dropped ideas keep their history in the ledger's `seen_values`.
 
-**Evidence words.** BUILT, REAL (field named), MODEL (our simulation), PROPOSAL, GUESS, RULING (his words), UNKNOWN. Several labels may apply; the first is the strongest honest one.
+**Evidence words.** BUILT, REAL (field named), MODEL (our simulation), PROPOSAL, GUESS, RULING (his direct decisions), HIS THOUGHT (his "I think", kept as he asked: "I think, I did not say it is", M51), UNKNOWN. Several labels may apply; the first is the strongest honest one.
+
+**Fix round, 7 Nov.** Applied `round-2/funnel/REVIEW.md` with the lead's rulings: every fate that says core names a live or merged row of `FUNNEL.md` section 3 (checked by script, `FUNNEL.md` Appendix D); rows the fix round merged keep their id as a pointer; demoted rows (S19, I14, R12, R14, R16's fields, K4, V8, V11, V12) are no longer named as core here. Six rows that recorded his "I think" as a ruling now read HIS THOUGHT.
 
 **Counting.** Rows are placed, not kept or dropped. `FUNNEL.md` Appendix B answers "you kept everything again".
 
@@ -23,7 +25,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 |---|---|---|---|
 | H1-1 | MIS as router with a door to widen a unit's markets | core I5 (allowed, home, active); the finder is content (E1 MIS-3) | RULING (M5); PROPOSAL; MODEL on lag |
 | H1-2 | Units read MIS readings, each with a stated fallback | core S8 | designed, REFUSED today |
-| H1-3 | Contexts, not sessions; settings keyed to a word | content on S8; context key reserved in the override chain | PROPOSAL; RULING (M10 accepted it) |
+| H1-3 | Contexts, not sessions; settings keyed to a word | content on S8; context key reserved in the override chain (I16) | PROPOSAL; HIS THOUGHT (M10) |
 | H1-4 | A named reading allowed to change size, with range and reason | core S2 | PROPOSAL |
 | H1-5 | Mini apps and agents as publishers of readings | core S8 (open `source`, publisher on reads) | RULING (M50); PROPOSAL |
 | H1-6 | Agents write a dated reading, scored like a sensor | other: agentic; needs R13 | PROPOSAL |
@@ -44,7 +46,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H1-10l | Almanac and per-class inefficiency hunts | content (Lab) | PROPOSAL |
 | H1-10m | Crowding counts, dispersion, joint-state correlation, lead-lag | content (PC-side readings) | PROPOSAL |
 | H1-11 | Two hourly tables per instrument: volatility and cost; refuse when missing (refusal is a block) | core I2, I4 | REAL on cost shape (NBER); cells synthetic until fills |
-| H1-12 | Cost windows found by data; sniping as a counted slice | core R16 window card, S9, R6; finding is content | REAL on cost and activity; no window-sizing study |
+| H1-12 | Cost windows found by data; sniping as a counted slice | core S9 (window card kind), S9, R6; finding is content | REAL on cost and activity; no window-sizing study |
 | H1-13 | SQS as sensor, not only gate | core S6 and the node sensor | BUILT rule text, never run on a venue |
 | H1-14 | SQS K-of-N class caution | content (isolation evidence) | REAL mechanism (liquidity commonality); PROPOSAL rule |
 | H1-15 | Spread gate against the instrument's own percentiles, two windows | content block (SQS-1 variant) | author backtest |
@@ -55,11 +57,11 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H1-20 | Venue rule: never call a quote a book | core I4 (book-or-quote flag) | REAL for exchange books |
 | H1-21 | Broker and venue quality record; probing capacity | core R7; probe content | demo measurements; idea |
 | H1-22 | Scope keys: class, region, currency, underlying, session | core S11 | design |
-| H1-23 | His isolation protocol: two tells, graded, lifecycle, accuracy record | content pod block; core R14 | daily-data author backtests; no live precedent |
+| H1-23 | His isolation protocol: two tells, graded, lifecycle, accuracy record | content pod block; content (a query over R3 and S10) | daily-data author backtests; no live precedent |
 | H1-24 | Unknown is not calm | core S10 | design logic |
 | H1-25 | How does the MIS adjust: it doesn't; stickers refuse, the finder skips | decided (D24); UI must draw it | RULING; decision text |
 | H1-26 | Risk-off tells, fast and slow, no master score | content | author backtests |
-| H1-27 | Agent isolation over days by card | other: agentic; door K2 core | PROPOSAL |
+| H1-27 | Agent isolation over days by card | other: agentic; door core K2 | PROPOSAL |
 | H1-28 | Budget follows what's open; weekend crypto raises Monday caution | content pod rule | author backtest, short sample |
 | H1-29a | Region shift without budget rotation | content | old rule, killed in July |
 | H1-29b | Peer ejection | content | REAL (Envoy) |
@@ -72,7 +74,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H1-31 | News windows in the customisable layer; kill switch keeps the hard kill | core S10 tolerations | RULING (M49, C28) |
 | H1-32 | Event policy details: flat through, cool down, re-enter on spreads, never widen a stop in news | content; V1 holds | E-mini author study |
 | H1-33 | News as something to trade; event clock | content; core I7 event clock | author backtest (daily stocks) |
-| H1-34 | News agents with limits (typed, expiring, provenance, one-item cap) | other: agentic; door core | controlled test; simulation |
+| H1-34 | News agents with limits (typed, expiring, provenance, one-item cap) | other: agentic; door core K2 | controlled test; simulation |
 | H1-35 | Testable news rules: versioned event file, collision rate | content | author |
 | H1-36 | Session, open and fix minutes as caution windows with measured widths | core S9; widths content | fix behaviour REAL; no width derived |
 | H1-37 | Day boundary, rollover, weekend, holidays, DST as contracts | core I4, R5 | design; market facts |
@@ -89,7 +91,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H1-48 | Energy and stocks as data overlays | content rows | exchange facts |
 | H1-49 | Limits by tick-size tier and holding horizon | content I4 field | author backtest (100 futures) |
 | H1-50 | Factor buckets, grouping by underlying | core I4 (underlying, bucket), bet key I9 | SIMM practice |
-| H1-51 | Which classes can be traded at this budget | core D5 verdict shown; refusal a block | arithmetic |
+| H1-51 | Which classes can be traded at this budget | core I17; refusal a block | arithmetic |
 | H1-52 | Style as a dial (holding horizon) | content optional derivation; measured field on rows | wild |
 | H1-53 | Style by class matrix | content starter sheet for templates | varies |
 | H1-54 | Scenario harness and scenarios as data | core S15 replay path; scenario kind content | design |
@@ -103,14 +105,14 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I1 | Re-size a recorded trade list under another sizing rule | core R2 fields; tool content | REAL product (QuantAnalyzer) |
 | H2-I2 | Sizing base is a derivation; dollars first, lots last | core S1 | PROPOSAL over BUILT converter |
 | H2-I3 | The rule that splits risk across units is a swappable row | core I10 | REAL (bank limit hierarchy); MODEL for sqrt |
-| H2-I4 | House money and reverse house money are one rule; the anchor decides | core R5; shape content; template A on | REAL theory; MODEL no gain on independent trades |
-| H2-I5 | One row for every brake or accelerator | core S5 | PROPOSAL |
+| H2-I4 | House money and reverse house money are one rule; the anchor decides | core R9 (cushion ledger in the fold); shape content; template A on | REAL theory; MODEL no gain on independent trades |
+| H2-I5 | One row for every brake or accelerator | core S4 | PROPOSAL |
 | H2-I6 | Two ledgers: money for brakes, events for decay | core R2 (mechanism on every close), R5 | MODEL; REAL document practice |
 | H2-I7 | Exit stack fed with the position, three verbs | core S3 | BUILT blocks; PROPOSAL stack |
 | H2-I8 | Costs are observed facts; rules read them | core I2 | REAL hourly spread research |
-| H2-I9 | Speed by kind of signal: money fast, estimates slow, growth slower | core S5 attack and release fields; values content | REAL elsewhere |
+| H2-I9 | Speed by kind of signal: money fast, estimates slow, growth slower | core S4 attack and release fields; values content | REAL elsewhere |
 | H2-I10 | A money brake at the unit's own percentile | template A and B on; core: window in trades on S4 | MODEL; REAL firms use money |
-| H2-I11 | What a brake does is configurable per pod | core S5 `on_fire` | RULING (M49) |
+| H2-I11 | What a brake does is configurable per pod | core S4 `on_fire` | RULING (M49) |
 | H2-I12 | Every number carries how it derives | core S13 | REAL in software; never on a trading unit |
 | H2-I13 | A rule may read unit, pod and account statistics | core I1 | PROPOSAL |
 | H2-I14 | Risk only the cushion above a fixed dollar floor | default block option (base = cushion above a user floor, template A) | REAL theory; dollar sim dropped as verdict |
@@ -120,14 +122,14 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I18 | Press with winnings only | content on R5 | REAL prop rule; MODEL |
 | H2-I19 | AIMD: cut hard after a bad day, add a little after green | content | REAL networking; MODEL |
 | H2-I20 | The largest size that keeps a stated floor chance | content bases (horizon, Kelly) | REAL papers; MODEL |
-| H2-I21 | Reserve for the one move that really ruins | core I15 hook; worst-step table content | REAL in their fields |
+| H2-I21 | Reserve for the one move that really ruins | core S6 (order-boundary veto); worst-step table content | REAL in their fields |
 | H2-I22 | Step ladder earned by profit, stepped down the same day | content | REAL rules (Topstep) |
 | H2-I23 | Press only when own results persist | content | REAL monthly factors; no intraday |
 | H2-I24 | Size where the edge is, in time: measured windows | content on R16, S2 | MODEL; author |
 | H2-I25 | Taper as you near a goal | content | article simulation |
 | H2-I26 | Restart after a near-breach with less size | content; V5 holds | REAL paper, one period |
 | H2-I27 | Stack methods by capital stage | core I10 (pod changes rows at an anchor, no new identity); stack content | GUESS as stack |
-| H2-I28 | Audits that catch hidden ruin; firewall as a warning | content (S19 layer) | author tools |
+| H2-I28 | Audits that catch hidden ruin; firewall as a warning | content (check layer; census K9) | author tools |
 | H2-I29 | Negative-skew units get a tail budget | content base; template A candidate | simulation |
 | H2-I30 | Margin as a bound of its own | core I3, I15 | BUILT in part |
 | H2-I31 | Slow start with a first-warning switch | content | REAL medicine |
@@ -140,15 +142,15 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I38 | Above capacity, growth buys breadth | content pod rule | analogue |
 | H2-I39 | Risk classes with lending | content pod | REAL in software |
 | H2-I40 | A book thermostat | content | GUESS |
-| H2-I41 | Size by setup quality or calibrated probability | core I12 binding; rule content | in-sample |
+| H2-I41 | Size by setup quality or calibrated probability | core I1 (conviction binding); rule content | in-sample |
 | H2-I42 | Lot dither | content option, off | analogue |
 | H2-I43 | Meta-allocators in the Lab | content | author backtests |
 | H2-I44 | Graded ladder: reduce before bench | content; two_live_readers becomes a warning | REAL grid; MODEL |
 | H2-I45 | Loss points | content | never ran |
 | H2-I46 | His losing-run brake, made fair | template A present, off | MODEL |
 | H2-I47 | Streak brake only where results persist | content | MODEL |
-| H2-I48 | Two-speed circuit breaker | content; name kept; slow half display | REAL Basel; MODEL |
-| H2-I49 | Expected fire band on the card | core card field (I14); producer other: methodology | PROPOSAL |
+| H2-I48 | Two-speed circuit breaker | template A and B, present and off (his baseline brake, M10; REVIEW S1); slow half display | REAL Basel; MODEL |
+| H2-I49 | Expected fire band on the card | content (card field; expectation at birth); producer other: methodology | PROPOSAL |
 | H2-I50 | Portfolio day stop reading its own swing | default block (group row) | MODEL |
 | H2-I51 | Portfolio breaker on stacked evidence | content pod | REAL exchange breakers |
 | H2-I52 | Losing together counts once | core I9 driver tags; rule content | REAL insurance |
@@ -160,7 +162,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I58 | Five states, one rank table | core S4 | REAL (Nautilus); MODEL |
 | H2-I59 | Restore family | core S4 RESTORE state, K6 settle hook; methods content; retry-then-lockout default | REAL elsewhere |
 | H2-I60 | Random-control certificate and brake scorecard | content report; core R3 | REAL single test |
-| H2-I61a | Day-boundary contract | core R5 | demo tests |
+| H2-I61a | Day-boundary contract | core R9 (cushion ledger in the fold) | demo tests |
 | H2-I61b | Get-even flag | content | REAL (Nasdaq traders) |
 | H2-I61c | Changepoint cooldown per instrument | content | REAL fair test, one |
 | H2-I61d | Execution-anomaly pause | content | PROPOSAL |
@@ -172,12 +174,12 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I61j | Weekend and single-class budget cap | content | author |
 | H2-I61k | Drawdown cuts agent autonomy to his click | other: agentic | one live case |
 | H2-I61l | Re-entry cooling after a fill through the stop | content | PROPOSAL |
-| H2-I61m | Order-rate limit and size sanity band | core I15 | design |
+| H2-I61m | Order-rate limit and size sanity band | core S6 (order-boundary veto) | design |
 | H2-I62 | Cost triple: denominator, ceiling, gate | core I2 denominator in default sizer; ceiling and gate content | author backtest |
 | H2-I63 | A missing cost starts on a stressed guess that decays | core I2 label and fallback | PROPOSAL |
 | H2-I64 | News as an observed fact | core S10 tier per unit; widths content | E-mini author |
-| H2-I65 | The record must split by session and hour | core R6 | code fact (G7) |
-| H2-I66 | Input-first drift: costs, fills, rate move before profit | core K4 twin rows; bands content | practitioner |
+| H2-I65 | The record must split by session and hour | core R2 | code fact (G7) |
+| H2-I66 | Input-first drift: costs, fills, rate move before profit | content (twin on S14's deployment key) twin rows; bands content | practitioner |
 | H2-I67 | Graded cost shrink before the SQS block | content (SQS-4) | NQ study |
 | H2-I68a | Carry and funding inside the hold decision | content | REAL rules; MQL5 sims |
 | H2-I68b | Minimum worthwhile risk (commission floor) | content; speaks to "less than $1" | EOQ analogue |
@@ -188,7 +190,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I68g | Stop fills at the stressed spread in backtests | other: methodology (QMB convention) | secondary |
 | H2-I69 | Exit families per style as starting templates | template A and B; content families | one study or theory per cell |
 | H2-I70 | Fast invalidation from the unit's own winners | template A on | MODEL; no cost test |
-| H2-I71 | Thesis-first invalidation | template B on; core reason code | REAL paper account |
+| H2-I71 | Thesis-first invalidation | template B on; core S3 (reason code) | REAL paper account |
 | H2-I72 | No stop, or a stop not used to size | core I13 (R as declared basis) | PROPOSAL |
 | H2-I73 | Stops only where they earn: stopping premium | content Lab test | REAL daily scale |
 | H2-I74 | The dynamic stop and target, rebuilt | template B after step 3; content | April spec, never validated |
@@ -209,11 +211,11 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I75o | Exit used as a trigger in another strategy | content; same primitive both roles | RULING (T2) |
 | H2-I75p | Suspending stops during news | dropped as a default: leaves positions naked; kept as a labelled trap | author |
 | H2-I76 | Every exit change is a counted trial on fixed entries | core R8 arms, R2 bar path; test other: methodology | controlled test |
-| H2-I77 | A level slot; no ladder in the baseline | core I11 | BOIN elsewhere |
-| H2-I78 | The edge as a gate or dial, chosen per preset | content; `edge_range` on R12 core | shrinkage simulations |
+| H2-I77 | A level slot; no ladder in the baseline | core S2 (level modifier) | BOIN elsewhere |
+| H2-I78 | The edge as a gate or dial, chosen per preset | content; `edge_range` on I9 (claim and band) | shrinkage simulations |
 | H2-I79 | Asymmetric equity basis | core I3 basis per row | REAL prop practice |
-| H2-I80 | Per-scope anchor clocks | core R5 | demo tests; Topstep |
-| H2-I81 | Feasibility first, and the lot-shed rule | core D5 verdict; shed rule content | MODEL |
+| H2-I80 | Per-scope anchor clocks | core R9 (cushion ledger in the fold) | demo tests; Topstep |
+| H2-I81 | Feasibility first, and the lot-shed rule | core I17 verdict; shed rule content | MODEL |
 | H2-I82 | The deployment carries share, costs and level | core I3 budget share, I9 | REAL build design |
 | H2-I83 | Three numbers per instrument on one money scale | core I4 | REAL banks (SIMM) |
 | H2-I84 | Same bet counted once; heat cap | core I9 bet key, S7; heat cap content | textbook |
@@ -222,9 +224,9 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I87 | Three speeds, with cause | core S4 states and cause codes; rule content | MODEL |
 | H2-I88 | Trade CUSUM on R | content default-off block | MODEL |
 | H2-I89 | A family fading everywhere (pooled) | core I9 family tag; detector content | MODEL |
-| H2-I90 | False-demotion budget across many units | content (K6 group place) | simulation |
+| H2-I90 | False-demotion budget across many units | content (I10) | simulation |
 | H2-I91 | Bad luck, bad market, bad execution, or decay | core fire tags on R4; classifier content (agentic) | PROPOSAL |
-| H2-I92 | Random-entry twin: was the edge ever real | core K4 | controlled design |
+| H2-I92 | Random-entry twin: was the edge ever real | content (twin on S14's deployment key) | controlled design |
 | H2-I93 | Drawdown as a decay detector, not a skill measure | content | REAL (Man Group) |
 | H2-I94a | Expectation per regime | content | author |
 | H2-I94b | Planned looks with three zones | content | REAL regulatory |
@@ -238,7 +240,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H2-I94j | Rehab with the parent's record as prior | other: methodology | PROPOSAL |
 | H2-I95 | Agents read, propose and carry the watching | core K2; jobs other: agentic; C16 open | REAL (Steward) |
 | H2-I96 | A proposer that always wants more gets the slowest line | other: agentic | snippet |
-| H2-I97 | A ledger of 835 variables with typed couplings | content map; re-tier; S19 check layer core | catalogue |
+| H2-I97 | A ledger of 835 variables with typed couplings | content map; re-tier; the couplings check is content (census K9) | catalogue |
 | H2-I98 | Dead and parked values keep their history | content (`seen_values`) | design |
 
 ## H3: template, structure, architecture versions (`harvest/H3-unit-template-architectures.md`)
@@ -250,23 +252,23 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H3-T3 | The Lab's pod is the customization layer | core S14, S15; fork F1 | designed, unbuilt |
 | H3-T4 | Dollars decide; lots spell the order | core S1; word Q3 | PROPOSAL over BUILT |
 | H3-T5 | How units share capital is a declared rule | core I10 | REAL (LEAN, RiskMetrics) |
-| H3-T6 | A rule row is movable between unit and guard | core S5 placement; fork F1 | MODEL (property test) |
+| H3-T6 | A rule row is movable between unit and guard | core S4 placement; fork F1 | MODEL (property test) |
 | H3-T7 | Four kinds of unit, one door; nothing needs a QMB card | core V7 | RULING (M49) |
-| H3-T8 | Typed schema beside code; unknown fields refused | core (D50 census); generators content | checked on many platforms |
-| H3-T9 | Save only what differs from the preset, pin the version | core D36 pins and diffs | REAL (n8n) |
+| H3-T8 | Typed schema beside code; unknown fields refused | core K9 (census); generators content | checked on many platforms |
+| H3-T9 | Save only what differs from the preset, pin the version | core S16 pins and diffs | REAL (n8n) |
 | H3-T10 | Presets are charts: one schema, many presets | core S16 template kind; presets content | REAL (Helm) |
 | H3-T11 | Templates for a whole sizing structure: old-style, Book-style, hybrids; packs with a combiner | core S14 composition rules; packs content | checked (LEAN chaining) |
 | H3-T12 | QML new roles | core S12 | PROPOSAL over BUILT protocols |
 | H3-T13 | Dictionary holds closing mechanisms; a closing rule is a block | core S3 | BUILT |
-| H3-T14 | Facts, responses, limits are three things | core I4, V8 | author |
+| H3-T14 | Facts, responses, limits are three things | core I4; the labelled-values principle | author |
 | H3-T15 | One instrument record per unit, instrument, broker; fields not branches | core I4 | PROPOSAL |
-| H3-T16 | Override chain of eleven keys | core (keys reserved); evidence-earned overrides content | SIMM read |
-| H3-T17 | Cascade with "important" outer rule; inspector | core (group rank); `risk_explain` content | checked elsewhere |
+| H3-T16 | Override chain of eleven keys | core I16; evidence-earned overrides content | SIMM read |
+| H3-T17 | Cascade with "important" outer rule; inspector | core I10 (group rank); `risk_explain` content | checked elsewhere |
 | H3-T18 | The needs list | core S15 (replaces `unsupported_blocks`) | REAL (Bevy) |
 | H3-T19 | New type or brake needs one folder, zero core edits; stress battery | content CI test (D39) | PROPOSAL |
-| H3-T20 | Outside code: Library block, trust ladder, hatch | core K6 save path; ladder and hatch content | BUILT loader; PROPOSAL |
+| H3-T20 | Outside code: Library block, trust ladder, hatch | core S16; ladder and hatch content | BUILT loader; PROPOSAL |
 | H3-T21 | Small expression form compiled to a block | content | REAL (n8n) |
-| H3-T22 | Two adapters per seam; contract tests per class | core D50 tests | BUILT weaknesses |
+| H3-T22 | Two adapters per seam; contract tests per class | core K9 | BUILT weaknesses |
 | H3-T23 | Three faces per block | content, early | BUILT shape |
 | H3-T24 | Learner and applier (VPA) | content; fork F2 | REAL (VPA); MODEL little gain |
 | H3-T25 | Facts move live, numbers at anchors | default mode, not law | PROPOSAL |
@@ -275,47 +277,47 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H3-T28 | A reason on every resolved value | core R1 | spec checked |
 | H3-T29 | Never-self-tune list, per template | core S13 marker; list config | elsewhere |
 | H3-T30 | Pooled priors for a new unit | content rung | standard method |
-| H3-T31 | Herding guard | core K6 group place; rule content | GUESS |
+| H3-T31 | Herding guard | core I10; rule content | GUESS |
 | H3-T32 | Bandit arms, learned profiles, genomes | content (Lab) | papers |
 | H3-T33 | A pod as a shippable bundle | core S16 | BUILT (MIS proves apps run blocks) |
 | H3-T34 | The Risk Lab mini app | content | PROPOSAL |
 | H3-T35 | Resize a recorded trade list | core R2 fields; tool content | REAL product |
 | H3-T36 | Clusters as tags; Book and BMS as three documents | core I10 `tag:` and `parent`; structure his later | no generation ran it |
-| H3-T37 | Pods configure pod-life answers | core S5 `on_fire`, verbs | RULING |
+| H3-T37 | Pods configure pod-life answers | core S4 `on_fire`, verbs | RULING |
 | H3-T38 | One simulator or one guard: same evaluator | core S15 | reading of two documents |
 | H3-T39 | One catalogue for pod-block and component | core S16 | reading |
 | H3-T40 | A model as a block under a rule ceiling | content | PROPOSAL |
 | H3-T41 | Family ledger counts every trial; identity table is data | core I9 vocabulary; methodology owns rules | designed |
-| H3-T42 | Paper as daily finite runs; promotion two clicks | other: methodology; core "unit parts as a list" | designed |
-| H3-T43 | Mini apps feed each other; one narrow road to a unit | core K3 | BUILT narrow |
+| H3-T42 | Paper as daily finite runs; promotion two clicks | other: methodology; core S14 | designed |
+| H3-T43 | Mini apps feed each other; one narrow road to a unit | core S8 (road D) | BUILT narrow |
 | H3-T44 | Budget share travels with the deployment | core I3 | elsewhere |
 | H3-T45 | Shed by class; burn tiers; spent budget freezes versions | content | REAL SRE |
 | H3-T46 | Isolation by peer comparison with growing timeouts | content | REAL (Envoy) |
-| H3-T47 | Same compiled unit on PC and node | core (placement); agents' VMs later | BUILT one path |
-| H3-T48 | Two records: logic in R, money per version | core D40 | BUILT judge |
-| H3-T49 | Pinned versions plus a forwarding map | core D40 | REAL (Simulink) |
-| H3-T50 | Plan before change; click bound to the effect | core D40, V4 | REAL (Terraform) |
-| H3-T51 | Shadow, canary, full | core rollout field; analysis other: methodology | production elsewhere |
-| H3-T52 | Upgrade offers never silent | core lineage; offers content | checked |
-| H3-T53 | Self-test card per version | core D40; pass rules other: methodology | BUILT analogue |
-| H3-T54 | Deployment controls as important as logic; rip-out check | core D40 | REAL (Knight) |
-| H3-T55 | Migration of stored shapes; config-effective timing | core D40, V12 | BUILT |
+| H3-T47 | Same compiled unit on PC and node | core S14 (if F1=B); agents' VMs later | BUILT one path |
+| H3-T48 | Two records: logic in R, money per version | core R17, K5 | BUILT judge |
+| H3-T49 | Pinned versions plus a forwarding map | core R17, K5 | REAL (Simulink) |
+| H3-T50 | Plan before change; click bound to the effect | core R17, K5, V4 | REAL (Terraform) |
+| H3-T51 | Shadow, canary, full | content (rollout field, additive); analysis other: methodology | production elsewhere |
+| H3-T52 | Upgrade offers never silent | core I9 (lineage fields); offers content | checked |
+| H3-T53 | Self-test card per version | core R17, K5; pass rules other: methodology | BUILT analogue |
+| H3-T54 | Deployment controls as important as logic; rip-out check | core R17, K5 | REAL (Knight) |
+| H3-T55 | Migration of stored shapes; config-effective timing | core R17, K5 | BUILT |
 | H3-T56 | Read door and proposal door | core K2 | REAL paper runs |
-| H3-T57 | New-block door for agents | core K6 | gap verified |
-| H3-T58 | Ledger as source of truth, layer H check | core S19; runtime edges dropped | BUILT script |
+| H3-T57 | New-block door for agents | core S16 | gap verified |
+| H3-T58 | Ledger as source of truth, layer H check | content (check layer; census K9); runtime edges dropped | BUILT script |
 | H3-T59 | One fold, many readers: RiskState | core R9 | Gen 3 docs |
 | H3-T60 | Six words made exact, plus UNKNOWN | core R9 predicates; surfaces other: UI | control-room practice |
 | H3-T61 | Decision trail, trace id, three weights | core R1, R15 | production practice |
 | H3-T62 | Trade row v2 | core R2 | BUILT kind fields |
 | H3-T63 | Closed reason codes at source | core R4 | bug verified |
-| H3-T64 | Requested, enforced, observed | core R15 | Gen 3 |
+| H3-T64 | Requested, enforced, observed | core R1 | Gen 3 |
 | H3-T65 | Cost cell: assumed against realised | core I2 | author |
-| H3-T66 | Alert tiers, wake contract, incident funnel | other: UI; core R10 fields | SRE practice |
-| H3-T67 | Family alarm budget | content (K6 place) | proofs |
+| H3-T66 | Alert tiers, wake contract, incident funnel | other: UI; core R4 fields | SRE practice |
+| H3-T67 | Family alarm budget | content (I10) | proofs |
 | H3-T68 | Brake scorecard, trip tax, sitting-duck meter | content; core R3 | counterfactual |
-| H3-T69 | Observability observes itself; stack choice | content; V11; stack his later | REAL (Knight) |
+| H3-T69 | Observability observes itself; stack choice | content; principle (risk rows are evidence); stack his later | REAL (Knight) |
 | H3-T70 | Exit capacity, locked heat, stress gauge | content (R9 reserved field) | SPAN practice |
-| H3-T71 | Maintainability pieces | core D50 | BUILT partly |
+| H3-T71 | Maintainability pieces | core K9 | BUILT partly |
 | H3-drop1 | Central risk oracle (X1-H69) | dropped: breaks units-stand-alone; same pipeline in the guard | ruling |
 | H3-drop2 | Runtime `affects` edges (X1-H71) | dropped: too much machine; compile-time check keeps most | ruling |
 | H3-drop3 | Permission controller (X1-H75) | content if wanted | PROPOSAL |
@@ -328,9 +330,9 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | Id | One line | Fate | Evidence |
 |---|---|---|---|
 | H4-I-01 | The early fake-edge kit | other: methodology; core swappable entries (S3), costs in R (R2) | REAL per check; kit PROPOSAL |
-| H4-I-02 | Machine check in days against a paper twin | core K4 | production practice; arithmetic |
+| H4-I-02 | Machine check in days against a paper twin | content (twin on S14's deployment key) | production practice; arithmetic |
 | H4-I-03 | Costs as the data-analyst lens | core I2 | author backtest; live MM result |
-| H4-I-04 | Count every try | other: methodology, agentic; core R12 | REAL finding |
+| H4-I-04 | Count every try | other: methodology, agentic; family, parent and claim on I9; the rest other: methodology | REAL finding |
 | H4-I-05 | Leakage blocked in the tools | core I7 `knows_at`; rest other: methodology | REAL (planted cheat passed stats) |
 | H4-I-06 | The edge as a band with a reasoned low end | other: methodology; band on R12 | simulation |
 | H4-I-07 | "Too thin to prove" verdict; plan priced in trades | other: methodology | arithmetic |
@@ -342,14 +344,14 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H4-I-13 | Three speeds, three jobs | core S4 states; rules content | maths |
 | H4-I-14 | Anytime-valid promotion ledger | content block | simulation (daily) |
 | H4-I-15 | Planned looks, trial-style stopping | content | regulatory practice |
-| H4-I-16 | Three zones | core state word; rule content | regulatory |
+| H4-I-16 | Three zones | core R9 (state word); rule content | regulatory |
 | H4-I-17 | Dose-style size levels | content (I11 slot) | never on a trading unit |
 | H4-I-18 | Cone in the current regime; worry lines by style | content | simulation |
 | H4-I-19 | Old circuit breaker made honest | core R4 fire rows; test content | old spec |
 | H4-I-20 | "Too good" checks | content | prop practice |
 | H4-I-21 | Exits are tries too | core R2, S3 | controlled test |
-| H4-I-22 | New version against old, same minute | core K4 | simulation; Argo |
-| H4-I-23 | Canary across markets | core rollout field | production practice |
+| H4-I-22 | New version against old, same minute | content (twin on S14's deployment key) | simulation; Argo |
+| H4-I-23 | Canary across markets | content (rollout field, additive) | production practice |
 | H4-I-24 | Sniping window as a measured slice | core S9; search content | idea plus placebo |
 | H4-I-25 | Two vetoes, logged apart | content pod | author |
 | H4-I-26 | Funded error budget per family; burn permit | content | SRE analogue |
@@ -359,16 +361,16 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H4-I-30 | Thresholds calibrated on the unit's own record | content | plausible |
 | H4-I-31 | Exploration budget | parked: numbers; content pod | idea |
 | H4-I-32 | Edge as gate, not amount | content; baseline allows both | numbers |
-| H4-I-33 | Fleet watch: scripts decide, agents explain | content workflows; core rows (E5) | pieces BUILT |
-| H4-I-34 | One alarm budget across all units | content (K6 place); E5 corrected the scale claim | theory; simulation |
+| H4-I-33 | Fleet watch: scripts decide, agents explain | content workflows; core rows R1 to R4, R9 | pieces BUILT |
+| H4-I-34 | One alarm budget across all units | content (I10); E5 corrected the scale claim | theory; simulation |
 | H4-I-35 | One logic fading everywhere | core I9 family id; detector content | plausible |
 | H4-I-36 | His attention budget | other: agentic, UI | plausible |
-| H4-I-37 | One incident, one card | core R10 key | SRE |
+| H4-I-37 | One incident, one card | core R4 key | SRE |
 | H4-I-38 | Dark cockpit: six words, four tiers | other: UI | aviation |
 | H4-I-39 | Agent report card and matched random check | other: agentic | strong design |
 | H4-I-40 | Morning brief, drift explainer, coroner | content workflows (agentic) | solid to plausible |
 | H4-I-41 | Explain any size in ten words | core R1 `explain_size` | old rule |
-| H4-I-42 | Verification template per type as data | content preset; core free type tag | RULING (A5) |
+| H4-I-42 | Verification template per type as data | content preset; core I9 (type tag) | RULING (A5) |
 | H4-I-43 | Harness differs per asset class | other: methodology | assistant synthesis |
 | H4-I-44 | Five-gate falsification protocol | other: methodology | author OOS |
 | H4-I-45 | Eligibility by holding time | core style scope on I8 | one study |
@@ -378,7 +380,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H4-I-49 | Champion and diverse archive | other: methodology | pattern |
 | H4-I-50 | Three surfaces: read, propose, run | core K2 | BUILT door |
 | H4-I-51 | Risk state handed to the proposer first | core RiskState read (R9) | author backtest |
-| H4-I-52 | Evidence as a fact the unit's own rule reads | core I8; C16 open | no end-to-end test |
+| H4-I-52 | Evidence as a fact the unit's own rule reads | core S8 (agent evidence is a reading); C16 open | no end-to-end test |
 | H4-I-53 | Evidence contracts per kind | other: agentic; content | simulation |
 | H4-I-54 | Fast loop with no LLM | core V3; RULING | author backtest |
 | H4-I-55 | Direction on every operation | other: agentic | controlled test |
@@ -386,16 +388,16 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H4-I-57 | Spec, status, suggestions: three owners | core I9 | production practice |
 | H4-I-58 | Risk mini app with an MCP server | other: agentic | shape solid |
 | H4-I-59 | Lab as tenant of the run surface | other: UI, agentic; core S15 | designed |
-| H4-I-60 | Risk preflight plus challenger | core S19 | BUILT A to G |
+| H4-I-60 | Risk preflight plus challenger | content (check layer; census K9) | BUILT A to G |
 | H4-I-61 | Autonomy ladder and job registry | other: agentic | one live case |
 | H4-I-62 | Governed self-improvement | other: agentic | two cycles |
 | H4-I-63 | Never let an agent grade itself | other: agentic, methodology | one study |
 | H4-I-64 | Promotion gates for memory, skills, tools | other: agentic | PROPOSAL |
 | H4-I-65 | Agent profile contract | other: agentic | PROPOSAL |
 | H4-I-66 | Red-teaming the information path | other: agentic | attack papers |
-| H4-I-67a | Slow isolation by card | content pod; core S11 | RULING (C27) |
+| H4-I-67a | Slow isolation by card | content pod; core S11 | HIS THOUGHT (C27) |
 | H4-I-67b | Adversarial scenario author plus sealed set | content | simulation |
-| H4-I-67c | Tuning proposer under an applier | content (Lab) | RULING (M49 hill climb) |
+| H4-I-67c | Tuning proposer under an applier | content (Lab) | HIS THOUGHT (M49: "More of a hill climb challenge. To be honest, I don't know") |
 | H4-I-67d | Template version drafter | other: agentic | solid |
 | H4-I-67e | Sitting-duck advocate | content | fits M50 |
 | H4-I-67f | Accelerator scout | content | PROPOSAL |
@@ -404,13 +406,13 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H4-I-67i | Get-even guard | content | REAL (prop traders) |
 | H4-I-67j | Per-class roster and event mapper | content | PROPOSAL |
 | H4-I-67k | Structure labeller with capacity veto | content | PROPOSAL |
-| H4-I-67l | One-tap kill escalation card | other: UI, node; core `on_fire` card | design |
+| H4-I-67l | One-tap kill escalation card | other: UI, node; core S4 (`on_fire` card) | design |
 | H4-I-67m | Prediction market, ghost tracks, self-proposing ledger, staking | content if ever | wild |
 | H4-I-68 | Ingestion from video, channel, paper | other: methodology, agentic | BUILT templates |
 | H4-I-69 | Blacksmith: reforge failed strategies | other: methodology | pattern BUILT; value unproven |
 | H4-I-70 | Shepherd | other: agentic | early alpha |
 | H4-I-71 | Strong model structures, cheap model runs | other: agentic | no test |
-| H4-I-72 | Mini apps as departments | other: agentic; roads core (D37) | BUILT runtime |
+| H4-I-72 | Mini apps as departments | other: agentic; road D core S8 | BUILT runtime |
 | H4-I-73 | A week on one market | other: methodology | PROPOSAL |
 | H4-I-74 | Agents' own computers, charts | other: agentic | studied |
 | H4-I-75 | Library and memory ship with knowledge | other: methodology | PROPOSAL |
@@ -486,7 +488,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | UB-66 | Trend or reversal per timeframe at scalper scale | content | tiny R² |
 | UB-67 | Session volatility beats session flags | content | one model |
 | UB-68 | Forecast only when agents agree | content (model) | simulation |
-| UB-69 | Sniping windows as stored artifacts | core R16 window card | idea |
+| UB-69 | Sniping windows as stored artifacts | core S9 (window card kind) | idea |
 | UB-70 | Dollar and carry factors | content (read) | published |
 | UB-71 | Early warnings: ETF gap, correlated drops, toxicity | content (read) | idea |
 | UB-72 | Wait between quotes as activity gauge | content (tick) | small OOS |
@@ -501,23 +503,23 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 
 | Id | One line | Fate | Evidence |
 |---|---|---|---|
-| H5-1 | The "never real" kit agents can be handed | core R12 lineage and trial count; checks content; rules other: methodology | REAL per paper; kit PROPOSAL |
+| H5-1 | The "never real" kit agents can be handed | other: methodology (lineage); family and claim on I9; checks content; rules other: methodology | REAL per paper; kit PROPOSAL |
 | H5-2 | Monitoring department: code detects, agents explain | content (E5 design) | PROPOSAL; no paper shows LLM monitors sooner |
 | H5-3 | Making it affordable: write once check many, rank false alarms, LLM after a rule fires | other: agentic | author tests outside trading |
 | H5-4 | Every unit states what would prove it wrong, watched by code | core S12 (`invalidation` after entry), S3 reason code; template B | REAL paper account |
 | H5-5 | Risk state reaches the proposer first | core R9 read | backtest, two coins |
-| H5-6 | One evidence record for every agent, with expiry | core I8 | PROPOSAL |
+| H5-6 | One evidence record for every agent, with expiry | core S8 (agent evidence is a reading) | PROPOSAL |
 | H5-7 | Departments as bounded mini-harnesses with "must not see" | other: methodology, agentic; seat in pod manifest | PROPOSAL |
 | H5-8 | Alpha discovery as a workflow inside QMX | content on QML; other: methodology | mixed, sobering |
 | H5-9 | Agents find timing, not stock-picking: a home for overlay units | content (QML role) | one paper |
-| H5-10 | Linking as a capability: block manifest with source, evidence, classes, data, null | core R16 fields | assistant lines untested |
+| H5-10 | Linking as a capability: block manifest with source, evidence, classes, data, null | content (block-entry fields, additive) | assistant lines untested |
 | H5-11 | Papers in the Library as mental models, negatives first | content; other: agentic (memory) | PROPOSAL |
-| H5-12 | Ship a null beside every statistic | core R16 `null` field; E4 L03 corrects it | REAL test design |
+| H5-12 | Ship a null beside every statistic | content (`null` field, additive); E4 L03 corrects it | REAL test design |
 | H5-13 | A market with no edge as a test instrument | other: methodology | simulation by design |
 | H5-14 | A dumb control beside every agent result | content report rule | one paper |
 | H5-15 | Immunology: a brake that gathers danger | content | GUESS |
 | H5-16 | Power grids: nearest breaker trips first | core S11 scope order; settings content | engineering practice |
-| H5-17 | Plants and ICUs: an alert names an action and a deadline | core R10 alert fields | REAL in source fields |
+| H5-17 | Plants and ICUs: an alert names an action and a deadline | core R4 alert fields | REAL in source fields |
 | H5-18 | Reinsurance: count exposure to the same event; many-to-many tags | core I9, S11 | analogy |
 | H5-19 | Robotics: propose, constrain, one step, look again | content; K1 fits | robot simulation |
 | H5-20 | Self-healing: half-open probe, transient vs permanent errors, Safe Mode | core S4 state names; methods content | demo and code checks |
@@ -531,11 +533,11 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H5-23f | CUSUM fires 5x theory; fit per instrument | core I4 calibration record | measured |
 | H5-23g | Chaos measures | dropped for now: "not the Holy Grail"; a user may add | author |
 | H5-24 | Regimes have an age; sticky models | content; MIS seat outputs probabilities and age | backtests |
-| H5-25 | Macro as slow budget, market state as what's usable | content; S10 `unknown` core | policy to test |
+| H5-25 | Macro as slow budget, market state as what's usable | content; core S10 (`unknown`) | policy to test |
 | H5-26 | Separate the two residuals: signal faded or execution worse | core I2 | PROPOSAL |
 | H5-27 | Three-word liquidity state | content (SQS-3) | REAL OOS, two coins |
 | H5-28 | Impact law as a live gauge; venue-type field | core I4 flag; order flow other | explains |
-| H5-29 | Links between markets appear and vanish; retest date | core R16 `retest_by`; rule content | REAL, recent, short |
+| H5-29 | Links between markets appear and vanish; retest date | content (`retest_by`, additive); rule content | REAL, recent, short |
 | H5-30 | Learn which events matter per instrument | core S10 per-release widths seat; map content | REAL FX and futures |
 | H5-31 | Many units, one netted order | core S18 | author; inference |
 | H5-32 | Repeat same-side trades get worse quotes; log rejections | core R7 | theory |
@@ -544,15 +546,15 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | H5-35 | Group instruments by what they wrap; tick tier | core I4 | REAL measurements |
 | H5-36 | One record per unit, instrument and broker | core I4 | code checks |
 | H5-37 | Stamp every test with its conditions | core R8 run stamp | measured |
-| H5-38 | Self-improvement that can't loosen anything | other: agentic; core protected field list | short windows |
+| H5-38 | Self-improvement that can't loosen anything | other: agentic; core K5 (protected field list) | short windows |
 | H5-39 | Promotion gates for memory, skills, tools | other: agentic | PROPOSAL |
-| H5-40 | Blind the reviewer to the story | content; decision-chain record core R15 | synthetic |
-| H5-41 | A news item can only move so much | core I8 source and feed ids; cap content | sandbox tests |
+| H5-40 | Blind the reviewer to the story | content; decision-chain record core R1 | synthetic |
+| H5-41 | A news item can only move so much | core S8 (agent evidence is a reading) source and feed ids; cap content | sandbox tests |
 | H5-42 | Agents that can say "I don't know" | content | simulated |
 | H5-43 | Do your units agree on this instrument | content reading; units publish direction (I9) | stock-picking paper |
 | H5-44 | Let the agent try its fix in a lab first | content | one synthetic asset |
-| H5-45 | Authority that expires; evidence apart from money | core status expiry; policy other: methodology | simulation |
-| H5-46 | Can this edge live long enough to be proven | other: methodology; core counters (sessions, regimes) | model |
+| H5-45 | Authority that expires; evidence apart from money | content (status expiry; policy other: methodology); policy other: methodology | simulation |
+| H5-46 | Can this edge live long enough to be proven | other: methodology; the counters are content on R2 | model |
 | H5-S1 | Post-deleveraging crypto | content seed | author |
 | H5-S2 | Trailing multi-horizon vol-normalised momentum | content seed | author |
 | H5-S3 | Gap acceptance, trend quality | content seed | daily equities |
@@ -614,30 +616,30 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E1-sticker-fail | Unreadable sticker table reads `unknown` per scope | core S10 | design |
 | E1-iso-who | Who may place: two-tell rule, agent card, person | config; rule content | author backtests |
 | E1-iso-evidence | SQS blocks across a class; volatility against usual; commonality | content | REAL commonality |
-| E1-iso-record | Each isolation writes whether a loss followed | core R14 | PROPOSAL |
+| E1-iso-record | Each isolation writes whether a loss followed | content (a query over R3 and S10) | PROPOSAL |
 | E1-news-tags | Calendar to sticker with driver tags | core I4, S10 | REAL old |
 | E1-news-strength | Measured impact replaces colours | content | author |
 | E1-news-who | Who decides: pod setting; kill keeps hard kill | config; V2 | RULING |
 | E1-news-trade | News units tolerate the sticker; event clock | core I7; units content | author |
 | E1-news-pre | Pre-event liquidity state predicts post | content | abstract |
 | E1-news-missed | Velocity tell backstops the calendar | content | PROPOSAL |
-| E1-news-agents | News agents typed, expiring, de-risk only | other: agentic; door core | controlled test |
+| E1-news-agents | News agents typed, expiring, de-risk only | other: agentic; door core K2 | controlled test |
 | E1-snipe-answer | ORB is a logic; an open is a window; a sniping window is a record | decided (D30) | reasoning |
-| E1-window-card | Window card: slice, family, how found, tries, expiry, status | core R16 | PROPOSAL |
+| E1-window-card | Window card: slice, family, how found, tries, expiry, status | content (block-entry field, additive; was R16) | PROPOSAL |
 | E1-window-det | Deterministic windows from curves | content | author |
 | E1-window-agent | Agent-nominated windows, counted | content; other: agentic | RULING (M50 week) |
 | E1-window-hand | Hand-written window trades unproven, labelled | content; V9 | canvas |
 | E1-window-effect | Lift through S2 or restriction through `sessions` | core S2, S9 | design |
 | E1-caution-width | Caution widths measured from curves | content; parked: numbers | no width derived |
 | E1-router-shape | Active list is a reading; no router service | core I5, S8 | PROPOSAL |
-| E1-router-hazard | Fallback must be home markets | core I5 | BUILT hazard |
+| E1-router-hazard | Fallback must be home markets | core I5 | docstring on an unwired board (REVIEW S32) |
 | E1-router-lock | List read at session open, held | config | MODEL lag |
 | E1-rung0 | Fixed list | template default | design |
 | E1-rung1 | Board narrows | content (BUILT, unwired) | BUILT |
 | E1-rung2 | Active list with home fallback | content | PROPOSAL |
 | E1-rung3 | Card adds to allowed, counted try | content; other: methodology | PROPOSAL |
 | E1-rung4 | Free: allowed is a class | content (reckless) | canvas |
-| E1-router-needs1 | Records per unit, market, session | core R6 | code fact |
+| E1-router-needs1 | Records per unit, market, session | core R2 | code fact |
 | E1-router-needs2 | Newly active mark on the trade row | core R2 | PROPOSAL |
 | E1-router-needs3 | Same-bet key and cluster cap by unit rule | core I9; rule content | PROPOSAL |
 | E1-router-needs4 | Lists kept and scored side by side | content | PROPOSAL |
@@ -659,7 +661,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E1-rule7 | Same word, same meaning test | content | PROPOSAL |
 | E1-rule8 | Retire what nobody reads | content | PROPOSAL |
 | E1-walk | His departments walk: macro, FX, futures, finder, unit | content; other: agentic | PROPOSAL |
-| E1-floors | Three floors for every reading: null, bounce, use | core R16 `null`; floors content | MODEL bounce |
+| E1-floors | Three floors for every reading: null, bounce, use | content (block-entry field, additive; was R16) `null`; floors content | MODEL bounce |
 | E1-P1 | Activity-price split (market temperature) | content | GUESS |
 | E1-P2 | Quote self-excitement (Hawkes) | content, expect failure | snippets warn |
 | E1-P3 | Liquidity commonality | content, first | REAL (Mancini) |
@@ -676,16 +678,16 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E1-P14 | Disorder and compression with null | content | negative vs null |
 | E1-P15 | Trend age hazard | content | snippet |
 | E1-quarry | Old Chaos and Ising readings get cards and floors | content | UNKNOWN code runs |
-| E1-C1 to E1-C26 | The 26 must-carry rows of E1 section 8 | core: S8 (1-3), I5 (4-5), S6 (6-7), I2 (8), S2 (9), S6 node sensor (10), I6 (11), S10 (12-13), S11 (14), V1 (15), S9 (16), I4 (17), R2 (18), R3 (19), R6 (20), I9 (21), R13 (22), I7 (23), I1 (24), K2 (25), S15 (26) | design |
+| E1-C1 to E1-C26 | The 26 must-carry rows of E1 section 8 | core: S8 (1-3), I5 (4-5), S6 (6-7), I2 (8), S2 (9), S6 node sensor if F3=B (10), I6 if F3=B (11), S10 (12-13), S11 (14), V1 (15), S9 (16), I4 (17), R2 (18, 20), R3 (19), I9 (21), R13 (22), I7 (23), I1 (24), K2 (25), S15 (26) | design |
 | E1-preset-scalper | Scalper: cost hurdle, floor, tolerates none, fast readings, rung 0-1 | template A | design |
 | E1-preset-orb | ORB: hurdle, floor per open, tolerates open, open shortlist | template orb variant | design |
 | E1-preset-intraday | Intraday: hurdle, floor, per pod, session words | template B | design |
 | E1-preset-news | News unit: tolerates news, event clock | content template | design |
 | E1-preset-reckless | Reckless: gates off, tolerates all but kill, rung 4 | content template; V9 | canvas |
-| E1-A1-20 | Assumption reversal: flip to cost check (1), no baseline (2), one sensor one verb (3), verb list (4), bank (5), markout (6), one curve (7), borrowed curve (8), wait verb (9), resting order on wide spread (10), spread recovery seed (11), forward cost (12), dealer skew (13), two venues (14), block counts as reading (15), would-have per refusal (16), refused-share reading (17), control gate (18), gate can't size (19), curves where data allows (20) | 1,2 default block; 3,4,7 core S6/I6; 16 core R3; 19 core (S2 only sizes); 8,20 core I6 options; rest content | PROPOSAL |
-| E1-A21-40 | Reverse brainstorm: meaning-flip replay (21), isolation a stand-down row (22), dark runs (23), keep state (24), card clock (25), full bar (26), packs differ (27), words from own percentile (28), as-of only (29), herding count (30), retire card (31), news expire de-risk (32), allowed and active (33), list locked (34), cluster cap (35), three lists scored (36), home fallback (37), tick readings where feed lands (38), clock fact (39), yesterday's curves (40) | 22 core S10; 29 core R13; 33, 37 core I5; 32 core I8; 40 core I6; rest content | PROPOSAL |
+| E1-A1-20 | Assumption reversal: flip to cost check (1), no baseline (2), one sensor one verb (3), verb list (4), bank (5), markout (6), one curve (7), borrowed curve (8), wait verb (9), resting order on wide spread (10), spread recovery seed (11), forward cost (12), dealer skew (13), two venues (14), block counts as reading (15), would-have per refusal (16), refused-share reading (17), control gate (18), gate can't size (19), curves where data allows (20) | 1,2 default block; 3,4,7 core S6/I6; 16 core R3; 19 core (a link may shrink only through the chain S6, with its reason on the receipt); 8,20 core I6 options; rest content | PROPOSAL |
+| E1-A21-40 | Reverse brainstorm: meaning-flip replay (21), isolation a stand-down row (22), dark runs (23), keep state (24), card clock (25), full bar (26), packs differ (27), words from own percentile (28), as-of only (29), herding count (30), retire card (31), news expire de-risk (32), allowed and active (33), list locked (34), cluster cap (35), three lists scored (36), home fallback (37), tick readings where feed lands (38), clock fact (39), yesterday's curves (40) | 22 core S10; 29 core R13; 33, 37 core I5; 32 core S8 (agent evidence is a reading); 40 core I6; rest content | PROPOSAL |
 | E1-A41-60 | Cross-pollination: forecast and nowcast (41), NOTAM sticker (42), taints and tolerations (43), strengths (44), node affinity (45), triage vitals (46), explore slots on paper (47), aftershock clock (48), yield management (49), readings as pinned packages (50), word plus outlook (51), bee scouts (52), pheromone (53), good-days match (54), outlier ejection (55), feature flags per pod (56), correction record (57), almanac (58), niches (59), no router local rule (60) | 42-44 core S10; 50 core S8 pins; 56 content on S14; rest content | PROPOSAL, GUESS |
-| E1-A61-82 | Trader lens: ORB shortlist (61), same window two meanings (62), opening-range quality (63), ORB family cells (64), scalpability (65), tape speed (66), level map (67), context sentence (68), gold reads COMEX (69), mini-micro residue (70), cost per risk across sizes (71), instrument dossier app (72), window card (73), sniping lift (74), news sticker tags (75), pre-event state (76), re-entry on spreads (77), news units tolerate (78), velocity backstop (79), London active today (80), handover re-run (81), spread-to-stop check (82) | 62 core S10; 73 core R16; 74 core S2; 75 core I4; 82 default block (hurdle); rest content | PROPOSAL |
+| E1-A61-82 | Trader lens: ORB shortlist (61), same window two meanings (62), opening-range quality (63), ORB family cells (64), scalpability (65), tape speed (66), level map (67), context sentence (68), gold reads COMEX (69), mini-micro residue (70), cost per risk across sizes (71), instrument dossier app (72), window card (73), sniping lift (74), news sticker tags (75), pre-event state (76), re-entry on spreads (77), news units tolerate (78), velocity backstop (79), London active today (80), handover re-run (81), spread-to-stop check (82) | 62 core S10; 73 content (block-entry field, additive; was R16); 74 core S2; 75 core I4; 82 default block (hurdle); rest content | PROPOSAL |
 | E1-A83-94 | Systems lens: same-meaning test (83), replay parity check (84), admission from card lag (85), reading price tag (86), publisher pin (87), three forms (88), last-good fallback (89), active markets a reading (90), router as workflow (91), curves as artifact (92), node starts from curve (93), scope keys (94) | 87 core S8; 90 core I5; 92-93 core I6; 94 core S11; 84 content test; rest content | PROPOSAL |
 | E1-A95-109 | New physics list (duplicates P1 to P15, plus complexity-entropy plane 107, network markers 108) | content | as P rows |
 | E1-B | Party clashes: hurdle plus floor, one curve with age word, morning list, home markets, stickers with accuracy record, physics with nulls | folded into D26, D22, D23, D27 | one mind |
@@ -695,7 +697,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | Id | One line | Fate | Evidence |
 |---|---|---|---|
 | E2-sense1 | Pod as the stack (seven slots) | core S14; word Q3 | RULING (M7, M49) |
-| E2-sense2 | Pod as the department (desk) | other: agentic; word Q3 | RULING ("I think", M51) |
+| E2-sense2 | Pod as the department (desk) | other: agentic; word Q3 | HIS THOUGHT (M51) |
 | E2-sense3 | Pod as who shares money (pod deployment) | core S14 deployment key | BUILT screen (Portfolio card) |
 | E2-sense4 | Pod as how it arrives (package) | core S16 | RULING (M10) |
 | E2-words | Pod, pod deployment, desk, mini app; Book and BMS retire as screen words | default vocabulary; Q3 | my read |
@@ -716,46 +718,46 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E2-Pod6 | Scalper first | template A's pod form | design |
 | E2-Pod7 | Human mimic | content pod; needs I12, order flow (Q2) | in-sample |
 | E2-Pod8 | Best basket | content pod (allocation mode) | lore |
-| E2-Pod9 | Stage switcher | content pod; core I10 seat | RULING (M51) |
+| E2-Pod9 | Stage switcher | content pod; core I10 seat, only under S14's click rule | HIS THOUGHT (M51, "keep this aside") |
 | E2-Pod10 | Prop rider | content pod (other users) | REAL rules |
 | E2-Pod11 | Earned tiers | content pod | REAL (Topstep) |
 | E2-Pod12 | Multi-manager | content pod | REAL press-reported |
 | E2-Pod13 | Own size, capped total | default block (group row allocation mode) | REAL bank practice |
-| E2-Pod14 | Run together (pod of pods) | content; core `parent` | designed (OPEN-4) |
-| E2-Pod15 | Futures desk pod | content pod; needs futures route (Q2) | RULING (M50) |
+| E2-Pod14 | Run together (pod of pods) | content; core I10 (`parent`) | designed (OPEN-4) |
+| E2-Pod15 | Futures desk pod | content pod; needs a futures route that has no owner (Q2) | HIS THOUGHT (M50, "These are all just ideas") |
 | E2-Pod16 | Model-sized hybrid | content pod; needs list | PROPOSAL |
 | E2-Pod17 | Watched by agents | content pod; C16 open (Q4) | PROPOSAL |
 | E2-Pod18 | Volatility core | content pod | REAL backtests |
 | E2-Pod19 | Canary | template (third, for a stranger) | trivial |
 | E2-Pod20 | Full press (reckless) | content pod; V9; graded F | REAL as ruin |
-| E2-field-Q5 | Portfolio stop raising kill: `on_fire` field | core S5 | RULING |
+| E2-field-Q5 | Portfolio stop raising kill: `on_fire` field | core S4 | RULING |
 | E2-field-Q1 | A rule closing a position: guard verb plus dictionary exits | core S4 verbs, S3 | RULING |
 | E2-field-Q4 | Press after a record passes a rule: press-gate block | content on R5 | design |
-| E2-field-restore | Stand down and come back: attack, release, restore on the row | core S5 | design |
+| E2-field-restore | Stand down and come back: attack, release, restore on the row | core S4 | design |
 | E2-ship1 | A pod document, copied; `.qmxpod` file | core S16 kinds; extension content | PROPOSAL |
-| E2-ship2 | Pod plus new blocks through a save door | core K6 | gap verified |
+| E2-ship2 | Pod plus new blocks through a save door | core S16 | gap verified |
 | E2-ship3 | A mini app carrying pods, installed disabled until approved | core S16 lander; install card other: UI | BUILT runtime partly |
 | E2-ship4 | A desk: level 3 plus agents, workflows, screens | other: agentic, methodology | PROPOSAL |
-| E2-n8n | Store only diffs plus pinned block versions | core D36 | REAL (n8n) |
+| E2-n8n | Store only diffs plus pinned block versions | core S16 | REAL (n8n) |
 | E2-roadA | Artifact feed between apps | content (BUILT) | BUILT |
 | E2-roadB | Library landing as event | content (BUILT, only qmb-run lands) | BUILT |
 | E2-roadC | Proposal to a pod | core K2 door | partly |
-| E2-roadD | Reading to a unit | core K3 | not built |
+| E2-roadD | Reading to a unit | core S8 (road D) | not built |
 | E2-week | His futures week, walked | content; other: agentic | PROPOSAL |
 | E2-gap1 | One lander per app, only `qmb-run` | core S16 | BUILT |
 | E2-gap2 | Landers are run-shaped | core S16 | BUILT |
 | E2-gap3 | Pack holds plugin.json and skills only | core S16 | BUILT |
 | E2-gap4 | pod, pod-block shells; template retired | core S16 | BUILT |
-| E2-gap5 | No row saves a block | core K6 | BUILT |
+| E2-gap5 | No row saves a block | core S16 | BUILT |
 | E2-gap6 | Two block worlds | core S16 | reading |
 | E2-gap7 | `reads` refused; relay unwired | core S8, K3 | BUILT |
 | E2-gap8 | No app-level `requires` | content | BUILT |
 | E2-gap9 | No subscription | content | BUILT |
-| E2-gap10 | No pin or upgrade across units | core D40 | BUILT |
+| E2-gap10 | No pin or upgrade across units | core R17, K5 | BUILT |
 | E2-gap11 | Agent code installs only at T2 or after review | other: agentic | BUILT |
 | E2-gap12 | `build-mini-app` placeholder; no `build-pod` skill | other: agentic; content | BUILT |
-| E2-gap13 | Library block reaching a node | core check first (D46) | UNKNOWN |
-| E2-gap14 | A stdlib block bumps the money app; blocks live outside it | design note (F4 core home) | BUILT |
+| E2-gap13 | Library block reaching a node | core S16, traced first (D46) | UNKNOWN |
+| E2-gap14 | A stdlib block bumps the money app; blocks live outside it | design note (the old F4 was replaced; the core library's home sits with S15) | BUILT |
 | E2-eval1 | One core in a library both import | core S15 | PROPOSAL |
 | E2-eval2 | State in and out: pure and stateful both true | core S15 | reasoning |
 | E2-eval3 | Four drivers, one core | core S15 | PROPOSAL |
@@ -766,7 +768,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E2-forced1 | Workflows at trade time: a graph block compiles or publishes a fact | core S16 one catalogue | design |
 | E2-forced2 | Replay explores, rerun proves | other: methodology | design |
 | E2-forced3 | Compile target = pod document plus unit | core S15 | design |
-| E2-g1 to E2-g20 | The 20 must-carry rows of E2 (g) | core: S14 (1-2, 5-6), I9 (3), R3 (4), S1 (7), S2 (8), S4 (9), S7 (10), S11 (11), R5 (12), S5 (13), V9 (14), S3 (15), V7 (16), K3 (17), S16 (18), D40 (19), K2 (20) | design |
+| E2-g1 to E2-g20 | The 20 must-carry rows of E2 (g) | core: S14 (1-2, 5-6), I9 (3), R3 (4), S1 (7), S2 (8), S4 (9, 13), S6 (10), S11 (11), R9 (12), V9 (14), S3 (15), V7 (16), S8 (17), S16 (18), R17 and S16 (19), K2 (20) | design |
 | E2-rt1 | Guards change the record, so would-have rows are baseline | core R3 | round table |
 | E2-rt2 | Allocator isn't a trade-time slot | decided | round table |
 | E2-rt3 | Empty slot means unit's own block | core S14 | round table |
@@ -782,12 +784,12 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 
 | Id | One line | Fate | Evidence |
 |---|---|---|---|
-| E3-1 | Say, do, real: check words against code and record; claim scoreable by code | core R12 claim field; scoring content | REAL small (40 strategies) |
+| E3-1 | Say, do, real: check words against code and record; claim scoreable by code | core I9 (claim as metric, benchmark, window); scoring content | REAL small (40 strategies) |
 | E3-2 | Run the whole research process on a market with nothing in it | other: methodology | REAL as design |
 | E3-3 | Mine and shrink may do as well as strict gates | other: methodology (beside H5 conflict B) | REAL (US stocks monthly) |
 | E3-4 | A time-series test can't have everything; print the fold choice | other: methodology; core R8 stamp | theorem |
 | E3-5 | Same strategy, different engine, different answer; known-answer cost check | content (cheap test); other: methodology | REAL (five engines) |
-| E3-6 | Retune cadence from a budget on harmful updates | core R11 per-change record; scheduler content | MODEL plus clinical |
+| E3-6 | Retune cadence from a budget on harmful updates | core S13 (per-change record) per-change record; scheduler content | MODEL plus clinical |
 | E3-7 | Window lengths compete, costs inside the score | content | REAL thin |
 | E3-8 | Evidence authorises forgetting | content | MODEL |
 | E3-9 | A test for pool or fit per instrument | content | MODEL |
@@ -821,8 +823,8 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E3-S7 | Market making with funding as state | content seed (reckless) | author |
 | E3-S8 | Short-dated far OTM put selling | content seed; options not in instruments | in-sample |
 | E3-S9 | Deep RL overlay on crypto pairs | content seed | p about 0.06 |
-| E3-carry1 | Claim in lineage as metric, benchmark, window | core R12 | REAL |
-| E3-carry2 | Per-change record on every self-configured update | core R11 | MODEL |
+| E3-carry1 | Claim in lineage as metric, benchmark, window | family, parent and claim on I9; the rest other: methodology | REAL |
+| E3-carry2 | Per-change record on every self-configured update | core S13 (per-change record) | MODEL |
 | E3-carry3 | Promotion and money doors outside agent reach | core K5 | REAL |
 | E3-gaps | Retail FX scalping unmeasured; energy one pair; game theory parked; allocation across instruments; Monte Carlo reader missing; text failures | carried; parked: numbers (game theory) | honest |
 | E3-table | 302 papers, one line and a triage each (section 6) | material; no row changes a seat | as triaged |
@@ -837,20 +839,20 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E4-J3 | Scale joint | core S2 | REFUSED |
 | E4-J4 | Vote joint | BUILT combiners | BUILT |
 | E4-J5 | Switch joint | core S12 `regime_detector`; routes content | REFUSED |
-| E4-J6 | Overlay joint | core S7 | STUB |
+| E4-J6 | Overlay joint | core S6 | STUB |
 | E4-J7 | Referee joint | core R8 arms; judge BUILT | BUILT judge |
-| E4-boundary | Same boundary or different: the first question about a link | core R16 `decides`; skill content | PROOF (Lean), untested on markets |
+| E4-boundary | Same boundary or different: the first question about a link | content (`decides`, additive); skill content | PROOF (Lean), untested on markets |
 | E4-L01 | Link scanner: do these two say more together | content (Lab) | MECH; honest negative |
 | E4-L02 | Link proof: the six arms | core R8 arm fields; recipe content | REAL design, small samples |
-| E4-L03 | A null is not one thing: name the shuffle | core R16 `null` scheme | REAL (58-100 % false positives naive) |
+| E4-L03 | A null is not one thing: name the shuffle | content (block-entry field, additive; was R16) `null` scheme | REAL (58-100 % false positives naive) |
 | E4-L04 | Log the coin: every gate as a treatment; propensity | core R3 `propensity`, would-have writer | PROOF and simulation |
 | E4-L05 | Judge a rule by replacing it, never by the missed trade | content skill rule; other: methodology | controlled simulation |
 | E4-L06 | Fit map: which edge does this reading belong to | content; core readings on R1 | one honest test |
 | E4-L07 | Position as a curve: target-quantity answer type | core S18/S3 answer type; curves content | MECH; two demo days |
 | E4-L08 | Fit the worst move, with a refusal | content; needs S8 | author backtest |
-| E4-L09 | Calibration contract: a sizing number must mean what it says | core R16 `output_meaning` | backtest |
+| E4-L09 | Calibration contract: a sizing number must mean what it says | content (`output_meaning`, additive) | backtest |
 | E4-L10 | Aftershock clock (Hawkes) | content | academic; untested retail |
-| E4-L11 | Lead-lag with an expiry date | core R16 `retest_by`, second instrument input (`context_needs`) | MECH; single passes |
+| E4-L11 | Lead-lag with an expiry date | content (`retest_by`, additive), second instrument input (`context_needs`) | MECH; single passes |
 | E4-L12 | Arbitrage maths as a feed alarm | content (SQS) | GUESS |
 | E4-L13 | The commuting check: a law for joints | content check layer (S19) | maths |
 | E4-L14 | Porting by mapping | content on existing fields | none in trading |
@@ -877,13 +879,13 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E4-WF3 | External breaker | content recipe; needs S4, I3 | design |
 | E4-WF4 | Bucket stress isolation | content recipe; needs S8, S7 | author |
 | E4-WF5 | Read-only risk narrator | other: agentic | PROPOSAL |
-| E4-WF6 | Bound approval packet | core D40 | BUILT hash |
+| E4-WF6 | Bound approval packet | core R17, K5 | BUILT hash |
 | E4-WF7 | Governed research pipeline | other: methodology | sobering |
 | E4-WF8 | Staged ramp ladder | content (I11 slot) | design |
 | E4-WF9 | Shared cost ledger | core I2, R7 | design |
 | E4-WF10 | Meta-label exit and size gate | content recipe | BT |
 | E4-WF11 | Event calendar control | content recipe; core S10 | author |
-| E4-WF12 | Alert rationalisation | other: UI; core R10 | SRE |
+| E4-WF12 | Alert rationalisation | other: UI; core R4 | SRE |
 | E4-WF13 | Interactive simulation bench | other: methodology | simulation |
 | E4-WF14 | Conservative parameter tuning | content motion rule | design |
 | E4-WF15 | Propose, constrain, one step | content; K1 fits | robot simulation |
@@ -892,7 +894,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E4-C3 | Restore ladder | core S4 RESTORE; methods content | REAL elsewhere |
 | E4-C4 | Live cost monitor | content; core R7 | author |
 | E4-C5 | Backtest validity stamp | core R8 | measured |
-| E4-C6 | Exposure ledger | content; core S7, I9 | author |
+| E4-C6 | Exposure ledger | content; core S6, I9 | author |
 | E4-C7 | Risk-as-output accelerator | content | author |
 | E4-C8 | Concurrency-aware scalpers | content; core I9 direction | author |
 | E4-C9 | Trade-rate-scaled breakers | content (BUILT halt) | design |
@@ -909,7 +911,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E4-C20 | Regimes cut, never re-weight | content | REAL indices |
 | E4-C21 | Start diagonal, shrink on coupling | content (Book kind) | author |
 | E4-C22 | Fee-aware rare-event classifier | content | author |
-| E4-C23 | Evidence record | core I8 | PROPOSAL |
+| E4-C23 | Evidence record | core S8 (agent evidence is a reading) | PROPOSAL |
 | E4-C24 | Tuner pair | content motion rule | papers |
 | E4-C25 | Forward-looking stress | content | author |
 | E4-C26 | Statistics apart from the trip | content | author |
@@ -917,24 +919,24 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E4-C28 | Fast loop, slow agent | core V3; content | author |
 | E4-N1 | Link proof, six arms | core R8 fields; recipe content | design |
 | E4-N2 | Pair scan before stacking filters | content | MECH |
-| E4-N3 | Coin-logged paper twin | core R3 `propensity`, K4 | PROOF |
-| E4-N4 | Intraday long curve | content; core answer type | MECH |
+| E4-N3 | Coin-logged paper twin | core R3 (`propensity`); the twin is content on S14's key | PROOF |
+| E4-N4 | Intraday long curve | content; core S3 (reserved answer type) | MECH |
 | E4-N5 | Fitted tail for the cushion | content | author |
 | E4-N6 | Calibrated meta-gate | content | BT |
 | E4-N7 | Aftershock cooldown | content (S12 `cooldown`) | academic |
-| E4-N8 | Leader as veto with expiry | content; core `retest_by` | MECH |
+| E4-N8 | Leader as veto with expiry | content; `retest_by` is content (additive) | MECH |
 | E4-N9 | Feed-gap alarm | content (FX) | GUESS |
 | E4-N10 | Active mix reading | content; core I9 | SIM |
 | E4-N11 | Three-stage placement | content mini app; parked: numbers | BT |
 | E4-8a | Already in QML's entry: sources, family, roles, transfer, class meanings, data level, min_sample, reading fields, combiners, motion | keep; don't rebuild | BUILT |
-| E4-8b-1 | `output_meaning` | core R16 | S3 proof (trigger compiles in sizer) |
-| E4-8b-2 | `assumes` | core R16 | CUSUM 5x case |
-| E4-8b-3 | `null` scheme, block length, draws | core R16 | REAL |
-| E4-8b-4 | `evidence` label, instruments, source | core R16 | design |
-| E4-8b-5 | `retest_by` | core R16 | REAL (links vanish) |
+| E4-8b-1 | `output_meaning` | content (block-entry field, additive; was R16) | SWAP probe S3 (a trigger compiles in the sizer slot) |
+| E4-8b-2 | `assumes` | content (block-entry field, additive; was R16) | CUSUM 5x case |
+| E4-8b-3 | `null` scheme, block length, draws | content (block-entry field, additive; was R16) | REAL |
+| E4-8b-4 | `evidence` label, instruments, source | content (block-entry field, additive; was R16) | design |
+| E4-8b-5 | `retest_by` | content (block-entry field, additive; was R16) | REAL (links vanish) |
 | E4-8b-6 | `knows_at` | core I7 | design |
-| E4-8b-7 | `decides` boundary | core R16 | PROOF |
-| E4-8c-1 to 15 | Seats: fed inputs to sizer, exits, halts; `reads`; roles; target-position answer; link record; arm fields; propensity and would-have; readings on decision rows; intent with direction and family; second instrument input; many-to-many tags; save a block; identity wired; recipe kind; protected fields | core: I1 and S3 and S4; S8; S12; S18; R8; R8; R3; R1; S7 and I9; S8; I9; K6; D40; R16; K5 protected list | BUILT refusals |
+| E4-8b-7 | `decides` boundary | content (block-entry field, additive; was R16) | PROOF |
+| E4-8c-1 to 15 | Seats: fed inputs to sizer, exits, halts; `reads`; roles; target-position answer; link record; arm fields; propensity and would-have; readings on decision rows; intent with direction and family; second instrument input; many-to-many tags; save a block; identity wired; recipe kind; protected fields | core: I1 and S3 and S4; S8; S12; S3 (reserved answer type); R8; R8; R3; R1; S6 and I9; S8; I9; S16; R17; K5 protected list; the recipe kind is content | BUILT refusals |
 | E4-8d | Copilot and agent rules as a skill (name the joint, check boundary, warn on no null, run link proof, never present a missed trade, warnings never refuse) | content, early (skill) | design |
 | E4-seeds-1-14 | Forced pairs onto shelf blocks (entropy gate, Kalman plus CUSUM, trendiness vote, half-life as time exit, efficiency on trailing, choppiness switch, TPO stop, momersion window, GK vs close vol gap, range over ATR day type, funding gate, autocorrelation switch, record sets size floor, self-scaled thresholds) | content seeds; 4 and 13 need S13 motion on exits and sizer | GUESS |
 | E4-seeds-15-20 | Medicine: benefit stopping, late-onset harm, run-in placebo twin, number needed to treat, dose-response for brakes, crossover design | content seeds; 17 fits K4 | GUESS |
@@ -943,7 +945,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E4-seeds-31-39 | Information: MIC vs distance correlation, compression day type, spectrum drift, wavelet denoise, Catch22 vocabulary, DMD short, Mann-Whitney before pooling, Kruskal-Wallis, uniqueness throttle | content seeds | author |
 | E4-seeds-40-45 | Finance theory: covered call, collar, insurance seller, payoff-shape tag, CFTC positioning, implied minus realised budget | content seeds; 40 reckless expressible | author |
 | E4-seeds-46-59 | Agents and canvas: three links proposal, explain this link, recipe diff, link heatmap, remix, bounty, start from failure card, devil's advocate null, pattern bitmap ports, repair failed patterns, paper to joints never code, paper-to-block card, shelf of nulls, shared floor table | content seeds; 56 other: agentic | GUESS |
-| E4-seeds-60-72 | Reverse brainstorm flips: count tries, locked hold-out, random arm, output_meaning, port by map, name the shuffle, referee grades, retest_by, would-have rows, equal samples, one change at a time, real-tick stamp, worst bin | each maps to a core field or rule above | design |
+| E4-seeds-60-72 | Reverse brainstorm flips: count tries, locked hold-out, random arm, output_meaning, port by map, name the shuffle, referee grades, retest_by, would-have rows, equal samples, one change at a time, real-tick stamp, worst bin | each maps to a row above or to a content field | design |
 | E4-seeds-73-80 | Scalper-specific: smallest scalper recipe, rate-scaled cooldown plus aftershock, netting-aware pair, reject streak gate, markout maker-taker switch, jitter block, min-hold as turnover cut, fee-threshold labels | content seeds | author |
 | E4-seeds-81-90 | Intraday-specific: first half hour into last, day-type switch, curve sizer to close, Monday overlay, overnight tail reading, gap accept or reject, London flip with delay, Larry Williams shelf, regime age tapers adds, VWAP distance scale | content seeds | author |
 | E4-seeds-91-100 | Book and fleet: hidden-family budget, tail-coupled caps, active mix at releases, effective bets on discovered families, exposure graph cycles, direction eliminator, fleet inaction audit, weekly link rescan, retire links to paper, boredom alarm | content seeds | GUESS |
@@ -958,18 +960,18 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E5-L0 | Inside the unit: brakes act, no agent | core S4, V3 | RULING |
 | E5-L1 | Health script every 5 minutes, fires on hash change | content (BUILT monitor node) | BUILT |
 | E5-L2 | Nightly fold: one row per unit | content; core R9 | pieces BUILT |
-| E5-L3 | Grouping by root-cause key | content; core R10 | design |
+| E5-L3 | Grouping by root-cause key | content; core R4 | design |
 | E5-L4 | Triage agent reads top K plus incidents, names a cause from a fixed list | other: agentic | design |
 | E5-L5 | Slow jobs: coroner, reruns, replay tuning | other: agentic | templates BUILT |
 | E5-L6 | To him: digest, cards, pages | other: UI | BUILT pieces |
 | E5-jobs | Fixed agent jobs: triage, morning words, coroner, sitting-duck advocate | other: agentic; content | design |
-| E5-tiers | Silent, digest, card, page | other: UI; core R10 | SRE |
+| E5-tiers | Silent, digest, card, page | other: UI; core R4 | SRE |
 | E5-away | A card carries what silence means; units run under pod rules | config | BUILT template |
 | E5-list1 | Who gets looked at: ranked top K, no threshold | config | MODEL |
-| E5-list2 | Who gets acted on: strict bar under a fleet budget | config; core K6 place | MODEL (e-detector) |
+| E5-list2 | Who gets acted on: strict bar under a fleet budget | config; core S16 place | MODEL (e-detector) |
 | E5-correction | 10x units slows catch by 30-135 %, not tenfold | finding | MODEL |
 | E5-pooling | Family pooling: 179 days alone, 51 pooled | core I9 family id | MODEL |
-| E5-incident | One incident, one card; key written where seen | core R10 | design |
+| E5-incident | One incident, one card; key written where seen | core R4 | design |
 | E5-20v200 | Rows read nightly 24k vs 236k without a fold | finding | arithmetic |
 | E5-app1 | App ships a workflow: no installer found | other: agentic | BUILT gap |
 | E5-app2 | App reads journals: `data_reads` market only | other: agentic | BUILT gap |
@@ -977,7 +979,7 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E5-app4 | Guide for building a mini app: placeholder | other: agentic | BUILT gap |
 | E5-app5 | Risk label `shows` fits | note | BUILT |
 | E5-reuse | Reuse map for eight templates (dc, t7, dm, gw, rk8, s2, morning-digest, pp) | content | BUILT |
-| E5-pub1 to 12 | What the unit must publish: identity with type tag and family; state word; decision rows; trade row; receipt; would-have; risk_event; calibration; root-cause key; expectation at birth; fleet read | core I9, R9, R1, R2, R3, R4, R10, I14 | design |
+| E5-pub1 to 12 | What the unit must publish: identity with type tag and family; state word; decision rows; trade row; receipt; would-have; risk_event; calibration; root-cause key; expectation at birth; fleet read | core I9, R9, R1, R2, R3, R4; the expectation at birth is content | design |
 | E5-find1 | Engine memory never ends (`SlowState.read`) | core S13 bounded window; other: repair flag | BUILT finding |
 | E5-find2 | The built engine already is an applier | decided (D16) | BUILT finding |
 | E5-find3 | It sees only taken trades; drifts down as cheap exploration | finding | BUILT |
@@ -991,8 +993,8 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E5-M4c | Whole range, recent window | dropped as live rule: too little history | MODEL |
 | E5-S | One replay over long history finds the number | default block (find) | MODEL; fooled by flattering replay |
 | E5-S+M1 | Find, then correct | default (D16) | MODEL held across worlds |
-| E5-controls | C-right, C-wrong, C-walk, C2 shuffled | content controls; core report with and without motion | MODEL |
-| E5-size-test | Own-record press: large gain with runs for a scalper, loss for swing; volatility fact helps all | template A press on (day anchor), B off; vol fact available | MODEL |
+| E5-controls | C-right, C-wrong, C-walk, C2 shuffled | content controls; core S13 (report with and without motion) | MODEL |
+| E5-size-test | Own-record press: large gain with runs for a scalper, loss for swing; volatility fact helps all | template A press on because he asked for it (M5, M39, M50), value open; B off; the volatility fact available as a block. The table shows only that the mechanism behaved as described; it chose nothing (REVIEW M5) | MODEL |
 | E5-job-find | Find at birth or on demand, counted | default; other: methodology for "better" | BUILT pieces |
 | E5-job-track | Track facts live, pure arithmetic | core S13 `scaled`, S8 | BUILT for logic |
 | E5-job-correct | Correct every N trades when flat, bounded, switchable | core S13 | BUILT |
@@ -1005,17 +1007,17 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E5-auth-brakes | Brake levels: find from own replay | config | design |
 | E5-auth-markets | Markets, sessions: find then u1, u2, s2 | content | BUILT templates |
 | E5-auth-never | Never-self-tune list per template; kill switch fixed | core S13 marker; V2 | RULING |
-| E5-rules | Inside range moves by own rule; outside is a new version and his click; agents never on a running unit | core D17 | BUILT identity table |
+| E5-rules | Inside range moves by own rule; outside is a new version and his click; agents never on a running unit | core S13 | BUILT identity table |
 | E5-not1-7 | Not in baseline: separate applier, dead band, retune share cap, target-with-bounds object, bandit over presets, pooled priors, Simplex | content | MODEL did not earn |
 | E5-seat1 | `authority` real `off` and `motion_inside_range`; non-flat anchors; calendar cadence | core S13 | BUILT gap |
 | E5-seat2 | Calibrated without a logic stamp | core S13 | BUILT gap |
 | E5-seat3 | Bounded window on engine memory | core S13 | BUILT gap |
 | E5-seat4 | `scaled` motion block | core S13 | design |
 | E5-seat5 | Reason on every resolved value; Origin "found by replay" | core R1, S13 | design |
-| E5-seat6 | Report with and without motion, always | core (MotionSwitch exists) | BUILT |
+| E5-seat6 | Report with and without motion, always | core S13 (MotionSwitch exists) | BUILT |
 | E5-climb | Live hill climb is the wrong place; Lab on long history, counted | decided (D16); content job | MODEL |
 | E5-style | Help or harm by style: correct off for swing press; cadence per type | template presets | MODEL |
-| E5-herd | Herding: daily cap only delayed; room for a group rule, not the rule | core K6 group place | MODEL (filters only) |
+| E5-herd | Herding: daily cap only delayed; room for a group rule, not the rule | core I10 | MODEL (filters only) |
 | E5-G1 | No installer a stranger can run | other: release | BUILT gap |
 | E5-G2 | Install and launcher describe the older host | other: release | BUILT gap |
 | E5-G3 | First start hands over to a desktop app nobody could find | other: UI | UNKNOWN |
@@ -1023,42 +1025,42 @@ Fable funnel judge, 7 Nov 2026. Companion to `FUNNEL.md`. One row per idea acros
 | E5-G5 | With demo off nothing has content | other: UI | BUILT gap |
 | E5-G6 | Spotware approval takes about a day | outside; Q1 | BUILT note |
 | E5-G7 | Never run against a real broker | other: repair; Q1 | BUILT |
-| E5-G8 | Can a newcomer backtest before a broker exists | core if no (D49) | UNKNOWN |
-| E5-G9 | One template | core 4.2 | BUILT |
+| E5-G8 | Can a newcomer backtest before a broker exists | a K7 row if the answer is no (D49) | UNKNOWN |
+| E5-G9 | One template | template (4.2) | BUILT |
 | E5-G10 | Copilot has no real risk choice from the shelf | core S1-S4 | BUILT |
-| E5-G11 | A working default size and brakes | core 4.1 | this session |
+| E5-G11 | A working default size and brakes | default block (4.1) | this session |
 | E5-G12 | Skill says never test; tools do | other: agentic | BUILT |
 | E5-G13 | Dictionary's risk blocks cannot be tried | core S3, S4 | BUILT |
 | E5-G14 | Persona speaks of one person | other: agentic | BUILT |
 | E5-G15 | No one-click "watch my units" | content | BUILT |
 | E5-G16 | Cost and fact feeds absent at live | core I2, I3 | BUILT |
 | E5-G17 | Customize: kinds are shells; Lab has no pods | core S14, S16 | BUILT |
-| E5-new1 | Working template per type, compiling and passing G | core 4.2 | design |
-| E5-new2 | Default size and brakes run with nothing set | core 4.1 | design |
+| E5-new1 | Working template per type, compiling and passing G | template (4.2) | design |
+| E5-new2 | Default size and brakes run with nothing set | default block (4.1) | design |
 | E5-new3 | The walk as a rehearsal test | core K7 | BUILT start |
-| E5-map | Module map | core D50 | reading |
-| E5-trap | Two risk worlds; one statement per module; subtract what retires | core D50 | reading |
-| E5-add1 | Adding a logic block: save row, scaffold, traced Library path | core K6; path UNKNOWN | BUILT gap |
+| E5-map | Module map | content, scheduled with the swap (D50) | reading |
+| E5-trap | Two risk worlds; one statement per module; subtract what retires | content, scheduled with the swap (D50) | reading |
+| E5-add1 | Adding a logic block: save row, scaffold, traced Library path | core S16; path UNKNOWN | BUILT gap |
 | E5-add2 | Adding a sizer: face check, money then converter, reference block reads evidence | core S1 | BUILT trap |
 | E5-add3 | Adding a brake: a host that runs them, required statistics, would-have | core S4, R3 | BUILT gap |
 | E5-add4 | Adding an instrument class: rows not branches; test fails on branching | core I4, D50 test | BUILT (two readers only) |
 | E5-add5 | A number that moves | core S13 | BUILT |
-| E5-add6 | A check layer | core S19 | BUILT stops at F |
+| E5-add6 | A check layer | content (check layer; census K9) | BUILT stops at F |
 | E5-add7 | A tool for agents: direction | other: agentic | BUILT gap |
 | E5-tests-exist | Socket contracts, census, goldens, upgrader rule, layer F and G, placeholders tool, apps in CI, failure register | keep | BUILT |
-| E5-tests-missing | Same decision both hosts; exits never blocked; refused fields labelled incl. authority and reads; number has reason and range; motion bounds plus shuffled control; every template reaches paper; no agent path to money; RiskState one fold | core D50 | design |
+| E5-tests-missing | Same decision both hosts; exits never blocked; refused fields labelled incl. authority and reads; number has reason and range; motion bounds plus shuffled control; every template reaches paper; no agent path to money; RiskState one fold | core K9 | design |
 | E5-debug | One decision row that replays; `explain_size`; replay test | core R1 | BUILT literal today |
-| E5-logs | Logs apart from journals kept; add trace id, motion counters, stack choice his | core R15; stack other | BUILT |
-| E5-ver1 | Widen all sockets in one bump | core V12 | BUILT constraint |
+| E5-logs | Logs apart from journals kept; add trace id, motion counters, stack choice his | core R1; stack other | BUILT |
+| E5-ver1 | Widen all sockets in one bump | dropped as a rule (REVIEW M1): bumps are free before the first deploy, so slices; the re-test workflow is core K8 | BUILT constraint for deployed units only |
 | E5-ver2 | Re-test workflow per bump | content | design |
-| E5-ver3 | Pins with diffs, lineage, forwarding map | core D40 | design |
-| E5-ver4 | Keep upgrader chain; cold restore rebuild UNKNOWN | core D40; UNKNOWN | BUILT |
+| E5-ver3 | Pins with diffs, lineage, forwarding map | core R17, K5 | design |
+| E5-ver4 | Keep upgrader chain; cold restore rebuild UNKNOWN | core R17, K5; UNKNOWN | BUILT |
 | E5-ver5 | A file extension | content (config) | RULING ("I don't care") |
-| E5-guide | Generated `EXTENDING.md` with staleness test | core D50 | design |
+| E5-guide | Generated `EXTENDING.md` with staleness test | content, scheduled with the swap (D50) | design |
 | E5-grill | Self-grilling: facts alone equal C-wrong; S lost to flattering replay; applier worded down; herding limited | recorded corrections | honest |
 | E5-F1 to F19 | Flaws for the agentic upgrade (build-mini-app placeholder; workflows entrypoint; data_reads; inbox path; scripts can't read Library; cron clocks; no fleet read; no attention budget; closed card asks; tighten says nothing; no save row; one template; skill vs tools; judge as operator; no direction; no triage job; no replay of runs; one-person persona; copilot not told about Lab) | other: agentic (section 8 of FUNNEL) | BUILT gaps |
 | E5-hand | Hand-offs to methodology, numbers, UI, repair, release | FUNNEL section 8 | design |
-| E5-must1 to 26 | The 26 must-carry rows of E5 section 8 | core: S13 (1-5, 8), S1 (6), report both (7), I14 (9), I9 (10), R9 (11), R2 (12), R3 and R4 (13), R10 (14), R9 fleet read (15), 4.2 (16), 4.1 (17), D49 (18), K7 (19), V12 (20), R1 (21), D50 (22-24), K6 and D40 (25), D50 guide (26) | design |
+| E5-must1 to 26 | The 26 must-carry rows of E5 section 8 | core: S13 (1-5, 7, 8), S1 (6), I9 (10), R9 (11, 15), R2 (12), R3 and R4 (13, 14), K7 (18, 19), R1 (21), K9 (22, 23), S16 and R17 (25); content: expectation at birth (9), module map and guide (24, 26); templates and defaults (16, 17) are section 4; one bump (20) dropped for K8 | design |
 
 ## X0 to X7: the 510 hybrids (`expansion/X*.md`, through `funnel/HYBRID-FATES.md`)
 
@@ -1070,10 +1072,10 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X0-02 | Effective-bets split as the B factor | content allocation mode (sqrt); was law by dollar sim | MODEL |
 | X0-03 | Sleeves as risk shares; re-slotting | content pod | PROPOSAL |
 | X0-04 | The edge is a gate; breadth is the amount | content gate block; other: methodology | PROPOSAL |
-| X0-05 | Cushion pair at a declared anchor | core R5; template A on | REAL theory; MODEL |
+| X0-05 | Cushion pair at a declared anchor | core R9 (cushion ledger in the fold); template A on | REAL theory; MODEL |
 | X0-06 | Macro governor, cut-only | content | idea |
 | X0-07 | Isolation by underlying process | content | author |
-| X0-08 | Three signals apart with their own speeds | core S5 attack and release; S4 | design |
+| X0-08 | Three signals apart with their own speeds | core S4 attack and release; S4 | design |
 | X0-09 | Six-tier ramp | content on I11 | PROPOSAL |
 | X0-10 | Hours clause on counts | content; core I9 driver tags | REAL insurance |
 | X0-11 | RiskState rows: exposure per bet key, open risk, drawdown | core R9 | design |
@@ -1092,7 +1094,7 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X0-24 | Dynamic SL and TP rebuilt; breakeven after test | template B (after step 3) | April spec |
 | X0-25 | ORB as a family across opens | template orb; core I9 | REAL stocks in play |
 | X0-26 | Placement by persistence readings | content (finder) | MODEL lag |
-| X0-27 | Day boundary as a contract; counters persist | core R5 | design |
+| X0-27 | Day boundary as a contract; counters persist | core R9 (cushion ledger in the fold) | design |
 | X0-28 | Daily ladders as burn-rate tiers | content | SRE |
 | X0-29 | Tier ladder and persistence press | content | REAL rules |
 | X0-30 | Session-open and fix caution windows | core S9; widths content | fix REAL |
@@ -1109,14 +1111,14 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X0-41 | Factor buckets | core I4 bucket; rule content | SIMM |
 | X0-42 | Regimes cut gross | content | author |
 | X0-43 | Risk-off tell stack | content | author |
-| X0-44 | Presets over cells; override chain | core keys reserved; templates | software checked |
-| X0-45 | Per-class feasibility verdict, re-run at anchors | core D5 | arithmetic |
+| X0-44 | Presets over cells; override chain | core I16; templates | software checked |
+| X0-45 | Per-class feasibility verdict, re-run at anchors | core I17 | arithmetic |
 | X0-46 | Placement score | content (finder) | PROPOSAL |
-| X0-47 | Sniping windows as counted slices | core R16; content finding | author |
+| X0-47 | Sniping windows as counted slices | content (block-entry field, additive; was R16); content finding | author |
 | X0-48 | Contexts not sessions | content on S8 | PROPOSAL |
 | X0-49 | Style as a dial | content optional derivation (was dropped) | wild |
-| X0-50 | Dry chassis as the null | core K4 | design |
-| X0-51 | Multi-position units | core S17 | RULING (A8) |
+| X0-50 | Dry chassis as the null | content (twin on S14's deployment key) | design |
+| X0-51 | Multi-position units | core S17 | HIS THOUGHT (A8, "isn't there a possibility") |
 | X0-52 | Cost-of-conservatism meter | content; core R3 | MODEL |
 | X0-53 | World switch resets; costs per world | core I9, I2 | design |
 | X0-54 | Crypto parts | content pod | author |
@@ -1132,40 +1134,40 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X1-H09 | Expressions compiled to blocks | content | REAL (n8n) |
 | X1-H10 | Trading-state spine; kill levels stay facts | core S4 | REAL (Nautilus) |
 | X1-H11 | Restore: retry-then-lockout; probes later | default; core S4 | REAL elsewhere |
-| X1-H12 | Shadow switch on every row | core S5 | design |
+| X1-H12 | Shadow switch on every row | core S4 | design |
 | X1-H13 | One arbiter per scope; any brake blocks every raise | default group row (raise gate), not law | design |
-| X1-H14 | One registry row per control | core S5 | PROPOSAL |
-| X1-H15 | Risk profile as its own document; unknown fields refused | core S14 (the pod document is that profile); census core | REAL (Nautilus) |
+| X1-H14 | One registry row per control | core S4 | PROPOSAL |
+| X1-H15 | Risk profile as its own document; unknown fields refused | core S14 (the pod document is that profile); census K9 | REAL (Nautilus) |
 | X1-H16 | One schema, many presets | core S16 template kind | REAL (Helm) |
 | X1-H17 | Packs that stack with combiners | core S14 composition rules; packs content | checked (LEAN) |
 | X1-H18 | Instrument risk record as the facts object | core I4 | PROPOSAL |
 | X1-H19 | Needs list the host must meet | core S15 | REAL (Bevy) |
 | X1-H20 | Template behind three verbs | core S15 | design |
-| X1-H21 | Self-test card; stress battery | core D40; battery content | design |
-| X1-H22 | Trust ladder; signed blocks | content; signature check core K6 | REAL (n8n) |
+| X1-H21 | Self-test card; stress battery | core R17, K5; battery content | design |
+| X1-H22 | Trust ladder; signed blocks | content; signature check core S16 | REAL (n8n) |
 | X1-H23 | Three faces | content | BUILT shape |
 | X1-H24 | Raw-code hatch, quarantined | content | design |
-| X1-H25 | Two adapters per slot | core D50 | design |
-| X1-H26 | Guard node-local, two adapters | fork F1; seam K1 core | design |
-| X1-H27 | `before_order` pass, shrink, refuse | core S7, K1 | design |
+| X1-H25 | Two adapters per slot | core K9 | design |
+| X1-H26 | Guard node-local, two adapters | fork F1; seam core S6 | design |
+| X1-H27 | `before_order` pass, shrink, refuse | core S6, K1 | design |
 | X1-H28 | Fast lane feeds facts; a brake raises a stand-down, never lowers kill | core V2 | RULING |
 | X1-H29 | Risk Lab mini app | content | PROPOSAL |
 | X1-H30 | Pod as a shippable bundle | core S16 | BUILT (MIS runs blocks by id) |
-| X1-H31 | Same compiled unit and guard on PC and node | core placement (S5, S14) | BUILT one path |
+| X1-H31 | Same compiled unit and guard on PC and node | core S4 and S14 placement (if F1=B) | BUILT one path |
 | X1-H32 | Budget share travels with the deployment | core I3 | elsewhere |
 | X1-H33 | Lab as a producer; compile target | core S15 | designed |
 | X1-H34 | Tag scopes | core S11 `tag:`; drop-ins content | elsewhere |
 | X1-H35 | Down as caps and states, up as events | content ledger map; S19 | design |
-| X1-H36 | Cascade over keys | core group rank | elsewhere |
-| X1-H37 | Full override chain | core keys reserved | SIMM |
+| X1-H36 | Cascade over keys | core I10 (group rank) | elsewhere |
+| X1-H37 | Full override chain | core I16 | SIMM |
 | X1-H38 | Same bet once; parent limit below the sum | core I9; default block (parent limit) | REAL banks |
 | X1-H39 | One hard floor, the buffer, two anchors | core V5, R5; values parked | design |
 | X1-H40 | Profile, cluster tags, portfolio config | core I10 `tag:` and `parent`; structure his later | no generation ran it |
 | X1-H41 | Shedding by class; burn tiers | content | SRE |
 | X1-H42 | Methodology and cluster drop-ins | content | design |
-| X1-H43 | Pinned versions, migration map, identity labels | core D40 | REAL (Simulink) |
-| X1-H44 | Two records | core D40 | BUILT judge |
-| X1-H45 | A new version shadows; canary later | core rollout field | production elsewhere |
+| X1-H43 | Pinned versions, migration map, identity labels | core R17, K5 | REAL (Simulink) |
+| X1-H44 | Two records | core R17, K5 | BUILT judge |
+| X1-H45 | A new version shadows; canary later | content (rollout field, additive) | production elsewhere |
 | X1-H46 | Effect-bound click | core V4 | REAL (Terraform) |
 | X1-H47 | Upgrade offers | content | checked |
 | X1-H48 | Conservative bandit | content | papers |
@@ -1176,24 +1178,24 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X1-H53 | Tool rows read and propose; run | core K2 | BUILT rows |
 | X1-H54 | Read-only explainer | content on core R1 `explain_size` | design |
 | X1-H55 | Agent department plugs in through the two doors | other: agentic | design |
-| X1-H56 | Compiler format bump | core V12 | BUILT constraint |
-| X1-H57 | Guard package | fork F1; K1 core | design |
+| X1-H56 | Compiler format bump | sequencing note (D41); re-test workflow core K8 | BUILT constraint for deployed units only |
+| X1-H57 | Guard package | fork F1; seam core S6 | design |
 | X1-H58 | Sizer inputs widened; receipt made real | core I1, R1 | BUILT gap |
 | X1-H59 | Trade rows carry mechanism, costs, excursions, stage | core R2 | BUILT kind fields |
 | X1-H60 | Exits after entry run; stops tighten | core S3, V6 | design |
 | X1-H61 | Closed reason codes; constants as rows; scope keys | core R4, S11 | bug verified |
 | X1-H62 | Library kinds beyond risk-profile | core S16 | shells today |
 | X1-H63 | Balance refresh, commission key, cost profile writer, slippage script | core I3, I2 | BUILT gaps |
-| X1-H64 | Agent rows and the socket contract on Library blocks | core K6, S16 | design |
-| X1-H65 | Risk-couplings check | core S19 | BUILT script |
+| X1-H64 | Agent rows and the socket contract on Library blocks | core S16 | design |
+| X1-H65 | Risk-couplings check | content (check layer; census K9) | BUILT script |
 | X1-H66 | Catalogue to dictionary entries | content | design |
 | X1-H67 | New block roles | core S12 | PROPOSAL |
-| X1-H68 | Class coverage on entries | core R16 `evidence` | design |
+| X1-H68 | Class coverage on entries | content (`evidence` field, additive) | design |
 | X1-H69 | Central oracle | dropped: breaks units-stand-alone | ruling |
 | X1-H70 | Genome variants | content, wild | papers |
 | X1-H71 | Runtime `affects` edges | dropped: too much machine | ruling |
 | X1-H72 | Overrides by a context word | content | PROPOSAL |
-| X1-H73 | Dry chassis offline; live twin | core K4 | design |
+| X1-H73 | Dry chassis offline; live twin | content (twin on S14's deployment key) | design |
 | X1-H74 | Netted virtual positions | content on S18 | author |
 | X1-H75 | Feedback controller permission | content if wanted | PROPOSAL |
 | X1-H76 | Three weights on every decision | core R1, R15 | practice |
@@ -1201,17 +1203,17 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X1-H78 | Marketplace | content after S16 | PROPOSAL |
 | X2-H01 | Horizon floor-odds sizer | content block, off, labelled MODEL (was law) | MODEL |
 | X2-H02 | Day-sigma budget | content (one formula with H01) | MODEL |
-| X2-H03 | Edge dial field | content; `edge_range` on R12 core | shrinkage sims |
+| X2-H03 | Edge dial field | content; `edge_range` on I9 (claim and band) | shrinkage sims |
 | X2-H04 | Cost-and-gap Kelly ceiling on the receipt | content | author |
 | X2-H05 | Risk-constrained Kelly | content base | REAL theory |
 | X2-H06 | Smallest-wins, binding clamp named and counted | core R1 | REAL (dash.js) |
-| X2-H07 | Cushion clip with the reserve | core I15 hook; values parked | proofs |
+| X2-H07 | Cushion clip with the reserve | core S6 (order-boundary veto); values parked | proofs |
 | X2-H08 | Tail-budget sizing | content base | simulation |
 | X2-H09 | Swing holding-period risk | content base | PROPOSAL |
-| X2-H10 | One-ledger pair | core R5; template A on | REAL theory; MODEL |
-| X2-H11 | Portfolio ledger with an event window | core R5 scope; window content | PROPOSAL |
-| X2-H12 | Per-scope anchor clocks | core R5 | demo tests |
-| X2-H13 | Levels as fractions of the baseline; start from holdout | core I11; start rule content (was law) | design |
+| X2-H10 | One-ledger pair | core R9 (cushion ledger in the fold); template A on | REAL theory; MODEL |
+| X2-H11 | Portfolio ledger with an event window | core R9 (cushion ledger in the fold) scope; window content | PROPOSAL |
+| X2-H12 | Per-scope anchor clocks | core R9 (cushion ledger in the fold) | demo tests |
+| X2-H13 | Levels as fractions of the baseline; start from holdout | core S2 (level modifier); start rule content (was law) | design |
 | X2-H14 | Slow start one level per clean cohort | content | medicine |
 | X2-H15 | Restore engine beyond retry-then-lockout | content | REAL elsewhere |
 | X2-H16 | EWOC steps | content | simulation |
@@ -1243,7 +1245,7 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X2-H42 | Cost nomogram before the SQS block | content (SQS-4), off | author NQ |
 | X2-H43 | Combined-flow netting | content on S18 | author |
 | X2-H44 | Asymmetric equity basis | core I3 | REAL prop |
-| X2-H45 | Feasibility-first admission, re-run at anchors | core D5 | MODEL |
+| X2-H45 | Feasibility-first admission, re-run at anchors | core I17 | MODEL |
 | X2-H46 | Lot dither | content option (was dropped) | analogue |
 | X2-H47 | Three-number record | core I4 | REAL SIMM |
 | X2-H48 | Tick-size tiers | content I4 field | author |
@@ -1256,7 +1258,7 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X2-H55 | Thermostat | content, wild | GUESS |
 | X2-H56 | Gain-lock ratchet | content on R5; floor V5 | REAL funds; MODEL |
 | X2-H57 | Priced reinstatement | content, wild | insurance snippet |
-| X2-H58 | Cut-only agent evidence | core I8 | design |
+| X2-H58 | Cut-only agent evidence | core S8 (agent evidence is a reading) | design |
 | X2-H59 | Lab as run-surface tenant | other: UI, agentic; S15 | designed |
 | X2-H60 | Martingale firewall | content warning on S19, never a refusal | REAL ruin |
 | X2-H61 | Meta-label sizing | content | in-sample |
@@ -1269,12 +1271,12 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X3-H06 | Persistence test that would switch H05 on | content | MODEL |
 | X3-H07 | AIMD red-zone | content | MODEL |
 | X3-H08 | Fire-density sentinel | content | MODEL |
-| X3-H09 | Expected fire band on the card | core I14 card field | PROPOSAL |
+| X3-H09 | Expected fire band on the card | content (card field; expectation at birth) | PROPOSAL |
 | X3-H10 | Context-tagged density | content; fire tags core R4 | PROPOSAL |
 | X3-H11 | Trade CUSUM key | content block, off by default | MODEL |
 | X3-H12 | Scorecard over time | content | counterfactual |
 | X3-H13 | Random-control certificate as a report | content report; core R3 | REAL one test |
-| X3-H14 | Shadow-first switch | core S5 | design |
+| X3-H14 | Shadow-first switch | core S4 | design |
 | X3-H15 | Retry-then-lockout | default restore | REAL elsewhere |
 | X3-H16 | Probe on the twin | content | REAL elsewhere |
 | X3-H17 | Memory ceiling | content | REAL elsewhere |
@@ -1284,7 +1286,7 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X3-H22 | Burn-rate permit | content | SRE |
 | X3-H23 | Methodology pooled CUSUM | content; core I9 family | MODEL |
 | X3-H24 | Portfolio day stop | default group row | MODEL |
-| X3-H25 | Cushion clip | core I15 | proofs |
+| X3-H25 | Cushion clip | core S6 (order-boundary veto) | proofs |
 | X3-H26 | Pod-style ladder on capital share | content | REAL press |
 | X3-H27 | Priority shedding | content | REAL Google |
 | X3-H28 | Two-tell isolation | content | author |
@@ -1310,13 +1312,13 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X3-H48 | Zones as the display | content | REAL regulatory |
 | X3-H49 | Money fast, warning reversible, second warning to paper | core S4 states; rule content | MODEL |
 | X3-H50 | Bad-day classifier | content (agentic) | PROPOSAL |
-| X3-H51 | Input-first: cost, rate, replay match | core K4 | practitioner |
+| X3-H51 | Input-first: cost, rate, replay match | content (twin on S14's deployment key) | practitioner |
 | X3-H52 | Lifetime false-demotion budget | content | simulation |
 | X3-H53 | Re-promotion by his click | core V4 | RULING |
 | X3-H54 | Regime-conditional expectation | content | author |
 | X3-H55 | Upside alarm | content | prop |
 | X3-H56 | Worry lines | content | REAL daily |
-| X3-H58 | Registry row | core S5 | PROPOSAL |
+| X3-H58 | Registry row | core S4 | PROPOSAL |
 | X3-H59 | Five-state spine | core S4 | REAL (Nautilus) |
 | X3-H60 | Deterministic fast loop | core V3 | RULING |
 | X3-H61 | Self-configuring brake thresholds through the loop | core S13 | design |
@@ -1331,8 +1333,8 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X3-H71 | Execution-anomaly brake | content | PROPOSAL |
 | X3-H72 | Changepoint cooldown | content | REAL one fair test |
 | X3-H73 | Regime-age taper | content | one gold test |
-| X3-H74 | Day-boundary contract | core R5 | demo tests |
-| X3-H75 | Order-boundary veto | core I15 | design |
+| X3-H74 | Day-boundary contract | core R9 (cushion ledger in the fold) | demo tests |
+| X3-H75 | Order-boundary veto | core S6 (order-boundary veto) | design |
 | X4-01 | Losing together: day stop and bet keys | content scenario; exercises I9, group row | design |
 | X4-02 | Correlation spike | content scenario | design |
 | X4-03 | Same signal, many units | content scenario; exercises I9 | design |
@@ -1432,53 +1434,53 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X4-97 | Scorecard with survival gates | content report; no gate | design |
 | X4-98 | Reverse stress | content | author |
 | X4-99 | Agent-based bench | other: methodology | simulation |
-| X5-H01 | Novelty check and search ledger | other: methodology; core R12 | REAL finding |
+| X5-H01 | Novelty check and search ledger | other: methodology; family, parent and claim on I9; the rest other: methodology | REAL finding |
 | X5-H02 | Look-ahead block in tools | core I7 `knows_at`; other: methodology | REAL |
 | X5-H03 | Gate: low end positive after costs | content; other: methodology | solid |
 | X5-H04 | Band from four shrinkages | other: methodology; band on R12 | simulation |
 | X5-H05 | Honest counts | other: methodology | design |
 | X5-H06 | Plan priced in trades; too-thin verdict | other: methodology | arithmetic |
 | X5-H07 | Challenger | other: methodology | controlled (blind check) |
-| X5-H08 | Event replays and the dry chassis | core K4 | design |
-| X5-H09 | Machine check against the twin in a week | core K4 | practice |
+| X5-H08 | Event replays and the dry chassis | content (twin on S14's deployment key) | design |
+| X5-H09 | Machine check against the twin in a week | content (twin on S14's deployment key) | practice |
 | X5-H10 | Bound click | core V4 | REAL (Terraform) |
 | X5-H11 | Two vetoes | content pod | author |
 | X5-H12 | Funded e-meter for raises | content block | simulation |
 | X5-H13 | Evidence bar under the baseline | dropped: makes a weak unit a sitting duck (REVIEW M2 kept) | MODEL |
 | X5-H14 | Cohorts set the speed | content | medicine |
 | X5-H15 | Three speeds | core S4 states; rules content | maths |
-| X5-H16 | One alarm budget | content; K6 place | theory |
+| X5-H16 | One alarm budget | content; I10 | theory |
 | X5-H17 | Paid restarts, variance cap | content | proofs |
 | X5-H18 | Cone in the current regime | content | simulation |
 | X5-H19 | Fire density as display | content | MODEL |
 | X5-H20 | Test of the tests | other: methodology | strong method |
-| X5-H21 | Paper twin and shadow lane | core K4 | design |
+| X5-H21 | Paper twin and shadow lane | content (twin on S14's deployment key) | design |
 | X5-H22 | Too good checks | content | prop |
 | X5-H23 | Family-level decay | content; core I9 | plausible |
 | X5-H24 | Three zones display | content | regulatory |
 | X5-H25 | Error-budget burn | content | SRE |
 | X5-H26 | Demotion with a cause code; re-promotion by click | core R4 cause codes; V4 | design |
-| X5-H27 | Rehab and lineage | other: methodology; core R12 | PROPOSAL |
+| X5-H27 | Rehab and lineage | other: methodology; family, parent and claim on I9; the rest other: methodology | PROPOSAL |
 | X5-H28 | World switch resets; contract-level replay | core I9 | design |
 | X5-H29 | Exit change as a counted trial | core R8 | controlled test |
 | X5-H30 | Narrators | other: agentic | PROPOSAL |
-| X5-H31 | Cut-only proposals | core I8 | design |
+| X5-H31 | Cut-only proposals | core S8 (agent evidence is a reading) | design |
 | X5-H32 | Protected core | core K5 protected list | design |
 | X5-H33 | Audit and red team | other: agentic | attack papers |
 | X5-H34 | Staking | content, wild | GUESS |
 | X5-H35 | Governed pipeline | other: methodology | sobering |
-| X5-H36 | Contrast test, new against old | core K4 | simulation |
+| X5-H36 | Contrast test, new against old | content (twin on S14's deployment key) | simulation |
 | X5-H37 | Evidence ledger with stage tags | core R2 stage | design |
 | X5-H38 | One cost ledger from node rows | core I2 | design |
 | X5-H39 | Passport strip | other: UI; R9 | design |
-| X5-H40 | Verification template per type is the preset | content preset; core type tag | RULING (A5) |
+| X5-H40 | Verification template per type is the preset | content preset; core I9 (type tag) | RULING (A5) |
 | X5-H41 | Node emits verification state; guard reads it | core R9 state input | design |
 | X5-H42 | Thresholds by simulation on own record | content | plausible |
 | X5-H43 | Calendar looks for rare traders | content | regulatory |
 | X5-H44 | Edge decides gate and level, never amount | content; parked: numbers | PROPOSAL |
 | X5-H45 | Certified capacity | other: methodology | model |
-| X5-H46 | Canary across markets | core rollout field | practice |
-| X5-H47 | Windows as counted slices | core R16 | idea |
+| X5-H46 | Canary across markets | content (rollout field, additive) | practice |
+| X5-H47 | Windows as counted slices | content (block-entry field, additive; was R16) | idea |
 | X5-H48 | Exploration budget | parked: numbers; content pod | idea |
 | X6-01 | One fold, many readers | core R9 | Gen 3 |
 | X6-02 | Equity triple and drawdown by kind | core R9 | design |
@@ -1487,15 +1489,15 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X6-05 | Two ledgers | core R2, R5 | MODEL |
 | X6-06 | Closed reason codes at source | core R4 | bug verified |
 | X6-07 | Meters for the core brakes | content | design |
-| X6-08 | Motion receipts | core R11 | design |
-| X6-09 | Requested, enforced, observed | core R15 | Gen 3 |
+| X6-08 | Motion receipts | core S13 (per-change record) | design |
+| X6-09 | Requested, enforced, observed | core R1 | Gen 3 |
 | X6-10 | Context tags on every fire | core R4 fire tags | design |
 | X6-11 | Six words and UNKNOWN | core R9 predicates; other: UI | practice |
 | X6-12 | Decision pulse | content | design |
 | X6-13 | Safety display | other: UI | design |
-| X6-14 | Four tiers | other: UI; core R10 | SRE |
+| X6-14 | Four tiers | other: UI; core R4 | SRE |
 | X6-15 | Burn tiers | content | SRE |
-| X6-16 | One incident, one page | core R10 | SRE |
+| X6-16 | One incident, one page | core R4 | SRE |
 | X6-17 | Wake contract | other: UI | SRE |
 | X6-18 | Distance bars | other: UI | design |
 | X6-19 | Watch windows | other: UI | design |
@@ -1504,22 +1506,22 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X6-22 | Trip tax, sitting-duck meter | content | MODEL |
 | X6-23 | Accelerator earned-keep | content | MODEL |
 | X6-24 | Growth waterfall | other: UI | design |
-| X6-25 | Family alarm budget | content; K6 place | proofs |
+| X6-25 | Family alarm budget | content; I10 | proofs |
 | X6-26 | Attention telemetry | dropped: low value; UI if wanted | GUESS |
 | X6-27 | Passport strip | other: UI | design |
 | X6-28 | Drift decomposition | other: UI | design |
 | X6-29 | Bad-day sentence | content (agentic words) | PROPOSAL |
 | X6-30 | Cost cells | core I2 | author |
 | X6-31 | Markout | core R7 | REAL live orders |
-| X6-32 | Shadow first | core S5 | design |
+| X6-32 | Shadow first | core S4 | design |
 | X6-33 | Exposure board | core R9 | design |
 | X6-34 | Chorus detector | content | spec |
 | X6-35 | Stress gauge | other: UI | SPAN |
-| X6-36 | Incident bundle | core R10; narrator other: agentic | design |
-| X6-37 | Fact flow and authority | core R15 | design |
+| X6-36 | Incident bundle | core R4; narrator other: agentic | design |
+| X6-37 | Fact flow and authority | core R1 | design |
 | X6-38 | Read tools for agents | core K2 | design |
 | X6-39 | Lab parity | core S15 | design |
-| X6-40 | Observability observes itself | content; V11 | REAL (Knight) |
+| X6-40 | Observability observes itself | content; principle (risk rows are evidence) | REAL (Knight) |
 | X6-41 | Ledger generates alerts | content | design |
 | X6-42 | Get-even flag | content | REAL traders |
 | X6-43 | Morning card | content; other: UI | design |
@@ -1529,9 +1531,9 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X6-47 | Sound map | dropped: low value | GUESS |
 | X7-H01 | Three-surface door | core K2 | BUILT door |
 | X7-H02 | Direction on every operation | other: agentic | controlled test |
-| X7-H03 | Evidence as a fact the unit's rule reads | core I8 | design |
+| X7-H03 | Evidence as a fact the unit's rule reads | core S8 (agent evidence is a reading) | design |
 | X7-H04 | Effect-bound card | core V4 | controlled tests |
-| X7-H05 | Two-speed authority; pre-authorised restore ladder | core S5 restore; default | design |
+| X7-H05 | Two-speed authority; pre-authorised restore ladder | core S4 restore; default | design |
 | X7-H06 | Spec, status, suggestions | core I9 | practice |
 | X7-H07 | Feasible-by-construction proposals | core R9 read | author backtest |
 | X7-H08 | LLM-free fast loop | core V3 | RULING |
@@ -1543,20 +1545,20 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X7-H14 | Point-in-time inputs | core I7 | design |
 | X7-H15 | Attention budget | other: agentic, UI | plausible |
 | X7-H16 | Graduation | other: agentic | design |
-| X7-H17 | One incident, one card | core R10 | SRE |
+| X7-H17 | One incident, one card | core R4 | SRE |
 | X7-H18 | Autonomy ladder | other: agentic | one live case |
 | X7-H19 | Get-even guard | content | REAL traders |
 | X7-H20 | Money both ways cards | other: agentic | design |
-| X7-H21 | Slow isolation by card | content; K2 | RULING (C27) |
+| X7-H21 | Slow isolation by card | content; K2 | HIS THOUGHT (C27) |
 | X7-H22 | Drift explainer | other: agentic | PROPOSAL |
 | X7-H23 | Adversarial scenario author | content | simulation |
-| X7-H24 | Tuning proposer under the applier | content (Lab job) | RULING (M49) |
+| X7-H24 | Tuning proposer under the applier | content (Lab job) | HIS THOUGHT (M49) |
 | X7-H25 | Cost-window prospector | content | author |
 | X7-H26 | Structure labeller | content | PROPOSAL |
 | X7-H27 | Journal coroner | other: agentic | PROPOSAL |
 | X7-H28 | Template version drafter | other: agentic | solid |
 | X7-H29 | Promotion pack with bound capability | core V4 | design |
-| X7-H30 | Preflight | core S19 | BUILT A to G |
+| X7-H30 | Preflight | content (check layer; census K9) | BUILT A to G |
 | X7-H31 | Decay watch: the script decides | content (E5 fold replaces the rule) | MODEL |
 | X7-H32 | Sitting-duck advocate | content | fits M50 |
 | X7-H33 | Accelerator scout | content | PROPOSAL |
@@ -1569,7 +1571,7 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | X7-H40 | Prediction market | content, wild | GUESS |
 | X7-H41 | Ghost tracks | content, wild | GUESS |
 | X7-H42 | Self-proposing ledger | content, wild | GUESS |
-| X7-H43 | One-tap kill escalation card | core `on_fire` card; other: UI | design |
+| X7-H43 | One-tap kill escalation card | core S4 (`on_fire` card); other: UI | design |
 | X7-H44 | Self-evolution | other: agentic | two cycles |
 | X7-H45 | Per-class agents | content | PROPOSAL |
 | X7-H46 | Agent-written glance | other: agentic | design |
@@ -1593,4 +1595,4 @@ The old tier (core, shadow, later, dropped) is material only. The new fate is by
 | E5 | 101 (must-carry grouped in 1 row) | 50 | 8 | 20 | 20 | 1 | 3 (as live rules) |
 | X0 to X7 | 510 | 205 | 24 | 220 | 44 | 4 | 8 |
 
-The Rows column is counted by script over the tables above (1,496 rows in all). The fate columns are counted by hand and approximate to a few rows; a row that names a core seat and also ships a default is counted once, under core. "Dropped" means dropped as a default or a law, with the idea kept as a labelled trap or an optional block; outright drops are X1-H69, X1-H71, X5-H13, X6-26, X6-44, X6-46, X6-47, UB-07, UB-14, UB-22, UB-33, UB-56, UB-60, UB-61, H5-23g, X2-H40 (as law) and E5's three live-climb rules.
+The Rows column is counted by script over the tables above (1,496 rows in all). The fate columns are counted by hand and approximate to a few rows; a row that names a core seat and also ships a default is counted once, under core. After the fix round the script counted the fate cells that name a core row; the number is in `FUNNEL.md` Appendix D. "Dropped" means dropped as a default or a law, with the idea kept as a labelled trap or an optional block; outright drops are X1-H69, X1-H71, X5-H13, X6-26, X6-44, X6-46, X6-47, UB-07, UB-14, UB-22, UB-33, UB-56, UB-60, UB-61, H5-23g, X2-H40 (as law) and E5's three live-climb rules.
