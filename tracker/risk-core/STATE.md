@@ -4,6 +4,9 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
+**7 Nov, READ FIRST: he rejected the template (M49). See `REVIEW-2026-11-07.md`. The next step, on his go, is a recut around unit plus pod. Q1-Q9 are withdrawn. Numbers and methodology stay out.**
+
+
 **Latest (6 Nov, afternoon). Read this block first; items 41-50 below hold the detail.**
 
 **The deliverable:** a self-configuring, extensible risk-and-sizing template for the unit that ships through builders. His first message of 3 Nov still stands. Numbers come after: he will argue them with me using the numbers lens and the scenario harness.
