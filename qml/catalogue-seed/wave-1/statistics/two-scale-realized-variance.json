@@ -1,0 +1,136 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "two-scale-realized-variance",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "two-scale realized variance",
+    "TSRV",
+    "two scales realized volatility"
+  ],
+  "same_word_as": [
+    "realized-volatility@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The realised variance averaged over several sparse subsamples of the ticks, less a correction for the noise the full-frequency sum measures.",
+  "boundaries": "Not computed in QML yet: it reads quote ticks, and QML's bars blocks get bars only; on bar closes alone it falls back to an ordinary realised variance.",
+  "recognition": "Near the true variance where a plain sum of tick returns mostly reads noise.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.nber.org/papers/w10111",
+      "quote": "estimate volatility from the sum of frequently-sampled squared returns",
+      "dated": "2003-11-17"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "Change detectors (CUSUM on returns, two-scale volatility, Kalman level)"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "quotes",
+      "stream_kind": "quotes",
+      "measure": "price",
+      "data_level": 2,
+      "fallback": [
+        {
+          "data_level": 1,
+          "expected_loss": "bar closes only: the noise the ticks carry is unseen"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "subsamples": {
+      "measure": "count",
+      "default": "5",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "one bar of ticks",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 1,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "reading": {
+    "tier": "bar",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 2,
+    "fallback": [
+      {
+        "data_level": 1,
+        "expected_loss": "bar closes only: the noise the ticks carry is unseen"
+      }
+    ],
+    "lag_bars": 0,
+    "minimum_sample": 1,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 3600,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "measured"
+          }
+        ],
+        "origin": "builder_chosen"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

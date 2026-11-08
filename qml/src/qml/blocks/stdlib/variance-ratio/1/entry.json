@@ -1,0 +1,157 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "variance-ratio",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "variance ratio",
+    "Lo-MacKinlay variance ratio",
+    "VR"
+  ],
+  "same_word_as": [
+    "market-regime@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The variance of horizon-bar log returns over horizon times the variance of one-bar log returns, over the last window prices, drift removed and de-biased.",
+  "boundaries": "Lo and MacKinlay's overlapping, de-biased ratio as arch computes it. It sees mean reversion well and trend poorly, and bid-ask bounce on short bars reads as false reversion. The window starts at 1,000 points.",
+  "recognition": "About 1 for a random walk, above 1 when moves persist, below 1 when they revert.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/14203",
+      "quote": "the variance ratio should be equal to 1",
+      "dated": "2024-02-08"
+    },
+    {
+      "source_ref": "https://arch.readthedocs.io/en/latest/unitroot/generated/arch.unitroot.VarianceRatio.html (read 2026-11-02)",
+      "quote": "Variance Ratio test of a random walk.",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "Variance ratio, Hurst (minimum 1,000 points; mid prices; bounce check)"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "1000",
+      "origin": "source_stated",
+      "range": {
+        "min": "1000",
+        "max": "20000",
+        "step": "1"
+      }
+    },
+    "horizon": {
+      "measure": "bars",
+      "default": "4",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "64",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 1000,
+  "expected_lag_bars": 499,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "window",
+    "observations": null
+  },
+  "reading": {
+    "tier": "day",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 499,
+    "minimum_sample": 1000,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 86400,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "reverting",
+            "below": "0.9"
+          },
+          {
+            "word": "random",
+            "below": "1.1"
+          },
+          {
+            "word": "persisting"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:6313c438d166402dc6d4e654d9616840e0ad3b43328da4251b6306072a01d17a",
+  "golden": {
+    "reference": "arch 8.0.0 VarianceRatio.vr",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}

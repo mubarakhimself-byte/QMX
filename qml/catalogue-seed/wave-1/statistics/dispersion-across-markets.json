@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "dispersion-across-markets",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "cross-market dispersion",
+    "return dispersion"
+  ],
+  "same_word_as": [
+    "currency-strength@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "How far apart the returns of a set of markets are over the same bar, read across every market at once.",
+  "boundaries": "A cross-market reading that only This PC's MIS instance computes, since it needs every market's bars together; its set of markets and its spread measure are not settled.",
+  "recognition": "High dispersion means the markets move apart, low means they move together.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "Currency strength, dispersion, herding counts, dated pair readings"
+    }
+  ]
+}

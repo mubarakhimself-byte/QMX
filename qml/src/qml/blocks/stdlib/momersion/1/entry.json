@@ -1,0 +1,129 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "momersion",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "Momersion",
+    "momentum-reversion balance"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The share, in percent, of momentum steps among the last period steps, a step being a bar's change times the change before it.",
+  "boundaries": "LEAN's Momersion with no minimum period; where LEAN prints 50 because half the steps or more are flat, this block leaves the value missing.",
+  "recognition": "Above 50 moves tend to continue, below 50 they tend to turn back.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.quantconnect.com/docs/v2/writing-algorithms/indicators/supported-indicators/momersion (read 2026-11-02)",
+      "quote": "measures momentum and mean-reversion over a specified period n",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "4",
+        "max": "2000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 3",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 23,
+  "expected_lag_bars": 10,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + 2",
+    "observations": null
+  },
+  "reading": {
+    "tier": "session",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 10,
+    "minimum_sample": 23,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 28800,
+    "outputs": {
+      "value": {
+        "measure": "percent"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "reverting",
+            "below": "50"
+          },
+          {
+            "word": "persisting"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:9dad7b2045740d876fe782be4dbeeb5188d0d08a0185cabb2ece14b914426d2e",
+  "golden": {
+    "reference": "QuantConnect LEAN Momersion.cs formula, numpy 2.5.4",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}

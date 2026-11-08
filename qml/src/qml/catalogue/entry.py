@@ -64,7 +64,7 @@ __all__ = [
     "corpus_problems",
 ]
 
-CHECKER_VERSION: Final[str] = "qml.entry/1 r1"
+CHECKER_VERSION: Final[str] = "qml.entry/1 r2"
 """Bumped by any change that alters a verdict, so a stored status names the checker it met."""
 
 GOLDEN_RELATIVE: Final[Decimal] = Decimal("1e-9")
@@ -398,6 +398,119 @@ def _any_object(value: object, where: str, found: _Found) -> None:
     _object(value, where, found)
 
 
+class Tier(StrEnum):
+    """The clock a reading runs on, which decides where it runs (L0 AD-40, CONTRACTS.md 5.3)."""
+
+    TICK = "tick"
+    BAR = "bar"
+    SESSION = "session"
+    DAY = "day"
+    CALENDAR = "calendar"
+
+
+class Concern(StrEnum):
+    """What a reading measures: a label for screens, never a placement rule (LC-A1-30)."""
+
+    MARKET_STATE = "market_state"
+    EXECUTION_HEALTH = "execution_health"
+
+
+class TimeBase(StrEnum):
+    CLOCK = "clock"
+    TICKS = "ticks"
+    VOLUME = "volume"
+
+
+class Health(StrEnum):
+    """The health words of Part C's stamped reading record (its section 7)."""
+
+    FRESH = "fresh"
+    STALE = "stale"
+    DEGRADED = "degraded"
+    THIN = "thin"
+    SHADOW = "shadow"
+    RETIRED = "retired"
+
+
+def _state(value: object, where: str, found: _Found) -> None:
+    """The state output: ordered cuts on the value, each naming the word below its bound and the
+    last one with no bound, so every value has exactly one word; or, for an event, the word
+    while it holds and the word while it does not."""
+    if not _object(value, where, found):
+        return
+    state = cast("Mapping[str, object]", value)
+    if "signal" in state:
+        if _object(state["signal"], f"{where}/signal", found):
+            said = cast("Mapping[str, object]", state["signal"])
+            for name in ("holds", "clear"):
+                _text(said.get(name), f"{where}/signal/{name}", found)
+        return
+    cuts = _list(state.get("cuts"), f"{where}/cuts", found)
+    if not cuts:
+        if cuts is not None:
+            found.add(f"{where}/cuts", "the state names at least one word", "")
+        return
+    words: set[str] = set()
+    bound: Decimal | None = None
+    for i, raw_cut in enumerate(cuts):
+        at = f"{where}/cuts/{i}"
+        if not _object(raw_cut, at, found):
+            continue
+        cut = cast("Mapping[str, object]", raw_cut)
+        word = cut.get("word")
+        _text(word, f"{at}/word", found)
+        if isinstance(word, str) and word in words:
+            found.add(f"{at}/word", f"{word!r} names two cuts", "give each cut its own word")
+        words.add(str(word))
+        last = i == len(cuts) - 1
+        if last != ("below" not in cut):
+            found.add(
+                at, "every cut but the last has a bound below", "the last word takes the rest"
+            )
+            continue
+        if last:
+            continue
+        below = _decimal(cut.get("below"))
+        if below is None or (bound is not None and below <= bound):
+            found.add(f"{at}/below", "below is a decimal string above the cut before", "")
+        bound = below if below is not None else bound
+
+
+def _reading(value: object, where: str, found: _Found) -> None:
+    """The reading card (CONTRACTS.md 5.3): where it runs, what it measures, its three outputs,
+    who may read it and when it is too old or too thin to read."""
+    if not _object(value, where, found):
+        return
+    card = cast("Mapping[str, object]", value)
+    _enum(Tier)(card.get("tier"), f"{where}/tier", found)
+    _enum(Concern)(card.get("concern"), f"{where}/concern", found)
+    _enum(TimeBase)(card.get("time_base"), f"{where}/time_base", found)
+    if level_of(card.get("data_level")) is None:
+        found.add(f"{where}/data_level", "a reading names its least data level, 0 to 6", "")
+    _fallback(card.get("fallback", []), f"{where}/fallback", found)
+    for name in ("lag_bars", "stale_after_s"):
+        _count(card.get(name), f"{where}/{name}", found)
+    sample = card.get("minimum_sample")
+    if isinstance(sample, bool) or not isinstance(sample, int) or sample < 1:
+        found.add(f"{where}/minimum_sample", "minimum_sample is a whole number of at least 1", "")
+    classes = _list(card.get("valid_classes"), f"{where}/valid_classes", found)
+    for i, name in enumerate(classes or []):
+        _enum(InstrumentClass)(name, f"{where}/valid_classes/{i}", found)
+    outputs = card.get("outputs")
+    if not _object(outputs, f"{where}/outputs", found):
+        return
+    said = cast("Mapping[str, object]", outputs)
+    at = f"{where}/outputs"
+    if _object(said.get("value"), f"{at}/value", found):
+        measure = cast("Mapping[str, object]", said["value"]).get("measure")
+        if measure != "price":
+            _enum(Measure)(measure, f"{at}/value/measure", found)
+    _state(said.get("state"), f"{at}/state", found)
+    if _object(said.get("health"), f"{at}/health", found):
+        thin = cast("Mapping[str, object]", said["health"]).get("below_minimum_sample")
+        _enum(Health)(thin, f"{at}/health/below_minimum_sample", found)
+
+
 _FIELDS: Final[Mapping[str, _Check]] = {
     "schema": _schema,
     "entry_id": _id,
@@ -423,7 +536,7 @@ _FIELDS: Final[Mapping[str, _Check]] = {
     "transfer": _transfer,
     "mirroring": _enum(Mirroring),
     "state_bound": _any_object,
-    "reading": _any_object,
+    "reading": _reading,
     "fingerprint": _fingerprint,
     "golden": _golden,
     "tests": _text,
@@ -459,6 +572,15 @@ def _rules(raw: Mapping[str, object], found: _Found) -> None:
             "an entry with no published reference cites no source",
             "cite a source with its exact quote and date",
         )
+    card = raw.get("reading")
+    if isinstance(card, Mapping) and raw.get("min_sample") is not None:
+        sample = cast("Mapping[str, object]", card).get("minimum_sample")
+        if sample != raw.get("min_sample"):
+            found.add(
+                "/reading/minimum_sample",
+                f"the card's minimum sample {sample} is not the entry's min_sample",
+                "state one minimum sample",
+            )
     if raw.get("origin") == EntryOrigin.PLACEHOLDER and not raw.get("owner"):
         found.add("/owner", "a placeholder names its owner", "the risk session owns sizers")
     aliases = raw.get("aliases")

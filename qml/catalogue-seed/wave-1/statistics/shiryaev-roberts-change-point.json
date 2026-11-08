@@ -1,0 +1,74 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "shiryaev-roberts-change-point",
+  "version": 1,
+  "family": "models",
+  "aliases": [
+    "Shiryaev-Roberts",
+    "SR procedure"
+  ],
+  "same_word_as": [
+    "cusum-change-point@1"
+  ],
+  "origin": "qml",
+  "component_type": "model",
+  "definition": "The Shiryaev-Roberts statistic, the running sum of likelihood ratios of a changed against an unchanged distribution, which holds when it passes its threshold.",
+  "boundaries": "Not computed in QML yet: it needs the distribution before and after the change stated in advance, which no default here gives.",
+  "recognition": "It holds when a change in the series becomes likely enough.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://arxiv.org/abs/1509.01570",
+      "quote": "the latter is a quasi-Bayesian surveillance method",
+      "dated": "2015-09-04"
+    }
+  ],
+  "reading": {
+    "tier": "bar",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 2,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 3600,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "signal": {
+          "holds": "change",
+          "clear": "no_change"
+        }
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

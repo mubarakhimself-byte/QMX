@@ -1,0 +1,139 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "hidden-markov-regime",
+  "version": 1,
+  "family": "models",
+  "aliases": [
+    "hidden Markov model",
+    "HMM regime",
+    "Markov-switching regime"
+  ],
+  "same_word_as": [
+    "market-regime@1"
+  ],
+  "origin": "qml",
+  "component_type": "model",
+  "definition": "The probability that the market is in its event state, from a hidden Markov model with states fitted to the log returns of the last window prices.",
+  "boundaries": "Not computed in QML yet: it is fitted to history by numerical optimisation, which belongs in the Lab's training placement; it runs in shadow in the MIS until his yes, behind the same reading shape, so no unit changes when it goes live. It flips falsely more often than a penalised jump model, and a refit relabels the past, so stamped history comes first. Pooled by class or underlying, never one model per market.",
+  "recognition": "A rising event probability marks a turbulent stretch.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://doi.org/10.2469/faj.v68.n3.3",
+      "quote": "how to apply Markov-switching models to forecast regimes in market turbulence",
+      "dated": "2012-05-01"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/15033",
+      "quote": "where the system being modeled is characterized by unobservable (hidden) states",
+      "dated": "2024-06-12"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "probability",
+    "measure": "probability"
+  },
+  "parameters": {
+    "states": {
+      "measure": "count",
+      "default": "2",
+      "origin": "source_stated",
+      "range": {
+        "min": "2",
+        "max": "4",
+        "step": "1"
+      }
+    },
+    "window": {
+      "measure": "bars",
+      "default": "1000",
+      "origin": "inferred",
+      "range": {
+        "min": "250",
+        "max": "20000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 1000,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "reading": {
+    "tier": "day",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 1000,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 86400,
+    "outputs": {
+      "value": {
+        "measure": "probability"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "normal",
+            "below": "0.5"
+          },
+          {
+            "word": "event"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

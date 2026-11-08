@@ -1,0 +1,137 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "choppiness-index",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "Choppiness Index",
+    "choppiness indicator"
+  ],
+  "same_word_as": [
+    "market-regime@1",
+    "range-bound-state@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "100 log10(sum of true ranges / (highest high - lowest low)) / log10(period) over the last period bars.",
+  "boundaries": "LEAN's form: the first bar's true range is its high less its low, and a window with no range reads 100. It says how much the bars overlap, not which way they go.",
+  "recognition": "Near 100 when bars overlap and chop, low when they travel one way.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://github.com/QuantConnect/Lean/blob/master/Indicators/ChoppinessIndex.cs (read 2026-11-02)",
+      "quote": "designed to determine if the market is choppy (trading sideways)",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "2000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 14,
+  "expected_lag_bars": 6,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "3 period + 1",
+    "observations": null
+  },
+  "reading": {
+    "tier": "session",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 6,
+    "minimum_sample": 14,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 28800,
+    "outputs": {
+      "value": {
+        "measure": "percent"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "trending",
+            "below": "38.2"
+          },
+          {
+            "word": "mixed",
+            "below": "61.8"
+          },
+          {
+            "word": "choppy"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:68fa8b219da1d0a32156f9affee1d2302bdc8f017eb3a08042b58eb8651aeff5",
+  "golden": {
+    "reference": "QuantConnect LEAN ChoppinessIndex.cs formula, numpy 2.5.4",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}

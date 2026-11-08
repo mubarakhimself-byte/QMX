@@ -1,0 +1,123 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bayesian-online-change-point",
+  "version": 1,
+  "family": "models",
+  "aliases": [
+    "BOCPD",
+    "Bayesian online changepoint detection"
+  ],
+  "same_word_as": [
+    "cusum-change-point@1"
+  ],
+  "origin": "qml",
+  "component_type": "model",
+  "definition": "The probability that a change point happened at the latest bar, from Adams and MacKay's posterior over the run length since the last change.",
+  "boundaries": "Not computed in QML yet: its run-length posterior grows with every bar unless pruned, and the pruning bound is a design call for its block. The hazard is the prior chance of a change per bar.",
+  "recognition": "A spike in the change probability marks a break in the series.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://arxiv.org/abs/0710.3742",
+      "quote": "derive an online algorithm for exact inference of the most recent changepoint",
+      "dated": "2007-10-19"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "probability",
+    "measure": "probability"
+  },
+  "parameters": {
+    "hazard_bars": {
+      "measure": "bars",
+      "default": "250",
+      "origin": "inferred",
+      "range": {
+        "min": "10",
+        "max": "100000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 2,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "reading": {
+    "tier": "bar",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 2,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 3600,
+    "outputs": {
+      "value": {
+        "measure": "probability"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "steady",
+            "below": "0.5"
+          },
+          {
+            "word": "change"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

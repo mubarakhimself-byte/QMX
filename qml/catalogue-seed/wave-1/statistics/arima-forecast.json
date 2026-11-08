@@ -1,0 +1,151 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "arima-forecast",
+  "version": 1,
+  "family": "models",
+  "aliases": [
+    "ARIMA",
+    "autoregressive integrated moving average"
+  ],
+  "origin": "qml",
+  "component_type": "model",
+  "definition": "The next value forecast by an ARIMA(p, d, q) model fitted to the last window prices.",
+  "boundaries": "Not computed in QML yet: it is fitted to history by numerical optimisation, which belongs in the Lab's training placement; it runs in shadow in the MIS until his yes, behind the same reading shape, so no unit changes when it goes live.",
+  "recognition": "A forecast above the price reads as up, below as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.quantconnect.com/docs/v2/writing-algorithms/indicators/supported-indicators/auto-regressive-integrated-moving-average (read 2026-11-02)",
+      "quote": "a time series model which can be used to describe a set of data",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/12798",
+      "quote": "ARIMA models rely on temporal dependences in a dataset",
+      "dated": "2023-06-26"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "p": {
+      "measure": "count",
+      "default": "1",
+      "origin": "inferred",
+      "range": {
+        "min": "0",
+        "max": "10",
+        "step": "1"
+      }
+    },
+    "d": {
+      "measure": "count",
+      "default": "0",
+      "origin": "inferred",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    },
+    "q": {
+      "measure": "count",
+      "default": "1",
+      "origin": "inferred",
+      "range": {
+        "min": "0",
+        "max": "10",
+        "step": "1"
+      }
+    },
+    "window": {
+      "measure": "bars",
+      "default": "500",
+      "origin": "inferred",
+      "range": {
+        "min": "50",
+        "max": "20000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 500,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "reading": {
+    "tier": "day",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 500,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 86400,
+    "outputs": {
+      "value": {
+        "measure": "price"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "forecast"
+          }
+        ],
+        "origin": "builder_chosen"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

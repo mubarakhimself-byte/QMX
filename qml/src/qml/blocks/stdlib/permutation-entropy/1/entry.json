@@ -1,0 +1,140 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "permutation-entropy",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "permutation entropy",
+    "ordinal entropy",
+    "Bandt-Pompe entropy"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The Shannon entropy of the ordinal patterns of order consecutive prices in the last window prices, divided by ln(order!) so it runs from 0 to 1.",
+  "boundaries": "Reads only the order of values, not their size; a tie keeps the earlier value first. It measures how patterned the moves are, not their direction.",
+  "recognition": "Near 1 for noise, lower when some orderings repeat.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.88.174102",
+      "quote": "complexity parameters for time series based on comparison of neighboring values",
+      "dated": "2002-04-11"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "100",
+      "origin": "inferred",
+      "range": {
+        "min": "3",
+        "max": "20000",
+        "step": "1"
+      }
+    },
+    "order": {
+      "measure": "count",
+      "default": "3",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "7",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 100,
+  "expected_lag_bars": 49,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 window",
+    "observations": null
+  },
+  "reading": {
+    "tier": "day",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 49,
+    "minimum_sample": 100,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 86400,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "patterned",
+            "below": "0.95"
+          },
+          {
+            "word": "random"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:f20594ffbd63a7c15cd5e47feba46eb0d641cdb8eff30edcd07cfd6131997464",
+  "golden": {
+    "reference": "Bandt and Pompe's formula, numpy 2.5.4",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}
