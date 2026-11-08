@@ -1,0 +1,38 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "exit-or-roll-before-expiry",
+  "version": 1,
+  "family": "beyond-fx-exits",
+  "aliases": [
+    "roll before expiry"
+  ],
+  "same_word_as": [
+    "contract-roll@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close or roll a dated position before its contract expires.",
+  "boundaries": "Vocabulary only: the exit's maths belongs to the risk session, and the unit's binding assigns the job.",
+  "recognition": "Named in research 45 as a practice outside FX.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.6",
+      "quote": "Exit or roll before contract expiry",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

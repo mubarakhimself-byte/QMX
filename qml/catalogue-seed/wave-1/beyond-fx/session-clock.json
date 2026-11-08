@@ -1,0 +1,69 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "session-clock",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "session by class",
+    "market hours"
+  ],
+  "same_word_as": [
+    "trading-session@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Which session a moment falls in, by the market's own calendar and clock.",
+  "boundaries": "The calendars are data (C-03's cme-*@1, nyse@1, the index CFD calendars and crypto-24x7@1), named by the instrument record's calendar_ref; trading-session@1 is FX's liquidity waves. Name the clock and its daylight-saving rule.",
+  "recognition": "The same hour is London's open on FX and pre-market on stocks.",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "class_meanings": {
+    "fx": "Liquidity waves (Asia, London, New York) in a 24/5 market; the day turns at 17:00 New York or the broker's server time.",
+    "metal": "The COMEX week, 18:00 to 17:00 New York, with London's auctions inside it.",
+    "index_cfd": "The broker's hours around the index's cash session in the index's own clock.",
+    "commodity_cfd": "The underlying future's exchange hours, with its daily break.",
+    "stock_cfd": "The listing exchange's hours.",
+    "future": "Exchange hours with a daily break (16:00 to 17:00 Chicago on Globex).",
+    "perp": "No venue hours: 24/7, bars turn at 00:00 UTC.",
+    "spot_crypto": "No venue hours: 24/7, bars turn at 00:00 UTC.",
+    "stock": "Open and close auctions, with pre-market and after-hours sessions."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 4",
+      "quote": "Crypto: no venue hours, 00:00 UTC bar boundary",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "category"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

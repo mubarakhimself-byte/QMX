@@ -1,0 +1,76 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "liquidation-level-estimate",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "liquidation price",
+    "liquidation map"
+  ],
+  "same_word_as": [
+    "liquidation@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The price at which a position of given leverage would be liquidated, from the venue's maintenance margin tiers; clusters of them mark where cascades may start.",
+  "boundaries": "An estimate: other traders' leverage is unseen, so levels come from assumed leverage tiers. The instrument record's leverage and liquidation_rule hold the venue's tiers.",
+  "recognition": "Price nearing a dense band of estimated liquidations reads as cascade risk.",
+  "eligible_roles": [
+    "context",
+    "location",
+    "veto"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations (read 2026-11-02)",
+      "quote": "the maintenance margin is between 1.25% (for 40x max leverage assets) and 16.7%",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "leverage": {
+      "measure": "ratio",
+      "default": "10",
+      "origin": "inferred",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

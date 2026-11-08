@@ -96,9 +96,10 @@ def test_find_names_the_trend_filters_in_one_line_each(blocks: dict[str, Row]) -
         "Jaw 13 and 8, teeth 8 and 5, lips 5 and 3.",
         "ichimoku-senkou-a@1 | indicator | series | level 1 | implemented | The mean of "
         "Tenkan-sen and Kijun-sen, drawn shift bars ahead.",
-        "roc-of-series@1 | context | state | level 1 | implemented | Rate of change of a series "
-        "over a lookback, as a fraction; holds when at least the floor (long) or at most minus the "
-        "floor (short).",
+        "initial-balance-range-extension@1 | indicator | series | level 1 | implemented | How far "
+        "the session has traded beyond its initial balance on one side since the balance "
+        "completed: the highest high above the balance's high for side 1, the lowest low below "
+        "the balance's low for side -1, and 0 while it has not extended.",
     ]
 
 

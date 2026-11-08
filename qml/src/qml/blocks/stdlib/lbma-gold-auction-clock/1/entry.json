@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "lbma-gold-auction-clock",
+  "version": 1,
+  "family": "metals-and-energy",
+  "aliases": [
+    "gold fix clock",
+    "LBMA gold price auction window",
+    "London gold fix"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Seconds from the nearest LBMA Gold Price auction, at 10:30 and 15:00 London time on London weekdays: the bar's close less the auction time, negative before it and positive after.",
+  "boundaries": "London time follows its daylight-saving rule, so the auctions move in UTC twice a year. UK bank holidays are not modelled. auction 1 keeps the 10:30 auction, 2 the 15:00 auction and 0 both. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "A gold unit stands aside in the minutes around the London fix.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.ice.com/iba/lbma-precious-metals (read 2026-11-02)",
+      "quote": "The auctions are run at 10:30 and 15:00 London time for gold",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "seconds"
+  },
+  "parameters": {
+    "auction": {
+      "measure": "category",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "native",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:abf9faec9385e0c8249b4b61cf930367b2c4b4cb8203762aa7d13ae3754cdb98",
+  "golden": {
+    "reference": "local event times from zoneinfo (the IANA tz database), in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/clocks.json"
+  }
+}

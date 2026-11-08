@@ -1,0 +1,59 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "nyse-tick-index",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "TICK",
+    "NYSE TICK"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The number of NYSE stocks last trading on an uptick less those on a downtick, at each moment.",
+  "boundaries": "Outside data from a breadth feed QMX does not trade on; extremes of plus or minus 1,000 are a starting default.",
+  "recognition": "TICK readings above 1,000 read as broad buying.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.interactivebrokers.com/campus/glossary-terms/tick-trin-market-indicator/ (read 2026-11-02)",
+      "quote": "stocks trading on an uptick minus the number of stocks trading on a downtick",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "breadth",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "native"
+  },
+  "mirroring": "not_applicable"
+}

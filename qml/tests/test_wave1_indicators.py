@@ -213,24 +213,51 @@ def test_metatrader_sentences_map_to_wave_entries_and_an_unknown_one_is_an_appen
     }
 
 
-def _silent_on_unit_bars(case: str) -> bool:
-    instance = _make(case)
-    fed = (
-        OHLC(
-            open=cast("Decimal", b["open"]),
-            high=cast("Decimal", b["high"]),
-            low=cast("Decimal", b["low"]),
-            close=cast("Decimal", b["close"]),
-        ).fields()
-        for b in _BARS
+@cache
+def _table(cases_file: str) -> dict[str, object]:
+    return json.loads((_QML.parent / cases_file).read_text("utf-8"))
+
+
+def _silent_on_unit_bars(entry_id: str) -> bool:
+    """Whether a stdlib bars block stays missing on every golden bar shaped as the unit runtime
+    hands a bars input (its OHLC only), at its first golden case. A block that reads no bars, or
+    whose golden table holds no bars, is not silent."""
+    entry = cast(
+        "dict[str, object]",
+        json.loads((_STDLIB / entry_id / "1" / "entry.json").read_text("utf-8")),
     )
-    return all(_value(instance.update({"series": x})) is None for x in fed)
+    cases_file = cast("dict[str, str]", entry.get("golden") or {}).get("cases")
+    if cases_file is None or _face(entry_id).inputs[0].stream_kind != "bars":
+        return False
+    table = _table(cases_file)
+    rows = cast("list[dict[str, object]]", table.get("bars") or [])
+    cases = cast("dict[str, object]", table["cases"])
+    case = min(c for c in cases if c.split()[0] == f"{entry_id}@1")
+    parameters = cast("dict[str, dict[str, str]]", entry.get("parameters") or {})
+    params = {name: Decimal(spec["default"]) for name, spec in parameters.items()}
+    params |= {k: Decimal(v) for k, v in (w.split("=", 1) for w in case.split()[1:])}
+    loaded = load(
+        [LockEntry(entry_id, 1, _face(entry_id).fingerprint)],
+        {f"{entry_id}@1": (_STDLIB / entry_id / "1" / "block.py").read_bytes()},
+    )
+    assert isinstance(loaded, Loaded), loaded
+    instance = loaded.blocks[f"{entry_id}@1"].make(params, {})
+    fed = [
+        OHLC(
+            open=Decimal(str(b["open"])),
+            high=Decimal(str(b["high"])),
+            low=Decimal(str(b["low"])),
+            close=Decimal(str(b["close"])),
+        ).fields()
+        for b in rows
+    ]
+    return bool(fed) and all(_value(instance.update({"series": x})) is None for x in fed)
 
 
 def test_blocks_left_missing_by_the_unit_runtime_say_which_input_it_does_not_pass() -> None:
-    bars_cases = [c for c in _CASES if _face(c.split("@", maxsplit=1)[0]).inputs[0].stream_kind == "bars"]
+    every = sorted(f.name for f in _STDLIB.iterdir() if (f / "1" / "entry.json").is_file())
 
-    silent = {c.split("@", maxsplit=1)[0] for c in bars_cases if _silent_on_unit_bars(c)}
+    silent = {entry_id for entry_id in every if _silent_on_unit_bars(entry_id)}
 
     lacks = {
         "accumulation-distribution": "volume",
@@ -243,6 +270,17 @@ def test_blocks_left_missing_by_the_unit_runtime_say_which_input_it_does_not_pas
         "session-running-high": "time",
         "session-running-low": "time",
         "session-running-range": "time",
+        "tpo-point-of-control": "time",
+        "tpo-value-area-high": "time",
+        "tpo-value-area-low": "time",
+        "initial-balance-high": "time",
+        "initial-balance-low": "time",
+        "initial-balance-range-extension": "time",
+        "lbma-gold-auction-clock": "time",
+        "lbma-silver-auction-clock": "time",
+        "eia-petroleum-status-report-clock": "time",
+        "eia-natural-gas-storage-report-clock": "time",
+        "perp-funding-settlement-clock": "time",
     }
     assert silent == set(lacks)
     for entry_id, what in lacks.items():

@@ -1,0 +1,36 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "reduce-only-order",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "reduce only"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "An order flag that lets an order only shrink or close a position, never open or flip it.",
+  "boundaries": "An order attribute the venue enforces; the unit's exit asks for it.",
+  "recognition": "A reduce-only take profit cannot open a new position after a partial fill.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "Reduce-only order",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "native",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

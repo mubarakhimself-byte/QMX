@@ -1,0 +1,75 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "price-volume-open-interest-quadrant",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "OI quadrant"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Which of four states price and open interest are in over a window: price up with OI up, price up with OI down, price down with OI up, price down with OI down.",
+  "boundaries": "Each quadrant's reading (new longs, short covering, new shorts, long liquidation) is the practitioners' convention; volume adds weight.",
+  "recognition": "Price down with open interest up reads as new shorts pressing.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "Price-volume-OI quadrant (price up with OI up, etc.)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "open_interest",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 5
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

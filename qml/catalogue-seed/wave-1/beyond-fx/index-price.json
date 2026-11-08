@@ -1,0 +1,76 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "index-price",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "oracle price",
+    "spot index"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The reference price a contract is tied to: for a perpetual the spot oracle used for funding, for an index future the cash index itself.",
+  "boundaries": "One word, two sources: a perp's index is a venue's weighted median of spot prices, an index future's is the exchange's published cash index.",
+  "recognition": "The perp trading above its index reads as a positive premium.",
+  "eligible_roles": [
+    "context"
+  ],
+  "class_meanings": {
+    "fx": "none",
+    "metal": "none",
+    "index_cfd": "The cash index the CFD tracks, quoted by the broker.",
+    "commodity_cfd": "none",
+    "stock_cfd": "none",
+    "future": "The cash index (for index futures) the contract converges to at expiry.",
+    "perp": "The spot oracle: a weighted median of exchange spot prices, used for funding.",
+    "spot_crypto": "none",
+    "stock": "none"
+  },
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/robust-price-indices (read 2026-11-02)",
+      "quote": "Oracle price is used to compute funding rates",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-equity-index-products/what-is-equity-index-basis (read 2026-11-02)",
+      "quote": "the difference in price between the futures contract and the spot index value",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "index",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "provider_limited"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "native",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

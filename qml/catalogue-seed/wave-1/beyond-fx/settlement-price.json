@@ -1,0 +1,73 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "settlement-price",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "daily settlement",
+    "final settlement"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The exchange's official daily price for a futures contract, and its final settlement at expiry.",
+  "boundaries": "A futures fact the instrument record names under settlement; perps have funding settlements instead (perp-funding-settlement-clock@1).",
+  "recognition": "Price holding above yesterday's settlement reads as buyers in control.",
+  "eligible_roles": [
+    "location",
+    "context"
+  ],
+  "class_meanings": {
+    "fx": "The value date of a spot trade, not a price.",
+    "metal": "none for spot CFDs",
+    "index_cfd": "none: the broker's day close stands in.",
+    "commodity_cfd": "none: the underlying future's settlement drives the CFD's roll.",
+    "stock_cfd": "none",
+    "future": "The exchange's daily settlement price and its final settlement at expiry.",
+    "perp": "Funding settlement times, not a price: perp-funding-settlement-clock@1.",
+    "spot_crypto": "none",
+    "stock": "The official close from the closing auction."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "official FV settlement",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    },
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

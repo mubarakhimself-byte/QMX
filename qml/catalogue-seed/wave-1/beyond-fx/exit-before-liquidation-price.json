@@ -1,0 +1,38 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "exit-before-liquidation-price",
+  "version": 1,
+  "family": "beyond-fx-exits",
+  "aliases": [
+    "liquidation buffer exit"
+  ],
+  "same_word_as": [
+    "liquidation-level-estimate@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Exit at a set distance from the estimated liquidation price, before the venue liquidates.",
+  "boundaries": "Vocabulary only: the exit's maths belongs to the risk session, and the unit's binding assigns the job.",
+  "recognition": "Named in research 45 as a practice outside FX.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.6",
+      "quote": "Exit at a distance from the estimated liquidation price",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

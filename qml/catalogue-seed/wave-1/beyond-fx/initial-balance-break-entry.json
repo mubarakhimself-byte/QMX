@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "initial-balance-break-entry",
+  "version": 1,
+  "family": "beyond-fx-exits",
+  "aliases": [
+    "IB breakout"
+  ],
+  "same_word_as": [
+    "initial-balance-high@1",
+    "initial-balance-low@1"
+  ],
+  "origin": "qml",
+  "component_type": "trigger",
+  "definition": "Enter when price breaks out of the session's initial balance.",
+  "boundaries": "Vocabulary only: the exit's maths belongs to the risk session, and the unit's binding assigns the job.",
+  "recognition": "Named in research 45 as a practice outside FX.",
+  "eligible_roles": [
+    "trigger"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.6",
+      "quote": "Entry at initial balance break",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  }
+}

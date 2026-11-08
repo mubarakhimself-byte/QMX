@@ -1,0 +1,107 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "diagonal-bid-ask-imbalance",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "footprint imbalance",
+    "diagonal imbalance"
+  ],
+  "same_word_as": [
+    "imbalance@1",
+    "footprint-order-flow@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "At one price level of a bar, aggressive buying at the ask against aggressive selling at the bid one level below (or the mirror for the sell side), as a ratio; an imbalance when it passes the ratio threshold.",
+  "boundaries": "Needs the trade tape with the aggressor side. ATAS ships 150% as its setting and teaches 200% and 400% as standard; the threshold is the binding's. On cTrader every reading is a broker-side estimate (the fallback chain), never executed volume.",
+  "recognition": "A buy imbalance at a level reads as buyers overwhelming the offer there.",
+  "eligible_roles": [
+    "context",
+    "trigger",
+    "confirmation",
+    "filter",
+    "location"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "https://help.atas.net/en/support/solutions/articles/72000606631-footprint-settings (read 2026-11-02)",
+      "quote": "By default, the imbalance threshold is set to 150%",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://learn.atas.net/volume-basics/volume-analysis/imbalances (read 2026-11-02)",
+      "quote": "The 200% and 400% thresholds are standard and can be adjusted",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "tape",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 4,
+      "fallback": [
+        {
+          "data_level": 3,
+          "splits": {
+            "depth": "by_price"
+          },
+          "expected_loss": "an estimate from resting size: the bid against the ask size near the price stands in for executed aggression, and on cTrader the book is the broker's own, so it is a broker-side estimate"
+        },
+        {
+          "data_level": 2,
+          "expected_loss": "a broker-side estimate by the tick rule: a quote that moves up counts as buying and one that moves down as selling, with no traded size behind either"
+        },
+        {
+          "data_level": 1,
+          "expected_loss": "an estimate from the bar alone: where the close sits in the range (bar-range-pressure@1) stands in for who pressed, with no size at all"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "event",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "ratio": {
+      "measure": "percent",
+      "default": "150",
+      "origin": "source_stated",
+      "range": {
+        "min": "100",
+        "max": "1000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

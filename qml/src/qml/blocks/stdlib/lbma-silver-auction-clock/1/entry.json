@@ -1,0 +1,68 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "lbma-silver-auction-clock",
+  "version": 1,
+  "family": "metals-and-energy",
+  "aliases": [
+    "silver fix clock",
+    "LBMA silver price auction window"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Seconds from the nearest LBMA Silver Price auction, at 12:00 London time on London weekdays, negative before it and positive after.",
+  "boundaries": "London time follows its daylight-saving rule. UK bank holidays are not modelled. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "A silver unit stands aside around the noon auction.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.ice.com/iba/lbma-precious-metals (read 2026-11-02)",
+      "quote": "12:00 London time for silver",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "seconds"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "native",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:5ce9dcb0f8e0b75847b7c0faff3cd3bea6fd51dfa1f500986724d9a3f1e51c1d",
+  "golden": {
+    "reference": "local event times from zoneinfo (the IANA tz database), in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/clocks.json"
+  }
+}

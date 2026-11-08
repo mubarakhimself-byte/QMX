@@ -1,0 +1,59 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "advance-decline-line",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "A/D line",
+    "breadth line"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The running total of advancing issues less declining issues each day.",
+  "boundaries": "Outside data from a breadth feed; LEAN ships it as a built-in indicator.",
+  "recognition": "Index highs with a falling advance-decline line read as narrow breadth.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.quantconnect.com/docs/v2/writing-algorithms/indicators/supported-indicators (read 2026-11-02)",
+      "quote": "Advance Decline Difference",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "breadth",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "native"
+  },
+  "mirroring": "not_applicable"
+}

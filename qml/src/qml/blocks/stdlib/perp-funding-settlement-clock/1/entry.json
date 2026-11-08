@@ -1,0 +1,86 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "perp-funding-settlement-clock",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "funding settlement window",
+    "funding clock"
+  ],
+  "same_word_as": [
+    "perp-funding-rate@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Seconds from the nearest perpetual funding settlement, which falls every interval seconds from 00:00 UTC, negative before it and positive after.",
+  "boundaries": "interval divides the day: 28800 for an eight-hour venue, 3600 for Hyperliquid's hourly funding; the instrument record's funding_interval holds the venue's value. A venue that moves its funding times is not modelled. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "A perp unit exits before a settlement it would pay.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/funding (read 2026-11-02)",
+      "quote": "The funding rate on Hyperliquid is paid every hour",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/funding (read 2026-11-02)",
+      "quote": "interest rate component is predetermined at 0.01% every 8 hours",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "seconds"
+  },
+  "parameters": {
+    "interval": {
+      "measure": "seconds",
+      "default": "28800",
+      "origin": "source_stated",
+      "range": {
+        "min": "60",
+        "max": "86400",
+        "step": "60"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:0e0170c1cf83199f7e58112bca4eae72ff027832dcb34d12646c930b20fe3e7f",
+  "golden": {
+    "reference": "local event times from zoneinfo (the IANA tz database), in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/clocks.json"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "index-dividend-adjustment",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "ex-dividend",
+    "dividend adjustment"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "The cash adjustment an index CFD's broker books on the ex-dividend dates of the index's members, and the ex-dividend date itself for a stock.",
+  "boundaries": "A broker's booking from outside data; it moves the account, not the price.",
+  "recognition": "Short index CFDs pay the dividend adjustment.",
+  "eligible_roles": [
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Ex-dividend date and dividend adjustment",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    },
+    {
+      "port": "events",
+      "stream_kind": "series",
+      "measure": "money",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "money"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "native",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "direct",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "stablecoin-supply-change",
+  "version": 1,
+  "family": "crypto",
+  "aliases": [
+    "stablecoin inflow"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The change in the total supply of the main stablecoins over a window.",
+  "boundaries": "Outside data, daily.",
+  "recognition": "Growing stablecoin supply reads as fresh money for crypto.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "BTC dominance, stablecoin supply change",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "supply",
+      "stream_kind": "series",
+      "measure": "money",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "money"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

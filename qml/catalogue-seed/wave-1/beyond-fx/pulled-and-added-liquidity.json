@@ -1,0 +1,93 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "pulled-and-added-liquidity",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "spoofing footprint",
+    "liquidity pulled"
+  ],
+  "same_word_as": [
+    "order-book-liquidity-change@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Resting size that leaves or joins a price level without trading there, over a window.",
+  "boundaries": "Needs depth by price with time; cTrader's depth is the broker's own, so it is a broker-side estimate.",
+  "recognition": "Bids pulled as price falls toward them read as no defence.",
+  "eligible_roles": [
+    "context",
+    "trigger",
+    "confirmation",
+    "filter",
+    "location"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.2",
+      "quote": "Pulled or added liquidity (book changes without trades)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "book",
+      "stream_kind": "book",
+      "measure": "price",
+      "data_level": 3,
+      "splits": {
+        "depth": "by_price"
+      },
+      "fallback": [
+        {
+          "data_level": 2,
+          "expected_loss": "a broker-side estimate from the best bid and ask alone: the size away from the touch is unseen, so walls and pulled orders deeper in the book are missed"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": null
+  },
+  "parameters": {
+    "within": {
+      "measure": "seconds",
+      "default": "1",
+      "origin": "inferred",
+      "range": {
+        "min": "1",
+        "max": "600",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

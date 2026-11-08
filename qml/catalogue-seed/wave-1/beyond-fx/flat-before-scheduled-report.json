@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "flat-before-scheduled-report",
+  "version": 1,
+  "family": "beyond-fx-exits",
+  "aliases": [
+    "flat before the report"
+  ],
+  "same_word_as": [
+    "eia-petroleum-status-report-clock@1",
+    "lbma-gold-auction-clock@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Be flat before a scheduled report: an EIA release, earnings or a gold auction.",
+  "boundaries": "Vocabulary only: the exit's maths belongs to the risk session, and the unit's binding assigns the job.",
+  "recognition": "Named in research 45 as a practice outside FX.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.6",
+      "quote": "Flat before a scheduled report (EIA, earnings, gold auction)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

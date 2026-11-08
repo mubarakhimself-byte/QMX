@@ -1,0 +1,57 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "cme-globex-daily-break",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "Globex break",
+    "Globex maintenance hour"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "The daily hour CME Globex stops trading, 16:00 to 17:00 Chicago time Monday to Thursday, and the Sunday 17:00 open.",
+  "boundaries": "Read from the instrument record's calendar_ref: the calendars cme-equity@1, cme-metals@1, cme-energy@1, cme-fx@1, cme-rates@1 and cme-crypto@1 hold the hours, so the entry holds no second copy. Prices across the break are a gap.",
+  "recognition": "No orders fill in the break; a stop sits until 17:00.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/notices/clearing/2019/10/Chadv19-357.pdf",
+      "quote": "with a 60-minute break each day beginning at 4:00 p.m.",
+      "dated": "2019-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "flag"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

@@ -1,0 +1,64 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "maker-taker-fee-tier",
+  "version": 1,
+  "family": "crypto",
+  "aliases": [
+    "maker fee",
+    "taker fee"
+  ],
+  "same_word_as": [
+    "trading-cost@1",
+    "post-only-entry@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The fee a venue charges for adding liquidity (maker) against taking it (taker), by the account's tier.",
+  "boundaries": "A cost fact of the venue and account; trading-cost@1 is the all-in cost.",
+  "recognition": "A maker rebate makes passive entries cheaper than market orders.",
+  "eligible_roles": [
+    "context",
+    "entry_order"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Maker vs taker fee tier",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    },
+    {
+      "port": "account",
+      "stream_kind": "account",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "native",
+    "spot_crypto": "native",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

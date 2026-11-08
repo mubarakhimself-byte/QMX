@@ -1,0 +1,63 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "mark-price",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "mark against last",
+    "fair price"
+  ],
+  "same_word_as": [
+    "trigger-price-basis@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The venue's fair price of a perpetual or future, from its index and its own book, that drives margining, liquidation and stop triggers; read against the last traded price.",
+  "boundaries": "Which price a stop triggers on is trigger-price-basis@1; this entry is the series. On Hyperliquid the mark is a median of three inputs.",
+  "recognition": "Last price far above mark reads as a local squeeze the mark has not followed.",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/robust-price-indices (read 2026-11-02)",
+      "quote": "used for margining, liquidations, triggering TP/SL, and computing unrealized pnl",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "mark",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "provider_limited"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "adapted",
+    "perp": "native",
+    "spot_crypto": "not_assessed",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

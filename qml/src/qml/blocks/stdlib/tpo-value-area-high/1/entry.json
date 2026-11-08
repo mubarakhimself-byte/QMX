@@ -1,0 +1,127 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "tpo-value-area-high",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "TPO value area high",
+    "time-price value area high",
+    "TPO VAH"
+  ],
+  "same_word_as": [
+    "value-area@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The top row of the session's time-price value area so far. The value area starts at the point of control and adds, one row at a time, whichever of the next row above and the next row below holds more time blocks, until it holds value_area_share percent of them.",
+  "boundaries": "A tie between the two candidate rows goes to the row nearer the point of control, then to the higher row. It counts time, not traded size; the volume value area is value-area@1. A session spanning more than max_rows rows is missing, and bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "Acceptance above the value area high reads as value moving up.",
+  "eligible_roles": [
+    "context",
+    "location",
+    "filter",
+    "exit"
+  ],
+  "class_meanings": {
+    "fx": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "perp": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "spot_crypto": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "Uses the highest and lowest levels in the VA as the value area high",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "Start the VA block counter at the row with the highest number of blocks",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://help.cqg.com/cqgic/26/Documents/marketprofilevalueareasmpva.htm (read 2026-11-02)",
+      "quote": "It is expanded in the direction of the price having more TPOs",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "row_size": {
+      "measure": "price_distance",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0.00001",
+        "max": "100000",
+        "step": "0.00001"
+      }
+    },
+    "value_area_share": {
+      "measure": "percent",
+      "default": "70",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    },
+    "max_rows": {
+      "measure": "count",
+      "default": "2000",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "100000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "native",
+    "perp": "adapted",
+    "spot_crypto": "adapted",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "max_rows",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:4a9b3813958a6103f3e176066f00b9d6a653fc39037278c1739a5f69a2b2bc44",
+  "golden": {
+    "reference": "TradingView's TPO value-area algorithm with CQG's point-of-control tie, rebuilt from the session's bars at every bar, in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/profile.json"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "eia-natural-gas-storage-report-clock",
+  "version": 1,
+  "family": "metals-and-energy",
+  "aliases": [
+    "gas storage report clock",
+    "EIA storage report clock"
+  ],
+  "same_word_as": [
+    "economic-calendar-event@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Seconds from the nearest EIA Weekly Natural Gas Storage Report, Thursday 10:30 New York time, negative before it and positive after.",
+  "boundaries": "New York time follows its daylight-saving rule. Holiday moves are not modelled. It is a fixed clock, not the report's numbers. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "Gas units go flat before the Thursday storage report.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.eia.gov/reports/upcoming.php (read 2026-11-02)",
+      "quote": "Weekly Natural Gas Storage Report Thursday at 10:30 a.m.",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "seconds"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:e8bbe878b84386d04dbdbaac93c59ef85813bd95ff54e5c944e5d9b833033422",
+  "golden": {
+    "reference": "local event times from zoneinfo (the IANA tz database), in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/clocks.json"
+  }
+}

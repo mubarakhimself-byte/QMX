@@ -1,0 +1,74 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "continuous-contract-method",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "back-adjusted series",
+    "continuous futures"
+  ],
+  "same_word_as": [
+    "contract-roll@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "How a run of futures contracts is joined into one series: back-adjusted (shift earlier contracts by the roll gap), ratio-adjusted (scale them), or unadjusted (raw jumps).",
+  "boundaries": "A data construction choice that changes every price level and return across a roll; back-adjusted is the starting default. Levels on a back-adjusted series are not tradable prices.",
+  "recognition": "A back-adjusted series removes the roll jump a raw chart shows.",
+  "eligible_roles": [
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "Continuous contract method (back-adjusted, ratio-adjusted, unadjusted)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    },
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "method": {
+      "measure": "category",
+      "default": "0",
+      "origin": "inferred",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

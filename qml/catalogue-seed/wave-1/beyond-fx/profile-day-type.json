@@ -1,0 +1,85 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "profile-day-type",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "day type",
+    "trend day",
+    "neutral day"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The shape the session's profile took against its initial balance: normal (most of the range inside the balance), normal variation, trend (a range extension more than double the balance), neutral (extensions on both sides) or double distribution.",
+  "boundaries": "A final type is known only at the session's close; during the session it is the type so far. The cuts (about 85% inside for normal, double for trend) are the sources' words, starting defaults to calibrate.",
+  "recognition": "A trend day keeps extending; a normal day rotates inside the balance.",
+  "eligible_roles": [
+    "context",
+    "regime_detector",
+    "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "most of the period's price range (about 85%) lies within the initial balance range",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "http://www.aspenres.com/Documents/AspenGraphics4.0/Using_Market_profile.htm (read 2026-11-02)",
+      "quote": "categorized as non-trend, normal, normal variation, trend, neutral, and running profile",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "ib_seconds": {
+      "measure": "seconds",
+      "default": "3600",
+      "origin": "source_stated",
+      "range": {
+        "min": "60",
+        "max": "86340",
+        "step": "60"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

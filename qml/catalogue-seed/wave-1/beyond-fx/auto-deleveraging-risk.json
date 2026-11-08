@@ -1,0 +1,61 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "auto-deleveraging-risk",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "ADL rank",
+    "insurance fund"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "How likely a profitable position is to be closed by the venue's auto-deleveraging when its insurance fund cannot cover a liquidation, and the fund's size.",
+  "boundaries": "Venue-specific endpoints; a reading of one venue's queue position.",
+  "recognition": "A high deleveraging rank on a winning position reads as exit risk.",
+  "eligible_roles": [
+    "context",
+    "veto"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "Auto-deleveraging risk, insurance fund",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "adl",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "provider_limited"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

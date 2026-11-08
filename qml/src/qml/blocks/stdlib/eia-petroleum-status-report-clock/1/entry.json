@@ -1,0 +1,71 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "eia-petroleum-status-report-clock",
+  "version": 1,
+  "family": "metals-and-energy",
+  "aliases": [
+    "oil inventory report clock",
+    "EIA crude inventories clock",
+    "WPSR clock"
+  ],
+  "same_word_as": [
+    "economic-calendar-event@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Seconds from the nearest EIA Weekly Petroleum Status Report, Wednesday 10:30 New York time, negative before it and positive after.",
+  "boundaries": "New York time follows its daylight-saving rule. The weeks EIA moves the release for a holiday are not modelled, so in those weeks the value measures from the standard Wednesday. It is a fixed clock, not the report's numbers. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "Oil units go flat before the Wednesday inventory report.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.eia.gov/petroleum/supply/weekly/schedule.php (read 2026-11-02)",
+      "quote": "will be at 10:30 a.m. eastern time on Wednesday",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "seconds"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:9e6cfc9144ecd8a2f48fef723228d76ae7ffbb147e82c814dea9ca0b0bd4762b",
+  "golden": {
+    "reference": "local event times from zoneinfo (the IANA tz database), in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/clocks.json"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bitcoin-dominance",
+  "version": 1,
+  "family": "crypto",
+  "aliases": [
+    "BTC dominance"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Bitcoin's share of the total crypto market value.",
+  "boundaries": "Outside data, daily.",
+  "recognition": "Rising dominance reads as money leaving altcoins.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "BTC dominance, stablecoin supply change",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "market",
+      "stream_kind": "series",
+      "measure": "percent",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

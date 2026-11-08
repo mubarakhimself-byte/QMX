@@ -1,0 +1,58 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "weekend-liquidity-regime",
+  "version": 1,
+  "family": "crypto",
+  "aliases": [
+    "weekend regime"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Whether a moment falls on Saturday or Sunday UTC, when crypto trades with the traditional markets shut.",
+  "boundaries": "A flag from the bar's time; thinner books are the practitioners' reason.",
+  "recognition": "Breakouts on weekend crypto fail more often.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Weekend liquidity regime",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "flag"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

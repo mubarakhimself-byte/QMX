@@ -1,0 +1,78 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "single-prints",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "single print",
+    "TPO single prints"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "structure",
+  "definition": "Rows inside the session's profile, not at its edge, that hold one time block only: the market passed them once, fast.",
+  "boundaries": "Built on the same profile as tpo-point-of-control@1; no block lists the rows yet. A shorter block length makes more of them, so bind 30-minute bars.",
+  "recognition": "Single prints are levels price often returns to test.",
+  "eligible_roles": [
+    "location",
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "Single prints are non-extreme levels that contain only one TPO block",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "row_size": {
+      "measure": "price_distance",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0.00001",
+        "max": "100000",
+        "step": "0.00001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

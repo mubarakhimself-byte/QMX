@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "opening-drive",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "cash open drive",
+    "open drive"
+  ],
+  "same_word_as": [
+    "session-open-price@1",
+    "opening-range@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "A strong one-directional move from the cash open over its first minutes that does not return to the open price.",
+  "boundaries": "The cash open is the market's own clock (nyse@1 for US indices), not the broker's day turn. The first 5 to 30 minutes is a starting default.",
+  "recognition": "An opening drive up reads as a trend day likely.",
+  "eligible_roles": [
+    "context",
+    "trigger",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.nyse.com/trade/auctions (read 2026-11-02)",
+      "quote": "9:30 a.m. Opening auction process begins",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Cash open and opening drive",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {
+    "within": {
+      "measure": "seconds",
+      "default": "1800",
+      "origin": "inferred",
+      "range": {
+        "min": "300",
+        "max": "3600",
+        "step": "60"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

@@ -1,0 +1,98 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "iceberg-order",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "hidden size",
+    "refilling order"
+  ],
+  "same_word_as": [
+    "absorption-event@1"
+  ],
+  "origin": "qml",
+  "component_type": "structure",
+  "definition": "A resting limit order that refills after it trades, showing only part of its size; native when the venue's order-by-order data shows the refill, detected when inferred from trades against a level that does not shrink.",
+  "boundaries": "Native detection needs order-by-order depth and the tape, which only exchanges such as CME give; it is not transferable to cTrader data, and there is no honest fallback, so the chain is empty. On crypto venues it is detection only.",
+  "recognition": "An iceberg bid defending a level reads as a large buyer there.",
+  "eligible_roles": [
+    "location",
+    "context",
+    "veto"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "https://bookmap.com/knowledgebase/docs/Addons-SIT (read 2026-11-02)",
+      "quote": "split into smaller limit orders to hide the total order quantity",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://bookmap.com/knowledgebase/docs/Addons-Stops-And-Icebergs-On-Chart-Indicator (read 2026-11-02)",
+      "quote": "only works with CME MBO (Rithmic & Bookmap Data) real-time data",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "book",
+      "stream_kind": "book",
+      "measure": "price",
+      "data_level": 3,
+      "splits": {
+        "depth": "by_order"
+      },
+      "fallback": []
+    },
+    {
+      "port": "tape",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 4,
+      "fallback": []
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "min_size": {
+      "measure": "count",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "1000000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_transferable",
+    "commodity_cfd": "not_transferable",
+    "stock_cfd": "not_transferable",
+    "future": "native",
+    "perp": "conceptual_only",
+    "spot_crypto": "conceptual_only",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

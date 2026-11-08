@@ -1,0 +1,57 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "commitments-of-traders",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "COT report",
+    "commitment of traders"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The CFTC's weekly count of futures positions held by each class of trader, long and short.",
+  "boundaries": "Weekly, released on Friday afternoon for the Tuesday before: outside data with a lag of days.",
+  "recognition": "Commercials at an extreme net long read as a turn near.",
+  "eligible_roles": [
+    "context",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-futures/open-interest (read 2026-11-02)",
+      "quote": "every Friday afternoon, the CFTC publishes a report called the Commitment of Traders",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "report",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

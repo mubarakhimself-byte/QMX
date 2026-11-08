@@ -1,0 +1,83 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "naked-point-of-control",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "naked POC",
+    "virgin point of control",
+    "untested POC"
+  ],
+  "same_word_as": [
+    "point-of-control@1"
+  ],
+  "origin": "qml",
+  "component_type": "structure",
+  "definition": "An earlier session's volume point of control that no later bar has traded through, carried forward as a level until it is touched.",
+  "boundaries": "Needs exchange volume at each price; on tick-count bars it is a quote-weighted proxy. The look-back of 5 sessions is a starting default. QML's unit runtime does not yet pass a bars input its volume or its time.",
+  "recognition": "Price drawn to an untouched point of control from days ago.",
+  "eligible_roles": [
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://info.tradovate.com/tpo-profile-charts (read 2026-11-02)",
+      "quote": "untouched full term Point of Control (POC)",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "a tick count weights prices by quote activity, an estimate of where size traded"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "lookback": {
+      "measure": "count",
+      "default": "5",
+      "origin": "inferred",
+      "range": {
+        "min": "1",
+        "max": "250",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

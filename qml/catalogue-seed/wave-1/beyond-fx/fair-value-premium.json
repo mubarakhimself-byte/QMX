@@ -1,0 +1,64 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "fair-value-premium",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "fair value",
+    "futures premium"
+  ],
+  "same_word_as": [
+    "basis@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "An index future's price less its fair value, where fair value is the cash index carried at the financing rate to expiry less the dividends paid before it.",
+  "boundaries": "Needs the rate and the dividends to expiry, outside data. Premium above fair value reads as buyers in the future ahead of cash.",
+  "recognition": "The future trading above fair value before the cash open reads as a higher open.",
+  "eligible_roles": [
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "= Cash [1+r (x/360)] - Dividends",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "future",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "cash",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

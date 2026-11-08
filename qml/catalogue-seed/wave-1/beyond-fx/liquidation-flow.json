@@ -1,0 +1,74 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "liquidation-flow",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "liquidation stream",
+    "forced orders"
+  ],
+  "same_word_as": [
+    "liquidation@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The size of forced liquidation orders printed by the venue over a window.",
+  "boundaries": "A sample, not every event: Binance's stream pushes at most one liquidation per symbol per second and its history call covers 90 days, a provider limit, not a QMX one.",
+  "recognition": "A spike in long liquidations at a low reads as a flush.",
+  "eligible_roles": [
+    "context",
+    "trigger"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://developers.binance.com/docs/derivatives/coin-margined-futures/websocket-market-streams/Liquidation-Order-Streams (read 2026-11-02)",
+      "quote": "only the latest one liquidation order within 1000ms will be pushed",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "liquidations",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "sampled"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

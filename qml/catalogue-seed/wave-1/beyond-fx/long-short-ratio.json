@@ -1,0 +1,63 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "long-short-ratio",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "long/short ratio",
+    "top trader ratio"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The ratio of accounts (or positions) long to short on a venue, for all accounts or its top traders.",
+  "boundaries": "Binance archives it in 5-minute steps; it counts that venue's accounts only.",
+  "recognition": "An extreme long-short ratio reads as a crowded side.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 2.3",
+      "quote": "top-trader long/short ratio (accounts and positions), global long/short ratio",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "ratio",
+      "stream_kind": "series",
+      "measure": "ratio",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "five_minutes",
+        "history": "complete"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

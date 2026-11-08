@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "relative-volume",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "RVOL",
+    "relative daily volume"
+  ],
+  "same_word_as": [
+    "volume-expansion@1"
+  ],
+  "origin": "qml",
+  "component_type": "filter",
+  "definition": "Volume so far today against the usual volume by this time of day.",
+  "boundaries": "Needs exchange volume; on tick-count bars it is a proxy of activity. The 20-day median by minute of day is a starting default. QML's unit runtime does not yet pass a bars input its volume or its time.",
+  "recognition": "Relative volume twice usual on a breakout reads as participation.",
+  "eligible_roles": [
+    "filter",
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.quantconnect.com/docs/v2/writing-algorithms/indicators/supported-indicators (read 2026-11-02)",
+      "quote": "Relative Daily Volume",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "quote activity, an estimate of participation"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}
