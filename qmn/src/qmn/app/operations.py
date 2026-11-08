@@ -40,6 +40,7 @@ from qmn.app.store import Change, Desired, Json, Outcome, Store
 from qmn.protection.ksa import LEVEL_RANK, KsaLevel
 
 __all__ = [
+    "ALARMS_OFF",
     "CHANGES",
     "GUARD_BYTES",
     "ISSUED_AHEAD_NS",
@@ -55,6 +56,9 @@ __all__ = [
 
 Answer: TypeAlias = dict[str, Json]
 
+ALARMS_OFF: Final = "alarms.off"
+"""The store row holding why every alarm sender is off (``alarms.attach``), None while they are
+not. stderr reaches nobody, so ``status`` reads this."""
 TAIL_ROWS: Final = 500
 """`[node] tail_rows`: the most journal rows one `journal_tail` answers."""
 ISSUED_AHEAD_NS: Final = 5_000_000_000
@@ -851,6 +855,12 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
         )
     if journal_problem is not None:
         reasons.append(f"The node cannot write its journal: {journal_problem}")
+    alarms_off = context.store.observed(ALARMS_OFF)
+    if isinstance(alarms_off, str):
+        reasons.append(
+            f"Phone alarms off: {alarms_off}. No push or liveness ping leaves this node until "
+            "that is fixed."
+        )
     units = _observed_list(context, "runtime.units")
     states = [str(cast(dict[str, Json], unit).get("state")) for unit in units]
     trading = states.count("trading")
