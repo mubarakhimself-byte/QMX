@@ -850,18 +850,28 @@ class CTraderDoor:
         ]
 
     def _markets(self) -> dict[str, str]:
-        """The self-test's market, then every market a kept deployment trades, by symbol."""
+        """The self-test's market, then each market a kept deployment chose, by symbol. A
+        deployment the node refused keeps its markets: a position it left open is still the
+        session's to name, and R21's kill reaches it by that name."""
         markets: dict[str, str] = {SELF_TEST_MARKET[0]: SELF_TEST_MARKET[1]}
         for change in Target.fold(self.store.accepted()).deployments.values():
             document = change.args.get("document")
-            unit = document.get("unit_document") if isinstance(document, dict) else None
-            for market in (
-                cast(list[Json], unit.get("markets") if isinstance(unit, dict) else []) or []
-            ):
-                item = cast(dict[str, Json], market) if isinstance(market, dict) else {}
-                ref = item.get("instrument_ref")
-                symbol = cast(dict[str, Json], ref).get("symbol") if isinstance(ref, dict) else None
-                market_id = item.get("market_id")
+            if not isinstance(document, dict):
+                continue
+            unit = document.get("unit_document")
+            traded = unit.get("markets") if isinstance(unit, dict) else None
+            by_market = {
+                str(item.get("market_id")): cast("dict[str, Json]", item.get("instrument_ref")).get(
+                    "symbol"
+                )
+                for item in (cast("list[Json]", traded) if isinstance(traded, list) else [])
+                if isinstance(item, dict) and isinstance(item.get("instrument_ref"), dict)
+            }
+            chosen = document.get("markets")
+            for item in cast("list[Json]", chosen) if isinstance(chosen, list) else []:
+                market = cast("dict[str, Json]", item) if isinstance(item, dict) else {}
+                market_id = market.get("market_id")
+                symbol = by_market.get(str(market_id))
                 if isinstance(market_id, str) and isinstance(symbol, str):
                     markets.setdefault(market_id, symbol)
         return markets

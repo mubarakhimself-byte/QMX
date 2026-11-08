@@ -349,6 +349,11 @@ class FeedKeeper:
                     bars.append(event)
         return tuple(bars)
 
+    def drop(self, reason: str, /) -> None:
+        """Drop the session now, so the next pump opens it again: a deployment that added a
+        market widens through this, the reconnect path the reconcile already resets."""
+        self._drop(reason)
+
     def _close_minute(self, now: int) -> None:
         """A quote is a new object each time, so a market quoted in this minute holds a different
         one than when the minute began. That costs the feed path nothing per quote."""

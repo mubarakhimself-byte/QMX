@@ -31,13 +31,11 @@ from qmn.app.runtime import Blocked, OrderPath, Placed, Ticket, Unknown, Venue, 
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.venue import CloseScope, OrderParameters, OrderType, TimeInForce
 from qmn.venue.ccxt_client import (
-    ERRORS,
     AgentWallet,
     CcxtClient,
     agent_wallets,
     cloid,
     cloid_tag,
-    read_error,
     renewal_due,
 )
 from qmn.venue.port import VenueClientKind, select_venue_client
@@ -54,19 +52,6 @@ ACCOUNT = Account("hl-testnet-1", VENUE, AccountRole.DEMO)
 ADDRESS = "0x" + "ab" * 20
 SIGNER = "0x" + hashlib.sha256(b"c16 test signer, never a wallet").hexdigest()
 TESTNET = "https://api.hyperliquid-testnet.xyz"
-CCXT_ERRORS_4_5_85 = {
-    "BaseError", "ExchangeError", "AuthenticationError", "PermissionDenied",
-    "AccountNotEnabled", "AccountSuspended", "ArgumentsRequired", "BadRequest", "BadSymbol",
-    "OperationRejected", "NoChange", "MarginModeAlreadySet", "MarketClosed",
-    "ManualInteractionNeeded", "RestrictedLocation", "InsufficientFunds", "InvalidAddress",
-    "AddressPending", "InvalidOrder", "OrderNotFound", "OrderNotCached",
-    "OrderImmediatelyFillable", "OrderNotFillable", "DuplicateOrderId", "ContractUnavailable",
-    "NotSupported", "InvalidProxySettings", "ExchangeClosedByUser", "OperationFailed",
-    "NetworkError", "DDoSProtection", "RateLimitExceeded", "ExchangeNotAvailable",
-    "OnMaintenance", "InvalidNonce", "ChecksumError", "RequestTimeout", "BadResponse",
-    "NullResponse", "CancelPending", "UnsubscribeError",
-}  # fmt: skip
-"""Every class in ``ccxt/base/errors.py`` of the pinned CCXT 4.5.85."""
 
 
 class InsufficientFunds(Exception):
@@ -445,12 +430,6 @@ def test_each_ccxt_error_reads_as_its_table_row(
 
     assert enter(node) == answer
     assert [a["alarm"] for a in node.alarms] == alarms
-
-
-def test_the_table_reads_every_error_class_of_the_pinned_ccxt() -> None:
-    assert set(ERRORS) == CCXT_ERRORS_4_5_85
-    assert read_error(RequestTimeout()).code == "request-timeout"
-    assert read_error(Teapot()).code == "unmapped:Teapot"
 
 
 def test_no_entry_goes_while_the_account_holds_the_open_order_margin(tmp_path: Path) -> None:

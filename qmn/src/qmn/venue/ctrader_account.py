@@ -619,6 +619,9 @@ class CTraderVenue:
         self.bar_ns = bar_ns
         self.api: OpenApi | None = None
         self.symbols: dict[str, SymbolFacts] = {}
+        self.unlisted: dict[str, str] = {}
+        """Each market this session cannot trade, by the symbol the account does not list. The
+        session keeps the markets it can trade instead of refusing all for one of these."""
         self.balance: Decimal = Decimal(0)
         self.money_digits = 2
         self.position_model = "hedging"
@@ -1069,45 +1072,80 @@ class CTraderVenue:
             for row in _rows(listed.value.body.get("symbol"))
         }
         wanted = {market: by_name.get(name) for market, name in self.markets.items()}
-        missing = sorted(self.markets[market] for market, ident in wanted.items() if ident is None)
-        if missing:
-            return _refused(
-                "unknown_symbol", f"the account lists no {', '.join(missing)}", retry=False
+        ids = [ident for ident in wanted.values() if ident is not None]
+        rows: dict[int | None, Mapping[str, object]] = {}
+        if ids:
+            detail = api.ask(
+                "ProtoOASymbolByIdReq", {"ctidTraderAccountId": self.ctid, "symbolId": ids}
             )
-        ids = [cast("int", ident) for ident in wanted.values()]
-        detail = api.ask(
-            "ProtoOASymbolByIdReq", {"ctidTraderAccountId": self.ctid, "symbolId": ids}
-        )
-        if is_refusal(detail):
-            return detail
-        rows = {_int(row.get("symbolId")): row for row in _rows(detail.value.body.get("symbol"))}
-        self.symbols = {}
+            if is_refusal(detail):
+                return detail
+            rows = {
+                _int(row.get("symbolId")): row for row in _rows(detail.value.body.get("symbol"))
+            }
+        # A market a position this binding holds sits on keeps the facts it had, whatever the
+        # reconnect says: its stop and its size still read here, so R20's read and R21's close
+        # keep working on a position whose market went unlisted mid-session. It is still
+        # reported unlisted, so a new deployment on that market is refused by name while the
+        # held position keeps its facts.
+        built: dict[str, SymbolFacts] = {
+            market: self.symbols[market]
+            for held in self._open.values()
+            if (market := held.market_id) in self.symbols
+        }
+        unlisted: dict[str, str] = {}
         for market, ident in wanted.items():
+            symbol = self.markets[market]
             row = rows.get(ident) or {}
             facts = [
                 _int(row.get(key))
                 for key in ("digits", "pipPosition", "lotSize", "stepVolume", "minVolume")
             ]
-            if any(fact is None for fact in facts) or not all(facts[2:]):
-                # A size crosses into cTrader volume through these, so none is ever guessed.
-                return _refused(
-                    "symbol_facts_missing",
-                    f"cTrader did not state {self.markets[market]}'s digits and volumes",
-                    retry=False,
-                )
+            # A size crosses into cTrader volume through these, so none is ever guessed.
+            if ident is None or any(fact is None for fact in facts) or not all(facts[2:]):
+                unlisted[market] = symbol
+                continue
             digits, pip, lot, step, least = cast("list[int]", facts)
-            self.symbols[market] = SymbolFacts(
+            built[market] = SymbolFacts(
                 market,
-                self.markets[market],
-                cast("int", ident),
+                symbol,
+                ident,
                 digits,
                 pip,
                 lot,
                 step,
                 least,
-                Instrument(self.venue_account.venue, self.markets[market]),
+                Instrument(self.venue_account.venue, symbol),
             )
+        self.symbols = built
+        self.unlisted = unlisted
         return Ok(None)
+
+    def nets_positions(self) -> bool:
+        """Whether one position per symbol is all this account keeps, so a second unit's cancels."""
+        return self.position_model == "netting"
+
+    def bar_size_ns(self) -> int | None:
+        """The bar this account's feed builds, or None when its bars are the unit's own."""
+        return self.bar_ns
+
+    def add_markets(self, markets: Mapping[str, str], /) -> bool:
+        """Add each market the binding does not hold yet; True when any was added, so the
+        session must reconnect to carry it."""
+        with self._lock:
+            added = [
+                (market, symbol) for market, symbol in markets.items() if market not in self.markets
+            ]
+            for market, symbol in added:
+                self.markets[market] = symbol
+            return bool(added)
+
+    def unauthorised(self, market: str, /) -> str | None:
+        """Why this session cannot trade ``market``, naming the symbol the account does not
+        list, or None when it can."""
+        with self._lock:
+            symbol = self.unlisted.get(market)
+            return None if symbol is None else f"the account does not list {symbol}"
 
     def subscribe(self, markets: Sequence[str], /) -> Result[None]:
         with self._lock:
