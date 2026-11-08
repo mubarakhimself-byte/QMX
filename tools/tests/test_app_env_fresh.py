@@ -21,6 +21,10 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = Path("qmx-agents/apps/trading-node")
 MODULES = (
     "qmb",
+    "qmf.calendar_cme",
+    "qmf.calendar_crypto247",
+    "qmf.calendar_forex",
+    "qmf.calendar_indices",
     "qmf.core",
     "qmf.data",
     "qmf.indicators",

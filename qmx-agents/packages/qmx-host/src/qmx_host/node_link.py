@@ -57,8 +57,12 @@ from qmx_engine.service.forward import (
 )
 
 NODE_APP: Final = "trading-node"
-NODE_READS: Final = frozenset({"status", "units", "positions", "journal_tail", "passport"})
-"""The node operations the core `node` rows read; none of them changes anything (AD-302)."""
+NODE_READS: Final = frozenset(
+    {"status", "units", "positions", "journal_tail", "passport", "deployments"}
+)
+"""The node operations this link reads; none of them changes anything (AD-302)."""
+ROW_READS: Final = frozenset({"units", "deployments"})
+"""The reads that answer one row per deployment, where a refused deploy reads too."""
 SCHEMA: Final = "qmx.host.forward/1"
 ROUTE_PATH: Final = "/api/host/forward"
 OUTBOX: Final = "node-link.db"
@@ -218,6 +222,16 @@ class Outbox:
         with self._db() as db:
             row = db.execute(f"{_SELECT} WHERE op_id = ?", (op_id,)).fetchone()
         return None if row is None else _change(row)
+
+    def refused_deploys(self, place: str) -> list[Change]:
+        """Every deploy the place's node refused, in the order he clicked them."""
+        with self._db() as db:
+            rows = db.execute(
+                f"{_SELECT} WHERE place = ? AND operation = 'deploy' AND state = 'refused'"
+                " ORDER BY seq",
+                (place,),
+            ).fetchall()
+        return [_change(row) for row in rows]
 
     def waiting(self, place: str) -> list[Change]:
         with self._db() as db:
@@ -391,7 +405,12 @@ class NodeLink:
             raise AppError("not_a_read", f"{operation} is not one of the node's reads", 400)
         if not self.set_up():
             return None
-        return self.call(NODE_APP, operation, arguments, principal=principal)
+        answer = self.call(NODE_APP, operation, arguments, principal=principal)
+        if operation not in ROW_READS:
+            return answer
+        wanted = arguments.get("deployment_id")
+        refused = self.outbox.refused_deploys(self.home_of(NODE_APP))
+        return _with_refused(operation, answer, refused, wanted)
 
     def node_read(self, operation: str, arguments: Document) -> JsonValue | None:
         """`read` as the caller the door named, for the core `node` rows (`qmx_tools.NodeReads`)."""
@@ -602,6 +621,52 @@ class NodeLink:
         """`tick` until cancelled, waking for the next heartbeat read or the next retry."""
         while True:
             await asyncio.sleep(await asyncio.to_thread(self.tick))
+
+
+def _refused_row(operation: str, change: Change) -> tuple[str, Document]:
+    """A refused deploy as the node's own row for it reads: its id, then the row, whose state
+    says refused and whose detail is the node's code and message."""
+    document = cast(Document, change.arguments.get("deployment") or {})
+    answer = cast(Document, change.answer or {})
+    unit = document.get("unit")
+    detail = f"{answer.get('code')}: {answer.get('message')}"
+    deployment_id = str(document.get("deployment_id"))
+    if operation == "deployments":
+        return deployment_id, {
+            "deployment_id": deployment_id,
+            "unit": unit,
+            "state": "refused",
+            "detail": detail,
+            "accepted_at": None,
+        }
+    return deployment_id, {
+        "deployment_id": deployment_id,
+        "unit_id": cast(Document, unit).get("id") if isinstance(unit, dict) else None,
+        "state": "refused",
+        "detail": detail,
+        "warm": None,
+        "kill_level": "GREEN",
+    }
+
+
+def _with_refused(
+    operation: str, answer: JsonValue, refused: Sequence[Change], wanted: JsonValue
+) -> JsonValue:
+    """The node's rows, then a row for each deploy it refused. A deployment the node holds reads
+    as the node has it, since an ask that timed out files as refused and may have reached it. A
+    node here answers its envelope and a node elsewhere its value, and each keeps its shape."""
+    enveloped = isinstance(answer, dict)
+    if enveloped and cast(Document, answer).get("ok") is not True:
+        return answer
+    found = cast(Document, answer).get("value") if enveloped else answer
+    if not isinstance(found, list):
+        return answer
+    held = {cast(Document, row).get("deployment_id") for row in found if isinstance(row, dict)}
+    rows: list[JsonValue] = list(found)
+    for deployment_id, row in (_refused_row(operation, change) for change in refused):
+        if deployment_id not in held and wanted in (None, deployment_id):
+            rows.append(row)
+    return {**cast(Document, answer), "value": rows} if enveloped else rows
 
 
 def _fingerprint(path: Path) -> str:

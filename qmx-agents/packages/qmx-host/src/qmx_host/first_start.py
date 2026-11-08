@@ -597,12 +597,15 @@ def make_new(folder: Path, places: Places) -> Layout:
     return layout
 
 
-FIRST_APPS: Final[Mapping[str, Path]] = {
-    app: Path(__file__).resolve().parents[4] / "apps" / app for app in ("qmb", "mis")
+APP_FOLDERS: Final[Mapping[str, Path]] = {
+    app: Path(__file__).resolve().parents[4] / "apps" / app
+    for app in ("qmb", "mis", "trading-node")
 }
-"""The first-party apps a new folder starts with, as this program ships them: QMB first (Part B
-AD-201), then the MIS, which reads this machine's market store and publishes readings (Part C
-AD-313). The node joins this table when its app lands."""
+"""Every first-party app this program ships, by id, which the host's first-party list may name."""
+FIRST_APPS: Final[Mapping[str, Path]] = {app: APP_FOLDERS[app] for app in ("qmb", "mis")}
+"""The first-party apps a new folder starts with: QMB first (Part B AD-201), then the MIS, which
+reads this machine's market store and publishes readings (Part C AD-313). The trading node joins
+a folder's list when his connect steps enable it (`add_first_party`)."""
 FIRST_PARTY: Final = "first-party.json"
 """The card's choice, in a new folder's `data/`: the first-party apps enabled in this folder,
 which the host starts at every start."""
@@ -620,9 +623,29 @@ def enable_first_party(home: Path, runtime: Supervisor) -> list[str]:
     installed = {str(cast(dict[str, object], row["definition"])["id"]) for row in runtime.list()}
     for app_id in wanted:
         if app_id not in installed:
-            runtime.install(FIRST_APPS[app_id], trust="first_party")
+            runtime.install(APP_FOLDERS[app_id], trust="first_party")
         runtime.start(app_id)
     return wanted
+
+
+def first_party_names(home: Path) -> list[str]:
+    """The apps this folder's first-party list names; a list that does not read names none."""
+    try:
+        found = json.loads((home / FIRST_PARTY).read_text("utf-8"))
+    except OSError, ValueError:
+        return []
+    return [str(app) for app in found.get("enable", [])] if isinstance(found, dict) else []
+
+
+def add_first_party(home: Path, names: Sequence[str]) -> None:
+    """Keep `names` in this folder's first-party list, after what it holds, so every host start
+    starts them. Written whole and replaced, so a stop halfway leaves the old list."""
+    enabled = first_party_names(home)
+    wanted = [*enabled, *(name for name in names if name not in enabled)]
+    if wanted != enabled:
+        part = home / f"{FIRST_PARTY}.part"
+        part.write_text(json.dumps({"enable": wanted}), "utf-8")
+        part.replace(home / FIRST_PARTY)
 
 
 def _fingerprint(value: object) -> str | None:

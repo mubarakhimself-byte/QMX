@@ -47,7 +47,7 @@ import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
 from typing import Final, Protocol, cast
@@ -86,6 +86,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
+from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
@@ -112,7 +113,7 @@ from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
-from qmn.app.operations import Answer, Context, Target, refused
+from qmn.app.operations import Answer, Context, Target, cleared_by, refused, same_market
 from qmn.app.reconciler import Found, Ours, Reconciler
 from qmn.app.stand_down import (
     REPEATED_FAULT_RESTARTS,
@@ -122,7 +123,7 @@ from qmn.app.stand_down import (
     Subject,
     restored,
 )
-from qmn.app.store import Json
+from qmn.app.store import Change, Json, Outcome
 from qmn.journal_dispatch import enact_command
 from qmn.loop.accumulator import RecordingAccumulator
 from qmn.loop.driver import CommandStreamLoop
@@ -213,6 +214,10 @@ class Deployment:
     account_id: str
     snapshots: tuple[Mapping[str, object], ...]
     lane: str
+    markets: tuple[str, ...] = ()
+    """The unit's markets he chose. Only these get bars, so only these ever trade."""
+    starting: Mapping[str, object] = field(default_factory=dict[str, object])
+    """The numbers the unit starts from, by name, as the document states them."""
     placement: Placement | None = None
 
 
@@ -278,8 +283,35 @@ def parse_deployment(document: Mapping[str, object]) -> Deployment:
             if isinstance(item, Mapping)
         ),
         lane=lane,
+        markets=_chosen_markets(document),
+        starting=_map(_map(document, "starting"), "values"),
         placement=_placement(document.get("placement")),
     )
+
+
+def _chosen_markets(document: Mapping[str, object]) -> tuple[str, ...]:
+    """``deployment.markets`` as market ids of the unit. A document naming none is refused, so an
+    empty list can never read as every market of the unit."""
+    chosen = document.get("markets")
+    if not isinstance(chosen, list) or not chosen:
+        raise ValueError("deployment.markets names at least one market he chose")
+    unit = _map(document, "unit_document").get("markets")
+    held = {
+        cast("Mapping[str, object]", market).get("market_id")
+        for market in (cast("list[object]", unit) if isinstance(unit, list) else [])
+        if isinstance(market, Mapping)
+    }
+    named: list[str] = []
+    for item in cast("list[object]", chosen):
+        market = (
+            cast("Mapping[str, object]", item).get("market_id")
+            if isinstance(item, Mapping)
+            else None
+        )
+        if not isinstance(market, str) or market not in held:
+            raise ValueError(f"deployment.markets names {market}, which the unit does not trade")
+        named.append(market)
+    return tuple(dict.fromkeys(named))
 
 
 # --- the board feed: an optional placement read (connections C25) ----------------------------
@@ -1298,8 +1330,11 @@ class NodeUnit:
         orders: OrderPath,
         journal: RunJournal,
         guard: Callable[[str], str | None],
+        assignment: Mapping[str, Decimal] | None = None,
     ) -> None:
         self.deployment = deployment
+        self.assignment = assignment
+        self.traded = deployment.markets
         self.compiled = compiled
         self.records = records
         self.orders = orders
@@ -1345,7 +1380,11 @@ class NodeUnit:
             scope = self.deployment.deployment_id
             built = (
                 construct_unit(
-                    self.compiled, read_surfaces=read, scope_id=scope, execution_target=target
+                    self.compiled,
+                    read_surfaces=read,
+                    scope_id=scope,
+                    execution_target=target,
+                    assignment=self.assignment,
                 )
                 if snapshot is None
                 else restore_unit(
@@ -1354,6 +1393,7 @@ class NodeUnit:
                     read_surfaces=read,
                     scope_id=scope,
                     execution_target=target,
+                    assignment=self.assignment,
                 )
             )
             if not is_refusal(built):
@@ -1403,7 +1443,7 @@ class NodeUnit:
             if (
                 handler is None
                 or send.get("deployment_id") != self.deployment.deployment_id
-                or market not in self.records
+                or market not in self.traded
                 or name in self.placed
                 or client.closed(name) is not None
             ):
@@ -1763,6 +1803,40 @@ def deployment_records(deployment: Deployment) -> dict[str, InstrumentRecord] | 
     return found
 
 
+def starting_assignment(deployment: Deployment, compiled: CompiledUnit) -> dict[str, Decimal] | str:
+    """The calibrated numbers the deployment starts from, or why one does not read as a number.
+    Every other number the document lists is fixed in the compiled plan its G record tested."""
+    found: dict[str, Decimal] = {}
+    for slow in compiled.plan.slow:
+        given = deployment.starting.get(slow.number.name)
+        if given is None:
+            continue
+        try:
+            found[slow.number.name] = Decimal(str(given))
+        except InvalidOperation:
+            return f"the starting value of {slow.number.name} is not a number: {given}"
+    return found
+
+
+def journalled_resumes(root: Path) -> set[str]:
+    """The op id of each resume the node journal already holds a row for, so a restart lands no
+    second row and still lands the row of a resume it missed. A folder the volume refuses reads
+    as holding none: a repeated row is better than a resume nobody can see."""
+    found: set[str] = set()
+    for folder in stream_folders(root):
+        if not folder.name.startswith(f"{JournalStream.NODE.source}.kill_level."):
+            continue
+        lines = read_committed(folder)
+        if is_refusal(lines):
+            continue
+        for line in lines.value:
+            if isinstance(line, JournalLine):
+                body = cast("Mapping[str, object]", line.record.get("body", {}))
+                if isinstance(body.get("op_id"), str):
+                    found.add(str(body["op_id"]))
+    return found
+
+
 class Runtime:
     """The node's runtime thread over its store, its journal and its venue bindings."""
 
@@ -1795,6 +1869,7 @@ class Runtime:
         self.hosted: dict[str, _Hosted] = {}
         self.alarms: list[Mapping[str, object]] = []
         self.applied: dict[str, KsaLevel] = {}
+        self._resumes_seen = journalled_resumes(context.journal_root)
         self._paths: dict[str, OrderPath] = {}
         self._compiler = ThreadPoolExecutor(max_workers=1, thread_name_prefix="node-compile")
         self._wake = threading.Event()
@@ -2011,6 +2086,7 @@ class Runtime:
             self._observe()
             return
         self._protect(self._kill(target))
+        self._journal_resumes(accepted)
         self._deployments(target)
         faulted = self._repeated_fault()
         self.stand_downs.resumes(accepted)
@@ -2120,6 +2196,34 @@ class Runtime:
             )
         return tried
 
+    def _journal_resumes(self, accepted: Sequence[Change]) -> None:
+        """One ``kill_level`` row per resume he sent, beside the rises, naming the kills it
+        cleared. It is keyed by its op id and read back at start, so it lands once across a
+        restart, and a row the journal refuses is tried again on the next tick."""
+        for index, change in enumerate(accepted):
+            if (
+                change.kind != "resume"
+                or change.outcome is not Outcome.ACCEPTED
+                or change.op_id in self._resumes_seen
+            ):
+                continue
+            scope = str(change.args["scope"])
+            before = Target.fold(accepted[:index])
+            named = same_market(before.deployments, scope)
+            body: dict[str, object] = {
+                "scope": scope,
+                **PLACEHOLDER_KILL_EFFECTS[KsaLevel.GREEN].document(),
+                "positions_closed": 0,
+                "resting_entries_cancelled": 0,
+                "op_id": change.op_id,
+                "cleared": sorted(cleared_by(before.kills, scope, named)),
+            }
+            written = self.journal.append(
+                "kill_level", body, RowFacts(ts_recv=self.clock_ns(), clock_ok=False)
+            )
+            if not is_refusal(written):
+                self._resumes_seen.add(change.op_id)
+
     def _enact(self, scope: str, effect: KillEffect, tried: set[str]) -> int:
         if not (effect.close_positions or effect.close_all_and_pause):
             return 0
@@ -2203,6 +2307,7 @@ class Runtime:
                     "all",
                     f"account:{hosted.deployment.account_id}",
                     f"instrument:{market}",
+                    *(hosted.unit.instrument_scopes(market) if hosted.unit else ()),
                     f"unit:{hosted.deployment.deployment_id}:{market}",
                 )
             )
@@ -2216,7 +2321,7 @@ class Runtime:
         placement = hosted.deployment.placement
         if placement is None or hosted.unit is None:
             return None
-        return self.board.read(placement, hosted.unit.records)
+        return self.board.read(placement, hosted.unit.traded)
 
     # --- stand-downs that wait for him ---
 
@@ -2225,8 +2330,9 @@ class Runtime:
 
     def stand_down(self, kind: Kind, scope: str, cause: str) -> bool:
         """Hold a stand-down that waits for him (a repeated fault, a spec change) at ``scope``;
-        True when it was not already held."""
-        return self.stand_downs.hold(kind, scope, cause, covers=(scope,))
+        True when it was not already held. His resume reaches it by either name of its market."""
+        deployments = Target.fold(self.context.store.accepted()).deployments
+        return self.stand_downs.hold(kind, scope, cause, covers=same_market(deployments, scope))
 
     def risk_stop(self, deployment_id: str, market_id: str, rule: str, reason: str) -> str | None:
         """A risk rule stops a hosted unit on one market (standing order 7): one ``lifecycle``
@@ -2235,7 +2341,7 @@ class Runtime:
         in the second case, with an alarm."""
         hosted = self.hosted.get(deployment_id)
         unit = None if hosted is None else hosted.unit
-        if hosted is None or unit is None or market_id not in unit.records:
+        if hosted is None or unit is None or market_id not in unit.traded:
             return None
         deployment = hosted.deployment
         subject = Subject(
@@ -2325,8 +2431,14 @@ class Runtime:
         if is_refusal(journal):
             hosted.phase, hosted.detail = Phase.REFUSED, "the unit journal would not open"
             return
+        assignment = starting_assignment(deployment, compiled)
+        if isinstance(assignment, str):
+            hosted.phase, hosted.detail = Phase.REFUSED, assignment
+            return
         hosted.venue = venue
-        unit = NodeUnit(deployment, compiled, records, path, journal.value, self.guard(hosted))
+        unit = NodeUnit(
+            deployment, compiled, records, path, journal.value, self.guard(hosted), assignment
+        )
         unit.journal_world = world
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
@@ -2335,10 +2447,8 @@ class Runtime:
             return
         started = unit.start(venue.client.equity(), target.value)
         if is_refusal(started):
-            hosted.phase, hosted.detail = (
-                Phase.REFUSED,
-                f"the unit would not start ({started.category.value})",
-            )
+            hosted.phase = Phase.REFUSED
+            hosted.detail = f"the unit would not start: {_why(started)}"
             return
         loop = self._loop(unit, account)
         if is_refusal(loop):
@@ -2348,7 +2458,7 @@ class Runtime:
         hosted.phase = Phase.WARMING
         recorded = [
             Bar(market, bar)
-            for market in records
+            for market in unit.traded
             for bar in venue.feed.recording.recent(market, unit.warm_needed)
         ]
         self._drive_one(hosted, recorded)
@@ -2405,7 +2515,7 @@ class Runtime:
         )
         if is_refusal(accumulator):
             return accumulator
-        streams = StreamSet.try_create([DeclaredStream(market, market) for market in unit.records])
+        streams = StreamSet.try_create([DeclaredStream(market, market) for market in unit.traded])
         if is_refusal(streams):
             return streams
         latency = Duration.try_create(MAX_SLICE_LATENCY_NS)
@@ -2444,7 +2554,7 @@ class Runtime:
             return
         by_ns: dict[int, list[Bar]] = {}
         for event in bars:
-            if event.market_id in unit.records:
+            if event.market_id in unit.traded:
                 by_ns.setdefault(event.bar.knowable_at.value_ns, []).append(event)
         for ns in sorted(by_ns):
             for event in by_ns[ns]:
@@ -2472,6 +2582,12 @@ class Runtime:
 
     # --- what he sees ---
 
+    def _unit_level(self, hosted: _Hosted) -> KsaLevel:
+        """The highest kill level over the unit: its deployment, its account, each market."""
+        markets = (None,) if hosted.unit is None else (None, *hosted.unit.traded)
+        levels = [self.level_for(hosted, market)[0] for market in markets]
+        return max(levels, key=LEVEL_RANK.__getitem__)
+
     def _observe(self) -> None:
         deployments: dict[str, object] = {}
         units: list[object] = []
@@ -2496,7 +2612,7 @@ class Runtime:
                         "seen": min(unit.warm_seen, unit.warm_needed),
                         "needed": unit.warm_needed,
                     },
-                    "kill_level": self.level_for(hosted)[0].value,
+                    "kill_level": self._unit_level(hosted).value,
                 }
             )
             if unit is not None:

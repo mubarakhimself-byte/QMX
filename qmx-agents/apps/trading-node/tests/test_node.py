@@ -18,7 +18,7 @@ from unittest import mock
 from qmn.app.server import OPERATIONS, Node, from_environment
 from qmn.app.store import Json
 
-SCOPE: dict[str, Json] = {"account": "road-proof"}
+SCOPE: Json = "all"
 
 
 class FreshNode(unittest.TestCase):

@@ -99,6 +99,9 @@ qmf-data = { workspace = true }
 # The qmf-calendar-forex workspace member, referenced by calendar-tzdata below so
 # its pinned tzdata lands in the gate environment (Story 4.1; DEC-0106).
 qmf-calendar-forex = { workspace = true }
+qmf-calendar-cme = { workspace = true }
+qmf-calendar-crypto247 = { workspace = true }
+qmf-calendar-indices = { workspace = true }
 # The qmf-venue workspace member, referenced by venue-proto below so its pinned
 # protobuf runtime lands in the gate environment (Story 8.2; DEC-0141). The
 # protobuf library itself stays declared only in qmf-venue's own pyproject.
@@ -165,8 +168,14 @@ qa-suites = ["hypothesis>=6,<7"]
 # The forex calendar's pinned tzdata, provisioned by default. Installs the
 # qmf-calendar-forex workspace member so `tzdata==2025.2` is present for
 # import-time TZPATH / tzdb verification under `poe test`. Kept out of `dev` so
-# the SSSF factory-gate contract stays byte-stable (Story 4.1; DEC-0106).
-calendar-tzdata = ["qmf-calendar-forex"]
+# the SSSF factory-gate contract stays byte-stable (Story 4.1; DEC-0106). The other
+# three carry only calendar files, which QMB and the node find in the env (C-38).
+calendar-tzdata = [
+    "qmf-calendar-forex",
+    "qmf-calendar-cme",
+    "qmf-calendar-crypto247",
+    "qmf-calendar-indices",
+]
 
 # The venue transport's pinned protobuf runtime, provisioned by default. Installs
 # the qmf-venue workspace member so `protobuf==7.36.0` is present for the in-house
@@ -234,6 +243,9 @@ pythonpath = [
     "packages/qmf-risk/src",
     "packages/qmf-readings/src",
     "extensions/qmf-calendar-forex/src",
+    "extensions/qmf-calendar-cme/src",
+    "extensions/qmf-calendar-crypto247/src",
+    "extensions/qmf-calendar-indices/src",
     "qml/src",
     "qmb/src",
     "qmn/src",
@@ -365,6 +377,9 @@ extraPaths = [
     "packages/qmf-risk/src",
     "packages/qmf-readings/src",
     "extensions/qmf-calendar-forex/src",
+    "extensions/qmf-calendar-cme/src",
+    "extensions/qmf-calendar-crypto247/src",
+    "extensions/qmf-calendar-indices/src",
     "qml/src",
     "qmb/src",
     "qmn/src",

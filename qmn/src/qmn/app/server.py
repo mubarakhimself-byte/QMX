@@ -92,6 +92,7 @@ from qmn.venue.ctrader_account import (
     account_listing,
 )
 from qmn.venue.live import VenueFacts, read_venue_facts
+from qmn.venue.proto_runtime import DEFINITIONS
 
 __all__ = [
     "BUILD",
@@ -303,11 +304,6 @@ def open_node(
 
 
 LIVE_STAGE: Final = "live"
-DEFINITIONS: Final = (
-    Path(__file__).resolve().parents[4]
-    / "qmx-agents/packages/qmx-broker/src/qmx_broker/protocol/openapi-91.pb"
-)
-"""The pinned Spotware definitions (release 91), read from the checkout the node runs from."""
 ENDPOINTS: Final = Path("venues") / "endpoints.json"
 """A conformance binding's endpoints in ``data/``: a fake cTrader on this machine. Every host it
 names must be loopback, so it can never reach a broker."""

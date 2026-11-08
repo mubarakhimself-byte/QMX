@@ -1772,7 +1772,10 @@ dependencies = [
 
 [package.dev-dependencies]
 calendar-tzdata = [
+    { name = "qmf-calendar-cme" },
+    { name = "qmf-calendar-crypto247" },
     { name = "qmf-calendar-forex" },
+    { name = "qmf-calendar-indices" },
 ]
 dev = [
     { name = "mypy" },
@@ -1822,7 +1825,12 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-calendar-tzdata = [{ name = "qmf-calendar-forex", editable = "extensions/qmf-calendar-forex" }]
+calendar-tzdata = [
+    { name = "qmf-calendar-cme", editable = "extensions/qmf-calendar-cme" },
+    { name = "qmf-calendar-crypto247", editable = "extensions/qmf-calendar-crypto247" },
+    { name = "qmf-calendar-forex", editable = "extensions/qmf-calendar-forex" },
+    { name = "qmf-calendar-indices", editable = "extensions/qmf-calendar-indices" },
+]
 dev = [
     { name = "mypy" },
     { name = "poethepoet", specifier = "==0.48.0" },

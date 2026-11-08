@@ -7,6 +7,10 @@ dependencies = [
     "fastmcp==4.0.11",
     "qmb",
     "qml",
+    "qmf-calendar-cme",
+    "qmf-calendar-crypto247",
+    "qmf-calendar-forex",
+    "qmf-calendar-indices",
     "qmf-core",
     "qmf-data",
     "qmf-indicators",
@@ -24,6 +28,10 @@ members = []
 [tool.uv.sources]
 qmb = { path = "../../../qmb", editable = true }
 qml = { path = "../../../qml", editable = true }
+qmf-calendar-cme = { path = "../../../extensions/qmf-calendar-cme", editable = true }
+qmf-calendar-crypto247 = { path = "../../../extensions/qmf-calendar-crypto247", editable = true }
+qmf-calendar-forex = { path = "../../../extensions/qmf-calendar-forex", editable = true }
+qmf-calendar-indices = { path = "../../../extensions/qmf-calendar-indices", editable = true }
 qmf-core = { path = "../../../packages/qmf-core", editable = true }
 qmf-data = { path = "../../../packages/qmf-data", editable = true }
 qmf-indicators = { path = "../../../packages/qmf-indicators", editable = true }

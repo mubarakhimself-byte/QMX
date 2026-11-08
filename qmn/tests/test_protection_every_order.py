@@ -198,11 +198,10 @@ def test_a_journal_that_cannot_be_written_blocks_the_entry_before_the_venue(
 KILL_SCOPES = [
     pytest.param("all", "all", "Paused", True, id="all"),
     pytest.param(
-        {"instrument": "fx.eurusd"}, "instrument:fx.eurusd", "Trading", False, id="market-id"
+        {"instrument": "fx.eurusd"}, "instrument:fx.eurusd", "Paused", False, id="market-id"
     ),
 ]
-"""Each scope a kill is asked at, its key, the status word, and whether status's level for all
-shows the kill."""
+"""Each scope a kill is asked at, its key, the status word, and whether it holds for all."""
 
 
 @pytest.mark.parametrize(("scope", "key", "word", "for_all"), KILL_SCOPES)
@@ -240,13 +239,15 @@ def test_each_kill_level_applies_its_placeholder_effect_and_only_his_resume_lift
     assert killed == {"ok": True, "value": {"level_in_force": level}, "op_id": "op-kill"}
     assert value(lower) == {"level_in_force": level}
     assert [t.command.kind for t in node.account.received] == sent
-    assert (during["word"], during["kill_level"]) == (word, level if for_all else "GREEN")
+    assert (during["word"], during["kill_level"]) == (word, level)
     assert during["kill_effects"] == {key: effect}
     assert effect["origin"] == "placeholder"
     kills = node_rows(node, "kill_level")
     assert [(k["scope"], k["level"], k["origin"], k["positions_closed"]) for k in kills] == [
-        (key, level, "placeholder", closed)
+        (key, level, "placeholder", closed),
+        ("all", "GREEN", "placeholder", 0),
     ]
+    assert for_all is (key == "all")
     assert value(resumed) == {"state": "accepted", "open_causes": []}
     assert (after["kill_level"], after["kill_effects"]) == ("GREEN", {})
 
@@ -260,12 +261,8 @@ def test_a_kill_at_an_instrument_no_deployment_trades_is_refused_by_name(
     )
     paused = node.node.call("pause", {"op_id": "op-pause", "scope": {"instrument": "XAUUSD"}})
 
-    assert killed == {
-        "ok": False,
-        "code": "unknown_instrument",
-        "message": "kill: no deployment on this node trades instrument fx.gbpusd; name it by a"
-        " market id or symbol a deployment trades",
-    }
+    assert (killed["ok"], killed["code"]) == (False, "unknown_scope")
+    assert str(killed["message"]).startswith("kill: this node holds no instrument fx.gbpusd; ")
     assert value(paused) == {"state": "accepted"}
     assert value(node.node.call("status", {}))["kill_effects"] == {}
 

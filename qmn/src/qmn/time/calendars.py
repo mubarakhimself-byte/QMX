@@ -20,7 +20,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Protocol, cast
 
-from qmb.data.gap_check import OpenTime, open_time
+from qmb.data.gap_check import OpenTime, calendar_files, open_time
 from qmf.core import CalendarIdentity, Instant, Ok, Result, TradingDate
 from qmf.core.refusal import is_refusal
 
@@ -46,10 +46,6 @@ __all__ = [
     "refuse_time_substitute",
 ]
 
-EXTENSIONS: Final = Path(__file__).resolve().parents[4] / "extensions"
-"""The checkout's ``extensions/``, where each ``qmf-calendar-*`` package ships its market-hours
-calendars as ``qmx.calendar/1`` files, read from the checkout the node runs from as QMB reads
-them."""
 CALENDAR_WARN_DAYS: Final = 30
 """How close to the last day its data covers a market-hours calendar shows on the node's status:
 30 days, the starting default of `[node] calendar_warn_days`. The node reads no settings file
@@ -314,12 +310,12 @@ class MarketCalendar:
 
 
 @cache
-def market_calendars(folder: Path = EXTENSIONS) -> Mapping[str, MarketCalendar]:
-    """Every market-hours calendar the ``qmf-calendar-*`` packages ship, by ref. A file that
-    cannot be read is left out, named once on stderr, so the node starts and reads it as
-    missing."""
+def market_calendars(files: tuple[Path, ...] | None = None) -> Mapping[str, MarketCalendar]:
+    """Every market-hours calendar in ``files``, by ref: by default each file the
+    ``qmf-calendar-*`` packages ship, as QMB finds them. A file that cannot be read is left out,
+    named once on stderr, so the node starts and reads it as missing."""
     found: dict[str, MarketCalendar] = {}
-    for path in sorted(folder.glob("qmf-calendar-*/src/qmf/calendar_*/calendars/*.json")):
+    for path in calendar_files() if files is None else files:
         try:
             calendar = _market_calendar(path)
         except (OSError, ValueError, KeyError, TypeError) as error:
