@@ -10,13 +10,16 @@ swap-table calibration (FEE-4).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from qmf.core.chrono import Duration
+from qmf.core.exact import ExactRational, Money, UnitKind
 from qmf.core.refusal import Ok, Result, is_refusal
 
+from qmb._refuse import invalid
 from qmb.execution.cost import (
     COST_ADAPTER_CATALOG,
     COST_ADAPTER_NOTIONAL_MINIMUM,
@@ -63,6 +66,7 @@ from qmb.execution.slippage import (
     ConstantPercentSlippageAdapter,
     GapVolatilitySlippageAdapter,
     SizeTieredSlippageAdapter,
+    SlippageCalibration,
     SpreadCrossingSlippageAdapter,
     ZeroSlippageAdapter,
 )
@@ -98,6 +102,9 @@ __all__ = [
     "SpreadCrossingSlippageAdapter",
     "ZeroCostAdapter",
     "ZeroSlippageAdapter",
+    "decode_commission_calibration",
+    "decode_slippage_calibration",
+    "parse_adapter_ref",
 ]
 
 AMBIENT_DISCOVERY: Final[bool] = False
@@ -171,3 +178,97 @@ SLIPPAGE_ADAPTER_CATALOG: Final[MappingProxyType[str, type[SlippagePort]]] = Map
         SLIPPAGE_ADAPTER_SIZE_TIERED: SizeTieredSlippageAdapter,
     }
 )
+
+
+def parse_adapter_ref(field: str, raw: object, catalog: Mapping[str, object]) -> Result[str]:
+    """Read a request's ``name@version`` adapter pin and return the catalog adapter-id.
+
+    The version is the composition version every catalog adapter stamps, so a request
+    pinned to another version is refused rather than bound to adapters it did not name.
+    """
+    if not isinstance(raw, str) or "@" not in raw:
+        return invalid(field, "an adapter is named as name@version", given=repr(raw))
+    name, version = raw.rsplit("@", 1)
+    if name not in catalog:
+        return invalid(field, "unknown adapter name", given=name, known=sorted(catalog))
+    if version != str(COMPOSITION_VERSION):
+        return invalid(
+            field,
+            "this QMB binds only the adapter version it ships",
+            given=version,
+            known=[str(COMPOSITION_VERSION)],
+        )
+    return Ok(name)
+
+
+def decode_commission_calibration(
+    adapter_id: str, raw: Mapping[str, object]
+) -> Result[CommissionCalibration | None]:
+    """Build a cost profile's commission calibration from its request data."""
+    if adapter_id == COST_ADAPTER_ZERO:
+        return Ok(None)
+    percent = _optional_ratio(raw.get("percent"), "cost_profile.percent")
+    if is_refusal(percent):
+        return percent
+    per_lot = _optional_money(raw.get("per_lot"), "cost_profile.per_lot")
+    if is_refusal(per_lot):
+        return per_lot
+    per_1k = _optional_money(raw.get("per_1k_units"), "cost_profile.per_1k_units")
+    if is_refusal(per_1k):
+        return per_1k
+    minimum = _optional_money(raw.get("minimum"), "cost_profile.minimum")
+    if is_refusal(minimum):
+        return minimum
+    built = CommissionCalibration.try_create(
+        adapter_id,
+        raw.get("broker"),
+        currency=raw.get("currency"),
+        percent=percent.value,
+        per_lot=per_lot.value,
+        per_1k_units=per_1k.value,
+        minimum=minimum.value,
+    )
+    if is_refusal(built):
+        return built
+    return Ok(built.value)
+
+
+def decode_slippage_calibration(
+    adapter_id: str, raw: Mapping[str, object]
+) -> Result[SlippageCalibration | None]:
+    """Build a slippage calibration from its request data; ``zero`` takes none."""
+    if adapter_id == SLIPPAGE_ADAPTER_ZERO:
+        return Ok(None)
+    percent = _optional_ratio(raw.get("percent"), "slippage.percent")
+    if is_refusal(percent):
+        return percent
+    built = SlippageCalibration.try_create(adapter_id, raw.get("broker"), percent=percent.value)
+    if is_refusal(built):
+        return built
+    return Ok(built.value)
+
+
+def _optional_money(raw: object, field: str) -> Result[Money | None]:
+    if raw is None:
+        return Ok(None)
+    if not isinstance(raw, Mapping):
+        return invalid(field, "money is {amount, currency, scale} with whole numbers")
+    body = cast("Mapping[str, object]", raw)
+    built = Money.try_create(body.get("amount"), body.get("currency"), body.get("scale"))
+    if is_refusal(built):
+        return built
+    return Ok(built.value)
+
+
+def _optional_ratio(raw: object, field: str) -> Result[ExactRational | None]:
+    if raw is None:
+        return Ok(None)
+    if not isinstance(raw, Mapping):
+        return invalid(field, "a ratio is {numerator, denominator} with whole numbers")
+    body = cast("Mapping[str, object]", raw)
+    built = ExactRational.try_create(
+        body.get("numerator"), body.get("denominator"), UnitKind.DIMENSIONLESS_RATIO
+    )
+    if is_refusal(built):
+        return built
+    return Ok(built.value)
