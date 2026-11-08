@@ -174,6 +174,34 @@ def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_
         for name in OPERATIONS
     }
     assert (manifest.breaker.max_errors, manifest.breaker.restart) == (1000, "backoff")
+    (served,) = supervisor.registry()
+    hints = {
+        str(tool["name"]): cast(Document, tool["annotations"])["readOnlyHint"]
+        for tool in cast(list[Document], served["tools"])
+    }
+    assert hints == {
+        **dict.fromkeys(
+            ("status", "units", "positions", "journal_tail", "passport", "deployments"), True
+        ),
+        **dict.fromkeys(
+            (
+                "deploy",
+                "withdraw",
+                "pause",
+                "resume",
+                "kill",
+                "flatten",
+                "bind",
+                "confirm_same_node",
+                "take_over",
+                "sign_in_begin",
+                "sign_in_code",
+                "self_test",
+                "rotate_keys",
+            ),
+            False,
+        ),
+    }
 
 
 def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Supervisor) -> None:

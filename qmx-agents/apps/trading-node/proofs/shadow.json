@@ -1,0 +1,32 @@
+{
+  "source": "live",
+  "cases": [
+    {
+      "tool": "status",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "status: unknown argument surprise"
+      }
+    },
+    {
+      "tool": "journal_tail",
+      "arguments": {"after_sequence": "x"},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "journal_tail: after_sequence is an integer from -1"
+      }
+    },
+    {
+      "tool": "journal_tail",
+      "arguments": {"streams": ["nope"]},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "journal_tail: streams is a list of node, unit"
+      }
+    }
+  ]
+}
