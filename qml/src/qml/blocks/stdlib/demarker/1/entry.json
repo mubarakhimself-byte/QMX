@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "demarker",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "DeMarker",
+    "DeM"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "DeMark's ratio of the mean rise of the high over the mean rise plus the mean fall of the low, each over period bars, from 0 to 1.",
+  "boundaries": "Missing while the window holds neither a rise nor a fall.",
+  "recognition": "Above 0.7 reads as overbought, below 0.3 as oversold, by convention.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/demarker (read 2026-11-02)",
+      "quote": "is based on the comparison of the period maximum with the previous period maximum",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x period + 2",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:68a3b58182f88fc74c3b113d0ea4ecbb3feeb17c8a732c598f4db9e119abd4e9",
+  "golden": {
+    "reference": "talib.SMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

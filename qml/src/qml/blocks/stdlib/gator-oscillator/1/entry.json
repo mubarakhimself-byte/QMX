@@ -1,0 +1,110 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "gator-oscillator",
+  "version": 1,
+  "family": "bill-williams",
+  "aliases": [
+    "Gator",
+    "Gator Oscillator"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The absolute distance between two Alligator lines: jaw against teeth for the upper histogram, teeth against lips for the lower one.",
+  "boundaries": "Always 0 or more; MetaTrader draws the lower histogram below zero.",
+  "recognition": "Widening bars read as the Alligator eating, shrinking as it sating.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/bw_indicators/go (read 2026-11-02)",
+      "quote": "shows the degree of convergence/divergence of the Balance Lines (Smoothed Moving Average)",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "slow_period": {
+      "measure": "bars",
+      "default": "13",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slow_shift": {
+      "measure": "bars",
+      "default": "8",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    },
+    "fast_period": {
+      "measure": "bars",
+      "default": "8",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "fast_shift": {
+      "measure": "bars",
+      "default": "5",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "max(slow_period + slow_shift, fast_period + fast_shift)",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "slow_shift + fast_shift + 4",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:f010d6fba3a931e0f38e00d09ca8786ab8b682ea390c4c3a98aaa2548d489a43",
+  "golden": {
+    "reference": "MetaQuotes SMMA formula over talib.MEDPRICE 0.7.1, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

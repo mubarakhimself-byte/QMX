@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "atr-wilder",
+  "version": 1,
+  "family": "volatility",
+  "aliases": [
+    "Wilder ATR"
+  ],
+  "same_word_as": [
+    "average-true-range@1",
+    "atr@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Wilder's average true range: the mean of the first period true ranges, then (previous x (period - 1) + true range) / period.",
+  "boundaries": "MetaTrader's ATR is a simple mean of the true range; this is Wilder's.",
+  "recognition": "Stops and targets are often set in multiples of it.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "exit",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/atr (read 2026-11-02)",
+      "quote": "is an indicator that shows volatility of the market",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:2b12b72b5d4653249f9baed98617786e95c6921b487c5d4135e04ea0bc1c813a",
+  "golden": {
+    "reference": "talib.ATR 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

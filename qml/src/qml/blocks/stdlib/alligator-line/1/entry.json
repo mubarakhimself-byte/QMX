@@ -1,0 +1,90 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "alligator-line",
+  "version": 1,
+  "family": "bill-williams",
+  "aliases": [
+    "Alligator",
+    "Alligator jaw",
+    "Alligator teeth",
+    "Alligator lips"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "One Alligator balance line: the smoothed mean of the median price over period bars, drawn shift bars ahead. Jaw 13 and 8, teeth 8 and 5, lips 5 and 3.",
+  "boundaries": "One line per binding; a unit binds it three times for the whole Alligator.",
+  "recognition": "Lines apart and in order read as a trend; braided lines as a sleeping market.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/bw_indicators/alligator (read 2026-11-02)",
+      "quote": "Alligator Technical Indicator is a combination of Balance Lines (Moving Averages)",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "13",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "shift": {
+      "measure": "bars",
+      "default": "8",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + shift",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "shift + 2",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:4fc02cf35e78a7bbeae819cf77eb8c367c00b078f09b7f253dd17859169f5fb2",
+  "golden": {
+    "reference": "MetaQuotes SMMA formula over talib.MEDPRICE 0.7.1, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

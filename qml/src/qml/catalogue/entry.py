@@ -553,14 +553,29 @@ def _defaults(raw: Mapping[str, object]) -> dict[str, Decimal]:
     return found
 
 
-def _series_port(raw: Mapping[str, object]) -> str | None:
+def _bar(row: object) -> dict[str, object]:
+    """One golden bar: prices and volume as decimals, ``time`` (nanoseconds UTC) as it is."""
+    if not isinstance(row, Mapping):
+        raise TypeError(f"a golden bar is an object, not {row!r}")
+    fields = cast("Mapping[str, object]", row)
+    return {k: v if k == "time" else Decimal(str(v)) for k, v in fields.items()}
+
+
+def _feed(raw: Mapping[str, object], table: Mapping[str, object]) -> tuple[str, list[object]]:
+    """The port a golden run feeds and what it feeds it: the table's ``close`` values to the
+    first ``series`` input, or its ``bars`` rows to the first ``bars`` input."""
     inputs = raw.get("inputs")
     for port in cast("list[object]", inputs) if isinstance(inputs, list) else []:
-        if isinstance(port, Mapping):
-            given = cast("Mapping[str, object]", port)
-            if given.get("stream_kind") == "series" and isinstance(given.get("port"), str):
-                return str(given["port"])
-    return None
+        empty: Mapping[str, object] = {}
+        given = cast("Mapping[str, object]", port) if isinstance(port, Mapping) else empty
+        name, kind = given.get("port"), given.get("stream_kind")
+        if not isinstance(name, str):
+            continue
+        if kind == "series":
+            return name, [Decimal(str(c)) for c in cast("list[object]", table.get("close") or [])]
+        if kind == "bars" and isinstance(table.get("bars"), list):
+            return name, [_bar(b) for b in cast("list[object]", table["bars"])]
+    return "", []
 
 
 def _value(output: object) -> Decimal | None:
@@ -593,18 +608,17 @@ def _golden_problems(
     if not isinstance(golden, Mapping):
         return [EntryProblem("/golden/cases", "the golden cases are not an object", "")]
     table = cast("Mapping[str, object]", golden)
-    port = _series_port(raw)
     try:
-        closes = [Decimal(str(c)) for c in cast("list[object]", table.get("close") or [])]
+        port, closes = _feed(raw, table)
         named = list(_cases(table, pin))
     except (TypeError, ArithmeticError) as error:
         return [EntryProblem("/golden/cases", f"the golden cases do not read: {error}", "")]
-    if port is None or not closes or not named:
+    if not port or not closes or not named:
         return [EntryProblem("/golden/cases", f"the golden cases hold no run of {pin}", "")]
     problems: list[EntryProblem] = []
     for name, params in named:
 
-        def run(series: Sequence[Decimal], params: Mapping[str, Decimal] = params) -> list[object]:
+        def run(series: Sequence[object], params: Mapping[str, Decimal] = params) -> list[object]:
             instance = make({**_defaults(raw), **params})
             return [_value(instance.update({port: x})) for x in series]
 

@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bulls-power",
+  "version": 1,
+  "family": "elder-ray",
+  "aliases": [
+    "Bulls Power",
+    "Elder bulls power"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Elder's Bulls Power: the bar's high less the EMA of the close over period bars.",
+  "boundaries": "In price units; one half of Elder's ray, read beside a trend filter.",
+  "recognition": "Its sign says whether the bar's high reached past the average.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/bulls (read 2026-11-02)",
+      "quote": "Bulls Power as the difference between the highest price and 13-period exponential moving average",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "13",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:e04622c922aed7f1c42342378a013c95b9a291d4afdf0afb68e15c22e7ea9607",
+  "golden": {
+    "reference": "talib.EMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

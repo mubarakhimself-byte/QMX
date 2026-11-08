@@ -1,0 +1,79 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "cci",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "Commodity Channel Index"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "How far the typical price (high + low + close) / 3 sits from its period mean, in units of 0.015 times its mean absolute deviation.",
+  "boundaries": "Unbounded; readings beyond plus and minus 100 are a convention, not a limit.",
+  "recognition": "Above +100 reads as stretched up, below -100 as stretched down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/cci (read 2026-11-02)",
+      "quote": "measures the deviation of the commodity price from its average statistical price",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:09e81bed10599a20238fe6d40c5a5222562d573d4e1bc659039048795e71dcd5",
+  "golden": {
+    "reference": "talib.CCI 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

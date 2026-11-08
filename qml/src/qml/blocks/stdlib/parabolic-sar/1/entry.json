@@ -1,0 +1,90 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "parabolic-sar",
+  "version": 1,
+  "family": "trailing-level",
+  "aliases": [
+    "Parabolic SAR",
+    "SAR",
+    "parabolic stop and reverse"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Wilder's stop and reverse: a level that trails price, speeding up by step at each new extreme up to maximum, and flips side when a bar crosses it.",
+  "boundaries": "Always in the market on one side; its side is a reading, not a position.",
+  "recognition": "Dots under price read as up, over price as down; a flip is the signal.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/psar (read 2026-11-02)",
+      "quote": "Parabolic SAR Technical Indicator was developed for analyzing the trending markets",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "step": {
+      "measure": "ratio",
+      "default": "0.02",
+      "origin": "published_convention",
+      "range": {
+        "min": "0.001",
+        "max": "0.2",
+        "step": "0.001"
+      }
+    },
+    "maximum": {
+      "measure": "ratio",
+      "default": "0.2",
+      "origin": "published_convention",
+      "range": {
+        "min": "0.01",
+        "max": "1",
+        "step": "0.01"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "2",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:43bf8f84d81bdc722ccab04fdd2afc43eaa0a4769bde45696bb16a190a2accf7",
+  "golden": {
+    "reference": "talib.SAR 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

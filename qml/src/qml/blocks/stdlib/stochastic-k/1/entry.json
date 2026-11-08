@@ -1,0 +1,93 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "stochastic-k",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "stochastic main line",
+    "%K line"
+  ],
+  "same_word_as": [
+    "stochastic-oscillator@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Lane's %K: where the close sits in the high-low range of the last k_period bars, slowed by a simple mean over slowing values, from 0 to 100.",
+  "boundaries": "MetaTrader slows by summing the parts over the slowing bars; this is TA-Lib's.",
+  "recognition": "Above 80 reads as overbought, below 20 as oversold, by convention.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/so (read 2026-11-02)",
+      "quote": "compares where a security’s price closed relative to its price range",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "k_period": {
+      "measure": "bars",
+      "default": "5",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slowing": {
+      "measure": "bars",
+      "default": "3",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "k_period + slowing - 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x k_period + slowing",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:86246dfef51a5098877550f0016fef79447ab4e150d9006d4442ea62a2d76d34",
+  "golden": {
+    "reference": "talib.SMA over talib.STOCHF 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

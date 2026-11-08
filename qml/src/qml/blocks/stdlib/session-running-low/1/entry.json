@@ -1,0 +1,78 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "session-running-low",
+  "version": 1,
+  "family": "session",
+  "aliases": [],
+  "same_word_as": [
+    "session-low@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The lowest low of the current session so far. Each bar carries its close time in nanoseconds UTC as time; a session opens at session_start seconds into the UTC day and lasts a day.",
+  "boundaries": "One session per UTC-day slot; bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "A break of the session's high or low is a common breakout level.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "qml/catalogue-seed/stats-2026-08-26/market-structure-and-location/locations-and-structure.md#session-low Definition",
+      "quote": "The lowest price traded within a defined trading session up to the current moment.",
+      "dated": "2026-08-26"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:2606f40f2a4c7ec5a00881b41a0cacf5b36c125b258a5b53d39df20b56ffd1f7",
+  "golden": {
+    "reference": "session extremes in numpy, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

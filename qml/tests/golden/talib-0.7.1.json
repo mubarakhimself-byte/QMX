@@ -1,7 +1,7 @@
 {
  "generator": "tools/dictionary/golden_talib.py",
  "talib": "0.7.1",
- "numpy": "2.5.4",
+ "numpy": "2.5.2",
  "seed": 20261101,
  "close": [
   "1.09994",

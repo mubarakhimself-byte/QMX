@@ -1,0 +1,64 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "heikin-ashi-open",
+  "version": 1,
+  "family": "candle-transform",
+  "aliases": [],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The Heikin-Ashi open: the mean of the previous Heikin-Ashi open and close.",
+  "boundaries": "A smoothed candle, not a traded price; the first bar seeds the open with its own open and close.",
+  "recognition": "Heikin-Ashi close above its open reads as an up candle.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-types/heikin-ashi (read 2026-11-02)",
+      "quote": "Heikin-Ashi Candlesticks are an offshoot from Japanese candlesticks",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:0a8fd745221571eb231496f26f292a8b6f2b0c8b206f1fc2ffa5334aeb171295",
+  "golden": {
+    "reference": "Heikin-Ashi recursion in numpy, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

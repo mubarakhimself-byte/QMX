@@ -1,0 +1,91 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bollinger-band",
+  "version": 1,
+  "family": "band",
+  "aliases": [
+    "Bollinger band line"
+  ],
+  "same_word_as": [
+    "context.bollinger-bands@1",
+    "locations.bollinger-bands@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The simple mean of the last period closes plus deviations population standard deviations; 2 is the upper band, -2 the lower, 0 the middle line.",
+  "boundaries": "One line per binding: a unit binds it twice for both bands.",
+  "recognition": "A close outside a band is a stretch; bands narrowing is a squeeze.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/bb (read 2026-11-02)",
+      "quote": "the Bollinger Bands are plotted a certain number of standard deviations away from it",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "deviations": {
+      "measure": "ratio",
+      "default": "2",
+      "origin": "published_convention",
+      "range": {
+        "min": "-5",
+        "max": "5",
+        "step": "0.1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:63cc8c8cff46448f4e6f336534bcf62be78fb9eb588fe73a1365be92e92c89be",
+  "golden": {
+    "reference": "talib.BBANDS 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

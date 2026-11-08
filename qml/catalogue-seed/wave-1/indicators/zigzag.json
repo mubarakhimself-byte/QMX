@@ -1,0 +1,29 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "zigzag",
+  "version": 1,
+  "family": "swing-line",
+  "aliases": [
+    "ZigZag"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "A line joining the swing highs and lows that differ by more than a minimum move, drawn over the last period bars.",
+  "boundaries": "Its last segment moves as new bars arrive, so it repaints and no block computes it; confirmed swings are swing-high, swing-low and the fractal levels.",
+  "recognition": "Used to read past swings and wave counts, not to trade the last leg.",
+  "eligible_roles": [
+    "context",
+    "location"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/mobile-trading/iphone/help/chart/indicators/trend_indicators/zigzag (read 2026-11-02)",
+      "quote": "The ZigZag indicator connects trend reversal points",
+      "dated": "2026-11-02"
+    }
+  ],
+  "same_word_as": [
+    "swing-high@1",
+    "swing-low@1"
+  ]
+}

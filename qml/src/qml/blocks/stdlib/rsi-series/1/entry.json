@@ -1,0 +1,83 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "rsi-series",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "RSI line"
+  ],
+  "same_word_as": [
+    "rsi@1",
+    "rsi-cross-back@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Wilder's Relative Strength Index of the close, from 0 to 100.",
+  "boundaries": "The line itself; the cross back over a level is rsi-cross-back@1.",
+  "recognition": "Above 70 reads as overbought, below 30 as oversold, by convention.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/rsi (read 2026-11-02)",
+      "quote": "is a price-following oscillator that ranges between 0 and 100",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:bd4ed1a35089f6715573aec1e087b365dae23d1c4d62e2df62ba4aaf097efc4c",
+  "golden": {
+    "reference": "talib.RSI 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

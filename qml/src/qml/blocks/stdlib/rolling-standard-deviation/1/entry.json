@@ -1,0 +1,79 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "rolling-standard-deviation",
+  "version": 1,
+  "family": "volatility",
+  "aliases": [
+    "StdDev",
+    "standard deviation indicator"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The population standard deviation of the last period closes.",
+  "boundaries": "In price units around the simple mean, not returns; TA-Lib also prints 0 for any variance under 1e-8 and this block does not.",
+  "recognition": "High values mark a spread-out, volatile window, low values a quiet one.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "exit",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/sd (read 2026-11-02)",
+      "quote": "describes the range of price fluctuations relative to Moving Average",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:8dda5c0437c38c6e26cf21503ae6c43db31759d4f44c0322a36c12f9ed315d1e",
+  "golden": {
+    "reference": "talib.STDDEV 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

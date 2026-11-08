@@ -1,0 +1,79 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "aroon-down",
+  "version": 1,
+  "family": "aroon",
+  "aliases": [
+    "Aroon-Down"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Chande's how recent the lowest low of the last period + 1 bars is, 100 for this bar.",
+  "boundaries": "Counts bars since an extreme, not its size; ties count the newest extreme.",
+  "recognition": "Up near 100 and down near 0 reads as a fresh uptrend.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/aroon (read 2026-11-02)",
+      "quote": "measure the number of periods since price recorded an x-day high or low",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x period + 2",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:408de17b2e742628e96f9aebeb9ebc85950053ea3428d0804d58d2a40287d596",
+  "golden": {
+    "reference": "talib.AROON 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

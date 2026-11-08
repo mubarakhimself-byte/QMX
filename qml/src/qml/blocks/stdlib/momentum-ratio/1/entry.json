@@ -1,0 +1,83 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "momentum-ratio",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "MetaTrader Momentum",
+    "ROCR100"
+  ],
+  "same_word_as": [
+    "momentum@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The close as a percent of the close period bars ago; 100 means no change.",
+  "boundaries": "MetaTrader's Momentum is this ratio; the difference form is the ported momentum entry.",
+  "recognition": "Above 100 price is higher than period bars ago, below 100 lower.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/momentum (read 2026-11-02)",
+      "quote": "measures the change of price of a financial instrument over a given time span",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:4f18ecb6508a6077ea5668be02c23ce6f7ed225fade3239ff519565f71220a41",
+  "golden": {
+    "reference": "talib.ROCR100 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

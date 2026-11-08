@@ -1,0 +1,103 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "stochastic-d",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "stochastic signal line",
+    "%D line"
+  ],
+  "same_word_as": [
+    "stochastic-oscillator@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Lane's %D: the simple mean of %K over d_period values.",
+  "boundaries": "A smoothing of %K, so it lags it; read as %K's signal line.",
+  "recognition": "%K crossing %D is the common stochastic trigger.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/so (read 2026-11-02)",
+      "quote": "The second line, called %D, is a Moving Average of %K",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "k_period": {
+      "measure": "bars",
+      "default": "5",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slowing": {
+      "measure": "bars",
+      "default": "3",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "d_period": {
+      "measure": "bars",
+      "default": "3",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "k_period + slowing + d_period - 2",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x k_period + slowing + d_period",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:3185505244c4f844c7eb3cbd81c9caff1d0216c8d06500d16130c055d5c63c8d",
+  "golden": {
+    "reference": "talib.STOCH 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

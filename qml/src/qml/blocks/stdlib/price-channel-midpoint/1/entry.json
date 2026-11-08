@@ -1,0 +1,93 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "price-channel-midpoint",
+  "version": 1,
+  "family": "ichimoku",
+  "aliases": [
+    "Tenkan-sen",
+    "Kijun-sen",
+    "Senkou Span B",
+    "MIDPRICE"
+  ],
+  "same_word_as": [
+    "ichimoku-cloud@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The middle of the highest high and lowest low of the last period bars, drawn shift bars ahead. Tenkan 9 and 0, Kijun 26 and 0, Senkou B 52 and 26.",
+  "boundaries": "One Ichimoku line per binding; the lagging Chikou span reads the future, so none.",
+  "recognition": "Price above Kijun reads as up; Tenkan crossing Kijun is Ichimoku's trigger.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/ikh (read 2026-11-02)",
+      "quote": "the sum of maximum and minimum within this time, divided by two",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "26",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "shift": {
+      "measure": "bars",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + shift",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x period + shift + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:0be1a0f4e9a80564028eca845b30ef6789a56d8b72602c123634b1bb5692097c",
+  "golden": {
+    "reference": "talib.MIDPRICE 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}
