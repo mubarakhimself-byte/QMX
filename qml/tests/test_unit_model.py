@@ -32,7 +32,7 @@ def test_the_dummy_parses_with_zero_problems() -> None:
     assert unit.streams[0].bar.size == Decimal("900")
     assert isinstance(unit.logic.short, SlotsSide)
     assert unit.logic.short.slots["trigger"].bindings[0].params["level"] == NumberParam("rsi_high")
-    assert unit.sizer is not None and str(unit.sizer.block) == "fixed-fraction-at-stop@1"
+    assert unit.sizer is not None and str(unit.sizer.block) == "fixed-fraction-at-stop@2"
     assert [str(binding.block) for binding in unit.exit_set] == [
         "swing-stop-buffer@1",
         "target-r-multiple@1",

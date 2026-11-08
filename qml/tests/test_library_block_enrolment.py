@@ -53,9 +53,7 @@ def test_a_library_sizer_is_enrolled() -> None:
 
     assert shipped.face.component_type == "sizer"
     assert contracts._breaks(shipped) == same_as_stdlib
-    assert same_as_stdlib == [
-        f"sizer contract, {trade.name}: answered 0.25, not a Size" for trade in contracts._TRADES
-    ]
+    assert same_as_stdlib == contracts._FLOAT_BREAKS
 
 
 def test_the_exit_contract_feeds_only_host_evidence() -> None:

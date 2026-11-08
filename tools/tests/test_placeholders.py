@@ -88,7 +88,7 @@ def test_the_published_dummy_lists_its_placeholder_bindings_and_numbers(
         "dummy-trend-pullback\titem-dummy\tbinding\ttime_out\t/exit_set/2\t"
         "time-exit-bars@1\trisk-session",
         "dummy-trend-pullback\titem-dummy\tbinding\tfixed_fraction\t/sizer\t"
-        "fixed-fraction-at-stop@1\trisk-session",
+        "fixed-fraction-at-stop@2\trisk-session",
         *_NUMBERS,
         "1 published units, 1 use a placeholder: 4 bindings, 4 numbers, 0 blocks not found, "
         "0 unreadable",
