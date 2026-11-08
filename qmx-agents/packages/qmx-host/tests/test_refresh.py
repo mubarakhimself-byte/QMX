@@ -70,7 +70,7 @@ def test_the_sign_in_and_the_refresh_never_keep_a_live_grants_pair(
     signing_store = Store({})
     signing = HomeSignIn(
         name=lambda: "pc",
-        key=lambda: None,
+        pass_keys=dict,
         app=lambda: APP,
         keys=signing_store,
         accounts=lambda app, tokens: asyncio.run(

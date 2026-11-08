@@ -98,6 +98,7 @@ from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.runner import Engine
 from qmx_engine.service.forward import (
     Forwarder,
+    HostKeys,
     forward_router,
     owned_instances,
     placement_rows,
@@ -184,7 +185,7 @@ from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.first_start import enable_first_party, land_dummy, land_port, land_wave
-from qmx_host.host_route import ANSWERS, Answering, Answers, host_router
+from qmx_host.host_route import ANSWERS, Answering, Answers, held_keys, host_router
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
@@ -1164,7 +1165,7 @@ async def serve(
                             host_router(
                                 Answering(
                                     nodes,
-                                    key=pairing_key(home),
+                                    pass_keys=lambda: held_keys(home),
                                     heartbeats=lambda: heartbeats_read(home, name)({}),
                                     store_root=lambda: (
                                         door.store_root if isinstance(door, MarketDoor) else None
@@ -1576,11 +1577,6 @@ def vault_key(home: Path, name: str = PAIRING_KEY) -> str | None:
     return None if found is None else found.decode("utf-8").strip()
 
 
-def pairing_key(home: Path) -> Callable[[], str | None]:
-    """The home's pairing key, read at each use, so a key paired after the start is used."""
-    return lambda: vault_key(home)
-
-
 def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
     """This host's one node link (Part C AD-303), over its supervisor and its place rows."""
 
@@ -1601,20 +1597,20 @@ def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
         here=name,
         apps=control.app_runtime(),
         settings=ControlSettings(control).values,
-        key=pairing_key(home),
+        pass_keys=lambda: held_keys(home),
         tuning=tuning,
         blobs=blobs,
     )
 
 
 def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forwarder]:
-    """The owned instances this home asks: every node on the PC, none on a node (AD-65)."""
-    key = vault_key(home) if role == "pc" else None
-    if key is None:
-        return []
+    """The owned instances this home asks: every node on the PC, none on a node (AD-65), each
+    with the pass key it was paired with; a node not paired yet is not asked."""
+    keys: HostKeys = held_keys(home) if role == "pc" else {}
     return [
-        Forwarder(instance, key=key, source=name, principal="operator", now=wall)
+        Forwarder(instance, key=keys[instance.name], source=name, principal="operator", now=wall)
         for instance in owned_instances(placement_rows(core.settings), home=name)
+        if instance.name in keys
     ]
 
 
@@ -1669,7 +1665,7 @@ def records_job(
         clock=lambda: datetime.now(UTC),  # ambient-scan: allow (the host is the composition root)
         projection=projection,
         store=store,
-        pull=Pull(door, folder, here=nodes.here, places=nodes.places, key=nodes.key)
+        pull=Pull(door, folder, here=nodes.here, places=nodes.places, pass_keys=nodes.pass_keys)
         if role == "pc"
         else None,
     )
@@ -2063,15 +2059,11 @@ def closed_market_router(refusal: TypedRefusal) -> APIRouter:
 
 
 def answering_router(home: Path, engine: EngineDoor) -> list[APIRouter]:
-    """The node's forwarding route, served only where a pairing key lets another host ask, and
-    the cTrader sign-in routes, which refuse by name until a pairing key exists (AD-67)."""
+    """The node's forwarding route and the cTrader sign-in routes, which answer only a pass
+    signed with the pass key this host shares with its sender (AD-67, C-28)."""
     from qmx_host.venue_session import for_host  # noqa: PLC0415 - kept beside the mount (WU8)
 
-    venue = for_host(home, engine)
-    key = vault_key(home)
-    if key is None:
-        return [venue]
-    return [forward_router(engine.svc.remote(), key), venue]
+    return [forward_router(engine.svc.remote(), lambda: held_keys(home)), for_host(home, engine)]
 
 
 def drain_router(core: Engine) -> APIRouter:

@@ -5,9 +5,10 @@ A server connects in two halves. First his five cards, all before anything runs:
 for it, its address, a one-off Tailscale key, the server password typed in a terminal window QMX
 opens (QMX never sees it; the window copies a key QMX made in `keys/` onto the server), and his
 approval of the firewall step. Then QMX's checked steps: the source sent over, the steps of `qmx
-node setup` and its PC half (`qmx_control.node`, the one list both run), the place row, a one-node
-smoke run on the server's own engine, the status ladder and the server's own recovery check. A
-rerun skips every step whose check passes, so a kill at any step converges on one row (I12).
+node setup` and its PC half (`qmx_control.node`, the one list both run), a pass key of the
+server's own (C-28), the place row, a one-node smoke run on the server's own engine, the status
+ladder and the server's own recovery check. A rerun skips every step whose check passes, so a kill
+at any step converges on one row (I12).
 
 "Keep copies on your server" is its own kind, run once the server is up: it runs the `sftp`
 storage kind's steps with the server's address and key, and adds `keep`, `via = "rclone"`, the
@@ -40,11 +41,19 @@ from pydantic import JsonValue
 from qmx_control import node
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.service.forward import Forwarder, ForwardRefused, Instance, post_json
+from qmx_engine.settings import PC
 from qmx_engine.triggers.preflight import PLACEMENT_STATES, placement_state
 from qmx_home.files import plain
 
 from qmx_host.connect import Card, Kind, Rows, Run, Step, placement, run_kind, write_row
 from qmx_host.connect_storage import STORAGE, mint
+from qmx_host.host_route import (
+    PASS_KEY_DIGEST,
+    held_keys,
+    pair_place,
+    pass_key_script,
+    server_digest,
+)
 from qmx_host.jobs import Stopped
 
 USER: Final = "root"
@@ -453,6 +462,7 @@ def server_of(run: Run) -> node.Server:
 
 
 SHIPPED: Final = "send the source"
+PASS_KEY: Final = "pass-key"  # noqa: S105 (a step name, not a key)
 
 
 def _shipped(run: Run) -> bool:
@@ -561,12 +571,38 @@ def _never(_run: Run) -> bool:
     return False
 
 
+def _send(run: Run, script: str, what: str) -> str:
+    try:
+        return server_of(run).send("sudo bash -s", script)
+    except RuntimeError as failed:
+        raise Stopped(f"{run.place}: {what} did not finish ({failed})") from None
+
+
+def _pass_key_held(run: Run) -> bool:
+    key = held_keys(run.world.layout.home).get(run.place)
+    if not key:
+        return False
+    said = _send(run, PASS_KEY_DIGEST, "reading its pass key").split()
+    return bool(said) and said[0] == server_digest(key)
+
+
+def _pair_pass_key(run: Run) -> Card | None:
+    """A fresh key for this server alone: This PC keeps it beside its other servers' keys, and the
+    server keeps it as This PC's. A key either side held for the pair before stops verifying."""
+    key = pair_place(run.world.layout.home, run.place)
+    _send(run, pass_key_script(key), "writing its pass key")
+    run.say(f"{run.place}: This PC and {run.place} share a pass key no other machine holds")
+    return None
+
+
 def _forwarder(run: Run) -> Forwarder:
-    key = (run.world.layout.home / "vault" / node.PAIRING_KEY).read_text(encoding="utf-8")
+    key = held_keys(run.world.layout.home).get(run.place)
+    if not key:
+        raise Stopped(f"{run.place}: This PC holds no pass key for it; set it up again")
     return Forwarder(
         Instance(run.place, _engine_url(run)),
-        key=key.strip(),
-        source="pc",
+        key=key,
+        source=PC,
         principal="operator",
         post=ports(run).post,
     )
@@ -666,6 +702,7 @@ SERVER: Final = Kind(
         Step("firewall", "his", _answered("approve"), _firewall),
         Step(SHIPPED, "qmx", _shipped, _ship),
         *(_node_step(name) for name in SETUP_NAMES),
+        Step(PASS_KEY, "qmx", _pass_key_held, _pair_pass_key),
         Step("row", "qmx", _row_written, _write_row),
         Step("smoke", "qmx", _never, _smoke),
         Step("ladder", "qmx", _never, _ladder),

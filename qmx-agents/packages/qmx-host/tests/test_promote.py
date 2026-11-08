@@ -236,7 +236,7 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
             here="pc",
             apps=cast(Any, node),
             settings=dict,
-            key=lambda: None,
+            pass_keys=dict,
             blobs=lambda fingerprint: [store.read_blob(fingerprint)],
         )
         promoter = Promoter(

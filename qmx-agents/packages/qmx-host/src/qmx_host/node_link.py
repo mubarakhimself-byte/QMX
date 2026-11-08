@@ -48,7 +48,13 @@ from qmx_engine.admission import setting
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.nodes.app_op import Placements
 from qmx_engine.service.context import OPERATOR
-from qmx_engine.service.forward import PASS_HEADER, mint_host_pass, owned_instances, placement_rows
+from qmx_engine.service.forward import (
+    PASS_HEADER,
+    HostKeys,
+    mint_host_pass,
+    owned_instances,
+    placement_rows,
+)
 
 NODE_APP: Final = "trading-node"
 NODE_READS: Final = frozenset({"status", "units", "positions", "journal_tail", "passport"})
@@ -257,20 +263,20 @@ class NodeLink:
         here: str,
         apps: Supervisor,
         settings: Callable[[], Mapping[str, object]],
-        key: Callable[[], str | None],
+        pass_keys: Callable[[], HostKeys],
         tuning: Callable[[], Mapping[str, object]] = dict,
         clock: Callable[[], float] = time.time,
         post: Post = post_json,
         blobs: Blobs | None = None,
     ) -> None:
         """`settings` are the flat engine settings the place rows live in; `tuning` is the
-        `[engine.node_link]` table; `key` reads the pairing key, None before pairing; `blobs`
-        reads this machine's Library, which a deployment's files are staged from."""
+        `[engine.node_link]` table; `pass_keys` reads this home's pass keys, none before pairing;
+        `blobs` reads this machine's Library, which a deployment's files are staged from."""
         self.here = here
         self.apps = apps
         self.blobs = blobs
         self.settings = settings
-        self.key = key
+        self.pass_keys = pass_keys
         self.tuning = tuning
         self.clock = clock
         self.post = post
@@ -520,12 +526,12 @@ class NodeLink:
     ) -> Mapping[str, JsonValue]:
         """One ask of `place`'s host route; a missed answer counts against the place."""
         found = self.places().get(place)
-        key = self.key()
+        key = self.pass_keys().get(place)
         if found is None or not key:
             raise AppError(
                 "placement_unreachable",
-                f"{place} has no owned place row with a host URL, or this home holds no pairing"
-                " key",
+                f"{place} has no owned place row with a host URL, or this home holds no pass key"
+                f" for {place}; set {place} up again in Connect to pair it",
                 409,
             )
         held = mint_host_pass(

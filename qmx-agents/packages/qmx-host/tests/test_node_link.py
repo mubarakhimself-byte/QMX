@@ -47,7 +47,9 @@ class FarHost:
     ) -> JsonValue:
         if not self.up:
             raise Unreachable("ConnectError: recorded refusal")
-        held = verify_host_pass(KEY, headers[PASS_HEADER], target="ldn-1", now=self.clock[0])
+        held = verify_host_pass(
+            {"pc": KEY}, headers[PASS_HEADER], target="ldn-1", now=self.clock[0]
+        )
         self.asked.append({"url": url, "principal": held.principal, **dict(body)})
         return {"schema_version": "qmx.host.forward/1", "ok": True, "value": {"verb": body["verb"]}}
 
@@ -67,7 +69,7 @@ def link_of(control: ControlService, far: FarHost) -> NodeLink:
         here="pc",
         apps=control.app_runtime(),
         settings=lambda: ROWS,
-        key=lambda: KEY,
+        pass_keys=lambda: {"ldn-1": KEY},
         clock=lambda: far.clock[0],
         post=far,
     )
@@ -137,7 +139,7 @@ def test_the_place_rows_come_from_his_settings(control: ControlService) -> None:
         here="pc",
         apps=control.app_runtime(),
         settings=ControlSettings(control).values,
-        key=lambda: None,
+        pass_keys=dict,
     )
     assert (link.home_of("trading-node"), link.home_of("mis"), link.home_of("qmb")) == (
         "ldn-1",
@@ -151,7 +153,7 @@ def test_no_trading_node_reads_as_none_and_no_row_reaches_a_change(
     control: ControlService,
 ) -> None:
     link = NodeLink(
-        control.home, here="pc", apps=control.app_runtime(), settings=dict, key=lambda: None
+        control.home, here="pc", apps=control.app_runtime(), settings=dict, pass_keys=dict
     )
     assert link.read("status", {}, principal="agent:x") is None
     with pytest.raises(AppError, match="pause is not one of the node's reads"):
@@ -209,7 +211,7 @@ class RecordingSupervisor:
 def test_a_change_on_a_node_homed_here_answers_only_to_the_operator(tmp_path: Path) -> None:
     supervisor = RecordingSupervisor()
     link = NodeLink(
-        tmp_path, here="ldn-1", apps=cast(Any, supervisor), settings=dict, key=lambda: None
+        tmp_path, here="ldn-1", apps=cast(Any, supervisor), settings=dict, pass_keys=dict
     )
     for principal, op_id in (("agent:x", "L1"), ("run:r1", "L2")):
         with pytest.raises(AppError, match=f"only to the operator, not {principal}") as refused:
@@ -235,7 +237,7 @@ def test_deploy_waits_until_every_file_is_staged_from_this_library(tmp_path: Pat
         here="ldn-1",
         apps=cast(Any, supervisor),
         settings=dict,
-        key=lambda: None,
+        pass_keys=dict,
         blobs=lambda fingerprint: None if fingerprint not in held else [held[fingerprint]],
     )
     files: list[JsonValue] = [
