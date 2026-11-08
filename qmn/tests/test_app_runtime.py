@@ -184,7 +184,7 @@ def deployment(
             cast("Json", json.loads((RECORDS / f"{symbol}.json").read_text("utf-8")))
             for symbol in MARKETS.values()
         ],
-        "lane": "paper",
+        "lane": "live",
         "placeholders_acknowledged": False,
         "created_by": "operator",
         "created_at": "2026-11-02T09:00:00+00:00",

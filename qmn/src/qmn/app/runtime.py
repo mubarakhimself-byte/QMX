@@ -27,6 +27,10 @@ QMB's ``run_slice``. :class:`NodeUnit` wraps the handler for the node:
   world, never ``replay``;
 - a stop amendment that would widen the stop is refused before it reaches the venue.
 
+A paper deployment takes the same order path and ends at its paper account beside the binding,
+which sends nothing to the venue (``paper_lane.py``). Every entry also passes the stand-down
+table (``stand_down.py``); exits, broker stops and the kill switch never do.
+
 Protection follows the venue's rule: on cTrader the stop rides on the entry order as a distance.
 If the venue does not hold it after ``PROTECT_RETRY_MAX`` tries of ``PROTECT_CONFIRM_NS`` each,
 the node closes that position reduce-only and raises the protection alarm, a labelled placeholder
@@ -37,6 +41,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import sys
 import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -62,6 +67,7 @@ from qmb.results.journal import RunJournal
 from qmb.runloop import DeclaredStream, RestingIntent, SliceObservation, StreamSet
 from qmf.core import (
     Account,
+    AccountRole,
     Duration,
     Instant,
     Instrument,
@@ -79,8 +85,8 @@ from qmf.core import (
     WriterId,
     is_refusal,
 )
-from qmf.data.journal_envelope import JournalWorld, RowFacts
-from qmf.data.journal_writer import JournalWriter
+from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
+from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     AmendProtection,
@@ -95,10 +101,12 @@ from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import HostedUnit, OwnPosition, QuoteBar, Surface, construct_unit
 from qml.unit.model import Side
 
+from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.operations import Answer, Context, Target, refused
 from qmn.app.reconciler import Reconciler
+from qmn.app.stand_down import Kind, StandDowns, Subject
 from qmn.app.store import Json
 from qmn.journal_dispatch import enact_command
 from qmn.loop.accumulator import RecordingAccumulator
@@ -136,6 +144,7 @@ __all__ = [
     "Unprotected",
     "Venue",
     "VenueAccount",
+    "VenueClose",
     "deploy_preflight",
     "parse_deployment",
 ]
@@ -159,10 +168,7 @@ ACCUMULATOR_BOUND: Final = 10_000
 DEPLOYMENT_SCHEMA: Final = "qmx.node.deployment/1"
 ROLE: Final = "node"
 _ULID_ALPHABET: Final = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_LANE_WORLD: Final[Mapping[str, JournalWorld]] = {
-    "paper": JournalWorld.PAPER,
-    "live": JournalWorld.LIVE,
-}
+LANES: Final = frozenset({"paper", "live"})
 
 
 # --- the deployment document ----------------------------------------------------------------
@@ -192,10 +198,6 @@ class Deployment:
     account_id: str
     snapshots: tuple[Mapping[str, object], ...]
     lane: str
-
-    @property
-    def world(self) -> JournalWorld:
-        return _LANE_WORLD[self.lane]
 
 
 def _str(document: Mapping[str, object], name: str) -> str:
@@ -238,7 +240,7 @@ def parse_deployment(document: Mapping[str, object]) -> Deployment:
     if document.get("schema_version") != DEPLOYMENT_SCHEMA:
         raise ValueError(f"deployment.schema_version is {DEPLOYMENT_SCHEMA}")
     lane = _str(document, "lane")
-    if lane not in _LANE_WORLD:
+    if lane not in LANES:
         raise ValueError('deployment.lane is "paper" or "live"')
     files = document.get("files")
     snapshots = document.get("snapshots")
@@ -289,11 +291,6 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
         deployment = parse_deployment(document)
     except ValueError as error:
         return refused("bad_argument", f"deploy: {error}")
-    if deployment.lane == "live":
-        return refused(
-            "live_not_bound",
-            "a live lane needs a live account binding, which this node does not hold",
-        )
     if deployment.compiled_fingerprint != deployment.g_fingerprint:
         return refused(
             "fingerprint_mismatch",
@@ -1097,6 +1094,7 @@ class NodeUnit:
         self.orders = orders
         self.journal = journal
         self.lane = deployment.lane
+        self.journal_world = JournalWorld.PAPER
         self.guard = guard
         self.windows = {market: BarWindow(window_size(compiled)) for market in records}
         self.warm_needed = window_size(compiled)
@@ -1509,6 +1507,17 @@ class Runtime:
         self.reconciler = Reconciler(
             journal, context.journal_root, context.standing().tag, clock_ns, self.alarms.append
         )
+        self.stand_downs = StandDowns(
+            journal,
+            journal_root=context.journal_root,
+            machine=machine,
+            build=build,
+            boot_epoch_id=boot_epoch_id,
+            clock_ns=clock_ns,
+            free_bytes=lambda: shutil.disk_usage(context.data).free,
+            on_alarm=self.alarms.append,
+        )
+        self._paper_journal: JournalWriter | None = None
 
     # --- the thread ---
 
@@ -1525,6 +1534,9 @@ class Runtime:
         if self._thread is not None:
             self._thread.join(timeout=10)
         self._compiler.shutdown(wait=False, cancel_futures=True)
+        self.stand_downs.close()
+        if self._paper_journal is not None:
+            self._paper_journal.close()
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -1540,7 +1552,8 @@ class Runtime:
 
     def tick(self) -> None:
         standing = self.context.standing()
-        target = Target.fold(self.context.store.accepted())
+        accepted = self.context.store.accepted()
+        target = Target.fold(accepted)
         self._target = target
         if standing.mismatch:
             for hosted in self.hosted.values():
@@ -1549,8 +1562,11 @@ class Runtime:
             return
         self._protect(self._kill(target))
         self._deployments(target)
+        self.stand_downs.resumes(accepted)
+        self.stand_downs.watch_node()
         for account, venue in self.venues.items():
             bars = venue.feed.pump()
+            self.stand_downs.watch_feed(account, venue.feed)
             self._reconcile(account, venue)
             if bars:
                 self._drive(venue, bars)
@@ -1694,9 +1710,55 @@ class Runtime:
             if venue is None or not venue.feed.ready:
                 reason = "no session" if venue is None else venue.feed.reason
                 return f"venue not ready: {reason}"
-            return self.reconciler.holds(hosted.deployment.account_id, venue.feed.reconnects)
+            held_by_reconcile = self.reconciler.holds(
+                hosted.deployment.account_id, venue.feed.reconnects
+            )
+            if held_by_reconcile is not None:
+                return held_by_reconcile
+            held = self.stand_downs.blocking(
+                (
+                    "all",
+                    f"account:{hosted.deployment.account_id}",
+                    f"instrument:{market}",
+                    f"unit:{hosted.deployment.deployment_id}:{market}",
+                )
+            )
+            return None if held is None else f"{held.row.blocks} ({held.cause})"
 
         return check
+
+    # --- stand-downs that wait for him ---
+
+    def stand_down(self, kind: Kind, scope: str, cause: str) -> bool:
+        """Hold a stand-down that waits for him (a repeated fault, a spec change) at ``scope``;
+        True when it was not already held."""
+        return self.stand_downs.hold(kind, scope, cause, covers=(scope,))
+
+    def risk_stop(self, deployment_id: str, market_id: str, rule: str, reason: str) -> str | None:
+        """A risk rule stops a hosted unit on one market (standing order 7): one ``lifecycle``
+        event by ``risk_rule``, and no entry there until his resume. Answers its event id, or
+        None when the deployment is not trading or the row could not be written; the stop holds
+        in the second case, with an alarm."""
+        hosted = self.hosted.get(deployment_id)
+        unit = None if hosted is None else hosted.unit
+        if hosted is None or unit is None or market_id not in unit.records:
+            return None
+        deployment = hosted.deployment
+        subject = Subject(
+            deployment_id,
+            deployment.unit_id,
+            unit.compiled.document_fingerprint.value,
+            unit.compiled.compiled_fingerprint.value,
+            market_id,
+            deployment.lane,
+            unit.journal_world,
+        )
+        covers = (
+            f"deployment_id:{deployment_id}",
+            f"account:{deployment.account_id}",
+            *unit.instrument_scopes(market_id),
+        )
+        return self.stand_downs.risk_stop(subject, rule, reason, covers=covers)
 
     # --- deployments: compile after the answer, then warm up, then trade ---
 
@@ -1738,20 +1800,29 @@ class Runtime:
             )
             return
         venue = self.venues.get(deployment.account_id)
-        path = self._path(deployment.account_id)
-        if venue is None or path is None:
+        if venue is None:
             hosted.phase = Phase.WAITING
             hosted.detail = f"no venue binding holds account {deployment.account_id}"
+            return
+        live = deployment.lane == "live"
+        if live and venue.client.account.role is not AccountRole.DEMO:
+            hosted.phase = Phase.REFUSED
+            hosted.detail = "a live lane trades only on a demo binding until a live one is bound"
+            return
+        path = self._path(deployment.account_id) if live else self._paper_path(hosted, venue)
+        if path is None:
+            hosted.phase, hosted.detail = Phase.REFUSED, "the paper lane's journal would not open"
             return
         records = deployment_records(deployment)
         if isinstance(records, str):
             hosted.phase, hosted.detail = Phase.REFUSED, records
             return
+        world = JournalWorld.DEMO if live else JournalWorld.PAPER
         journal = RunJournal.open_live(
             self.context.journal_root,
             compiled,
             scope_id=deployment.deployment_id,
-            world=deployment.world,
+            world=world,
             machine=self.machine,
             role=ROLE,
             build=self.build,
@@ -1762,6 +1833,7 @@ class Runtime:
             return
         hosted.venue = venue
         unit = NodeUnit(deployment, compiled, records, path, journal.value, self.guard(hosted))
+        unit.journal_world = world
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
         if is_refusal(target):
@@ -1787,6 +1859,40 @@ class Runtime:
         ]
         self._drive_one(hosted, recorded)
         self._settle_warm(hosted)
+
+    def _paper_path(self, hosted: _Hosted, venue: Venue) -> OrderPath | None:
+        """A paper deployment's own order path: every step a live order takes, ending at its
+        paper account beside the binding instead of the venue. Its order rows go to the node
+        journal's ``paper`` partition."""
+        if self._paper_journal is None:
+            scope = WriterScope(
+                JournalStream.NODE,
+                self.context.standing().tag,
+                JournalWorld.PAPER,
+                self.machine,
+                ROLE,
+                self.build,
+            )
+            opened = JournalWriter.open(
+                self.context.journal_root,
+                scope,
+                clock=self.clock_ns,
+                boot_epoch_id=self.boot_epoch_id,
+            )
+            if is_refusal(opened):
+                return None
+            self._paper_journal = opened.value
+        paper = paper_lane.PaperAccount(venue.client)
+        venue.feed.listen(paper.on_bar)
+        return OrderPath(
+            tag=self.context.standing().tag,
+            venue=Venue(paper, venue.feed),
+            journal=self._paper_journal,
+            clock_ns=self.clock_ns,
+            sleep=self.sleep,
+            on_alarm=self.alarms.append,
+            session_epoch=f"{self.boot_epoch_id}-paper-{hosted.deployment.deployment_id}",
+        )
 
     def _loop(self, unit: NodeUnit, account: Account) -> Result[CommandStreamLoop]:
         writer = WriterId.try_create(
@@ -1909,6 +2015,7 @@ class Runtime:
             ("runtime.kill", kill),
             ("runtime.venues", venues),
             ("runtime.alarms", list(self.alarms)),
+            ("runtime.stand_downs", self.stand_downs.document()),
         ):
             text = json.dumps(value, sort_keys=True, default=str)
             if self._shown.get(key) != text:
