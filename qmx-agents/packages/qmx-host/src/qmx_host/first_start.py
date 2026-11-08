@@ -44,6 +44,7 @@ from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any, Final, cast
 
+import qml
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -94,7 +95,7 @@ from qmx_home.files import Busy, Held, copy_file, hold, local_floor
 from qmx_home.rclone import Rclone
 from qmx_home.versions import check_open
 from qmx_library.port import Draft, ObjectId
-from qmx_library.principal import Principal, drafts_ref
+from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
 from qmx_tools.gather import DUMMY, template
 
@@ -166,6 +167,9 @@ DRIVE_REMOVABLE: Final = 2
 SYNC_ROOTS_KEY: Final = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager"
 DRIVEFS_KEY: Final = r"Software\Google\DriveFS"
 OPERATOR: Final = Principal("operator")
+PORT_SEED: Final = Path(qml.__file__).resolve().parents[2] / "catalogue-seed" / "stats-2026-08-26"
+"""The frozen Stats dictionary and the drafts its port made (`tools/dictionary/port_stats.py`),
+in the checkout QMX runs from."""
 
 
 def default_old() -> Path:
@@ -638,6 +642,46 @@ def land_dummy(store: Store) -> ObjectId | None:
     fields = cast(dict[str, JsonValue], document)
     draft = Draft("unit", item, title, fields=fields)
     return store.put(OPERATOR, draft, on=drafts_ref(item), expected_head=None).object_id
+
+
+@dataclass(frozen=True, slots=True)
+class PortLanded:
+    collection: str
+    put: int
+    kept: int
+
+    def __str__(self) -> str:
+        return f"{self.put} drafts landed and {self.kept} kept in collection {self.collection}"
+
+
+def _port_draft(kind: str, row: dict[str, Any]) -> Draft:
+    return Draft(kind, row["item"], row["title"], fields=row["fields"], tags=row["tags"])
+
+
+def land_port(store: Store, seed: Path = PORT_SEED) -> PortLanded | None:
+    """The ported dictionary as `component` drafts in one collection, once per store (AD-114,
+    A12), or None when that collection is there.
+
+    Keyed by the seed's fingerprint as `land_dummy` is keyed by the dummy's: the collection's item
+    is named from it, so a store whose `main` holds the collection writes nothing. A draft whose
+    item has a head already is kept as it is, so a landing a crash cut short finishes and never
+    writes over his edits. The entries are put as drafts only; publishing them is his click
+    (`qmx_host.publish_collection`). The collection itself, the list of their items, goes on
+    `main` last, so he finds it, and it is the mark that the landing finished."""
+    port = cast(dict[str, Any], json.loads((seed / "port.json").read_text("utf-8")))
+    collection = cast(dict[str, Any], port["collection"])
+    if store.head(collection["item"], MAIN) is not None:
+        return None
+    drafts = cast(list[dict[str, Any]], port["drafts"])
+    put = 0
+    for row in drafts:
+        item = str(row["item"])
+        if store.head(item, drafts_ref(item)) is None and store.head(item, MAIN) is None:
+            draft = _port_draft("component", row)
+            store.put(OPERATOR, draft, on=drafts_ref(item), expected_head=None)
+            put += 1
+    store.put(OPERATOR, _port_draft("collection", collection), on=MAIN, expected_head=None)
+    return PortLanded(str(collection["item"]), put, len(drafts) - put)
 
 
 def open_existing(folder: Path, places: Places) -> Layout:

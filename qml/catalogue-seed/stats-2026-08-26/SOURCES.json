@@ -1,0 +1,13 @@
+{
+ "dated": "2026-08-26",
+ "files": {
+  "README.md": "sha256:ad5aa079fc6ffe2814c08cbeb1f7d2eb65ca384502629be8113dadc4e001b52a",
+  "context-regime-and-intermarket/context-filters-confirmations.md": "sha256:9c6fd1378b6eb7ee4d732843eafc657cc4171301567e1c54648712789ef7586e",
+  "invalidation-exits-and-management/exits-execution-management.md": "sha256:40707719d316711ee6db6162bb3393e7991fa26dc0997b3faace0b6f35941989",
+  "market-structure-and-location/locations-and-structure.md": "sha256:9b5876c5fbe3a0420cd758602343381797b991c0ae15cd1fbbe32610b801e63c",
+  "price-action-and-patterns/triggers-patterns-transitions.md": "sha256:5c22523731ddd948603b1041b93c5eb53e4d4ee3df758ee8c0a804fe111b91cb"
+ },
+ "fingerprint": "fp1:sha256:160ca15f33f3919fefeb142be63978694568f0bf1ef67b05a068750a429620ce",
+ "schema": "qmx.seed-sources/1",
+ "taken_from": "C:/Users/Mubarak/Desktop/Stats/dictionary"
+}
