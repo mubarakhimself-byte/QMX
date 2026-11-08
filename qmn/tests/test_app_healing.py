@@ -16,17 +16,13 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from qmf.core import Ok, TypedRefusal
-from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
-from qmf.data.journal_kinds.unit import LIFECYCLE_SCHEMA
-from qmf.data.journal_writer import JournalWriter, WriterScope
+from qmf.core import Ok
 from qmf.data.store.refusals import storage_failure
 from qmf.venue.commands import CommandKind
 from qmn.app import stand_down
 from qmn.app.feed_keeper import Bar, Quote
 from qmn.app.healing import RUNTIME_STUCK_EXIT_CODE, Backoff
 from qmn.app.runtime import ConformanceAccount, NodeUnit
-from qmn.app.server import BUILD
 from test_app_runtime import (
     DAY,
     LIVE_FROM,
@@ -557,72 +553,6 @@ def test_a_kill_he_sends_during_the_back_off_ends_the_wait(tmp_path: Path) -> No
     assert cut_short == [0.2]
     assert status(node)["kill_level"] == "YELLOW"
     node.runtime.stop()
-
-
-def test_a_start_reads_stop_rows_written_before_c13_and_a_cleared_one_stays_cleared(
-    tmp_path: Path,
-) -> None:
-    node = rig(tmp_path)
-    deploy(node, deployment(node.data))
-    settle(node)
-    driven(node, at(5570))
-    unit = node.runtime.hosted["dep-1"].unit
-    assert unit is not None
-    now = node.now[0]
-    facts = RowFacts(ts_recv=now, clock_ok=False)
-    word = stand_down.TABLE[stand_down.Kind.REPEATED_FAULT]
-    journal = node.node.journal
-    assert journal is not None
-    journal.append(
-        "stand_down",
-        {
-            "event": "start",
-            "stand_down": "repeated_fault",
-            "scope": "all",
-            "word": word.word.value,
-            "cause": "5 restarts in 10 minutes",
-            "clears": word.clears.value,
-            "since_ns": now,
-        },
-        facts,
-    )
-    scope = WriterScope(
-        JournalStream.UNIT, "dummy-trend-pullback", JournalWorld.DEMO, "pc", "node", BUILD
-    )
-    writer = JournalWriter.open(
-        node.node.context.journal_root, scope, clock=lambda: now, boot_epoch_id="before-c13"
-    )
-    assert not isinstance(writer, TypedRefusal)
-    writer.value.append(
-        "lifecycle",
-        {
-            "schema": LIFECYCLE_SCHEMA,
-            "event_id": "lifecycle-before-c13",
-            "unit_id": "dummy-trend-pullback",
-            "version_ref": unit.compiled.document_fingerprint.value,
-            "compiled_fingerprint": unit.compiled.compiled_fingerprint.value,
-            "market_id": "fx.eurusd",
-            "from": "live",
-            "to": "stopped",
-            "reason": "the kill line is crossed",
-            "at": "2025-03-24T16:36:40+00:00",
-            "by": {"kind": "risk_rule", "principal": "kill-line"},
-        },
-        RowFacts(ts_recv=now, clock_ok=False, unit_id="dummy-trend-pullback", market_id="fx.eurusd"),
-    )
-    writer.value.close()
-    second = restarted(node, tmp_path)
-    after_restart = held(second)
-    second.now[0] = now + 60 * SECOND
-    value(second.node.call("resume", {"op_id": "op-resume-1", "scope": "all"}))
-    second.runtime.step()
-    after_resume = held(second)
-    third = restarted(second, tmp_path)
-
-    assert after_restart == [("repeated_fault", None), ("risk_stop", "lifecycle-before-c13")]
-    assert after_resume == []
-    assert held(third) == []
-    third.runtime.stop()
 
 
 def test_the_back_off_doubles_to_its_cap_and_starts_again_after_a_healthy_run() -> None:

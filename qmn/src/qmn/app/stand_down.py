@@ -288,41 +288,31 @@ def _subject(found: Mapping[str, object], lane: str, world: str) -> Subject:
     )
 
 
-def held_from_start(body: Mapping[str, object], written_ns: int) -> Held:
-    """The stand-down a ``stand_down`` start row records (:meth:`Held.record`). A row written
-    before C-13 names no scopes, and is cleared from ``all`` and its own scope, as
-    :meth:`StandDowns.hold` holds it."""
+def held_from_start(body: Mapping[str, object]) -> Held:
+    """The stand-down a ``stand_down`` start row records (:meth:`Held.record`)."""
     found = body.get("subject")
     subject = None
     if isinstance(found, Mapping):
         named = cast("Mapping[str, object]", found)
         subject = _subject(named, str(named["lane"]), str(named["world"]))
     pending = body.get("pending")
-    scope = str(body["scope"])
-    since = body.get("since_ns")
-    covers = body.get("covers")
     return Held(
         Kind(str(body["stand_down"])),
-        scope,
-        since if isinstance(since, int) else written_ns,
+        str(body["scope"]),
+        cast("int", body["since_ns"]),
         str(body["cause"]),
-        frozenset(str(s) for s in cast("list[object]", covers))
-        if isinstance(covers, list)
-        else frozenset({"all", scope}),
+        frozenset(str(scope) for scope in cast("list[object]", body["covers"])),
         subject=subject,
         event_id=None if body.get("lifecycle_event") is None else str(body["lifecycle_event"]),
         pending=cast("Mapping[str, object]", pending) if isinstance(pending, Mapping) else None,
     )
 
 
-def held_from_stop(body: Mapping[str, object], world: str, written_ns: int) -> Held:
+def held_from_stop(body: Mapping[str, object], world: str) -> Held:
     """The risk stop a ``lifecycle`` row by ``risk_rule`` records, as :meth:`StandDowns.risk_stop`
-    wrote it. A row that does not name its deployment holds every entry on the node until his
-    resume at ``all``, the safe side of not knowing its scope."""
+    wrote it."""
     rule = str(cast("Mapping[str, object]", body["by"])["principal"])
     cause = f"{rule}: {body.get('reason')}"
-    if "deployment_id" not in body:
-        return Held(Kind.RISK_STOP, "all", written_ns, cause, event_id=str(body["event_id"]))
     subject = _subject(body, str(body["from"]), world)
     return Held(
         Kind.RISK_STOP,
@@ -352,9 +342,8 @@ def restored(root: Path) -> Result[list[Held]]:
     """The stand-downs waiting for him when the node last stopped, rebuilt from its journals.
 
     A risk stop whose ``lifecycle`` row landed is held until a later row ``clears`` it, which
-    his resume lands; that row is what the PC reads too. A stop whose row names no deployment
-    (written before C-13) gets no such row, so the node journal's ``clear`` row of the same
-    stop clears it. Every other stand-down that waits for him, and a risk stop whose
+    his resume lands; that row is what the PC reads too. The node journal's ``clear`` row of the
+    same stop clears it as well. Every other stand-down that waits for him, and a risk stop whose
     ``lifecycle`` row never landed, is held from its node-journal ``stand_down`` start row until
     a ``clear`` row for its scope follows. A read the volume refuses, or a row it cannot
     parse, is answered as a refusal, never as "nothing held"."""
@@ -386,7 +375,7 @@ def _waiting(stops: Sequence[JournalLine], rows: Sequence[JournalLine]) -> list[
             isinstance(by, Mapping) and cast("Mapping[str, object]", by).get("kind") == "risk_rule"
         ):
             world = str(line.record["world"])
-            landed[str(body["event_id"])] = held_from_stop(body, world, line.t)
+            landed[str(body["event_id"])] = held_from_stop(body, world)
     waiting: dict[tuple[Kind, str], Held] = {}
     ended: set[tuple[Kind, str, object]] = set()
     for line in rows:
@@ -396,7 +385,7 @@ def _waiting(stops: Sequence[JournalLine], rows: Sequence[JournalLine]) -> list[
             waiting.pop(key, None)
             ended.add((*key, body.get("since_ns")))
         elif body.get("event") == "start" and TABLE[key[0]].clears is not Clears.ITSELF:
-            waiting[key] = held_from_start(body, line.t)
+            waiting[key] = held_from_start(body)
     held = {key: found for key, found in waiting.items() if _unlanded(found, landed)}
     for event_id, stop in landed.items():
         if event_id not in cleared and (stop.kind, stop.scope, stop.since_ns) not in ended:

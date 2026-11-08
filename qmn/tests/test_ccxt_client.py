@@ -392,7 +392,7 @@ def test_every_order_the_node_sends_carries_its_cloid_and_the_stop_stays_on(
         ),
         ("cancel_order", stop_1, ETH, {"clientOrderId": stop_1}),
         (
-            "create_order", ETH, "market", "sell", "0.01", "2490",
+            "create_order", ETH, "market", "sell", "0.01", "2499.5",
             {"clientOrderId": "0x716d0707070707eb84404b5048d254d0", "reduceOnly": True,
              "timeInForce": "Ioc", "slippage": "0.05"},
         ),
@@ -494,7 +494,7 @@ def test_an_entry_whose_answer_was_lost_is_reconciled_and_its_protection_close_g
     assert closed == Placed(Decimal("2501.0"))
     assert node.exchange.sent_orders()[1:] == [
         (
-            "create_order", ETH, "market", "sell", "0.01", "2490",
+            "create_order", ETH, "market", "sell", "0.01", "2499.5",
             {"clientOrderId": "0x716d070707070783d2558f065e537e83", "reduceOnly": True,
              "timeInForce": "Ioc", "slippage": "0.05"},
         ),

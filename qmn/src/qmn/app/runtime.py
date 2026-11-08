@@ -114,7 +114,7 @@ from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, cleared_by, refused, same_market
-from qmn.app.reconciler import Found, Ours, Reconciler
+from qmn.app.reconciler import Found, Ours, Reconciler, journal_sends
 from qmn.app.stand_down import (
     REPEATED_FAULT_RESTARTS,
     REPEATED_FAULT_WINDOW_NS,
@@ -142,6 +142,7 @@ from qmn.venue import (
     SubmissionOutcome,
     TimeInForce,
     order_tags,
+    submit_not_ready_refusal,
 )
 
 __all__ = [
@@ -856,6 +857,10 @@ def _price(value: Decimal, instrument: Instrument) -> Result[Price]:
     return Price.try_create(number, instrument, scale)
 
 
+def _past_entry(side: Side, stop: Decimal, entry: Decimal) -> bool:
+    return (stop - entry) * (1 if side is Side.LONG else -1) > 0
+
+
 class _OrderJournal:
     """The node journal as the journal-before-dispatch gate's sink: one ``order`` row."""
 
@@ -901,8 +906,8 @@ class OrderPath:
     """Each entry whose outcome is unknown, by client order id, with its market: no entry on
     that market until the reconciler resolves it (TN-01). Nothing is ever resent."""
     unprotected: set[str] = field(default_factory=set[str])
-    """Positions the venue filled without holding their stop, which the node closes on every
-    tick until the venue shows them closed."""
+    """Positions the node closes on every tick until the venue shows them closed: filled without
+    holding their stop, or a unit's full exit the venue refused."""
     _ordinal: int = 0
     _sent: dict[str, Placed | Blocked] = field(default_factory=dict[str, Placed | Blocked])
     _refusals: dict[str, int] = field(default_factory=dict[str, int])
@@ -921,6 +926,8 @@ class OrderPath:
         return Ok(cast("Sent", enacted.value.dispatcher_result))
 
     def _send(self, ticket: Ticket) -> Result[Sent]:
+        if isinstance(self.venue.client, ConformanceAccount) and not self.venue.feed.ready:
+            return submit_not_ready_refusal()
         return self.venue.client.send(ticket)
 
     def _note(self, client_order_id: str, step: str, body: Mapping[str, object]) -> None:
@@ -1096,26 +1103,56 @@ class OrderPath:
         for attempt in range(self.retry_max):
             if attempt:
                 self._amend(position, ticket, distance, attempt)
-            deadline = self.clock_ns() + self.confirm_ns
-            while True:
-                if self.venue.client.stop_of(position) is not None:
-                    return True
-                if self.clock_ns() >= deadline:
-                    break
-                self.sleep(PROTECT_POLL_S)
+            if self._shows_stop(position):
+                return True
+        self._escalate(position, ticket.market_id, ticket.side, ticket.reference, self.retry_max)
+        return False
+
+    def restore_stop(
+        self,
+        position: str,
+        market: str,
+        side: Side,
+        stop: Decimal | None,
+        entry: Decimal,
+        record: InstrumentRecord,
+    ) -> None:
+        """Put back a stop the venue no longer holds, at ``stop``, up to ``retry_max`` tries. No
+        level, a level past entry, or a refusal, as when the price is already past the stop, goes
+        straight to the reduce-only close and the protection alarm, so a kill never waits on it."""
+        tries = 0
+        while stop is not None and not _past_entry(side, stop, entry) and tries < self.retry_max:
+            tries += 1
+            if self._move_stop(position, market, side, stop, entry, stop, record) is not None:
+                break
+            if self._shows_stop(position):
+                return
+        self._escalate(position, market, side, entry, tries)
+
+    def _shows_stop(self, position: str) -> bool:
+        deadline = self.clock_ns() + self.confirm_ns
+        while True:
+            if self.venue.client.stop_of(position) is not None:
+                return True
+            if self.clock_ns() >= deadline:
+                return False
+            self.sleep(PROTECT_POLL_S)
+
+    def _escalate(
+        self, position: str, market: str, side: Side, reference: Decimal, tries: int
+    ) -> None:
         self.unprotected.add(position)
-        done = self.close(position, ticket.market_id, ticket.side, ticket.reference, "protection")
+        done = self.close(position, market, side, reference, "protection")
         self._alarm(
             {
                 "alarm": "protection_escalation",
                 "position": position,
-                "market_id": ticket.market_id,
-                "tries": self.retry_max,
+                "market_id": market,
+                "tries": tries,
                 "action": "closed_reduce_only" if isinstance(done, Placed) else "close_refused",
                 "origin": "placeholder",
             }
         )
-        return False
 
     def _alarm(self, alarm: Mapping[str, object]) -> None:
         self.journal.append("protection", alarm, RowFacts(ts_recv=self.clock_ns(), clock_ok=False))
@@ -1192,7 +1229,15 @@ class OrderPath:
         )
         if is_refusal(command):
             return Blocked(f"the close could not be built ({command.category.value})")
-        ticket = Ticket(command.value, market, side, reference, position=position)
+        quote = self.venue.feed.quote(market)
+        current = None if quote is None else quote.bid if side is Side.LONG else quote.ask
+        ticket = Ticket(
+            command.value,
+            market,
+            side,
+            reference if current is None else current,
+            position=position,
+        )
         body: dict[str, object] = {
             "event_id": f"{position}/close-{why}",
             "client_order_id": position,
@@ -1226,7 +1271,51 @@ class OrderPath:
         record: InstrumentRecord,
     ) -> Placed | Blocked:
         """Move a held stop the unit tightened; the caller checked that it only tightens, and
-        the amendment's own risk check refuses a wider distance again."""
+        the amendment's own risk check refuses a wider distance again. The venue takes a distance
+        on the loss side, so a stop past entry goes out only once the risk session has signed
+        the distance. The answer is the stop the broker holds, and an alarm says when that is
+        not the one asked for, one tick apart being the venue's rounding."""
+        if _past_entry(side, new_stop, entry):
+            blocked = Blocked(
+                "the new stop is past entry, not on the loss side, so the node did not send it"
+            )
+            self._note(
+                position,
+                f"amend-blocked-{new_stop}",
+                {"step": "amend_blocked", "stop": str(new_stop), "reason": blocked.reason},
+            )
+            return blocked
+        refused = self._move_stop(position, market, side, new_stop, entry, held_stop, record)
+        if refused is not None:
+            return refused
+        at_broker = self.venue.client.stop_of(position)
+        if at_broker is not None and abs(at_broker - new_stop) < Decimal(1).scaleb(-record.digits):
+            return Placed(at_broker)
+        self._alarm(
+            {
+                "alarm": "stop_differs",
+                "position": position,
+                "market_id": market,
+                "asked": str(new_stop),
+                "at_broker": _text(at_broker),
+                "action": "answered_the_brokers_stop",
+            }
+        )
+        if at_broker is None:
+            return Blocked("the venue cannot show the amended stop")
+        return Placed(at_broker)
+
+    def _move_stop(
+        self,
+        position: str,
+        market: str,
+        side: Side,
+        new_stop: Decimal,
+        entry: Decimal,
+        held_stop: Decimal,
+        record: InstrumentRecord,
+    ) -> Blocked | None:
+        """Send the stop to the venue; None when the venue accepted it."""
         instrument = Instrument(VenueId(record.venue), record.symbol)
         gap = _delta(abs(entry - new_stop), instrument)
         first = _delta(abs(entry - held_stop), instrument)
@@ -1258,7 +1347,7 @@ class OrderPath:
         sent = self._journalled(body, ticket)
         if is_refusal(sent) or sent.value.outcome is not SubmissionOutcome.ACCEPTED_BY_VENUE:
             return Blocked("the venue refused the amended stop")
-        return Placed(new_stop)
+        return None
 
 
 # --- one hosted unit ------------------------------------------------------------------------
@@ -1636,7 +1725,10 @@ class NodeUnit:
                 new_stop = Decimal(stop.value).scaleb(-stop.scale)
                 return self._amend(exit_, market, position, held, new_stop)
             case _:
-                return self.orders.close(position, market, held.side, held.entry_price, "unit")
+                done = self.orders.close(position, market, held.side, held.entry_price, "unit")
+                if not isinstance(done, Placed):
+                    self.orders.unprotected.add(position)
+                return done
 
     def _amend(
         self,
@@ -1847,6 +1939,38 @@ def journalled_resumes(root: Path) -> set[str]:
     return found
 
 
+def journalled_flattens(root: Path) -> Result[set[str]]:
+    """The op id of each flatten the node journal holds as done, so a restart never replays an
+    old flatten on new positions. A folder the volume refuses answers the refusal: reading it as
+    holding none would close positions he opened since, so the op waits for a read that works."""
+    found: set[str] = set()
+    for folder in stream_folders(root):
+        if not folder.name.startswith(f"{JournalStream.NODE.source}.kill_level."):
+            continue
+        lines = read_committed(folder)
+        if is_refusal(lines):
+            return lines
+        for line in lines.value:
+            if isinstance(line, JournalLine):
+                body = cast("Mapping[str, object]", line.record.get("body", {}))
+                if isinstance(body.get("op_id"), str):
+                    found.add(str(body["op_id"]))
+    return Ok(found)
+
+
+@dataclass(frozen=True, slots=True)
+class _Open:
+    """One position of this node open at the venue, whether a unit holds it or not."""
+
+    name: str
+    market: str
+    side: Side
+    entry: Decimal
+    path: OrderPath
+    scopes: frozenset[str]
+    """Every scope key that names it."""
+
+
 class Runtime:
     """The node's runtime thread over its store, its journal and its venue bindings."""
 
@@ -1880,6 +2004,9 @@ class Runtime:
         self.alarms: list[Mapping[str, object]] = []
         self.applied: dict[str, KsaLevel] = {}
         self._resumes_seen = journalled_resumes(context.journal_root)
+        self._flattened: set[str] | None = None
+        """Every flatten op journalled done; None until the journal could be read."""
+        self._flat_closed: dict[str, int] = {}
         self._paths: dict[str, OrderPath] = {}
         self._compiler = ThreadPoolExecutor(max_workers=1, thread_name_prefix="node-compile")
         self._wake = threading.Event()
@@ -2075,7 +2202,7 @@ class Runtime:
             if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, {}):
                 reasons.append(f"account {account} is not reconciled")
             reasons.extend(
-                f"position {orphan.position} of ours is open and no unit holds it"
+                f"position {orphan.position.position} of ours is open and no unit holds it"
                 for orphan in self._orphans(account, venue)
             )
         reasons.extend(
@@ -2096,7 +2223,9 @@ class Runtime:
                 hosted.phase, hosted.detail = Phase.WAITING, "the node's identity is unconfirmed"
             self._observe()
             return
-        self._protect(self._kill(target))
+        tried = self._kill(target)
+        self._flatten(target, accepted, tried)
+        self._protect(tried)
         self._journal_resumes(accepted)
         self._deployments(target)
         faulted = self._repeated_fault()
@@ -2131,8 +2260,39 @@ class Runtime:
             self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units, kept)
         for unit in units:
             unit.adopt(self.reconciler.mine(account))
+        if venue.feed.ready and not self.reconciler.due(account, venue.feed.reconnects, unknown):
+            self._restore_stops(account, units)
 
-    def _orphans(self, account: str, venue: Venue) -> list[VenuePosition]:
+    def _restore_stops(self, account: str, units: Sequence[NodeUnit]) -> None:
+        """Put back each stop the venue no longer holds on a position a unit holds, or close it
+        with the alarm, before any bar is driven. It walks every tick and not only at adoption:
+        ``adopt`` runs from a snapshot and skips a name it holds, a unit may compile after the
+        reconcile, and a stop can go during a dropped connection. The level is the entry's send
+        row, the one ``adopt`` gives the handler."""
+        for unit in units:
+            client = unit.orders.venue.client
+            missing = {
+                name: held
+                for name, held in unit.venue_open().items()
+                if name not in unit.orders.unprotected and client.stop_of(name) is None
+            }
+            if not missing:
+                continue
+            read = journal_sends(self.context.journal_root)
+            sends = {} if is_refusal(read) else dict(read.value)
+            sends.update((o.position.position, o.send) for o in self.reconciler.mine(account))
+            for name, (market, side, entry) in missing.items():
+                stop = sends.get(name, {}).get("stop")
+                unit.orders.restore_stop(
+                    name,
+                    market,
+                    side,
+                    None if stop is None else Decimal(str(stop)),
+                    entry,
+                    unit.records[market],
+                )
+
+    def _orphans(self, account: str, venue: Venue) -> list[Ours]:
         """The node's own positions the reconcile read open on ``account`` that no hosted unit
         holds and the venue has not closed since."""
         held = {
@@ -2140,13 +2300,73 @@ class Runtime:
         }
         return sorted(
             (
-                ours.position
+                ours
                 for ours in self.reconciler.mine(account)
                 if ours.position.position not in held
                 and venue.client.closed(ours.position.position) is None
             ),
-            key=lambda position: position.position,
+            key=lambda ours: ours.position.position,
         )
+
+    def _mine(self) -> list[_Open]:
+        """Every position of this node open at the venue. A unit's own list holds what opened
+        since the last reconcile, and paper; the orphans add what no unit holds. Only the
+        reconcile's ``Claim.MINE`` positions ever join, so a position not ours is never here."""
+        found = [
+            _Open(
+                name,
+                market,
+                side,
+                entry,
+                unit.orders,
+                frozenset(
+                    {
+                        "all",
+                        f"deployment_id:{hosted.deployment.deployment_id}",
+                        f"account:{hosted.deployment.account_id}",
+                        *unit.instrument_scopes(market),
+                    }
+                ),
+            )
+            for hosted in self.hosted.values()
+            if (unit := hosted.unit) is not None
+            for name, (market, side, entry) in unit.venue_open().items()
+        ]
+        for account, venue in self.venues.items():
+            for orphan in self._orphans(account, venue):
+                position = orphan.position
+                found.append(
+                    _Open(
+                        position.position,
+                        position.market_id,
+                        Side(position.side),
+                        position.entry_price,
+                        cast("OrderPath", self._path(account)),
+                        frozenset(
+                            {
+                                "all",
+                                f"deployment_id:{orphan.send.get('deployment_id')}",
+                                f"account:{account}",
+                                *same_market(
+                                    self._target.deployments, f"instrument:{position.market_id}"
+                                ),
+                            }
+                        ),
+                    )
+                )
+        return found
+
+    def _close_scope(self, scope: str, why: str, tried: set[str], *, every: bool = False) -> int:
+        """Close every position of this node at ``scope``, or all of them with ``every``;
+        answers how many the venue closed now. A position already tried this tick waits."""
+        closed = 0
+        for held in self._mine():
+            if held.name in tried or not (every or scope in held.scopes):
+                continue
+            tried.add(held.name)
+            done = held.path.close(held.name, held.market, held.side, held.entry, why)
+            closed += isinstance(done, Placed)
+        return closed
 
     def _path(self, account: str) -> OrderPath | None:
         venue = self.venues.get(account)
@@ -2243,30 +2463,59 @@ class Runtime:
     def _enact(self, scope: str, effect: KillEffect, tried: set[str]) -> int:
         if not (effect.close_positions or effect.close_all_and_pause):
             return 0
-        closed = 0
-        for hosted in self.hosted.values():
-            unit = hosted.unit
-            if unit is None:
+        why = f"kill-{effect.level.value.lower()}"
+        return self._close_scope(scope, why, tried, every=effect.close_all_and_pause)
+
+    def _flatten(self, target: Target, accepted: Sequence[Change], tried: set[str]) -> None:
+        """Close each flatten's scope until it reads flat, then write the op's done row: a
+        ``kill_level`` row with no ``level``, which reads as neither a kill nor a clear. The row
+        is read back at start, so a restart never replays it on new positions, and a journal
+        that cannot be read holds every op unacted."""
+        if self._flattened is None:
+            read = journalled_flattens(self.context.journal_root)
+            if is_refusal(read):
+                return
+            self._flattened = read.value
+        for op_id, scope in target.flattens.items():
+            if op_id in self._flattened:
                 continue
-            for position, (market, side, price) in unit.venue_open().items():
-                covers = (
-                    effect.close_all_and_pause
-                    or scope == "all"
-                    or scope
-                    in (
-                        f"deployment_id:{hosted.deployment.deployment_id}",
-                        f"account:{hosted.deployment.account_id}",
-                        *unit.instrument_scopes(market),
-                    )
-                )
-                if not covers or position in tried:
-                    continue
-                tried.add(position)
-                done = unit.orders.close(
-                    position, market, side, price, f"kill-{effect.level.value.lower()}"
-                )
-                closed += isinstance(done, Placed)
-        return closed
+            closed = self._flat_closed.get(op_id, 0) + self._close_scope(scope, "flatten", tried)
+            self._flat_closed[op_id] = closed
+            if not self._reads_flat(scope, accepted):
+                continue
+            written = self.journal.append(
+                "kill_level",
+                {"op_id": op_id, "scope": scope, "positions_closed": closed},
+                RowFacts(ts_recv=self.clock_ns(), clock_ok=False),
+            )
+            if not is_refusal(written):
+                self._flattened.add(op_id)
+
+    def _reads_flat(self, scope: str, accepted: Sequence[Change]) -> bool:
+        """Whether the broker is proved to hold nothing of this node at ``scope``: every account
+        he kept bound that the scope may reach is bound now, its session is up and reconciled,
+        and no entry's answer is unknown. An empty view proves nothing, because a restart sees
+        no position until its first reconcile."""
+        kept = {
+            str(change.args["account"]): change.args["action"]
+            for change in accepted
+            if change.kind == "bind"
+        }
+        accounts = {name for name, action in kept.items() if action == "add"} | set(self.venues)
+        for account in accounts:
+            if scope.startswith("account:") and scope != f"account:{account}":
+                continue
+            venue = self.venues.get(account)
+            path = self._paths.get(account)
+            unknown = {} if path is None else path.unknown
+            if (
+                venue is None
+                or unknown
+                or not venue.feed.ready
+                or self.reconciler.due(account, venue.feed.reconnects, unknown)
+            ):
+                return False
+        return not any(scope in held.scopes for held in self._mine())
 
     def _protect(self, tried: set[str]) -> None:
         """Close again each position the venue filled without holding its stop, until the
@@ -2315,10 +2564,10 @@ class Runtime:
             if held_by_reconcile is not None:
                 return held_by_reconcile
             for orphan in self._orphans(hosted.deployment.account_id, venue):
-                if orphan.market_id == market:
+                if orphan.position.market_id == market:
                     return (
                         f"a position of ours that no unit holds is open on {market}:"
-                        f" {orphan.position}"
+                        f" {orphan.position.position}"
                     )
             held = self.stand_downs.blocking(
                 (
@@ -2653,6 +2902,10 @@ class Runtime:
             ("runtime.deployments", deployments),
             ("runtime.units", units),
             ("runtime.positions", positions),
+            (
+                "runtime.mine",
+                [{"position": held.name, "scopes": sorted(held.scopes)} for held in self._mine()],
+            ),
             ("runtime.board", boards),
             ("runtime.kill", kill),
             ("runtime.venues", venues),

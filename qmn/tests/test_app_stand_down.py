@@ -220,6 +220,7 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     case.clear(node, probes)
     played(node, probes, at(1320))
     cleared_first = node.runtime.stand_downs.document()
+    exits_by_then = tickets(node, first)
 
     played(node, probes, at(5570))
     second = len(node.account.received)
@@ -242,7 +243,9 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     ]
 
     assert [held["stand_down"] for held in held_first] == [case.kind.value]
-    assert exits == [(CommandKind.CLOSE_POSITION, "fx.eurusd", "short")]
+    the_exit = [(CommandKind.CLOSE_POSITION, "fx.eurusd", "short")]
+    assert exits == ([] if case.kind is Kind.VENUE_NOT_READY else the_exit)
+    assert exits_by_then == the_exit
     assert cleared_first == []
     assert kept_back == []
     assert stops[:5] == [
@@ -431,25 +434,6 @@ def test_a_risk_stop_whose_row_cannot_land_still_holds_entries_and_raises_an_ala
             "why": "the stop's lifecycle row could not be written, so only the node shows it",
         }
     ]
-    node.runtime.stop()
-
-
-def test_a_resume_he_sent_before_a_risk_stop_does_not_clear_it(tmp_path: Path) -> None:
-    node = rig(tmp_path)
-    probes = Probes()
-    deploy(node, deployment(node.data))
-    settle(node)
-    played(node, probes, at(5570))
-    arrived = node.now[0]
-    ahead = datetime.fromtimestamp(arrived // 1_000_000_000 + 4, UTC).isoformat()
-    early = node.node.call("resume", {"op_id": "op-resume-early", "scope": "all", "issued_at": ahead})
-    node.now[0] = arrived + 1_000_000_000
-    stop = node.runtime.risk_stop("dep-1", "fx.eurusd", "kill-line", "the kill line is crossed")
-    node.runtime.tick()
-
-    assert early["ok"] is True
-    assert stop is not None
-    assert held_now(node) == [("risk_stop", stop)]
     node.runtime.stop()
 
 

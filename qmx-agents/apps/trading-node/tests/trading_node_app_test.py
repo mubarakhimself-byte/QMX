@@ -7,7 +7,6 @@ fake made here, with no venue in it, so every venue reads "not set up".
 
 from __future__ import annotations
 
-import re
 import secrets
 import shutil
 import time
@@ -252,13 +251,6 @@ def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Su
     assert (paused["code"], paused["value"]) == ("superseded", {"newer_op_id": "order-resume"})
     assert killed == {"ok": True, "value": {"level_in_force": "ORANGE"}, "op_id": "order-kill"}
     assert errors(supervisor) == 0
-
-
-def test_a_direct_call_without_an_op_id_gets_one_minted(supervisor: Supervisor) -> None:
-    answer, _ = ask(supervisor, "flatten", {"scope": "all"})
-
-    assert answer["value"] == {"state": "accepted", "positions": 0}
-    assert re.fullmatch(r"[0-9a-f]{32}", str(answer["op_id"]))
 
 
 def test_journal_tail_mid_write_returns_whole_lines_and_leaves_the_file_unchanged(

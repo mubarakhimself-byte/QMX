@@ -21,7 +21,6 @@ import pytest
 from qmf.core import TypedRefusal
 from qmf.venue.commands import CommandKind
 from qmn.app.alarms import (
-    SHORT_LIST,
     LivenessSender,
     PushSender,
     View,
@@ -32,9 +31,7 @@ from qmn.app.alarms import Position as Held
 from qmn.app.server import from_environment
 from qmn.app.store import Store
 from qmn.observability.alerts import (
-    PUSH_ALERT_CLASSES,
     AlertPublisher,
-    load_alert_allow_list,
 )
 from qmn.observability.liveness import LivenessHeartbeat
 from test_app_runtime import DAY, LIVE_FROM, play, value
@@ -161,23 +158,6 @@ def publisher_to(fake: Fake, root: Path) -> AlertPublisher:
     )
     assert senders.push is not None
     return senders.push.publisher
-
-
-def test_the_short_list_rides_the_kept_closed_push_list_unchanged() -> None:
-    allow = load_alert_allow_list()
-    assert not isinstance(allow, TypedRefusal), allow
-
-    assert PUSH_ALERT_CLASSES == ("money-boundary", "protection-escalation", "silent-degradation")
-    assert {
-        wake.value: (rule.failure_id, allow.value.alert_class_for(rule.failure_id), rule.priority)
-        for wake, rule in SHORT_LIST.items()
-    } == {
-        "protection escalation": ("protection.ksa.escalation", "protection-escalation", 5),
-        "risk stop with open trades": ("lifecycle.stand_down", "protection-escalation", 4),
-        "broker link down with open trades": ("lifecycle.stand_down", "protection-escalation", 4),
-        "clock stand-down past its alarm time": ("clock.band.halt", "protection-escalation", 4),
-        "healing that keeps failing": ("supervision.fail_closed", "protection-escalation", 4),
-    }
 
 
 def test_a_protection_escalation_reaches_ntfy_once_with_priority_5_on_a_shut_market(

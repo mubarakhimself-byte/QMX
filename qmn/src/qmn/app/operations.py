@@ -383,6 +383,8 @@ class Target:
     paused: dict[str, bool] = field(default_factory=dict[str, bool])
     deployments: dict[str, Change] = field(default_factory=dict[str, Change])
     withdrawn: frozenset[str] = frozenset()
+    flattens: dict[str, str] = field(default_factory=dict[str, str])
+    """The scope of each flatten he sent, by its op id."""
 
     @classmethod
     def fold(cls, accepted: Sequence[Change]) -> Target:
@@ -390,6 +392,7 @@ class Target:
         paused: dict[str, bool] = {}
         deployments: dict[str, Change] = {}
         withdrawn: set[str] = set()
+        flattens: dict[str, str] = {}
         newest_pause: dict[str, int] = {}
         for change in accepted:
             if change.kind == "kill":
@@ -415,7 +418,9 @@ class Target:
                 withdrawn.discard(str(change.args["deployment_id"]))
             elif change.kind == "withdraw":
                 withdrawn.add(str(change.args["deployment_id"]))
-        return cls(kills, paused, deployments, frozenset(withdrawn))
+            elif change.kind == "flatten":
+                flattens[change.op_id] = str(change.args["scope"])
+        return cls(kills, paused, deployments, frozenset(withdrawn), flattens)
 
     def level_at(self, scope: str) -> KsaLevel:
         held = [self.kills.get(scope, KsaLevel.GREEN), self.kills.get("all", KsaLevel.GREEN)]
@@ -551,7 +556,11 @@ def _flatten(arguments: Mapping[str, Json], context: Context) -> Request:
 
 
 def _apply_flatten(step: Applying) -> Answer:
-    return ok({"state": "accepted", "positions": 0})
+    """An operation never touches the broker: the runtime closes them. This answers at once with
+    the count of this node's positions at the scope in the runtime's last view."""
+    scope = str(step.request.kept["scope"])
+    mine = cast("list[dict[str, list[str]]]", _observed_list(step.context, "runtime.mine"))
+    return ok({"state": "accepted", "positions": sum(scope in row["scopes"] for row in mine)})
 
 
 def _bind(arguments: Mapping[str, Json], _: Context) -> Request:
