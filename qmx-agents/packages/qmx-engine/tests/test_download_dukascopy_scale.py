@@ -25,6 +25,7 @@ import qml
 from qmf.core import is_ok
 from qmf.data.series import SeriesKey, SeriesStore
 from qmx_home import resolve
+from qmx_host.market_data import MarketDoor  # pyright: ignore[reportMissingTypeStubs]
 
 from qmx_engine.templates.catalog import PACK
 
@@ -91,6 +92,13 @@ def priced(row: dict[str, Any], card: dict[str, Any]) -> tuple[Decimal, Decimal]
     return Decimal(row["bid"]).scaleb(-scale), Decimal(row["ask"]).scaleb(-scale)
 
 
+def stated_scale(tmp_path: Path, symbol: str) -> int | None:
+    """The scale a QMB run would read for the series, through the door the host opens."""
+    door = MarketDoor.open(tmp_path / "QMX" / "data" / "market", {})
+    assert is_ok(door)
+    return door.value.price_scale(f"dukascopy/{symbol}/ticks/-")
+
+
 def nothing_landed(tmp_path: Path, symbol: str) -> bool:
     store, key = month(tmp_path, symbol)
     return store.state(key) is None
@@ -105,6 +113,7 @@ def test_gold_at_scale_three_reads_its_first_price_exactly(tmp_path: Path) -> No
     assert (summary["status"], summary["rows"]) == ("landed", 1)
     assert rows[0]["t"] == 1740956400000
     assert priced(rows[0], card) == (Decimal("2855.205"), Decimal("2856.475"))
+    assert stated_scale(tmp_path, "XAUUSD") == 3
 
 
 def test_eurusd_at_scale_five_lands_the_same_month_as_before(tmp_path: Path) -> None:
@@ -186,3 +195,5 @@ def test_a_gold_card_landed_at_scale_five_reads_wrong_scale(tmp_path: Path) -> N
     }
     assert right["status"] == "scale_ok"
     assert nothing_landed(tmp_path, "XAUUSD")
+    assert stated_scale(tmp_path, "XAUUSD") is None
+    assert stated_scale(tmp_path / "again", "XAUUSD") == 3

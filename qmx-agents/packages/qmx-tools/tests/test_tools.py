@@ -63,7 +63,7 @@ class FakeDoor:
         )
 
     def card(self, series: str) -> Result[Any]:
-        return Ok({"card": series, "digests": ["fp1:sha256:recorded"]})
+        return Ok({"card": series, "digests": ["fp1:sha256:recorded"], "seal_boundary": ""})
 
     def read(self, series: str = "", **arguments: Any) -> Result[Any]:
         return Ok(

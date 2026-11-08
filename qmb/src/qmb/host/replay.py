@@ -25,8 +25,6 @@ from __future__ import annotations
 
 import csv
 import heapq
-import re
-import tempfile
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -46,7 +44,6 @@ from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.data.observation import SourceObservation
 from qmf.data.seal import HoldoutSeal
-from qmf.data.series import SeriesKey, SeriesStore, rule_for
 from qmf.data.source_boundary import SourceObservationBoundary
 from qmf.data.source_split import partition_source_observation
 from qmf.data.splits import SegmentRole, SplitManifest
@@ -56,7 +53,6 @@ from qml.protocol import MappingReadSurface
 from qml.protocol.unit import OHLC, QuoteBar
 
 from qmb._refuse import invalid, policy
-from qmb.data import policy as data_policy
 from qmb.execution.ports import SlicePath
 from qmb.host.unit_handler import UnitSliceHandler
 from qmb.runloop.bars import BarBuilder, Piece
@@ -83,28 +79,23 @@ __all__ = [
     "RecordedReplaySource",
     "Roll",
     "RollHook",
+    "Row",
     "SliceHook",
     "Tick",
-    "TypedPartitionRef",
     "VenueDay",
     "futures_feed",
     "read_bar_csv",
     "read_bar_pair_csv",
+    "read_bar_pair_parquet",
     "read_recorded_replay_source",
-    "read_typed_replay_source",
+    "read_tick_parquet",
     "replay_feed",
     "replay_windowed",
     "window_size",
 ]
 
 _REPLAY_SOURCE_CLASS: Final[str] = "qmb-recorded-replay-source-v1"
-_TYPED_SOURCE_CLASS: Final[str] = "qmb-typed-partition-replay-source-v1"
-_TICKS_KIND: Final[str] = "ticks"
-_BAR_KIND: Final[str] = "bar-m1"
 _NS_PER_MS: Final[int] = 1_000_000
-_SOURCE_PRICE_SCALE: Final[int] = 5
-"""The typed writer's own scale: a price integer divided by 100_000 is the price (W9)."""
-_MONTH: Final[re.Pattern[str]] = re.compile(r"^(\d{4})-(\d{2})$")
 
 
 def _freeze_evidence(value: object) -> object:
@@ -121,10 +112,7 @@ def _freeze_evidence(value: object) -> object:
 class RecordedReplaySource:
     """Validated replay evidence arranged as replay slices and QML read surfaces.
 
-    One type serves both readers: ``observations`` are the CT-10 receipts the archive
-    boundary admitted, and ``partitions`` are the typed price files the market-data door
-    materialised. A source carries one or the other, never a mix, and ``source_class`` says
-    which, so its fingerprint names the release it was read from.
+    ``observations`` are the CT-10 receipts the archive boundary admitted.
     """
 
     world: World
@@ -137,97 +125,20 @@ class RecordedReplaySource:
     split_fp1: Fingerprint | None
     split_role: SegmentRole | None
     fingerprint: Fingerprint
-    source_class: str = _REPLAY_SOURCE_CLASS
-    partitions: tuple[TypedPartitionRef, ...] = ()
 
     def fp1_identity(self) -> dict[str, object]:
         identity: dict[str, object] = {
-            "class": self.source_class,
+            "class": _REPLAY_SOURCE_CLASS,
             "stream_id": self.stream_id,
             "world": self.world.value,
         }
-        if self.partitions:
-            identity["partitions"] = [item.fp1_identity() for item in self.partitions]
-        else:
-            identity["observations"] = [item.fingerprint.value for item in self.observations]
+        identity["observations"] = [item.fingerprint.value for item in self.observations]
         if self.price_metadata_fp1 is not None:
             identity["price_metadata_fp1"] = self.price_metadata_fp1.value
         if self.split_fp1 is not None and self.split_role is not None:
             identity["split_fp1"] = self.split_fp1.value
             identity["split_role"] = self.split_role.value
         return identity
-
-
-@dataclass(frozen=True, slots=True)
-class TypedPartitionRef:
-    """One typed price partition the market-data door materialised for a replay read.
-
-    ``series`` is the door's address without its month (``source/subject/kind/variant``,
-    ``-`` for no variant) and ``month`` is ``YYYY-MM``. ``fingerprint`` is the streamed one
-    the store recorded, and the reader re-derives it from the file's rows before it replays
-    anything, so a copied or substituted file cannot pass as that partition.
-    """
-
-    path: Path
-    series: str
-    month: str
-    fingerprint: str
-
-    @classmethod
-    def try_create(
-        cls, *, path: object, series: object, month: object, fingerprint: object
-    ) -> Result[TypedPartitionRef]:
-        if not isinstance(path, (str, Path)) or not str(path).strip():
-            return invalid("path", "a typed partition names the file the door materialised")
-        if not isinstance(series, str):
-            return invalid("series", "a typed partition names its series", given=repr(series))
-        parts = series.split("/")
-        if len(parts) != 4 or any(part.strip() == "" for part in parts[:3]):
-            return invalid(
-                "series",
-                "a series is source/subject/kind/variant, with '-' for no variant",
-                given=series,
-            )
-        if not isinstance(month, str) or _MONTH.fullmatch(month) is None:
-            return invalid("month", "a typed partition names its month as YYYY-MM", given=month)
-        if not isinstance(fingerprint, str):
-            return invalid(
-                "fingerprint", "a typed partition names its fingerprint", given=repr(fingerprint)
-            )
-        return Ok(cls(Path(path), series, month, fingerprint))
-
-    @property
-    def source(self) -> str:
-        return self.series.split("/")[0]
-
-    @property
-    def subject(self) -> str:
-        return self.series.split("/")[1]
-
-    @property
-    def kind(self) -> str:
-        return self.series.split("/")[2]
-
-    @property
-    def variant(self) -> str:
-        variant = self.series.split("/")[3]
-        return "" if variant == "-" else variant
-
-    @property
-    def year(self) -> int:
-        return int(self.month[:4])
-
-    @property
-    def month_number(self) -> int:
-        return int(self.month[5:])
-
-    def fp1_identity(self) -> dict[str, object]:
-        return {
-            "kind": self.kind,
-            "month": self.month,
-            "series": self.series,
-            "fingerprint": self.fingerprint,
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,7 +407,6 @@ def read_recorded_replay_source(
         identity=identity,
         split_manifest=split_manifest if isinstance(split_manifest, SplitManifest) else None,
         split_role=split_role if isinstance(split_role, SegmentRole) else None,
-        source_class=_REPLAY_SOURCE_CLASS,
         observations=tuple(observations),
     )
 
@@ -530,9 +440,7 @@ def _materialise_quotes(
     identity: dict[str, object],
     split_manifest: SplitManifest | None,
     split_role: SegmentRole | None,
-    source_class: str,
     observations: tuple[SourceObservation, ...] = (),
-    partitions: tuple[TypedPartitionRef, ...] = (),
 ) -> Result[RecordedReplaySource]:
     """Turn quote frontiers into slices, cumulative read surfaces and exact execution paths."""
     slices: list[EventSlice] = []
@@ -649,314 +557,8 @@ def _materialise_quotes(
             split_fp1=(None if split_manifest is None else split_manifest.fingerprint),
             split_role=split_role,
             fingerprint=stamped.value,
-            source_class=source_class,
-            partitions=partitions,
         )
     )
-
-
-def read_typed_replay_source(
-    *,
-    partitions: object,
-    stream_id: object,
-    instrument_metadata: object = None,
-    split_manifest: object = None,
-    split_role: object = None,
-    holdout_seal: object = None,
-    world: object = World.REPLAY,
-) -> Result[RecordedReplaySource]:
-    """Read typed price partitions and materialize bitemporal replay input (W12, N2).
-
-    ``partitions`` are the typed files the market-data door's ``materialise`` copied for this
-    read, each with its series, its month and the fingerprint the store recorded. The reader
-    verifies the world, each file's streamed fingerprint, the holdout seal and the split role
-    as ``read_recorded_replay_source`` does for CT-10 receipts, then builds quote pairs from
-    tick rows (both sides in one row) or from a bid and an ask bar series of the same month.
-    Half a pair is refused: a bid series without its ask is never replayed as a one-sided
-    quote.
-    """
-    checked_world = data_policy.check_typed_world(world)
-    if is_refusal(checked_world):
-        return checked_world
-    if not isinstance(stream_id, str) or not stream_id.strip():
-        return invalid("stream_id", "a replay source names its declared run stream")
-    if instrument_metadata is not None and not isinstance(
-        instrument_metadata, PinnedInstrumentPriceMetadata
-    ):
-        return invalid(
-            "instrument_metadata",
-            "typed replay prices require explicit fingerprint-verified instrument metadata",
-        )
-    pinned_split: tuple[SplitManifest, SegmentRole] | None = None
-    pinned_seal: HoldoutSeal | None = None
-    if split_manifest is not None or split_role is not None or holdout_seal is not None:
-        if not isinstance(split_manifest, SplitManifest):
-            return invalid("split_manifest", "governed replay uses the registered CT-12 manifest")
-        if not isinstance(split_role, SegmentRole):
-            return invalid("split_role", "governed replay names one CT-12 segment role")
-        if not isinstance(holdout_seal, HoldoutSeal):
-            return invalid(
-                "holdout_seal", "governed replay wires the configured CT-12 holdout seal"
-            )
-        if split_manifest.world is not World.REPLAY:
-            return policy("world", "CT-12 split world matches replay materialization")
-        if (
-            holdout_seal.world is not World.REPLAY
-            or holdout_seal.calendar_identity != split_manifest.calendar_identity
-            or holdout_seal.seal_boundary != split_manifest.seal_boundary
-        ):
-            return policy(
-                "holdout_seal",
-                "the configured holdout seal carries this CT-12 manifest's calendar, "
-                "boundary, and world",
-            )
-        pinned_split = (split_manifest, split_role)
-        pinned_seal = holdout_seal
-    if isinstance(partitions, (str, bytes)) or not isinstance(partitions, Sequence):
-        return invalid(
-            "partitions", "a typed replay read cites the partitions the door materialised"
-        )
-    refs: list[TypedPartitionRef] = []
-    for index, item in enumerate(cast("Sequence[object]", partitions)):
-        if not isinstance(item, TypedPartitionRef):
-            return invalid(
-                "partitions",
-                "a typed replay read cites materialised partition references",
-                index=index,
-            )
-        refs.append(item)
-    paired = _typed_pair(refs)
-    if is_refusal(paired):
-        return paired
-    kind, ordered = paired.value
-    metadata = instrument_metadata
-    if metadata is not None and (
-        ordered[0].subject != metadata.instrument.symbol
-        or metadata.price_scale != _SOURCE_PRICE_SCALE
-    ):
-        return policy(
-            "instrument_metadata",
-            "the typed series is about the pinned CT-03 instrument at its declared scale",
-            series=ordered[0].series,
-            price_scale=metadata.price_scale,
-        )
-    month = ordered[0].month
-    rows: dict[str, list[tuple[object, ...]]] = {}
-    for ref in ordered:
-        read = _verified_rows(ref, _columns_of(ref))
-        if is_refusal(read):
-            return read
-        rows[ref.variant or kind] = read.value
-    built = _typed_frontiers(kind, ordered, rows, metadata=metadata, month=month)
-    if is_refusal(built):
-        return built
-    frontiers = built.value
-    for frontier in frontiers:
-        if pinned_seal is not None:
-            sealed = data_policy.check_typed_sealed(
-                seal=pinned_seal, month=month, instant_ns=frontier.event_ns
-            )
-            if is_refusal(sealed):
-                return sealed
-        if pinned_split is not None:
-            manifest, role = pinned_split
-            claimed = data_policy.check_typed_instant(
-                manifest=manifest, role=role, month=month, instant_ns=frontier.event_ns
-            )
-            if is_refusal(claimed):
-                return claimed
-    identity: dict[str, object] = {
-        "class": _TYPED_SOURCE_CLASS,
-        "partitions": [ref.fp1_identity() for ref in ordered],
-        "stream_id": stream_id,
-        "world": World.REPLAY.value,
-    }
-    if pinned_split is not None:
-        identity["split_fp1"] = pinned_split[0].fingerprint.value
-        identity["split_role"] = pinned_split[1].value
-    if metadata is not None:
-        identity["price_metadata_fp1"] = metadata.fingerprint.value
-    return _materialise_quotes(
-        stream_id=stream_id,
-        frontiers=frontiers,
-        instrument_metadata=metadata,
-        identity=identity,
-        split_manifest=None if pinned_split is None else pinned_split[0],
-        split_role=None if pinned_split is None else pinned_split[1],
-        source_class=_TYPED_SOURCE_CLASS,
-        partitions=tuple(ordered),
-    )
-
-
-def _typed_pair(
-    refs: Sequence[TypedPartitionRef],
-) -> Result[tuple[str, tuple[TypedPartitionRef, ...]]]:
-    """Order a typed read as one tick series, or one month's bid and ask bar pair."""
-    if not refs:
-        return invalid("partitions", "a typed replay read cites at least one partition")
-    kinds = sorted({ref.kind for ref in refs})
-    if len(kinds) != 1:
-        return invalid("partitions", "a typed replay read pairs one kind at a time", kinds=kinds)
-    kind = kinds[0]
-    if kind == _TICKS_KIND:
-        if len(refs) != 1:
-            return invalid(
-                "partitions",
-                "a tick month is one partition, because a tick row carries both sides",
-                series=[ref.series for ref in refs],
-            )
-        return Ok((_TICKS_KIND, (refs[0],)))
-    if kind != _BAR_KIND:
-        return invalid(
-            "partitions",
-            "a typed replay read takes ticks or the bid and ask bar-m1 series of one month",
-            kind=kind,
-        )
-    if len({(ref.source, ref.subject, ref.month) for ref in refs}) != 1:
-        return invalid(
-            "partitions",
-            "a bar pair is one instrument's bid and ask series of one month",
-            series=[ref.series for ref in refs],
-        )
-    variants = {ref.variant for ref in refs}
-    if len(refs) != 2 or variants != {"bid", "ask"}:
-        return invalid(
-            "partitions",
-            "a bar replay reads the bid series and the ask series together; half a pair is "
-            "never used as a quote",
-            present=sorted(variants),
-            missing=sorted({"bid", "ask"} - variants),
-        )
-    by_variant = {ref.variant: ref for ref in refs}
-    return Ok((_BAR_KIND, (by_variant["bid"], by_variant["ask"])))
-
-
-def _columns_of(ref: TypedPartitionRef) -> tuple[str, ...]:
-    """The typed columns the store wrote for this series' kind."""
-    return rule_for(ref.source, ref.kind).columns
-
-
-def _verified_rows(
-    ref: TypedPartitionRef, columns: Sequence[str]
-) -> Result[list[tuple[object, ...]]]:
-    """Read a materialised partition and re-derive the fingerprint its rows hash to.
-
-    The fingerprint is the store writer's own streamed hash over the pinned logical encoding, so
-    the rows are written once more through the store's public commit into a scratch root, and the
-    fingerprint that comes back is compared with the one claimed for the partition. A file whose
-    rows do not hash to its claim is refused before a single quote is built, so a substituted or
-    truncated copy cannot pass as that partition.
-    """
-    try:
-        import pyarrow.parquet as pq  # noqa: PLC0415 (only a read needs the library)
-    except ImportError as exc:  # pragma: no cover - qmf-data ships pyarrow
-        return invalid("partitions", "reading a typed partition needs pyarrow", error=str(exc))
-    key = SeriesKey.try_create(
-        ref.source, ref.subject, ref.kind, ref.year, ref.month_number, ref.variant
-    )
-    if is_refusal(key):
-        return key
-    collected: list[tuple[object, ...]] = []
-    computed = ""
-    with tempfile.TemporaryDirectory(prefix="qmb-typed-", ignore_cleanup_errors=True) as scratch:
-        try:
-            for batch in pq.ParquetFile(ref.path).iter_batches(batch_size=50_000):
-                collected.extend(tuple(row[name] for name in columns) for row in batch.to_pylist())
-        except (OSError, ValueError, KeyError) as exc:
-            return invalid(
-                "partitions",
-                "a typed partition is a readable typed Parquet file",
-                series=ref.series,
-                month=ref.month,
-                error=str(exc),
-            )
-        written = SeriesStore(Path(scratch)).commit(key.value, collected)
-        if is_refusal(written):
-            return written
-        computed = written.value.fingerprint
-    checked = data_policy.check_typed_fingerprint(
-        series=ref.series, month=ref.month, claimed=ref.fingerprint, computed=computed
-    )
-    if is_refusal(checked):
-        return checked
-    return Ok(collected)
-
-
-def _typed_frontiers(
-    kind: str,
-    ordered: Sequence[TypedPartitionRef],
-    rows: Mapping[str, Sequence[tuple[object, ...]]],
-    *,
-    metadata: PinnedInstrumentPriceMetadata | None,
-    month: str,
-) -> Result[tuple[_QuoteFrontier, ...]]:
-    """Build quote frontiers from tick rows, or from a bid and an ask bar series."""
-    first = ordered[0]
-    symbol = first.subject if metadata is None else metadata.instrument.symbol
-    venue = first.source if metadata is None else metadata.instrument.venue.value
-    license_tag = first.source
-    if kind == _TICKS_KIND:
-        built: list[_QuoteFrontier] = []
-        for row in rows[first.variant or _TICKS_KIND]:
-            event_ns = int(cast("int", row[0])) * _NS_PER_MS
-            built.append(
-                _QuoteFrontier(
-                    event_ns=event_ns,
-                    knowable_ns=event_ns,
-                    bid=int(cast("int", row[1])),
-                    ask=int(cast("int", row[2])),
-                    scale=_SOURCE_PRICE_SCALE,
-                    license_tag=license_tag,
-                    resolution="tick",
-                    symbol=symbol,
-                    venue=venue,
-                    bid_source_fp1=first.fingerprint,
-                    ask_source_fp1=first.fingerprint,
-                )
-            )
-        return Ok(tuple(built))
-    bid_ref, ask_ref = ordered[0], ordered[1]
-    bid_rows = rows["bid"]
-    ask_rows = rows["ask"]
-    if len(bid_rows) != len(ask_rows):
-        return policy(
-            "partitions",
-            "the bid and ask bars of a month cover the same minutes",
-            month=month,
-            bid_rows=len(bid_rows),
-            ask_rows=len(ask_rows),
-        )
-    paired: list[_QuoteFrontier] = []
-    for bid_row, ask_row in zip(bid_rows, ask_rows, strict=True):
-        bid_t = int(cast("int", bid_row[0]))
-        ask_t = int(cast("int", ask_row[0]))
-        if bid_t != ask_t:
-            return policy(
-                "partitions",
-                "the bid and ask bars of a month cover the same minutes",
-                month=month,
-                bid_t=bid_t,
-                ask_t=ask_t,
-            )
-        event_ns = bid_t * _NS_PER_MS
-        # One m1 bar is one quote at its minute, priced at the bar's close, the last price the
-        # minute traded and so the price a taker could have met at its end.
-        paired.append(
-            _QuoteFrontier(
-                event_ns=event_ns,
-                knowable_ns=event_ns,
-                bid=int(cast("int", bid_row[4])),
-                ask=int(cast("int", ask_row[4])),
-                scale=_SOURCE_PRICE_SCALE,
-                license_tag=license_tag,
-                resolution=_BAR_KIND,
-                symbol=symbol,
-                venue=venue,
-                bid_source_fp1=bid_ref.fingerprint,
-                ask_source_fp1=ask_ref.fingerprint,
-            )
-        )
-    return Ok(tuple(paired))
 
 
 # --- the windowed reader for units (AD-205, QB-01, QB-02) ------------------------------------
@@ -968,6 +570,7 @@ stays within 10% of its peak at 10,000 steps."""
 
 _EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
 _NS_PER_US: Final[int] = 1_000
+_BAR_M1_SECONDS: Final[int] = 60
 
 
 def _ns_of(moment: datetime) -> int:
@@ -1202,11 +805,74 @@ def read_bar_csv(path: Path, seconds: int) -> Iterator[Bar | TypedRefusal]:
 
 
 def read_bar_pair_csv(bid: Path, ask: Path, seconds: int) -> Iterator[BarPair | TypedRefusal]:
-    """Stream a bid file and an ask file of ``seconds`` bars, keeping stretches both sides have.
+    """Stream a bid file and an ask file of ``seconds`` bars, keeping stretches both sides have."""
+    return _paired(_csv_bars(bid), _csv_bars(ask), seconds)
 
-    Half a pair is never a quote, so a minute only one file holds is skipped.
-    """
-    bids, asks = _csv_bars(bid), _csv_bars(ask)
+
+def _parquet_batches(
+    paths: Sequence[Path], columns: Sequence[str]
+) -> Iterator[list[list[int]] | TypedRefusal]:
+    """One side's copied months in order, a batch at a time, these whole-number columns."""
+    import pyarrow.parquet as pq  # noqa: PLC0415 (only a read of the store needs the library)
+
+    try:
+        for path in paths:
+            with pq.ParquetFile(path) as months:
+                for batch in months.iter_batches(batch_size=50_000, columns=list(columns)):
+                    yield [batch.column(name).to_pylist() for name in columns]
+    except (OSError, ValueError, KeyError) as error:
+        yield invalid(
+            "data",
+            "a market's store months are readable typed Parquet files",
+            files=[str(path) for path in paths],
+            error=str(error),
+        )
+
+
+def read_tick_parquet(
+    paths: Sequence[Path], scale: int, start_ms: int, end_ms: int
+) -> Iterator[Tick | TypedRefusal]:
+    """Stream a market's copied tick months inside the window, as prices at the series' scale.
+
+    This is a month's hottest loop, millions of rows, so it walks whole batches."""
+    for batch in _parquet_batches(paths, ("t", "bid", "ask")):
+        if isinstance(batch, TypedRefusal):
+            yield batch
+            return
+        for ms, bid, ask in zip(*batch, strict=True):
+            if start_ms <= ms < end_ms:
+                yield Tick(ms, Decimal(bid).scaleb(-scale), Decimal(ask).scaleb(-scale))
+
+
+def _parquet_bars(
+    paths: Sequence[Path], scale: int, start_ms: int, end_ms: int
+) -> Iterator[tuple[int, OHLC] | TypedRefusal]:
+    for batch in _parquet_batches(paths, ("t", "open", "high", "low", "close")):
+        if isinstance(batch, TypedRefusal):
+            yield batch
+            return
+        for ms, *prices in zip(*batch, strict=True):
+            if start_ms <= ms < end_ms:
+                yield ms, OHLC(*(Decimal(price).scaleb(-scale) for price in prices))
+
+
+def read_bar_pair_parquet(
+    bid: Sequence[Path], ask: Sequence[Path], scale: int, start_ms: int, end_ms: int
+) -> Iterator[BarPair | TypedRefusal]:
+    """Stream a market's copied ``bar-m1`` bid and ask months inside the window."""
+    return _paired(
+        _parquet_bars(bid, scale, start_ms, end_ms),
+        _parquet_bars(ask, scale, start_ms, end_ms),
+        _BAR_M1_SECONDS,
+    )
+
+
+def _paired(
+    bids: Iterator[tuple[int, OHLC] | TypedRefusal],
+    asks: Iterator[tuple[int, OHLC] | TypedRefusal],
+    seconds: int,
+) -> Iterator[BarPair | TypedRefusal]:
+    """Half a pair is never a quote, so a stretch only one side holds is skipped."""
     left, right = next(bids, None), next(asks, None)
     while left is not None and right is not None:
         if isinstance(left, TypedRefusal) or isinstance(right, TypedRefusal):

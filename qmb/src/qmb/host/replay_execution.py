@@ -32,7 +32,7 @@ from qml.protocol.evidence import MappingReadSurface
 
 from qmb._refuse import invalid, policy
 from qmb.config.compiler import ASSIGNMENT_KEY, STUDY_TRIAL_LABEL_KEY, ResolvedRunConfig
-from qmb.execution.binder import BoundExecution, require_requested_execution
+from qmb.execution.binder import BoundExecution
 from qmb.execution.ports import SlicePath
 from qmb.host.book_handler import (
     BookAdmissionContext,
@@ -41,23 +41,14 @@ from qmb.host.book_handler import (
     read_replay_positions,
 )
 from qmb.host.replay import RecordedReplaySource
-from qmb.host.replay_request import (
-    ResolvedReplayRequest,
-    TypedReplayRequest,
-    resolve_replay_request,
-    resolve_typed_replay_request,
-)
+from qmb.host.replay_request import ResolvedReplayRequest, resolve_replay_request
 from qmb.ledger.line import LedgerLine
 from qmb.results.ct29 import CT29ClosedTrade, read_ct29_closed_trades
 from qmb.results.ct32 import mint_run_performance_result
 from qmb.results.measures import ClosedTrade, EquityPoint
 from qmb.runloop.loop import EventSlice, LoopOutcome, run
 
-__all__ = [
-    "RecordedExecutionResult",
-    "execute_recorded_replay_request",
-    "execute_typed_replay_request",
-]
+__all__ = ["RecordedExecutionResult", "execute_recorded_replay_request"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,106 +122,7 @@ def execute_recorded_replay_request(
             "source_materialization",
             "execution paths, slices, and read surfaces match fresh CT-10 readback",
         )
-    return _execute_resolved(
-        request=canonical_request.value,
-        command="execute_recorded_replay_request",
-        config=config,
-        bound_execution=bound_execution,
-        admission=admission,
-        journal_reader=journal_reader,
-        terminal_ledger=terminal_ledger,
-        expected_split_fp1=expected_split_fp1,
-        role=role,
-        initial_resting=initial_resting,
-        cancel=cancel,
-        limits=limits,
-        probe=probe,
-        trial_proposal=trial_proposal,
-        trial_label=trial_label,
-        trial_generation=trial_generation,
-    )
-
-
-def execute_typed_replay_request(
-    *,
-    request: object,
-    expected_request_ref: object,
-    holdout_months: object,
-    config: object,
-    bound_execution: object,
-    admission: object,
-    journal_reader: object,
-    terminal_ledger: object,
-    expected_split_fp1: object,
-    role: object = "confirmation",
-    initial_resting: object = (),
-    cancel: object = None,
-    limits: object = None,
-    probe: object = None,
-) -> Result[RecordedExecutionResult]:
-    """Execute a typed replay request over its Library partitions and mint real economics.
-
-    The typed-partition entry beside the CT-10 receipts path. The request is the parsed
-    JSON body the core wrote into the run's input folder; its partitions are read by
-    fingerprint, its execution inputs must be the ones the run-config binds, and from
-    there the run is the receipts path's own Book, CT-13 and CT-32 sequence.
-    """
-    if not isinstance(request, TypedReplayRequest):
-        return invalid("request", "typed execution consumes a parsed TypedReplayRequest")
-    expected_request = (
-        Ok(expected_request_ref)
-        if isinstance(expected_request_ref, Fingerprint)
-        else Fingerprint.try_create(expected_request_ref)
-    )
-    if is_refusal(expected_request):
-        return expected_request
-    if request.fingerprint != expected_request.value:
-        return policy("request_ref", "the typed request is the one the core pinned for this run")
-    requested = require_requested_execution(config, request.execution)
-    if is_refusal(requested):
-        return requested
-    resolved = resolve_typed_replay_request(request=request, holdout_months=holdout_months)
-    if is_refusal(resolved):
-        return resolved
-    return _execute_resolved(
-        request=resolved.value,
-        command="execute_typed_replay_request",
-        config=config,
-        bound_execution=bound_execution,
-        admission=admission,
-        journal_reader=journal_reader,
-        terminal_ledger=terminal_ledger,
-        expected_split_fp1=expected_split_fp1,
-        role=role,
-        initial_resting=initial_resting,
-        cancel=cancel,
-        limits=limits,
-        probe=probe,
-        trial_proposal=None,
-        trial_label=None,
-        trial_generation=None,
-    )
-
-
-def _execute_resolved(
-    *,
-    request: ResolvedReplayRequest,
-    command: str,
-    config: object,
-    bound_execution: object,
-    admission: object,
-    journal_reader: object,
-    terminal_ledger: object,
-    expected_split_fp1: object,
-    role: object,
-    initial_resting: object,
-    cancel: object,
-    limits: object,
-    probe: object,
-    trial_proposal: object,
-    trial_label: object,
-    trial_generation: object,
-) -> Result[RecordedExecutionResult]:
+    request = canonical_request.value
     if not isinstance(config, ResolvedRunConfig) or config.world is not World.REPLAY:
         return invalid("config", "recorded QMB execution uses a resolved world=replay config")
     if role == "trial":
@@ -388,7 +280,6 @@ def _execute_resolved(
         return policy("book_fp1", "the resolved Book and ReplayBinding identify the same Book")
     source_witness = _ensure_replay_source_witness(
         request=request,
-        command=command,
         source_fingerprint=source_fp,
         config=config,
         admission=admission,
@@ -593,7 +484,6 @@ _SOURCE_WITNESS_KIND = "qmb-recorded-replay-source-binding-v1"
 def _ensure_replay_source_witness(
     *,
     request: ResolvedReplayRequest,
-    command: str,
     source_fingerprint: Fingerprint,
     config: ResolvedRunConfig,
     admission: BookAdmissionContext,
@@ -641,7 +531,7 @@ def _ensure_replay_source_witness(
         "event_type_wire": JournalEventType.DATA_QUALITY.value,
         "signal": "recorded-replay-source-binding",
         "kind": _SOURCE_WITNESS_KIND,
-        "command": command,
+        "command": "execute_recorded_replay_request",
         "is_edge_claim": False,
         "fills_gaps": False,
         "request_ref": request.request_ref.value,

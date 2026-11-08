@@ -84,7 +84,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         run_id,
         "finished",
         measures={"trades": len(trades), "total_r": str(result.total_r), **measured},
-        labels={"zero_trades": not trades, "fidelity": "bars"},
+        labels={
+            "zero_trades": not trades,
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
         files=[
             tester.write(folder, "report.json", {"measured": measured, "unmeasured": unmeasured})
         ],

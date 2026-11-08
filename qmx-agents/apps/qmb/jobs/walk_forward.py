@@ -75,7 +75,9 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
                 rows.append(cell.fields() | {"status": "failed", "reason": tester.reason(ran)})
                 continue
             candidates[cell.name] = ran.value.result.trades
-            rows.append(cell.fields() | {"status": "finished", "trades": len(candidates[cell.name])})
+            rows.append(
+                cell.fields() | {"status": "finished", "trades": len(candidates[cell.name])}
+            )
     else:
         ran = run_cell(base, tester.unit_body(asked, run_id))
         if is_refusal(ran):
@@ -103,7 +105,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         run_id,
         "finished",
         measures=measures,
-        labels={"zero_trades": not any(candidates.values()), "fidelity": "bars"},
+        labels={
+            "zero_trades": not any(candidates.values()),
+            "fixture_records": asked.get("fixture_records", []),
+            "fidelity": "quotes",
+        },
         files=[
             tester.write(
                 folder,
