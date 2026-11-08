@@ -619,6 +619,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
                 "paused": 0,
                 "stopped": sum(state in {"stopped", "refused"} for state in states),
             },
+            "board": context.store.observed("runtime.board"),
             "kill_level": level.value,
             "kill_effects": context.store.observed("runtime.kill"),
             "alarms": context.store.observed("runtime.alarms"),

@@ -64,6 +64,7 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("venue answer unknown", "health_stop"),
     ("venue cannot", "health_stop"),
     ("widens the stop", "stop_wrong_side"),
+    ("does not favour", "not_favoured"),
 )
 """The reason code of each reason text QML's hosted unit, the handler and the trading node's
 order path write, first match wins."""
