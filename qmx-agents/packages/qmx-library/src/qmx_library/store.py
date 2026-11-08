@@ -54,7 +54,7 @@ from qmx_home.versions import too_new
 
 from qmx_library.blame import lines, origins
 from qmx_library.fts import Catalog, norm
-from qmx_library.kinds import Kind, kind, roster, schema_files
+from qmx_library.kinds import Checker, Kind, kind, roster, schema_files
 from qmx_library.marks import CLEAR, QUARANTINED, Marks, marks, marks_ref
 from qmx_library.port import (
     RELATIONS,
@@ -614,6 +614,9 @@ class Store:
         ).fetchone()
         self._edge_seq = int(edges)
         self._epoch: Epoch | None = self._read_epoch()
+        self.checkers: dict[str, Checker] = {}
+        """The checkers the host registered by name at composition (Part A AD-112). A store opened
+        without them refuses every check that applies with `checker_unavailable`."""
 
     @classmethod
     def open(
@@ -908,6 +911,18 @@ class Store:
                 f"machine keeps; {act} was refused whole and nothing was written",
             )
 
+    def register_checker(self, name: str, checker: Checker) -> None:
+        """The checker a kind file's `checks` names, run on this store's puts and publishes."""
+        self.checkers[name] = checker
+
+    def _admit(self, ref: str, object_id: ObjectId) -> None:
+        """The kind's `publish` checks, before `main` of a definition or governed item moves to
+        `object_id`; a mirror of another store's move runs none, as `ingest` runs no put check."""
+        if ref != MAIN:
+            return
+        view = self._view(object_id)
+        kind(view.kind).admit(view.fields, self.checkers)
+
     def _active(self, item: str) -> None:
         if self.catalog.state(item) == "archived":
             raise LibraryRefused("archived", f"item {item} is archived")
@@ -917,7 +932,7 @@ class Store:
     ) -> tuple[ObjectId, Kind]:
         spec = kind(draft.kind)
         fields = cast(JsonObject, self.redactor.redact_json(draft.fields)[0])
-        spec.check(fields, set(draft.blobs))
+        spec.check(fields, set(draft.blobs), self.checkers)
         relations: list[JsonObject] = []
         for relation in draft.relations:
             name, to = normalised(relation[0]), relation[1]
@@ -1019,7 +1034,9 @@ class Store:
         with self._writing():
             if self.catalog.head(item, name) is not None:
                 raise LibraryRefused("stale_head", f"{name} of {item} exists")
-            return self._move(who, item, name, self.resolve(who, item, from_ref))
+            object_id = self.resolve(who, item, from_ref)
+            self._admit(name, object_id)
+            return self._move(who, item, name, object_id)
 
     def annotate(self, who: Principal, object_id: ObjectId, values: JsonObject) -> None:
         """Annotation fields the object's kind accepts; no new version (AD-2). The operator and
@@ -1083,6 +1100,7 @@ class Store:
             if ours == theirs or (ours is not None and self._descends(ours, theirs)):
                 return MergeResult("up-to-date", ours or theirs)
             if ours is None or self._descends(theirs, ours):
+                self._admit(into, theirs)
                 self._move(who, item, into, theirs, reason=f"merge {from_ref}")
                 return MergeResult("fast-forward", theirs)
             if strategy == "ff-only":
@@ -1267,6 +1285,7 @@ class Store:
             [ours, theirs],
         )
         object_id, _ = self._mint(who, draft, item, [ours, theirs])
+        self._admit(into, object_id)
         self._move(who, item, into, object_id, reason=reason)
         return MergeResult("merged", object_id)
 
@@ -2048,6 +2067,7 @@ class Store:
                 raise LibraryRefused("stale_head", f"{ref} of {item} is at {head}")
             if head == new_head:
                 return Commit(new_head, item, ref, head, self._seq)
+            self._admit(ref, new_head)
             return self._move(who, item, ref, new_head)
 
     def put_transient(self, who: Principal, ref: str, data: bytes) -> str:
