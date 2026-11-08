@@ -27,6 +27,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_EVEN, Decimal
+from fractions import Fraction
+from types import MappingProxyType
 from typing import Final, Protocol, TypeVar, cast
 
 from qmf.core.chrono import Instant
@@ -34,6 +36,7 @@ from qmf.core.exact import Price
 from qmf.core.fingerprint import Fingerprint
 from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.risk.facts import Fact
 from qmf.risk.unit_intent import (
     AmendProtection,
     CloseFull,
@@ -52,8 +55,10 @@ from qml.protocol.unit import (
     Priced,
     Proposal,
     QuoteBar,
+    RatePort,
     StateEvent,
     UnitStep,
+    rate_used,
 )
 from qml.unit.model import Side
 
@@ -101,6 +106,11 @@ class HeldPosition:
     """How far the price has gone against the position since its entry, in R of its entry stop."""
     mfe_r: Decimal = Decimal(0)
     """How far the price has gone for the position since its entry, in R of its entry stop."""
+    rate: Fraction | None = None
+    """The account-currency rate the entry was sized at, stamped on its close (AD-10). A position
+    adopted after a restart carries none, and its money is summed as the quote figure it has."""
+    rate_ts: Instant | None = None
+    """When that rate was read, so the close can stamp its age without reading a rate again."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +166,11 @@ class UnitTrade:
     """How far the position's price ran its way before this close."""
     risk: Decimal = Decimal(0)
     """The money the whole entry risked at its entry stop: the trade's 1 R."""
+    rate: Fraction | None = None
+    """The account-currency rate the position was sized at; ``money`` is the quote figure, and
+    this is the one rate every money figure is converted by (SPINE section 3, "Money")."""
+    rate_age_s: Decimal = Decimal(0)
+    """How old that rate was when the position closed, stamped so a reader never reads one."""
 
 
 JournalRecord = DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade | CashEvent
@@ -230,6 +245,29 @@ def _money(
     return (move * quantity * record.value_per_point).quantize(_CENT, rounding=ROUND_HALF_EVEN)
 
 
+def _exact(value: Decimal | Fraction) -> Fraction:
+    """``value`` as an exact rational, never through a binary float."""
+    return value if isinstance(value, Fraction) else Fraction(value)
+
+
+def _converted(money: Decimal, rate: Fraction | None) -> Fraction:
+    """One row's money in the account's currency. A row with no stamped rate keeps its figure."""
+    return Fraction(money) if rate is None else Fraction(money) * rate
+
+
+def _amount(value: Fraction) -> Decimal:
+    """An exact sum as the row's decimal, at whatever scale the sum needs."""
+    return Decimal(value.numerator) / Decimal(value.denominator)
+
+
+def _age_s(now: Instant, since: Instant | None) -> Decimal:
+    """``now`` minus ``since`` in seconds, or zero when there is no read time to measure."""
+    if since is None:
+        return Decimal(0)
+    span = now.difference(since)
+    return Decimal(0) if is_refusal(span) else Decimal(span.value.value_ns) / Decimal(1_000_000_000)
+
+
 def _stamps(row: DecisionRow | None) -> dict[str, Decimal]:
     """Each slot output the entry's decision row recorded as a number, by binding name."""
     stamps: dict[str, Decimal] = {}
@@ -282,6 +320,7 @@ class UnitSliceHandler:
         journal: JournalPort,
         seeded: Mapping[str, OwnPosition] | None = None,
         cash: CashPort | None = None,
+        rates: RatePort | None = None,
     ) -> None:
         self._stream = stream
         self._records = records
@@ -291,6 +330,7 @@ class UnitSliceHandler:
         self._execution = execution
         self._journal = journal
         self._cash_port = cash
+        self._rates = rates
         self._unit: SteppingUnit | None = None
         self._latest: dict[str, QuoteBar] = {}
         self._held: dict[str, HeldPosition] = {}
@@ -302,6 +342,7 @@ class UnitSliceHandler:
         self._carried: dict[str, Instant] = {}
         self._stepped: tuple[int, UnitStep, tuple[Priced, ...]] | None = None
         self._entry_stamps: dict[str, dict[str, Decimal]] = {}
+        self._entry_rates: dict[str, tuple[Fraction | None, Instant | None]] = {}
         self._entries = 0
 
     @classmethod
@@ -318,13 +359,15 @@ class UnitSliceHandler:
         journal: JournalPort,
         seeded: Mapping[str, OwnPosition] | None = None,
         cash: CashPort | None = None,
+        rates: RatePort | None = None,
     ) -> Result[UnitSliceHandler]:
         """A handler whose unit ``host`` built from this handler's read surfaces.
 
         QMB passes ``construct_unit``; the node passes its resume call, so this file never
         restores a unit itself. ``opened_by`` is the fingerprint the positions it opens are
         keyed by: QMB pins one compile and passes that, the node passes the unit version's logic
-        half so a size edit keeps a held position's exits (AD-3).
+        half so a size edit keeps a held position's exits (AD-3). ``rates`` is where the host
+        supplies ``market.rate:<quote>``; a host with none sizes only its own currency's quotes.
         """
         handler = cls(
             stream=stream,
@@ -336,6 +379,7 @@ class UnitSliceHandler:
             journal=journal,
             seeded=seeded,
             cash=cash,
+            rates=rates,
         )
         unit = host(handler.read_surfaces())
         if is_refusal(unit):
@@ -369,7 +413,7 @@ class UnitSliceHandler:
 
     def read_surfaces(self) -> dict[str, _At]:
         surfaces = {
-            "account": _At(lambda _i: self._account()),
+            "account": _At(self._account),
             "own_journal": _At(lambda _i: tuple(self._closed)),
         }
         for market in self._records:
@@ -379,9 +423,25 @@ class UnitSliceHandler:
             surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: self._position(m))
         return surfaces
 
-    def _account(self) -> Account:
-        traded = sum((t.money for t in self._trades), Decimal(0))
-        return Account(self._equity + traded + sum((c.money for c in self._cash), Decimal(0)))
+    def _account(self, instant: Instant) -> Account:
+        """The account facts at ``instant``: the equity in the account's currency and the rates.
+
+        Each closed trade's money is the quote figure its row kept, so it is converted by the
+        rate that row stamped before the sum; a row with no stamp keeps the figure it has. The
+        rates come from the host's port for every quote the unit reads, and a quote it cannot
+        price is left out, which the converter names ``rate_absent`` on that entry alone.
+        """
+        equity = Fraction(self._equity)
+        equity += sum((_converted(t.money, t.rate) for t in self._trades), Fraction(0))
+        equity += sum((Fraction(c.money) for c in self._cash), Fraction(0))
+        if self._rates is None:
+            return Account(_amount(equity))
+        rates: dict[str, Fact] = {}
+        for record in self._records.values():
+            fact = self._rates.rate(record, instant)
+            if fact is not None:
+                rates[record.currency] = fact
+        return Account(_amount(equity), self._rates.currency, MappingProxyType(rates))
 
     def _position(self, market: str) -> OwnPosition | None:
         held = self._held.get(market)
@@ -529,7 +589,14 @@ class UnitSliceHandler:
         priced: tuple[Priced, ...] = ()
         if step.value.proposals:
             unit = cast("PricingUnit", self._unit)
-            priced = tuple(unit.price(one, self._account()) for one in step.value.proposals)
+            account = self._account(frontier)
+            priced = tuple(unit.price(one, account) for one in step.value.proposals)
+            for one in step.value.proposals:
+                fact = rate_used(one.record, account, frontier)
+                self._entry_rates[one.row.row_id] = (
+                    None if fact is None or fact.value is None else _exact(fact.value),
+                    None if fact is None else fact.ts,
+                )
         self._stepped = (frontier.value_ns, step.value, priced)
         for record in (
             *step.value.decisions,
@@ -562,6 +629,7 @@ class UnitSliceHandler:
     ) -> None:
         row_id = cast("str", wire["decision_row_id"])
         stamps = self._entry_stamps.pop(row_id, {})
+        rate, rate_ts = self._entry_rates.pop(row_id, (None, None))
         record = self._records[market]
         receipt = Decimal(cast("str", wire["quantity"]))
         if self._position(market) is not None:
@@ -596,6 +664,8 @@ class UnitSliceHandler:
             stamps,
             stop,
             _money(side, price, stop, quantity, record).copy_abs(),
+            rate=rate,
+            rate_ts=rate_ts,
         )
         fill = Fill(
             frontier,
@@ -720,6 +790,8 @@ class UnitSliceHandler:
             mae_r=held.mae_r,
             mfe_r=held.mfe_r,
             risk=held.risk,
+            rate=held.rate,
+            rate_age_s=_age_s(frontier, held.rate_ts),
         )
         self._record_fill(fill)
         self._trades.append(trade)

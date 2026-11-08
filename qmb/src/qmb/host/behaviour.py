@@ -22,14 +22,22 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
+from itertools import islice
 from pathlib import Path
 from typing import Final, TextIO, cast
 
 from qmf.core.refusal import Ok, Result, is_refusal
 from qml.check.layer_g import layer_g
+from qml.protocol.unit import ACCOUNT_CURRENCY
 
 from qmb._refuse import invalid
-from qmb.host.unit_runner import UnitRunRequest, load_unit_folder, parse_unit_run_request
+from qmb.host.facts import SliceRates
+from qmb.host.unit_runner import (
+    LoadedUnit,
+    UnitRunRequest,
+    load_unit_folder,
+    parse_unit_run_request,
+)
 
 __all__ = ["G_SLICE_BARS", "G_SLICE_MARGIN", "BehaviourCheck", "check_behaviour", "child_main"]
 
@@ -93,10 +101,19 @@ def check_behaviour(
         equity=request.equity,
         loaded_in_isolation=loaded_in_isolation,
         may_not_trade_on_slice=may_not_trade_on_slice,
+        rates=_rates(loaded.value, max(needed, slice_bars)),
     )
     report = dict(g.report)
     report["slice_bars_needed"] = needed
     return Ok(BehaviourCheck(report))
+
+
+def _rates(loaded: LoadedUnit, limit: int) -> SliceRates | None:
+    """The same rate facts the replay reads, over this bounded slice's conversion bars (AD-10)."""
+    if not loaded.conversions:
+        return None
+    shown = {market: tuple(islice(feed(), limit)) for market, feed in loaded.rate_feeds.items()}
+    return SliceRates(ACCOUNT_CURRENCY, loaded.conversions, shown)
 
 
 def child_main(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:

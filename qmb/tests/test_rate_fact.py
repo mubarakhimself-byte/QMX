@@ -425,26 +425,33 @@ def test_a_replay_missing_the_conversion_bars_skips_by_name_on_its_run_stamp(
     assert (rows[-1].outcome, rows[-1].reason) == ("skipped", "sizer: rate_absent")
 
 
+def _jpy_slice(cells: Sequence[OHLC], factor: str) -> list[OHLC]:
+    """The same price shape stated in yen, on the three digits the USDJPY record keeps."""
+    scale = Decimal(factor)
+    return [
+        OHLC(
+            (bar.open * scale).quantize(Decimal("0.001")),
+            (bar.high * scale).quantize(Decimal("0.001")),
+            (bar.low * scale).quantize(Decimal("0.001")),
+            (bar.close * scale).quantize(Decimal("0.001")),
+        )
+        for bar in cells
+    ]
+
+
 def test_the_g_check_sizes_a_jpy_unit(tmp_path: Path) -> None:
     opens, bid, ask = _slice_series("EURUSD")
     folder = _folder(
         tmp_path,
-        markets=[("fx.eurusd", "EURUSD")],
+        markets=[("fx.usdjpy", "USDJPY")],
         records={
-            "fx.eurusd": _fixture("eurusd")
-            | {
-                "currency": "JPY",
-                "conversions": {ACCOUNT_CURRENCY: {"market_id": "usdjpy", "invert": True}},
-            },
+            "fx.usdjpy": _jpy_record("USDJPY", "usdjpy"),
             "usdjpy": _fixture("usdjpy"),
         },
         bars={},
     )
-    for side, cells in (("bid", bid), ("ask", ask)):
-        _write_side(folder / "bars" / "fx.eurusd" / f"{side}.csv", opens, cells)
-    flat = [OHLC(*(Decimal("150.00"),) * 4) for _ in opens]
-    for side in ("bid", "ask"):
-        _write_side(folder / "bars" / "usdjpy" / f"{side}.csv", opens, flat)
+    for side, cells in (("bid", _jpy_slice(bid, "137.6")), ("ask", _jpy_slice(ask, "137.6"))):
+        _write_side(folder / "bars" / "fx.usdjpy" / f"{side}.csv", opens, cells)
     loaded = _ok(load_unit_folder(folder))
     series = _ok(loaded.bars())
     conversion = {market: tuple(feed()) for market, feed in loaded.rate_feeds.items()}

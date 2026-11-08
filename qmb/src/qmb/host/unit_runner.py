@@ -53,8 +53,15 @@ from qmf.core.identity import AccountRole, VenueId
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.paper import ExecutionTarget
 from qml.compile import CompileContext, CompiledUnit, compile_unit
-from qml.numbers import InstrumentRecord, parse_record
-from qml.protocol.unit import MotionSwitch, OwnPosition, QuoteBar, TraceLevel, construct_unit
+from qml.numbers import ConversionRef, InstrumentRecord, parse_record
+from qml.protocol.unit import (
+    ACCOUNT_CURRENCY,
+    MotionSwitch,
+    OwnPosition,
+    QuoteBar,
+    TraceLevel,
+    construct_unit,
+)
 
 from qmb._refuse import invalid, policy
 from qmb.data.gap_check import (
@@ -82,6 +89,7 @@ from qmb.execution.financing import (
     read_funding_rates,
 )
 from qmb.execution.risk import MarginRule, margin_rule
+from qmb.host.facts import RATE_ABSENT, ReplayRates, conversions
 from qmb.host.replay import (
     BarWindow,
     DataCard,
@@ -153,6 +161,11 @@ class LoadedUnit:
     (``motion = both`` runs the unit twice). Beside each market's record sit what the record's
     rules read: its carry, its margin rule when it states one, and its cost profile when the
     folder holds one.
+
+    ``conversions`` is each quote currency's conversion market, by the account currency it
+    converts into, and ``rate_feeds`` holds that market's bars beside the unit's own. A market
+    the folder cannot read is named in ``missing_rates``: the run sizes those entries by the
+    named skip and says so on its labels.
     """
 
     compiled: CompiledUnit
@@ -163,6 +176,9 @@ class LoadedUnit:
     carry: Mapping[str, CarrySchedule]
     margins: Mapping[str, MarginRule]
     costs: Mapping[str, CostProfile]
+    conversions: Mapping[str, ConversionRef] = field(default_factory=dict[str, ConversionRef])
+    rate_feeds: Mapping[str, BarFeed] = field(default_factory=dict[str, BarFeed])
+    missing_rates: tuple[str, ...] = ()
 
     def bars(self, limit: int | None = None) -> Result[dict[str, tuple[QuoteBar, ...]]]:
         """Each market's first ``limit`` bars held whole, or all of them, for a short recorded
@@ -438,6 +454,54 @@ def _market_rules(
     return Ok(_MarketRules(carry.value, margin.value, costs.value))
 
 
+def _conversion_feed(folder: Path, market: str, seconds: int) -> BarFeed | None:
+    """The conversion market's own bar feed, or None when this folder holds none it can read."""
+    try:
+        document: object = json.loads((folder / "records" / f"{market}.json").read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    parsed = parse_record(document)
+    if is_refusal(parsed):
+        return None
+    day = VenueDay.try_create(parsed.value.zone, parsed.value.day_boundary)
+    if is_refusal(day):
+        return None
+    feed = _market_feed(folder, market, day.value, seconds)
+    return None if is_refusal(feed) else feed.value
+
+
+def _rate_book(
+    folder: Path,
+    records: Mapping[str, InstrumentRecord],
+    loaded: Mapping[str, BarFeed],
+    seconds: int,
+) -> tuple[dict[str, ConversionRef], dict[str, BarFeed], tuple[str, ...]]:
+    """The conversion markets' bars beside the unit's own, and the ones this folder cannot read.
+
+    A conversion market the unit itself trades is already loaded, so its feed is shared and no
+    bar is read twice. One it does not trade is read from its own record and bars in the folder,
+    which is all QMB needs: it keys bars by market id and never by symbol.
+    """
+    refs: dict[str, ConversionRef] = {}
+    feeds: dict[str, BarFeed] = {}
+    missing: list[str] = []
+    by_record = {record.market_id: market for market, record in records.items()}
+    for quote, ref in conversions(records.values(), ACCOUNT_CURRENCY).items():
+        refs[quote] = ref
+        traded = by_record.get(ref.market_id)
+        if traded is not None and traded in loaded:
+            feeds[ref.market_id] = loaded[traded]
+            continue
+        if ref.market_id in feeds or ref.market_id in missing:
+            continue
+        found = _conversion_feed(folder, ref.market_id, seconds)
+        if found is None:
+            missing.append(ref.market_id)
+        else:
+            feeds[ref.market_id] = found
+    return refs, feeds, tuple(missing)
+
+
 def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
     """Compile the folder's unit from its pinned blocks and open a bar feed per market."""
     try:
@@ -501,16 +565,21 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
         if is_refusal(found):
             return found
         rules[market.market_id] = found.value
+    unit_records = {m.market_id: record for m, record in compiled.plan.markets}
+    refs, rate_feeds, missing = _rate_book(folder, unit_records, feeds, seconds)
     return Ok(
         LoadedUnit(
             compiled,
             sources,
-            {m.market_id: record for m, record in compiled.plan.markets},
+            unit_records,
             feeds,
             seconds * _NS_PER_SEC,
             {m: r.carry for m, r in rules.items()},
             {m: r.margin for m, r in rules.items() if r.margin is not None},
             {m: r.costs for m, r in rules.items() if r.costs is not None},
+            refs,
+            rate_feeds,
+            missing,
         )
     )
 
@@ -556,6 +625,11 @@ def run_loaded(
         return checked
     holes, unchecked, short = checked.value
     windows = {market: BarWindow(window_size(compiled)) for market in loaded.feeds}
+    rates = (
+        None
+        if not loaded.conversions
+        else ReplayRates(ACCOUNT_CURRENCY, loaded.conversions, loaded.rate_feeds)
+    )
     handler = UnitSliceHandler.start(
         lambda surfaces: construct_unit(
             compiled,
@@ -576,6 +650,7 @@ def run_loaded(
         journal=_Unkept() if journal is None else journal,
         seeded=seeded,
         cash=ReplayCash(loaded.carry, loaded.costs, loaded.bar_ns),
+        rates=rates,
     )
     if is_refusal(handler):
         return handler
@@ -587,6 +662,8 @@ def run_loaded(
     )
     if is_refusal(driven):
         return driven
+    if rates is not None and rates.refused is not None:
+        return rates.refused
     trades, cash = handler.value.trades, handler.value.cash_events
     uncalibrated = any(
         market not in loaded.costs
@@ -598,6 +675,7 @@ def run_loaded(
         *((COSTS_UNCALIBRATED,) if uncalibrated else ()),
         *((HOLES_UNCHECKED,) if unchecked else ()),
         *((DATA_SHORT,) if short else ()),
+        *((RATE_ABSENT,) if loaded.missing_rates else ()),
     )
     return Ok(
         UnitRunResult(
