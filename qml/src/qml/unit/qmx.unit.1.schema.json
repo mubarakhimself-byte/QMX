@@ -1,0 +1,1333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qmx.unit/1",
+  "description": "A QMX unit: one complete trading algorithm. Generated from qml.unit.model; completeness and cross-field rules are later check layers.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "enum": [
+        "qmx.unit/1"
+      ]
+    },
+    "unit_id": {
+      "type": "string"
+    },
+    "family_id": {
+      "type": "string"
+    },
+    "claim_card": {
+      "type": "object",
+      "properties": {
+        "idea": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source_ref": {
+                "type": "string"
+              },
+              "locator": {
+                "type": "string"
+              },
+              "dated": {
+                "type": "string"
+              },
+              "quote": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_ref",
+              "locator",
+              "dated"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "written_at": {
+          "type": "string"
+        },
+        "claimed_context": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "idea",
+        "sources",
+        "written_at"
+      ],
+      "additionalProperties": false
+    },
+    "markets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "market_id": {
+            "type": "string"
+          },
+          "instrument_ref": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "venue": {
+                    "type": "string"
+                  },
+                  "symbol": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "venue",
+                  "symbol"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "venue": {
+                    "type": "string"
+                  },
+                  "root": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "venue",
+                  "root"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "roll": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "enum": [
+                  "calendar",
+                  "volume",
+                  "open_interest"
+                ]
+              },
+              "days_before_expiry": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "rule"
+            ],
+            "additionalProperties": false
+          },
+          "settings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            }
+          },
+          "settings_record": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "market_id",
+          "instrument_ref"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "streams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "bar": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "time",
+                  "tick",
+                  "range",
+                  "volume"
+                ]
+              },
+              "size": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            },
+            "required": [
+              "kind",
+              "size"
+            ],
+            "additionalProperties": false
+          },
+          "price": {
+            "type": "string",
+            "enum": [
+              "bid_ask",
+              "mid",
+              "last"
+            ]
+          },
+          "input": {
+            "type": "string",
+            "enum": [
+              "closed_bars",
+              "quotes",
+              "ticks"
+            ]
+          },
+          "derived_from": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "market",
+          "bar",
+          "price"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "long",
+        "short",
+        "both"
+      ]
+    },
+    "logic": {
+      "type": "object",
+      "properties": {
+        "long": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "slots": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "context",
+                          "location",
+                          "setup",
+                          "trigger",
+                          "confirmation",
+                          "filter",
+                          "veto",
+                          "entry_order",
+                          "invalidation",
+                          "regime_detector",
+                          "sizing_modifier",
+                          "arming",
+                          "timeout",
+                          "cooldown",
+                          "re_entry",
+                          "exit",
+                          "sizer",
+                          "halt"
+                        ]
+                      },
+                      "bindings": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "block": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+                            },
+                            "params": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "number": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "number"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "string",
+                                        "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                                      }
+                                    },
+                                    "required": [
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "inputs": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "block",
+                            "params",
+                            "inputs"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "combiner": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "all",
+                              "any",
+                              "k_of_n",
+                              "weighted",
+                              "sequence",
+                              "veto"
+                            ]
+                          },
+                          "when_inputs_absent": {
+                            "type": "string",
+                            "enum": [
+                              "no_signal",
+                              "treat_as_false"
+                            ]
+                          },
+                          "k": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "weights": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string",
+                              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                            }
+                          },
+                          "open": {
+                            "type": "string",
+                            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                          },
+                          "close": {
+                            "type": "string",
+                            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                          },
+                          "within_bars": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "when_inputs_absent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "bindings",
+                      "combiner"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "slots"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "mirror_of": {
+                  "type": "string",
+                  "enum": [
+                    "long",
+                    "short"
+                  ]
+                }
+              },
+              "required": [
+                "mirror_of"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "short": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "slots": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "context",
+                          "location",
+                          "setup",
+                          "trigger",
+                          "confirmation",
+                          "filter",
+                          "veto",
+                          "entry_order",
+                          "invalidation",
+                          "regime_detector",
+                          "sizing_modifier",
+                          "arming",
+                          "timeout",
+                          "cooldown",
+                          "re_entry",
+                          "exit",
+                          "sizer",
+                          "halt"
+                        ]
+                      },
+                      "bindings": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "block": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+                            },
+                            "params": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "number": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "number"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "string",
+                                        "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                                      }
+                                    },
+                                    "required": [
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "inputs": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "block",
+                            "params",
+                            "inputs"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "combiner": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "all",
+                              "any",
+                              "k_of_n",
+                              "weighted",
+                              "sequence",
+                              "veto"
+                            ]
+                          },
+                          "when_inputs_absent": {
+                            "type": "string",
+                            "enum": [
+                              "no_signal",
+                              "treat_as_false"
+                            ]
+                          },
+                          "k": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "weights": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string",
+                              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                            }
+                          },
+                          "open": {
+                            "type": "string",
+                            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                          },
+                          "close": {
+                            "type": "string",
+                            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                          },
+                          "within_bars": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "when_inputs_absent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "bindings",
+                      "combiner"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "slots"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "mirror_of": {
+                  "type": "string",
+                  "enum": [
+                    "long",
+                    "short"
+                  ]
+                }
+              },
+              "required": [
+                "mirror_of"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "exit_set": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "block": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "number": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "number"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string",
+                      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "position",
+              "unit",
+              "account"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "block",
+          "params",
+          "inputs",
+          "scope"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "halts": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "block": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "number": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "number"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "inputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "position",
+                  "unit",
+                  "account"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "block",
+              "params",
+              "inputs",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "unit": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "block": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "number": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "number"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "inputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "position",
+                  "unit",
+                  "account"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "block",
+              "params",
+              "inputs",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "account": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "block": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "number": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "number"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "inputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "position",
+                  "unit",
+                  "account"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "block",
+              "params",
+              "inputs",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "reads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reading": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+          },
+          "market": {
+            "type": "string"
+          },
+          "fallback": {
+            "type": "string",
+            "enum": [
+              "compute_here",
+              "treat_as_absent",
+              "no_new_entries"
+            ]
+          },
+          "stale_after_s": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "reading",
+          "market",
+          "fallback",
+          "stale_after_s"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "numbers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "calibrated",
+              "derived"
+            ]
+          },
+          "measure": {
+            "type": "string",
+            "enum": [
+              "price_distance",
+              "ticks",
+              "pips",
+              "atr_multiple",
+              "percent",
+              "ratio",
+              "probability",
+              "bars",
+              "count",
+              "seconds",
+              "money",
+              "r",
+              "lots",
+              "category",
+              "flag"
+            ]
+          },
+          "default": {
+            "type": "string"
+          },
+          "motion": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "scaled",
+                  "percentile_of_own_history",
+                  "state_table",
+                  "shrink_from_own_trades",
+                  "learned"
+                ]
+              },
+              "source": {
+                "type": "string"
+              },
+              "cadence": {
+                "type": "object",
+                "properties": {
+                  "every_closed_trades": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "at": {
+                    "type": "string",
+                    "enum": [
+                      "market_day_close",
+                      "session_close"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "min_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "shrink_k": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "step_limit": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "rule": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              },
+              "rule_params": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "motion_inside_range"
+            ]
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "source_stated",
+              "published_convention",
+              "strats_standardized",
+              "inferred",
+              "builder_chosen",
+              "unresolved",
+              "placeholder"
+            ]
+          },
+          "range": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              },
+              "max": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              },
+              "step": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            },
+            "required": [
+              "min",
+              "max",
+              "step"
+            ],
+            "additionalProperties": false
+          },
+          "applies_to_open_positions": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "measure",
+          "default",
+          "motion",
+          "authority",
+          "origin"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entry_id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fingerprint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "version",
+          "fingerprint"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "title": {
+      "type": "string"
+    },
+    "lineage": {
+      "type": "object",
+      "properties": {
+        "parents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "unit_id": {
+                "type": "string"
+              },
+              "version_ref": {
+                "type": "string"
+              },
+              "edit_labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "unit_id",
+              "version_ref"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rewritten_from": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "calendar_ref": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                },
+                "to": {
+                  "type": "string",
+                  "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "calendar_ref",
+          "zone",
+          "windows"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "position_limit": {
+      "type": "object",
+      "properties": {
+        "per_instrument": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "sizer": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "block": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "number"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "block",
+        "params",
+        "inputs"
+      ],
+      "additionalProperties": false
+    },
+    "context_needs": {
+      "type": "object",
+      "properties": {
+        "require": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "word": {
+                "type": "string"
+              },
+              "reading": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              }
+            },
+            "required": [
+              "word"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "warn": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "word": {
+                "type": "string"
+              },
+              "reading": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              }
+            },
+            "required": [
+              "word"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "block": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "word": {
+                "type": "string"
+              },
+              "reading": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+              }
+            },
+            "required": [
+              "word"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "routes": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "execution": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "baseline": {
+      "type": "string"
+    },
+    "plain_python": {
+      "type": "object",
+      "properties": {
+        "block": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+        }
+      },
+      "required": [
+        "block"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "unit_id",
+    "family_id",
+    "claim_card",
+    "markets",
+    "streams",
+    "direction",
+    "logic",
+    "exit_set",
+    "halts",
+    "reads",
+    "numbers",
+    "pins"
+  ],
+  "additionalProperties": false
+}
