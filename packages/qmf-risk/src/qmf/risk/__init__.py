@@ -658,6 +658,14 @@ from qmf.risk.templates import (
     BmsDefinition,
     BookDefinition,
 )
+from qmf.risk.unit_intent import (
+    UNIT_INTENT_FORMAT_VERSION,
+    UnitEntryIntent,
+    UnitExitIntent,
+    UnitExitKind,
+    check_amendment_tightens,
+    parse_unit_intent,
+)
 from qmf.risk.versioning import (
     CurrentPointer,
     TemplateVersionGraph,
@@ -731,6 +739,7 @@ __all__ = [
     "SESSION_HANDOVER_BUFFER_WIDTH_VARIABLE",
     "STATE_CARRY_COUNTERS",
     "THRESHOLD_GAPS_BEHIND_NEW_ADMISSION_BAR_FIELDS",
+    "UNIT_INTENT_FORMAT_VERSION",
     "V1_NUMERAIRE",
     "VENUE_AUTHORED_CLOSE_REASONS",
     "VENUE_AUTHORED_EVENT_TYPES",
@@ -897,6 +906,9 @@ __all__ = [
     "TriggerKind",
     "UiEditability",
     "UndefinedMeasure",
+    "UnitEntryIntent",
+    "UnitExitIntent",
+    "UnitExitKind",
     "VariableDiff",
     "VariableEvidence",
     "VenueAuthoredEvent",
@@ -924,6 +936,7 @@ __all__ = [
     "bar_is_blank",
     "bind_time_capability_check",
     "block_dispatch_on_journal_failure",
+    "check_amendment_tightens",
     "check_b_split",
     "check_constraint",
     "check_control_rank_uniqueness",
@@ -980,6 +993,7 @@ __all__ = [
     "mint_veto_decision",
     "money_to_r",
     "parse_inbound_intent",
+    "parse_unit_intent",
     "partition_by_close_reason",
     "project_entity_journal",
     "project_legacy",
