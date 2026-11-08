@@ -105,6 +105,21 @@ def test_bundle_mode_writes_the_run_journal_as_partition_files(tmp_path: Path) -
     assert written.path == tmp_path / "out/journal-unit/u-dummy/signal/backtest.pc-1/2026-03.parquet"
 
 
+def test_a_bundle_finishes_a_month_when_its_series_reaches_the_next(tmp_path: Path) -> None:
+    scope = WriterScope(JournalStream.UNIT, "u-dummy", JournalWorld.BACKTEST, "pc-1", "qmb", "b8")
+    writer = _ok(JournalWriter.open_bundle(tmp_path / "out", scope, clock=_clock()))
+    march = _START_NS // 1_000_000
+    april = 1_775_001_600_000  # 2026-04-01T00:00:00Z
+
+    for t in (march, march + 60_000, april):
+        _ok(writer.append_series("recorded", "EURUSD", "bar-m1", (t, 1, 2, 0, 1, 1.0)))
+    finished = _rows(tmp_path / "out/recorded/EURUSD/bar-m1/-/2026-03.parquet")
+    files = _ok(writer.close())
+
+    assert finished == [(march, 1, 2, 0, 1, 1.0), (march + 60_000, 1, 2, 0, 1, 1.0)]
+    assert [(f.path.name, f.rows) for f in files] == [("2026-03.parquet", 2), ("2026-04.parquet", 1)]
+
+
 def test_a_refused_bundle_row_fails_its_partition_and_keeps_the_others(tmp_path: Path) -> None:
     scope = WriterScope(JournalStream.UNIT, "u-dummy", JournalWorld.BACKTEST, "pc-1", "qmb", "b8")
     writer = _ok(JournalWriter.open_bundle(tmp_path / "out", scope, clock=_clock()))

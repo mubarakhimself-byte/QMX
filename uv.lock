@@ -1349,6 +1349,7 @@ dependencies = [
     { name = "qmf-risk" },
     { name = "qmf-structure" },
     { name = "qml" },
+    { name = "tzdata" },
 ]
 
 [package.metadata]
@@ -1362,6 +1363,7 @@ requires-dist = [
     { name = "qmf-risk", editable = "packages/qmf-risk" },
     { name = "qmf-structure", editable = "packages/qmf-structure" },
     { name = "qml", editable = "qml" },
+    { name = "tzdata", specifier = "==2025.2" },
 ]
 
 [[package]]

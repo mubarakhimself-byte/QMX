@@ -189,13 +189,19 @@ class _HotSink:
 
 
 class _BundleSink:
-    """Streams each row into its partition file in a run's output folder."""
+    """Streams each row into its partition file in a run's output folder.
+
+    The writer never lets a series' ``t`` go back, so its months arrive in order: a row of a
+    later month finishes the series' open partition, and a run holds one open month per series
+    however long it is.
+    """
 
     def __init__(self, out_dir: Path) -> None:
         self._out = out_dir
-        self._open: dict[str, tuple[SeriesKey, TypedWriter]] = {}
-        # A failed partition is never reopened: a new writer on its path would overwrite
-        # the rows it already held, so its later rows are refused instead.
+        self._open: dict[str, tuple[SeriesKey, TypedWriter]] = {}  # series -> its open month
+        self._parts: dict[str, SeriesFile | None] = {}  # partition -> its file once finished
+        # A failed or finished partition is never reopened: a new writer on its path would
+        # overwrite the rows it already held, so its later rows are refused instead.
         self._failed: set[str] = set()
 
     def write(
@@ -206,7 +212,15 @@ class _BundleSink:
                 "this run's journal partition already failed, so its rows are not written",
                 context={"key": key.text},
             )
-        opened = self._open.get(key.text)
+        opened = self._open.get(key.series)
+        if opened is not None and opened[0].text != key.text:
+            self._finish(*opened)
+            opened = None
+        if opened is None and key.text in self._parts:
+            return storage_failure(
+                "this run's journal partition is already finished, so its rows are not written",
+                context={"key": key.text},
+            )
         try:
             if opened is None:
                 target = _staged_path(self._out, key)
@@ -217,7 +231,8 @@ class _BundleSink:
                         target, key.text, key.rule.columns, row_group_rows=_BUNDLE_ROW_GROUP
                     ),
                 )
-                self._open[key.text] = opened
+                self._open[key.series] = opened
+                self._parts[key.text] = None
             opened[1].add([row])
         except StoreEngineError as exc:
             self._fail(key)
@@ -231,25 +246,30 @@ class _BundleSink:
         return Ok(None)
 
     def close(self) -> Result[tuple[SeriesFile, ...]]:
-        files: list[SeriesFile] = []
-        for key, writer in list(self._open.values()):
-            try:
-                files.append(writer.finish())
-            except (StoreEngineError, OSError):
-                self._fail(key)
-        self._open.clear()
+        for opened in list(self._open.values()):
+            self._finish(*opened)
         if self._failed:
             return storage_failure(
                 "some of the run's journal partitions could not be written",
                 context={"failed": sorted(self._failed)},
             )
-        return Ok(tuple(files))
+        return Ok(tuple(file for file in self._parts.values() if file is not None))
+
+    def _finish(self, key: SeriesKey, writer: TypedWriter) -> None:
+        try:
+            self._parts[key.text] = writer.finish()
+        except (StoreEngineError, OSError):
+            self._fail(key)
+        else:
+            del self._open[key.series]
 
     def _fail(self, key: SeriesKey) -> None:
         """Drop a partition whose write failed, with its partial file."""
         self._failed.add(key.text)
-        opened = self._open.pop(key.text, None)
-        if opened is not None:
+        self._parts.pop(key.text, None)
+        opened = self._open.get(key.series)
+        if opened is not None and opened[0].text == key.text:
+            del self._open[key.series]
             opened[1].abort()
         with contextlib.suppress(OSError):
             _staged_path(self._out, key).unlink(missing_ok=True)
@@ -295,7 +315,11 @@ class JournalWriter:
     def open_bundle(
         cls, out_dir: Path, scope: WriterScope, *, clock: Clock
     ) -> Result[JournalWriter]:
-        """A run's writer: rows land as partition files under ``out_dir`` when it closes."""
+        """A run's writer: rows land as partition files under ``out_dir``.
+
+        A month's file is finished when its series' next month starts, or when the writer
+        closes.
+        """
         if scope.world not in BUNDLE_WORLDS:
             return policy_rejection(
                 "world",

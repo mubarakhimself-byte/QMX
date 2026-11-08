@@ -12,14 +12,15 @@ mappings and never redefines the type.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, cast
 
 from qmf.core.chrono import Instant, Interval
 from qmf.core.fingerprint import Fingerprint, fingerprint
-from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
+from qml.protocol.unit import OHLC, QuoteBar
 
 from qmb._refuse import clean_token, invalid, policy, unsupported
 
@@ -31,9 +32,12 @@ __all__ = [
     "FORMING_BAR_ACTIONABLE",
     "FORMING_BAR_VISIBLE",
     "LOOKAHEAD_PREVENTION_INDEPENDENT_OF_GAP_0048",
+    "BarBuilder",
+    "DaySpan",
     "DeclaredBarSpec",
     "DerivedBar",
     "FormingBarState",
+    "Piece",
     "ReadableBarSet",
     "SameSliceConsumption",
     "SeriesSample",
@@ -1309,3 +1313,124 @@ def _ohlc_bar(
             completed_at=completed_at,
         )
     )
+
+
+# --- bars of both sides in the venue's own day (QB-21) ---------------------------------------
+
+_DAY_SECONDS: Final[int] = 86_400
+
+DaySpan = Callable[[int], tuple[int, int]]
+"""The start and the end, in UTC ns, of the venue day that holds an instant (QB-21)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Piece:
+    """One stretch of both price sides a source row gives, from ``start_ns`` to ``end_ns``.
+
+    A tick or a print is a piece that ends where it starts, whose open, high, low and close are
+    one price; a source bar is a piece of its own OHLC that ends with its period. Every fidelity
+    reaches the bar builder in this one shape.
+    """
+
+    start_ns: int
+    end_ns: int
+    bid: OHLC
+    ask: OHLC
+
+
+def _crossing(piece: Piece, bar_end_ns: int) -> TypedRefusal:
+    return invalid(
+        "pieces",
+        "a source bar crosses the venue's day; use bars on the venue's clock or a finer resolution",
+        start_ns=piece.start_ns,
+        end_ns=piece.end_ns,
+        bar_end_ns=bar_end_ns,
+    )
+
+
+def _merged(into: OHLC, piece: OHLC) -> OHLC:
+    return OHLC(into.open, max(into.high, piece.high), min(into.low, piece.low), piece.close)
+
+
+class BarBuilder:
+    """Folds pieces into closed bars of ``seconds`` that sit inside the venue's day.
+
+    Bars of a day or less tile the venue day from its start, so an hour bar and a daily bar
+    close on the venue's boundary, and the day's last bar ends with the day when the period
+    does not divide it (a 23 or 25 hour daylight-saving day). A bar is answered only once a
+    later piece or the end of the data closes it, and it is knowable at its end. A stretch with
+    no piece makes no bar: a hole stays a hole. A piece that runs past the end of the bar it
+    starts in is refused, because folding it in would make its later prices knowable early.
+    """
+
+    def __init__(self, day: DaySpan, seconds: int) -> None:
+        self._day = day
+        self._period_ns = seconds * _NS_PER_SEC
+        self._whole_day = seconds == _DAY_SECONDS
+        self._day_span: tuple[int, int] = (0, 0)
+        self._end_ns = 0
+        self._last_ns: int | None = None
+        self._reached_ns = 0
+        self._bid: OHLC | None = None
+        self._ask: OHLC | None = None
+
+    @classmethod
+    def try_create(cls, day: DaySpan, seconds: object) -> Result[BarBuilder]:
+        if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds <= 0:
+            return invalid("seconds", "a bar lasts a positive whole number of seconds")
+        if seconds > _DAY_SECONDS:
+            return unsupported(
+                "seconds",
+                "bars longer than one venue day are not built from pieces yet",
+                seconds=seconds,
+            )
+        return Ok(cls(day, seconds))
+
+    def _bucket_end(self, ns: int) -> int:
+        start, end = self._day_span
+        if not start <= ns < end:
+            start, end = self._day(ns)
+            self._day_span = (start, end)
+        if self._whole_day:
+            return end
+        return min(start + ((ns - start) // self._period_ns + 1) * self._period_ns, end)
+
+    def push(self, piece: Piece) -> Result[QuoteBar | None]:
+        """Add ``piece``; answer the bar it closed, if it opened a later one."""
+        if self._last_ns is not None and piece.start_ns < self._last_ns:
+            return invalid(
+                "pieces",
+                "pieces reach the bar builder in time order",
+                previous_ns=self._last_ns,
+                given_ns=piece.start_ns,
+            )
+        if self._bid is not None and self._ask is not None and piece.start_ns < self._end_ns:
+            if piece.end_ns > self._end_ns:
+                return _crossing(piece, self._end_ns)
+            self._last_ns = piece.start_ns
+            self._reached_ns = max(self._reached_ns, piece.end_ns)
+            self._bid = _merged(self._bid, piece.bid)
+            self._ask = _merged(self._ask, piece.ask)
+            return Ok(None)
+        bar_end = self._bucket_end(piece.start_ns)
+        if piece.end_ns > bar_end:
+            return _crossing(piece, bar_end)
+        self._last_ns = piece.start_ns
+        self._reached_ns = max(self._reached_ns, piece.end_ns)
+        closed = self.close(piece.start_ns)
+        self._end_ns = bar_end
+        self._bid, self._ask = piece.bid, piece.ask
+        return Ok(closed)
+
+    def close(self, until_ns: int = 0) -> QuoteBar | None:
+        """The forming bar, once the data reaches its end.
+
+        The data reaches ``until_ns`` and the end of the last piece pushed, whichever is later:
+        a file of whole bars closes its last bar by itself, and ticks or prints close theirs only
+        when the caller says how far the data runs.
+        """
+        if self._bid is None or self._ask is None or max(until_ns, self._reached_ns) < self._end_ns:
+            return None
+        bar = QuoteBar(Instant(self._end_ns), self._bid, self._ask)
+        self._bid = self._ask = None
+        return bar

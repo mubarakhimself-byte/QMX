@@ -67,7 +67,10 @@ def check_behaviour(
     compiled = loaded.value.compiled
     warm = compiled.warm_up[compiled.plan.stream]
     needed = int((warm * (1 + margin)).to_integral_value(rounding=ROUND_CEILING))
-    short = {m: len(b) for m, b in loaded.value.bars.items() if len(b) < needed}
+    bars = loaded.value.bars()
+    if is_refusal(bars):
+        return bars
+    short = {m: len(b) for m, b in bars.value.items() if len(b) < needed}
     if short:
         return invalid(
             "slice",
@@ -78,7 +81,7 @@ def check_behaviour(
     g = layer_g(
         compiled,
         loaded.value.sources,
-        loaded.value.bars,
+        bars.value,
         execution_target=request.execution_target,
         equity=request.equity,
         loaded_in_isolation=loaded_in_isolation,

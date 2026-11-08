@@ -1,8 +1,14 @@
-"""Materialize bitemporal CT-10 artifacts for provider-free replay.
+"""Materialize bitemporal CT-10 artifacts for provider-free replay, and replay units windowed.
 
 This adapter reads immutable QMF raw-archive artifacts through the QMF-owned
 source-observation boundary. It preserves foreign prices and their declared
 scales verbatim; it does not convert them into QMB execution prices.
+
+The windowed reader (Part B AD-205, QB-01, QB-02) streams a unit's data row by row: each
+market's rows become pieces as its data card's fidelity declares (quotes, trades or bars),
+the bar builder folds them into the unit's bars in the venue's day, and each market keeps only
+a window of the unit's derived warm-up plus its declared lookback. The run's memory is the
+window's, whatever the run's length, and nothing caps the steps.
 """
 
 # pyarrow ships no type stubs; as in the QMF store's typed writer, the unknown-type rules are
@@ -12,19 +18,27 @@ scales verbatim; it does not convert them into QMB execution prices.
 
 from __future__ import annotations
 
+import csv
+import heapq
 import re
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections import OrderedDict
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, time, timedelta
+from decimal import Decimal, InvalidOperation
+from enum import StrEnum
+from itertools import groupby
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from qmf.core.chrono import Instant
 from qmf.core.exact import Price
 from qmf.core.fingerprint import Fingerprint, World, fingerprint
 from qmf.core.identity import Instrument
-from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.data.observation import SourceObservation
 from qmf.data.seal import HoldoutSeal
 from qmf.data.series import SeriesKey, SeriesStore, rule_for
@@ -32,19 +46,46 @@ from qmf.data.source_boundary import SourceObservationBoundary
 from qmf.data.source_split import partition_source_observation
 from qmf.data.splits import SegmentRole, SplitManifest
 from qmf.data.store import EvidenceStore
+from qml.compile import CompiledUnit
 from qml.protocol import MappingReadSurface
+from qml.protocol.unit import OHLC, QuoteBar
 
 from qmb._refuse import invalid, policy
 from qmb.data import policy as data_policy
 from qmb.execution.ports import SlicePath
-from qmb.runloop.loop import EventSlice, SliceObservation
+from qmb.host.unit_handler import UnitSliceHandler
+from qmb.runloop.bars import BarBuilder, Piece
+from qmb.runloop.loop import (
+    DeclaredStream,
+    EventSlice,
+    RestingIntent,
+    SliceObservation,
+    StreamSet,
+    run_slice,
+)
 
 __all__ = [
+    "WINDOW_MEMORY_TOLERANCE",
+    "Aggressor",
+    "Bar",
+    "BarPair",
+    "BarWindow",
+    "DataCard",
+    "Fidelity",
     "PinnedInstrumentPriceMetadata",
+    "Print",
     "RecordedReplaySource",
+    "SliceHook",
+    "Tick",
     "TypedPartitionRef",
+    "VenueDay",
+    "read_bar_csv",
+    "read_bar_pair_csv",
     "read_recorded_replay_source",
     "read_typed_replay_source",
+    "replay_feed",
+    "replay_windowed",
+    "window_size",
 ]
 
 _REPLAY_SOURCE_CLASS: Final[str] = "qmb-recorded-replay-source-v1"
@@ -907,3 +948,352 @@ def _typed_frontiers(
             )
         )
     return Ok(tuple(paired))
+
+
+# --- the windowed reader for units (AD-205, QB-01, QB-02) ------------------------------------
+
+WINDOW_MEMORY_TOLERANCE: Final[Decimal] = Decimal("0.10")
+"""``[qmb] window_memory_tolerance``'s starting default: a run's peak memory at 200,000 steps
+stays within 10% of its peak at 10,000 steps."""
+
+
+_EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
+_NS_PER_US: Final[int] = 1_000
+
+
+def _ns_of(moment: datetime) -> int:
+    return (moment - _EPOCH) // timedelta(microseconds=1) * _NS_PER_US
+
+
+@dataclass(frozen=True, slots=True)
+class VenueDay:
+    """The venue's trading day: each one starts at ``boundary`` wall time in ``zone``.
+
+    It comes from the instrument record's ``zone`` and ``day_boundary`` (17:00 New York at most
+    FX CFD brokers), so a daily bar closes where the venue's day does and moves with its
+    daylight saving, never at UTC midnight.
+    """
+
+    zone: ZoneInfo
+    boundary: time
+
+    @classmethod
+    def try_create(cls, zone: object, boundary: object) -> Result[VenueDay]:
+        if not isinstance(boundary, str):
+            return invalid("day_boundary", "a day boundary is wall time HH:MM", given=boundary)
+        try:
+            wall = time.fromisoformat(boundary)
+        except ValueError:
+            return invalid("day_boundary", "a day boundary is wall time HH:MM", given=boundary)
+        if not isinstance(zone, str):
+            return invalid("zone", "a venue zone is an IANA zone name", given=zone)
+        try:
+            return Ok(cls(ZoneInfo(zone), wall))
+        except (ZoneInfoNotFoundError, ValueError):
+            return invalid(
+                "zone", "the venue zone is not in this machine's time zone data", zone=zone
+            )
+
+    def span(self, ns: int) -> tuple[int, int]:
+        """The start and the end, in UTC ns, of the venue day that holds ``ns``."""
+        date = (_EPOCH + timedelta(microseconds=ns // _NS_PER_US)).astimezone(self.zone).date()
+        start = datetime.combine(date, self.boundary, self.zone)
+        if _ns_of(start) > ns:
+            start = datetime.combine(date - timedelta(days=1), self.boundary, self.zone)
+        end = datetime.combine(start.date() + timedelta(days=1), self.boundary, self.zone)
+        return _ns_of(start), _ns_of(end)
+
+
+class Fidelity(StrEnum):
+    """What a data card says QMB replays. Part A's data levels: bars 1, quotes 2, trades 4."""
+
+    QUOTES = "quotes"
+    TRADES = "trades"
+    BARS = "bars"
+
+
+class Aggressor(StrEnum):
+    """The side that crossed the spread on a print: a buyer meets the ask, a seller the bid."""
+
+    BUY = "buy"
+    SELL = "sell"
+
+
+@dataclass(frozen=True, slots=True)
+class Tick:
+    """A quote: both sides at one millisecond."""
+
+    ms: int
+    bid: Decimal
+    ask: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class BarPair:
+    """A bid bar and an ask bar of one stretch that opens at ``open_ms`` and lasts ``seconds``."""
+
+    open_ms: int
+    seconds: int
+    bid: OHLC
+    ask: OHLC
+
+
+@dataclass(frozen=True, slots=True)
+class Print:
+    """A trade print with the side that crossed the spread."""
+
+    ms: int
+    price: Decimal
+    aggressor: Aggressor
+
+
+@dataclass(frozen=True, slots=True)
+class Bar:
+    """One bid-side bar that opens at ``open_ms`` and lasts ``seconds``."""
+
+    open_ms: int
+    seconds: int
+    price: OHLC
+
+
+Row = Tick | BarPair | Print | Bar
+_Timed = tuple[int, int, str, QuoteBar]
+_ROWS: Final[Mapping[Fidelity, tuple[type, ...]]] = MappingProxyType(
+    {Fidelity.QUOTES: (Tick, BarPair), Fidelity.TRADES: (Print,), Fidelity.BARS: (Bar,)}
+)
+
+
+def _flat(price: Decimal) -> OHLC:
+    return OHLC(price, price, price, price)
+
+
+def _shifted(bar: OHLC, by: Decimal) -> OHLC:
+    return OHLC(bar.open + by, bar.high + by, bar.low + by, bar.close + by)
+
+
+@dataclass(frozen=True, slots=True)
+class DataCard:
+    """How one market's rows replay (QB-02).
+
+    Quotes carry both sides. Trades and bars carry one price, so the card declares the spread,
+    ask minus bid: a buyer's print is the ask and a seller's the bid, and a bar is the bid side.
+    """
+
+    fidelity: Fidelity
+    spread: Decimal | None = None
+
+    @classmethod
+    def try_create(cls, fidelity: object, spread: object = None) -> Result[DataCard]:
+        try:
+            declared = Fidelity(str(fidelity))
+        except ValueError:
+            return invalid("fidelity", "a data card replays quotes, trades or bars", given=fidelity)
+        if declared is Fidelity.QUOTES:
+            if spread is not None:
+                return invalid("spread", "quotes carry their own spread, so a card declares none")
+            return Ok(cls(declared))
+        if not isinstance(spread, Decimal) or not spread.is_finite() or spread < 0:
+            return invalid(
+                "spread",
+                "trades and bars replay with a declared spread of zero or more",
+                fidelity=declared.value,
+            )
+        return Ok(cls(declared, spread))
+
+    def piece(self, row: Row) -> Result[Piece]:
+        if not isinstance(row, _ROWS[self.fidelity]):
+            return invalid(
+                "rows",
+                "a row is the kind of data its card declares",
+                fidelity=self.fidelity.value,
+                row=type(row).__name__,
+            )
+        spread = self.spread or Decimal(0)
+        match row:
+            case Tick(ms=ms, bid=bid, ask=ask):
+                return Ok(_instant(ms, _flat(bid), _flat(ask)))
+            case BarPair(open_ms=ms, seconds=seconds, bid=bid, ask=ask):
+                return Ok(_stretch(ms, seconds, bid, ask))
+            case Print(ms=ms, price=price, aggressor=Aggressor.BUY):
+                return Ok(_instant(ms, _flat(price - spread), _flat(price)))
+            case Print(ms=ms, price=price):
+                return Ok(_instant(ms, _flat(price), _flat(price + spread)))
+            case Bar(open_ms=ms, seconds=seconds, price=price):
+                return Ok(_stretch(ms, seconds, price, _shifted(price, spread)))
+
+
+def _instant(ms: int, bid: OHLC, ask: OHLC) -> Piece:
+    return Piece(ms * _NS_PER_MS, ms * _NS_PER_MS, bid, ask)
+
+
+def _stretch(open_ms: int, seconds: int, bid: OHLC, ask: OHLC) -> Piece:
+    return Piece(open_ms * _NS_PER_MS, (open_ms + seconds * 1_000) * _NS_PER_MS, bid, ask)
+
+
+def replay_feed(
+    card: DataCard,
+    rows: Iterable[Row | TypedRefusal],
+    builder: BarBuilder,
+    *,
+    until_ns: int = 0,
+) -> Iterator[QuoteBar | TypedRefusal]:
+    """One market's closed bars, built row by row.
+
+    The data reaches ``until_ns`` or the end of its last row, whichever is later. A file of
+    whole bars needs no ``until_ns``: its last bar closes with its last row. Ticks and prints
+    end where they start, so their last bar closes only when ``until_ns`` reaches its end,
+    which is the request's end. The feed holds one forming bar, never the rows behind it. A
+    refusal ends the feed.
+    """
+    for row in rows:
+        if isinstance(row, TypedRefusal):
+            yield row
+            return
+        piece = card.piece(row)
+        if is_refusal(piece):
+            yield piece
+            return
+        closed = builder.push(piece.value)
+        if is_refusal(closed):
+            yield closed
+            return
+        if closed.value is not None:
+            yield closed.value
+    last = builder.close(until_ns)
+    if last is not None:
+        yield last
+
+
+def _csv_bars(path: Path) -> Iterator[tuple[int, OHLC] | TypedRefusal]:
+    try:
+        with path.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                yield (
+                    int(row["timestamp"]),
+                    OHLC(
+                        Decimal(row["open"]),
+                        Decimal(row["high"]),
+                        Decimal(row["low"]),
+                        Decimal(row["close"]),
+                    ),
+                )
+    except (OSError, KeyError, ValueError, InvalidOperation) as error:
+        yield invalid(
+            "bars",
+            "a bar file is rows of timestamp, open, high, low, close",
+            file=str(path),
+            error=str(error),
+        )
+
+
+def read_bar_csv(path: Path, seconds: int) -> Iterator[Bar | TypedRefusal]:
+    """Stream one side's file of ``seconds`` bars, as the Dukascopy download template saves it."""
+    for item in _csv_bars(path):
+        yield item if isinstance(item, TypedRefusal) else Bar(item[0], seconds, item[1])
+
+
+def read_bar_pair_csv(bid: Path, ask: Path, seconds: int) -> Iterator[BarPair | TypedRefusal]:
+    """Stream a bid file and an ask file of ``seconds`` bars, keeping stretches both sides have.
+
+    Half a pair is never a quote, so a minute only one file holds is skipped.
+    """
+    bids, asks = _csv_bars(bid), _csv_bars(ask)
+    left, right = next(bids, None), next(asks, None)
+    while left is not None and right is not None:
+        if isinstance(left, TypedRefusal) or isinstance(right, TypedRefusal):
+            yield cast("TypedRefusal", left if isinstance(left, TypedRefusal) else right)
+            return
+        if left[0] == right[0]:
+            yield BarPair(left[0], seconds, left[1], right[1])
+            left, right = next(bids, None), next(asks, None)
+        elif left[0] < right[0]:
+            left = next(bids, None)
+        else:
+            right = next(asks, None)
+
+
+class BarWindow(Mapping[int, QuoteBar]):
+    """One market's last ``size`` closed bars by the instant each became knowable."""
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._bars: OrderedDict[int, QuoteBar] = OrderedDict()
+
+    def push(self, bar: QuoteBar) -> None:
+        self._bars[bar.knowable_at.value_ns] = bar
+        if len(self._bars) > self._size:
+            self._bars.popitem(last=False)
+
+    def __getitem__(self, key: int) -> QuoteBar:
+        return self._bars[key]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self._bars)
+
+    def __len__(self) -> int:
+        return len(self._bars)
+
+
+def window_size(compiled: CompiledUnit, lookback: int = 0) -> int:
+    """The unit's derived warm-up on its stream plus its declared lookback, one bar at least."""
+    return max(1, compiled.warm_up.get(compiled.plan.stream, 0) + lookback)
+
+
+SliceHook = Callable[[Instant, Sequence[str]], None]
+"""Told each slice's instant and the markets whose bar closed there, before the slice runs."""
+
+
+def replay_windowed(
+    handler: UnitSliceHandler,
+    feeds: Mapping[str, Iterable[QuoteBar | TypedRefusal]],
+    windows: Mapping[str, BarWindow],
+    *,
+    on_slice: SliceHook | None = None,
+) -> Result[int]:
+    """Drive ``handler`` one bar instant at a time over every market's feed; answer the steps.
+
+    ``windows`` are the bars the handler was started with, so each bar enters its market's
+    window just before the slice that observes it. A slice lists its markets in ``feeds``'
+    order.
+    """
+    streams = StreamSet.try_create([DeclaredStream(market, market) for market in feeds])
+    if is_refusal(streams):
+        return streams
+    failed: list[TypedRefusal] = []
+
+    def timed(order: int, market: str, feed: Iterable[QuoteBar | TypedRefusal]) -> Iterator[_Timed]:
+        for item in feed:
+            if isinstance(item, TypedRefusal):
+                failed.append(item)
+                return
+            yield item.knowable_at.value_ns, order, market, item
+
+    merged = heapq.merge(
+        *(timed(i, m, f) for i, (m, f) in enumerate(feeds.items())), key=lambda t: (t[0], t[1])
+    )
+    frontier: Instant | None = None
+    resting: tuple[RestingIntent, ...] = ()
+    steps = 0
+    for ns, group in groupby(merged, key=lambda t: t[0]):
+        markets: list[str] = []
+        for _, _, market, bar in group:
+            windows[market].push(bar)
+            markets.append(market)
+        if failed:
+            return failed[0]
+        if on_slice is not None:
+            on_slice(Instant(ns), markets)
+        outcome = run_slice(
+            [SliceObservation(market, Instant(ns)) for market in markets],
+            stream_set=streams.value,
+            current_frontier=frontier,
+            handler=handler,
+            resting=resting,
+        )
+        if is_refusal(outcome):
+            return outcome
+        frontier, resting = outcome.value.frontier, outcome.value.resting
+        steps += 1
+    if failed:
+        return failed[0]
+    return Ok(steps)
