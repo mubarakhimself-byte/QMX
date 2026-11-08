@@ -50,7 +50,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from qmx_apps.errors import Document
-from qmx_apps.manifest import Definition
+from qmx_apps.manifest import Definition, image_files
 from qmx_apps.road.history import history
 from qmx_apps.road.models import Evidence, Stage
 from qmx_apps.supervisor import Supervisor
@@ -663,6 +663,55 @@ def test_the_walk_finds_seven_apps_with_an_example_for_every_operation_and_job()
         app: manifest.entrypoints.jobs for app, manifest in found.items()
     }
     assert list(skipped) == []
+
+
+APP_VERSIONS: Mapping[tuple[str, str], str] = {
+    ("exchange-status", "1.0.0"): "65bd42b6f9d29881ca7d19393598a9fc",
+    ("macro-daily-bias", "1.0.0"): "32f669c81be8b9c9a201d20dd9c272ed",
+    ("mis", "1.0.0"): "da97997e2a7f1b83f9362a5039930ca9",
+    ("mql5-articles", "1.0.0"): "dc86e07abe3b8b4442bdc4eeaa758110",
+    ("qmb", "1.0.0"): "b03c2aca41f2e67d1689522f9ffab2a9",
+    ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
+    ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
+}
+"""One row per app and version, append-only. A change anywhere in an app's folder moves its image
+hash, and the same version with new bytes answers `immutable_version` at his next start, so the
+change needs a new version in its `app.toml` and a new row here."""
+
+
+def folder_digest(folder: Path) -> str:
+    """A folder's bytes with `\\r\\n` read as `\\n`, because `image_hash` reads raw bytes and
+    `core.autocrlf` is true on this PC, so raw hashes would fail on any other checkout."""
+    digest = hashlib.sha256()
+    for path in image_files(folder):
+        name = path.relative_to(folder).as_posix().encode()
+        content = path.read_bytes().replace(b"\r\n", b"\n")
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()[:32]
+
+
+def test_a_changed_app_folder_has_a_new_version_row(tmp_path: Path) -> None:
+    unix, windows = tmp_path / "unix", tmp_path / "windows"
+    unix.mkdir()
+    windows.mkdir()
+    (unix / "server.py").write_bytes(b"one\ntwo\n")
+    (windows / "server.py").write_bytes(b"one\r\ntwo\r\n")
+    same_on_both = folder_digest(unix) == folder_digest(windows)
+    (windows / "server.py").write_bytes(b"one\r\nthree\r\n")
+    an_edit_moves_it = folder_digest(unix) != folder_digest(windows)
+
+    shipped = {
+        (manifest.id, manifest.version): folder_digest(folder)
+        for folder in folders()
+        for manifest in [Definition.load(folder).manifest]
+    }
+    moved = {row: found for row, found in shipped.items() if APP_VERSIONS.get(row) != found}
+
+    assert (same_on_both, an_edit_moves_it) == (True, True)
+    assert moved == {}, "An app folder changed: bump its app.toml version and add a row."
 
 
 def separators(name: str) -> str:

@@ -73,6 +73,7 @@ type SettingsSection = Literal[
     "qmb",
     "records",
     "journals",
+    "apps",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -300,6 +301,14 @@ TELEMETRY_DEFAULTS: Final[Document] = {
 }
 """`[telemetry]` with every default: nothing is sent, and OpenObserve on this PC keeps a 1 GB disk
 cache and 30 days."""
+
+APPS_DEFAULTS: Final[Document] = {"install_limit_s": 1800, "events_keep_days": 30}
+"""`[apps]` with every default: one app's environment build stops by name after 30 minutes, which
+stops a hung build and no usage, and an app or totals event row leaves at a start after 30 days."""
+SCREEN_TOPICS: Final = ("apps", "aggregates")
+"""The event topics only a live screen reads, which carry `recorded_at` and leave by age. The other
+topics are records: `sessions` is his chats."""
+RECORDED_AT: Final = "recorded_at"
 
 
 def _identity_row(label: str, result: str, counted_try: bool, click: bool) -> Document:
@@ -867,6 +876,18 @@ def observers() -> Observers | None:
     return None if found is None else Observers(found)
 
 
+def _stamped(data: Document) -> Document:
+    return {**data, RECORDED_AT: datetime.now(UTC).isoformat()}
+
+
+def _install_limit(values: Document) -> float:
+    """`[apps] install_limit_s`, or its default when what is stored is no positive number."""
+    limit = values.get("install_limit_s")
+    if isinstance(limit, bool) or not isinstance(limit, int | float) or limit <= 0:
+        return float(cast(int, APPS_DEFAULTS["install_limit_s"]))
+    return float(limit)
+
+
 class ControlService:
     def __init__(
         self,
@@ -899,6 +920,23 @@ class ControlService:
             open_sqlite(db, "control", (CONTROL_SCHEMA,))
             for statement in CONTROL_SCHEMA:
                 db.execute(statement)
+        self._totals: Document | None = None
+        self._prune_events()
+
+    def _prune_events(self) -> None:
+        """Remove `SCREEN_TOPICS` rows older than `[apps] events_keep_days`. A row with no stamp was
+        written before they carried one. A failure here must never stop a start."""
+        try:
+            keep = float(cast(float, self.settings_get("apps")["events_keep_days"]))
+            cutoff = (datetime.now(UTC) - timedelta(days=keep)).isoformat()
+            with self._connect() as db:
+                db.execute(
+                    "DELETE FROM events WHERE topic IN (?,?) "
+                    "AND COALESCE(json_extract(data,?),'') < ?",
+                    (*SCREEN_TOPICS, f"$.{RECORDED_AT}", cutoff),
+                )
+        except (ValueError, TypeError, OverflowError, OSError, sqlite3.Error) as error:
+            LOG.warning("old event rows stayed: %s", error)
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:
@@ -909,22 +947,28 @@ class ControlService:
         self, db: sqlite3.Connection, topic: EventTopic, subject: str, data: Document
     ) -> None:
         self._aggregate.cache_clear()
+        row = _stamped(data) if topic in SCREEN_TOPICS else data
         db.execute(
             "INSERT INTO events(topic,subject,data) VALUES(?,?,?)",
-            (topic, subject, json.dumps(data)),
+            (topic, subject, json.dumps(row)),
         )
 
     def _push_totals(self) -> None:
         """Push the UI totals after a runs, apps or library event, with the lock released: the
         engine's active count hops onto the engine's loop, and that loop takes this lock to read
-        settings, so a hop made under the lock deadlocks both (C-33)."""
+        settings, so a hop made under the lock deadlocks both (C-33). Totals that did not change
+        write no row."""
         active = self._active_jobs()
         with self._lock, self._connect() as db:
             (revision,) = db.execute("SELECT COALESCE(MAX(seq),0) FROM events").fetchone()
             summary = self._aggregate_counts(int(revision), active)
+            totals = {name: value for name, value in summary.items() if name != "revision"}
+            if totals == self._totals:
+                return
+            self._totals = totals
             db.execute(
                 "INSERT INTO events(topic,subject,data) VALUES('aggregates','',?)",
-                (json.dumps(summary),),
+                (json.dumps(_stamped(summary)),),
             )
 
     def events(
@@ -1060,6 +1104,8 @@ class ControlService:
                 values = _merged(RECORDS_DEFAULTS, values)
             if section == "journals":
                 values = _merged(JOURNALS_DEFAULTS, values)
+            if section == "apps":
+                values = _merged(APPS_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:
@@ -2003,6 +2049,7 @@ class ControlService:
                         self.home,
                         event_sink=self._app_event,
                         secret_getter=self.secret_getter,
+                        install_limit_s=_install_limit(self.settings_get("apps")),
                     )
                 self._apps.placement = self.place
                 self._apps.attach_library(self.library.landed)

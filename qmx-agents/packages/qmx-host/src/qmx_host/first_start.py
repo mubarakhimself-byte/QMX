@@ -51,7 +51,10 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool
 from qmf.core import is_refusal
 from qmf.core.fingerprint import fingerprint
-from qmx_apps.supervisor import Supervisor
+from qmx_apps.errors import AppError, Document
+from qmx_apps.manifest import Definition
+from qmx_apps.road.history import definition as road_definition
+from qmx_apps.supervisor import Supervisor, path_sources
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.library import UNFINISHED, old_library
 from qmx_control.service import ControlService, kept_word_for_word
@@ -611,21 +614,109 @@ FIRST_PARTY: Final = "first-party.json"
 which the host starts at every start."""
 
 
+def _told(runtime: Supervisor, app_id: str, text: str) -> None:
+    """Name what he must know about an app in the host's log and in its `status`."""
+    print(f"apps: {app_id}: {text}", file=sys.stderr)
+    runtime.notice(app_id, text)
+
+
+def refresh_first_party(runtime: Supervisor, app_id: str, folder: Path) -> Document:
+    """Bring an installed first-party app up to what this program ships in `folder`, before it
+    starts. A changed folder installs as a new head with the old head named. A library change
+    alone keeps the hash, so it installs the same bytes, which rebuilds the environment. A money
+    app is never rebuilt under its signed hash and never publishes here: it keeps running what he
+    signed, and its status says what waits for him. Any other app with a published version takes
+    the road's proof and its publish, because a start prefers the published version. A running app
+    is left as it is, and an app not installed installs."""
+    try:
+        found = runtime.get(app_id)
+    except AppError as missing:
+        if missing.code != "not_found":
+            raise
+        return runtime.install(folder, trust="first_party")
+    if cast(Document, found["runtime"]).get("status") in {"running", "starting"}:
+        return found
+    runtime.notice(app_id, None)
+    shipped = Definition.load(folder)
+    head = str(found["definition_hash"])
+    active = cast(Document, found.get("road") or {}).get("active")
+    published = str(active["definition_hash"]) if isinstance(active, dict) else None
+    signed = road_definition(runtime.home, app_id, published).manifest.risk if published else None
+    # A repair that changes the word still waits, so the head alone cannot say.
+    money = "money" in (shipped.manifest.risk, cast(Document, found["definition"])["risk"], signed)
+    # Installing what he signed again, as a checkout back on it would, rebuilds its environment.
+    moved = shipped.hash != head and not (money and shipped.hash == published)
+    if moved or (not money and path_sources(folder) != runtime.built_from(head)):
+        found = runtime.install(folder, trust="first_party", expected_id=app_id, expected_hash=head)
+    if not isinstance(active, dict) or published is None:
+        return found
+    if money:
+        version, running = cast(Document, found["definition"])["version"], active["version"]
+        if published != shipped.hash:
+            _told(
+                runtime,
+                app_id,
+                f"{app_id} {version} waits for your signature; {running} keeps running",
+            )
+        elif path_sources(folder) != runtime.built_from(published):
+            _told(
+                runtime,
+                app_id,
+                f"a library repair for {app_id} waits for a new signed version; "
+                f"{running} keeps running",
+            )
+    elif published != shipped.hash:
+        from qmx_host.connect_node import road_proof  # noqa: PLC0415 - it imports this file
+
+        road_proof(runtime, app_id, shipped.hash)
+        found = runtime.get(app_id)
+    return found
+
+
 def enable_first_party(home: Path, runtime: Supervisor) -> list[str]:
-    """Install and start each enabled first-party app, at every host start. An app already
-    installed is only started and one already running is left as it is, so the one click keeps
-    the app up however often the host starts. Installing builds the app's locked environment,
-    which can take minutes the first time."""
+    """Bring each enabled first-party app up to what this program ships and start it, at every
+    host start, and answer the ones that started, in the list's order. One already running is left
+    as it is, so the one click keeps the app up however often the host starts. Each app has its own
+    thread, because his kill needs the node up and an install elsewhere can run for its whole limit.
+    One that fails is named and one whose refresh failed starts its old version. Installing builds
+    the app's locked environment, which can take minutes the first time."""
     enabled = home / FIRST_PARTY
     if not enabled.is_file():
         return []
     wanted = cast(list[str], json.loads(enabled.read_text("utf-8")).get("enable", []))
-    installed = {str(cast(dict[str, object], row["definition"])["id"]) for row in runtime.list()}
-    for app_id in wanted:
-        if app_id not in installed:
-            runtime.install(APP_FOLDERS[app_id], trust="first_party")
-        runtime.start(app_id)
-    return wanted
+    started: set[str] = set()
+
+    def bring_up(app_id: str) -> None:
+        why = ""
+        try:
+            refresh_first_party(runtime, app_id, APP_FOLDERS[app_id])
+        except Exception as refused:
+            why = f"it did not take the shipped version, {_refusal(refused)}"
+        try:
+            runtime.start(app_id)
+        except Exception as refused:
+            why = f"{why}; " if why else ""
+            why = f"{why}it did not start, {_refusal(refused)}"
+        else:
+            started.add(app_id)
+        if why:
+            _told(runtime, app_id, why)
+
+    # Daemon threads, so a host stop does not wait on a stuck install: its Job ends uv at exit.
+    threads = [
+        threading.Thread(target=bring_up, args=(app_id,), name=f"qmx-first-{app_id}", daemon=True)
+        for app_id in wanted
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return [app_id for app_id in wanted if app_id in started]
+
+
+def _refusal(error: Exception) -> str:
+    code = error.code if isinstance(error, AppError) else type(error).__name__
+    return f"{code}: {error}"
 
 
 def first_party_names(home: Path) -> list[str]:

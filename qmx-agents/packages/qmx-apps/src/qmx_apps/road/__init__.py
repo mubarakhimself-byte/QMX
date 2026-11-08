@@ -323,7 +323,11 @@ class Road:
                     ),
                     409,
                 )
-            if image.manifest.risk == "money":
+            # A version that drops the money word still replaces what he signed.
+            needs_signature = image.manifest.risk == "money" or (
+                previous is not None and previous.manifest.risk == "money"
+            )
+            if needs_signature:
                 signed = self.sign(app_id, target, current, rollback=rollback)
                 if (
                     signature is None
@@ -351,7 +355,7 @@ class Road:
                         inputs={
                             "expected_hash": expected_hash,
                             "expected_active": current,
-                            "operator_signed": image.manifest.risk == "money",
+                            "operator_signed": needs_signature,
                         },
                         versions=self._versions(image),
                         results={
