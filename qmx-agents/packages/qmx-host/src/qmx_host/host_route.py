@@ -22,18 +22,23 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from fastapi import APIRouter, Request
 from pydantic import JsonValue
+from qmf.core import is_refusal
 from qmf.data.series import OPEN_NAME, STATE_NAME
 from qmx_apps.errors import AppError
 from qmx_control.models import Document
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.forward import PASS_HEADER, ForwardRefused, verify_host_pass
+from qmx_engine.settings import PC
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from qmx_host.node_link import ROUTE_PATH, SCHEMA, NodeLink
+
+if TYPE_CHECKING:
+    from qmx_host.market_data import MarketDoor
 
 HOST_ROUTE: Final = ("POST", ROUTE_PATH)
 """The one host-pass route this module serves, admitted by the door beside the other four."""
@@ -52,6 +57,9 @@ STATUS: Final[Mapping[str, int]] = {
     "pin_stale": 409,
     "app_refused": 422,
 }
+PULLER: Final = f"host:{PC}"
+"""The principal of This PC's records pull, the only one whose `confirmed` unpins a node's
+months (Level 0 AD-28)."""
 KEPT_CODES: Final = frozenset({"not_running", "pin_stale"})
 """Supervisor refusals the route answers by their own code; any other is `app_refused`."""
 
@@ -113,16 +121,23 @@ class Answers:
             )
 
 
+def _no_door() -> MarketDoor | None:
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class Answering:
     """What one host answers with: its node link (its place name, its supervisor and where each
-    app is homed), its pairing key read per call, its heartbeat read and its price store."""
+    app is homed), its pairing key read per call, its heartbeat read and its price store. ``door``
+    is the price store's market-data door, whose `verify` clears the pins This PC confirms; a host
+    without one lists its partitions and clears nothing."""
 
     link: NodeLink
     key: Callable[[], str | None]
     heartbeats: Callable[[], Awaitable[Mapping[str, object]]]
     store_root: Callable[[], Path | None]
     answers: Answers
+    door: Callable[[], MarketDoor | None] = _no_door
 
 
 def _text(args: Mapping[str, JsonValue], name: str) -> str:
@@ -259,11 +274,25 @@ class HostRoute:
             found.append((path.parent, cast(Document, json.loads(path.read_text("utf-8")))))
         return found
 
-    def listed(self, args: Document) -> Document:
+    def listed(self, args: Document, principal: str) -> Document:
+        """The partitions committed here after the watermark. On a host off This PC, the
+        fingerprints This PC's pull lists as `confirmed` first go to the door's `verify`, and the
+        answer says what it unpinned and what the door still pins; a door that cannot verify
+        leaves `unpinned` out, so This PC confirms them again. `confirmed` from any other
+        principal, and any `confirmed` on This PC, whose pins clear only by the server's commit,
+        is ignored and leaves `unpinned` out."""
         after = _table(args, "after") or {}
         mark = str(after.get("committed_at") or "")
         kinds, subjects = _strings(args, "kinds"), _strings(args, "subjects")
-        _strings(args, "confirmed")
+        confirmed = _strings(args, "confirmed") or []
+        door = self.answering.door()
+        pins: Document = {}
+        if door is not None:
+            if self.link.here != PC and principal == PULLER:
+                cleared = door.verify(confirmed)
+                if not is_refusal(cleared):
+                    pins["unpinned"] = list(cleared.value)
+            pins["pinned"] = list(door.pinned())
         rows: list[JsonValue] = []
         newest = mark
         for folder, state in self.states():
@@ -286,7 +315,7 @@ class HostRoute:
                     "committed_at": at,
                 }
             )
-        return answered({"partitions": rows, "watermark": {"committed_at": newest}})
+        return answered({"partitions": rows, "watermark": {"committed_at": newest}, **pins})
 
     def fetched(self, args: Document) -> Response:
         fingerprint = _text(args, "fingerprint")
@@ -327,7 +356,7 @@ class HostRoute:
             case "heartbeats":
                 found = await self.beats(args)
             case "data.list":
-                found = await asyncio.to_thread(self.listed, args)
+                found = await asyncio.to_thread(self.listed, args, principal)
             case _:
                 return await asyncio.to_thread(self.fetched, args)
         return JSONResponse(found, status_code=200 if found.get("ok") else _status(found))

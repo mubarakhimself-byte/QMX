@@ -521,7 +521,7 @@ class MarketDoor:
             try:
                 written = (
                     TypedWriter(probe, key.text, key.rule.columns)
-                    .add(_rows_of(copied, key.rule.columns))
+                    .add(rows_of(copied, key.rule.columns))
                     .finish()
                 )
             except Exception as exc:  # a copy that cannot be read back failed its verification
@@ -558,8 +558,11 @@ class MarketDoor:
         streamed through the typed writer, so the fingerprint the store records is computed
         here and never taken from the file's own claim. ``born_on`` defaults to this door's
         own place. A file born on the PC stays pinned until the server's commit reports the
-        same fingerprint (`verify`). A ``hold`` keeps the months open whatever their kind's
-        freeze rule says, with its reason (`SeriesStore.commit`).
+        same fingerprint (`verify`). On a door off the PC a `node`-born file stays pinned the
+        same way until This PC lists its fingerprint as confirmed (Level 0 AD-28); the same
+        rows again pin nothing, so a confirmed month is never pinned a second time. A ``hold``
+        keeps the months open whatever their kind's freeze rule says, with its reason
+        (`SeriesStore.commit`).
         """
         if self.too_new is not None:
             return self._read_only("a commit")
@@ -598,12 +601,24 @@ class MarketDoor:
             if is_refusal(landed):
                 return landed
             receipts.append(landed.value)
-            if born_on is Placement.PC:
-                self._pin(store, key.value, landed.value)
+            if self._pins(born_on, landed.value):
+                self._pin(store, key.value, landed.value, born_on)
         return Ok(tuple(receipts))
 
+    def _pins(self, born_on: Placement, receipt: CommitReceipt) -> bool:
+        """A PC-born file is pinned on every door; a `node`-born one on a door off the PC, unless
+        its rows were already there."""
+        if born_on is Placement.PC:
+            return True
+        return (
+            born_on is Placement.NODE
+            and self.placement is not Placement.PC
+            and not receipt.idempotent
+        )
+
     def verify(self, fingerprints: Sequence[str]) -> Result[tuple[str, ...]]:
-        """Unpin the PC-born partitions the server's commit reported with these fingerprints."""
+        """Unpin the partitions the other side holds with these fingerprints: on This PC the
+        server's commit, on a node the fingerprints This PC listed as confirmed."""
         if self.too_new is not None:
             return self._read_only("a verify")
         cleared: list[str] = []
@@ -619,7 +634,7 @@ class MarketDoor:
         return Ok(tuple(cleared))
 
     def pinned(self) -> tuple[str, ...]:
-        """The PC-born partitions still waiting for the server's verification."""
+        """The partitions still waiting for the other side to hold them (`verify`)."""
         return tuple(
             f"{marker.parent.parent.name}/{marker.parent.name}"
             for marker in sorted(self.store_root.glob(f"*/*/*/*/*/{PIN_NAME}"))
@@ -988,7 +1003,7 @@ class MarketDoor:
             writer = TypedWriter(
                 landed, key.text, key.rule.columns, hole_bounds=key.rule.hole_bounds
             )
-            writer.add(_rows_of(path, key.rule.columns))
+            writer.add(rows_of(path, key.rule.columns))
             finished = writer.finish()
         except (OSError, ValueError) as exc:
             landed.unlink(missing_ok=True)
@@ -998,13 +1013,15 @@ class MarketDoor:
             )
         return store.commit_file(key, finished, correction=correction, hold=hold)
 
-    def _pin(self, store: SeriesStore, key: SeriesKey, receipt: CommitReceipt) -> None:
+    def _pin(
+        self, store: SeriesStore, key: SeriesKey, receipt: CommitReceipt, born_on: Placement
+    ) -> None:
         marker = store.folder(key) / PIN_NAME
         marker.write_text(
             json.dumps(
                 {
                     "fingerprint": receipt.fingerprint,
-                    "from": "pc",
+                    "from": born_on.value,
                     "at": datetime.now(UTC).isoformat(),
                 },
                 sort_keys=True,
@@ -1386,7 +1403,7 @@ def _key_of(*parts: str, month: str) -> Result[SeriesKey]:
     )
 
 
-def _rows_of(path: Path, columns: Sequence[str]) -> Iterable[tuple[object, ...]]:
+def rows_of(path: Path, columns: Sequence[str]) -> Iterable[tuple[object, ...]]:
     """Stream one staged partition's rows in the typed writer's column order."""
     handle = pq.ParquetFile(path)
     batches = handle.iter_batches(batch_size=50_000)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
