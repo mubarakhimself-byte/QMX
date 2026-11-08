@@ -6,8 +6,8 @@ The two worlds are the ones the spine names. The **new risk world** is the risk 
 decides and runs itself through QML blocks, plus the sized intent and the execution target
 that carry that decision out. The **wire and accounting** world is the Book and BMS contract,
 admission, identity, records, journals and money that the new path cites and, where the swap
-says so, retires. The spine's new qmf-risk modules (`chain.py`, `facts.py`, `controls.py`,
-`group.py`) do not exist yet; the slices that build them land beside `unit_intent.py`.
+says so, retires. The spine's new qmf-risk modules (`chain.py`, `controls.py`, `group.py`) do not
+exist yet; the slices that build them land beside `unit_intent.py`.
 
 - `__init__.py` belongs to the wire and accounting because it re-exports the Book, BMS,
   admission, binding, paper, door, record and journal types and runs nothing of its own.
@@ -37,6 +37,9 @@ says so, retires. The spine's new qmf-risk modules (`chain.py`, `facts.py`, `con
   per-family exit policy entry, including the format-2 catch-all.
 - `exit_record.py` belongs to the wire and accounting because it records one exit per Book
   position close, attributes the whole trade and folds the bench.
+- `facts.py` belongs to the new risk world because it is the one fact a host reads a size from:
+  a value, the instant it was read, who supplied it, what its absence means, and whether it is
+  ok, stale, absent or uncalibrated.
 - `footprint_requirements.py` belongs to the wire and accounting because it fills the
   reserved footprint requirement slot with typed admission requirements.
 - `grammar.py` belongs to the wire and accounting because it defines the four-part template

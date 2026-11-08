@@ -24,12 +24,15 @@ from test_app_runtime import (
     dummy_document,
     listed,
     month,
+    play,
     rig,
     settle,
 )
 
 _STALE = "fp1:sha256:" + "0" * 64
 """A logic fingerprint no G record covers."""
+_OPEN_AT = 1_742_508_000_000_000_000 + 900_000_000_001
+"""A bar the dummy holds a position after, so the node's own stamp can be read."""
 
 
 def _compiled(node: Rig, document: dict[str, Json]) -> CompiledUnit:
@@ -91,3 +94,10 @@ def test_a_risk_only_recompile_is_taken_on_the_same_g_record(tmp_path: Path) -> 
 
     assert accepted["ok"] is True, accepted
     assert settle(node, "dep-2") == "trading"
+
+    play(node, _OPEN_AT)
+    unit = node.runtime.hosted["dep-2"].unit
+    assert unit is not None and unit.handler is not None
+    held = unit.handler.open_positions["fx.eurusd"]
+    assert held.opened_by == compiled.logic_fingerprint
+    node.runtime.stop()
