@@ -49,6 +49,8 @@ from qml.protocol.unit import (
     CalibrationRow,
     DecisionRow,
     OwnPosition,
+    Priced,
+    Proposal,
     QuoteBar,
     StateEvent,
     UnitStep,
@@ -203,6 +205,13 @@ class SteppingUnit(Protocol):
     def on_instant(self, instant: object, /) -> Result[UnitStep]: ...
 
 
+class PricingUnit(SteppingUnit, Protocol):
+    """A real hosted unit: one that prices the entries it proposed. A scripted stub proposes
+    nothing, so the handler never asks it for a price."""
+
+    def price(self, proposal: Proposal, facts: Account) -> Priced: ...
+
+
 _U = TypeVar("_U", bound=SteppingUnit)
 
 
@@ -291,7 +300,7 @@ class UnitSliceHandler:
         self._fills: list[Fill] = []
         self._cash: list[CashEvent] = []
         self._carried: dict[str, Instant] = {}
-        self._stepped: tuple[int, UnitStep] | None = None
+        self._stepped: tuple[int, UnitStep, tuple[Priced, ...]] | None = None
         self._entry_stamps: dict[str, dict[str, Decimal]] = {}
         self._entries = 0
 
@@ -488,9 +497,13 @@ class UnitSliceHandler:
         step = self._step(frontier)
         if is_refusal(step):
             return step
+        priced = self._stepped[2] if self._stepped is not None else ()
+        wires = [intent.to_wire() for intent in step.value.intents]
+        wires += [one.intent.to_wire() for one in priced if one.intent is not None]
+        decisions = {row.row_id: row for row in step.value.decisions}
+        decisions |= {one.row.row_id: one.row for one in priced}
         minted: list[RestingIntent] = []
-        for intent in step.value.intents:
-            wire = intent.to_wire()
+        for wire in wires:
             market = self._market_of(wire)
             if market != stream_id:
                 continue
@@ -502,8 +515,7 @@ class UnitSliceHandler:
             minted.append(made.value)
             if wire["intent_family"] == "entry":
                 row_id = cast("str", wire["decision_row_id"])
-                row = next((d for d in step.value.decisions if d.row_id == row_id), None)
-                self._entry_stamps[row_id] = _stamps(row)
+                self._entry_stamps[row_id] = _stamps(decisions.get(row_id))
         return Ok(tuple(minted))
 
     def _step(self, frontier: Instant) -> Result[UnitStep]:
@@ -514,9 +526,14 @@ class UnitSliceHandler:
         step = self._unit.on_instant(frontier)
         if is_refusal(step):
             return step
-        self._stepped = (frontier.value_ns, step.value)
+        priced: tuple[Priced, ...] = ()
+        if step.value.proposals:
+            unit = cast("PricingUnit", self._unit)
+            priced = tuple(unit.price(one, self._account()) for one in step.value.proposals)
+        self._stepped = (frontier.value_ns, step.value, priced)
         for record in (
             *step.value.decisions,
+            *(one.row for one in priced),
             *step.value.calibrations,
             *step.value.state_events,
         ):

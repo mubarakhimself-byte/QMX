@@ -77,7 +77,7 @@
     {"name": "target_2r", "scope": "position", "block": "target-r-multiple@1", "params": {"multiple": {"number": "target_r"}}, "inputs": {}},
     {"name": "time_out", "scope": "position", "block": "time-exit-bars@1", "params": {"bars": {"number": "time_out_bars"}}, "inputs": {}}
   ],
-  "sizer": {"name": "fixed_fraction", "block": "fixed-fraction-at-stop@1", "params": {"fraction": {"number": "risk_fraction"}}, "inputs": {}},
+  "sizer": {"name": "fixed_fraction", "block": "fixed-fraction-at-stop@2", "params": {"fraction": {"number": "risk_fraction"}}, "inputs": {}},
   "halts": {"position": [], "unit": [], "account": []},
   "reads": [],
   "numbers": {

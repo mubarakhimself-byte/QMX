@@ -38,6 +38,7 @@ from qml.conformance.scan import scan_logic_source
 from qml.protocol.unit import (
     OHLC,
     Account,
+    DecisionRow,
     HostedUnit,
     OwnPosition,
     QuoteBar,
@@ -170,22 +171,24 @@ class _Sim:
         elif reached:
             self.close(market, ExitUse.TARGET)
 
-    def take(self, step: UnitStep) -> tuple[dict[str, object], ...]:
-        wires = tuple(intent.to_wire() for intent in step.intents)
+    def take(
+        self, wires: Sequence[Mapping[str, object]], instant: Instant
+    ) -> tuple[dict[str, object], ...]:
+        tuples = tuple(dict(wire) for wire in wires)
         held = {p.position_id: m for m, p in self.positions.items() if p is not None}
-        for wire in wires:
+        for wire in tuples:
             if wire.get("intent_family") == "entry":
                 market = cast("str", wire["market_id"])
                 self.pending_entry[market] = wire
                 self.entries.append(
-                    (step.instant.value_ns, market, Side(cast("str", wire["direction"])))
+                    (instant.value_ns, market, Side(cast("str", wire["direction"])))
                 )
             else:
                 ref = cast("Mapping[str, object]", wire["position_ref"])
                 market = held.get(cast("str", ref["position_id"]))
                 if market is not None:
                     self.pending_close.add(market)
-        return wires
+        return tuples
 
 
 def _instants(bars: Mapping[str, Sequence[QuoteBar]]) -> list[int]:
@@ -206,6 +209,8 @@ class _Drive:
         default_factory=list[tuple[dict[str, object], ...]]
     )
     steps: list[UnitStep] = field(default_factory=list[UnitStep])
+    rows: list[DecisionRow] = field(default_factory=list[DecisionRow])
+    """The entry rows pricing wrote, kept beside the step's own rows for the trigger read."""
 
 
 def _host(sim: _Sim, target: ExecutionTarget) -> HostedUnit:
@@ -235,7 +240,13 @@ def _run(
         if is_refusal(step):
             raise ValueError(str(step.context))
         drive.steps.append(step.value)
-        drive.trace.append(sim.take(step.value))
+        wires = [intent.to_wire() for intent in step.value.intents]
+        for proposal in step.value.proposals:
+            priced = unit.price(proposal, Account(sim.equity))
+            drive.rows.append(priced.row)
+            if priced.intent is not None:
+                wires.append(priced.intent.to_wire())
+        drive.trace.append(sim.take(wires, step.value.instant))
 
 
 def _bound_holds(unit: HostedUnit) -> bool:
@@ -285,21 +296,20 @@ def _slice_fingerprint(bars: Mapping[str, Sequence[QuoteBar]]) -> Fingerprint:
     return made.value
 
 
-def _trigger_states(compiled: CompiledUnit, steps: Sequence[UnitStep]) -> dict[Side, set[bool]]:
+def _trigger_states(compiled: CompiledUnit, rows: Sequence[DecisionRow]) -> dict[Side, set[bool]]:
     """Per side, whether its trigger held on each bar after warm-up (every-bar rows)."""
     triggers = {
         side.side: {slot.name for slot in side.slots if slot.role is Role.TRIGGER}
         for side in compiled.plan.sides
     }
     states: dict[Side, set[bool]] = {side: set() for side in triggers}
-    for step in steps:
-        for row in step.decisions:
-            if row.outcome == "suppressed_warming" or not triggers.get(row.side):
-                continue
-            if row.outcome == "taken" and row.reason.startswith("time exit"):
-                continue
-            held = row.outcome != "no_signal" or row.reason.startswith("near miss")
-            states[row.side].add(held)
+    for row in rows:
+        if row.outcome == "suppressed_warming" or not triggers.get(row.side):
+            continue
+        if row.outcome == "taken" and row.reason.startswith("time exit"):
+            continue
+        held = row.outcome != "no_signal" or row.reason.startswith("near miss")
+        states[row.side].add(held)
     return states
 
 
@@ -386,7 +396,10 @@ def layer_g(
     short_entries = len(sim.entries) - long_entries
     exit_names = [e.binding.name for e in compiled.plan.exits]
     unfired = [name for name in exit_names if not sim.fired[name]]
-    states = _trigger_states(compiled, first.steps)
+    states = _trigger_states(
+        compiled,
+        (*[row for step in first.steps for row in step.decisions], *first.rows),
+    )
     constant = [side for side, seen in states.items() if len(seen) <= 1]
     both = compiled.unit.direction is Direction.BOTH
     one_side = both and bool(sim.entries) and (long_entries == 0 or short_entries == 0)

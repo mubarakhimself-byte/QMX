@@ -177,8 +177,31 @@ def _instants(bars: Mapping[str, Sequence[QuoteBar]]) -> list[Instant]:
     return [Instant(ns) for ns in stamps]
 
 
-def _drive(unit: HostedUnit, instants: Sequence[Instant]) -> list[UnitStep]:
-    return [_ok(unit.on_instant(instant)) for instant in instants]
+def _drive(
+    unit: HostedUnit, instants: Sequence[Instant], facts: Account | None = None
+) -> list[UnitStep]:
+    """Each instant's step, with the entries its pricing mints merged back into it.
+
+    A host steps the unit, prices the proposals the step answered, and places what came back. The
+    tests read the same single step: exits and priced entries as intents, every row in decisions.
+    """
+    account = Account(Decimal("10000.00")) if facts is None else facts
+    steps: list[UnitStep] = []
+    for instant in instants:
+        step = _ok(unit.on_instant(instant))
+        priced = [unit.price(proposal, account) for proposal in step.proposals]
+        steps.append(
+            UnitStep(
+                instant=step.instant,
+                intents=step.intents
+                + tuple(one.intent for one in priced if one.intent is not None),
+                decisions=step.decisions + tuple(one.row for one in priced),
+                calibrations=step.calibrations,
+                state_events=step.state_events,
+                proposals=step.proposals,
+            )
+        )
+    return steps
 
 
 def _entries(steps: Sequence[UnitStep]) -> list[tuple[UnitStep, UnitEntryIntent]]:

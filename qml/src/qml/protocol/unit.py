@@ -22,9 +22,10 @@ side; an entry's reference price is the ask close for a long and the bid close f
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
+from fractions import Fraction
 from itertools import pairwise
 from types import MappingProxyType
 from typing import Final, Protocol, cast
@@ -32,6 +33,7 @@ from typing import Final, Protocol, cast
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
+from qmf.risk.facts import Fact
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     UNIT_INTENT_FORMAT_VERSION,
@@ -41,7 +43,15 @@ from qmf.risk.unit_intent import (
 )
 
 from qml._refuse import invalid, unsupported
-from qml.blocks.api import EntryOrder, Instance, OutputType, Signal, Size
+from qml.blocks.api import (
+    Amount,
+    EntryOrder,
+    Instance,
+    OutputType,
+    Signal,
+    Size,
+    Skip,
+)
 from qml.compile.compiler import (
     BoundBlock,
     CompiledUnit,
@@ -51,21 +61,31 @@ from qml.compile.compiler import (
 )
 from qml.environment import current_environment
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
+from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
 __all__ = [
+    "ACCOUNT_CURRENCY",
     "OHLC",
+    "PER_TRADE_CAP_SHARE",
     "SEAM_JUMP_SCALE",
+    "SIZE_BAND",
+    "SIZE_BAND_MAX_LOTS",
     "STATE_SCHEMA_VERSION",
     "Account",
+    "AdmitPort",
     "CalibrationRow",
     "DecisionRow",
     "HostedUnit",
     "MotionSwitch",
     "OwnPosition",
+    "Priced",
+    "PricedEntry",
+    "Proposal",
     "QuoteBar",
     "SeamCheck",
+    "SizeBand",
     "SlotOutput",
     "StateEvent",
     "TraceLevel",
@@ -82,6 +102,20 @@ STATE_SCHEMA_VERSION: Final[int] = 2
 """2 records the interpreter the snapshot was taken under (UT-09, QML-25)."""
 SEAM_JUMP_SCALE: Final[Decimal] = Decimal(3)
 """The setting ``seam_jump_scale``: a seam flags past this many typical warm-up bar moves."""
+
+ACCOUNT_CURRENCY: Final[str] = "USD"
+"""Starting default of the account currency sizing is counted in (AD-10 "Currency"). The paper
+lane and the demo account are in USD, and every shipped record quotes USD. Labelled placeholder,
+owner numbers talk: RC-07 brings each host's real account currency and the rate for a quote that
+differs, and this default goes."""
+SIZE_BAND_MAX_LOTS: Final[Decimal] = Decimal("100")
+"""Starting default of the ``size_band_max_lots`` setting: the most lots one entry may take
+(AD-10, PH E8). It catches an absurd answer such as 5,000 lots, never a size a person chose, and a
+host replaces the row rather than this number. Labelled placeholder, owner numbers talk."""
+PER_TRADE_CAP_SHARE: Final[Decimal] = Decimal("1")
+"""Starting default of the ``per_trade_cap_share`` setting: the largest share of equity one entry
+may put at risk. At 1 an entry may risk the whole account, so only an answer above that (a bug,
+not a choice) is refused. Labelled placeholder, owner numbers talk."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -140,6 +174,7 @@ class OwnPosition:
 @dataclass(frozen=True, slots=True)
 class Account:
     equity: Decimal
+    currency: str = ACCOUNT_CURRENCY
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +225,135 @@ class UnitStep:
     decisions: tuple[DecisionRow, ...]
     calibrations: tuple[CalibrationRow, ...]
     state_events: tuple[StateEvent, ...]
+    proposals: tuple[Proposal, ...] = ()
+    """The entries whose slots held, with no size yet: the host prices each one in pass two."""
+
+
+@dataclass(frozen=True, slots=True)
+class Proposal:
+    """One entry whose slots held, before any size: every wire field but the quantity and the
+    receipt, the row it will land, and the evidence its sizer reads (AD-1, AD-10).
+
+    It carries no account fact, so a host can park it and price it later on fresh facts.
+    """
+
+    wire: Mapping[str, object]
+    row: DecisionRow
+    market_id: str
+    side: Side
+    entry_price: Decimal
+    stop: Decimal
+    params: Mapping[str, Decimal]
+    record: InstrumentRecord
+
+
+@dataclass(frozen=True, slots=True)
+class PricedEntry:
+    """One entry's size after the converter: the number the admit row judges."""
+
+    amount: Amount
+    quantity: Decimal
+    residue_r: Decimal
+    money_at_risk: Decimal | None
+    equity: Decimal
+
+
+class AdmitPort(Protocol):
+    """The host's entry seam after pricing: ``None`` passes the entry, a code refuses it."""
+
+    def admit(self, proposal: Proposal, entry: PricedEntry) -> str | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class SizeBand:
+    """The one row that catches an absurd size after the converter (AD-10, PH E8): a ceiling on
+    the quantity and a ceiling on the money one entry risks. A host that wants other vetoes passes
+    its own row; this one is what every host gets until the node chain lands."""
+
+    max_lots: Decimal = SIZE_BAND_MAX_LOTS
+    max_money_at_risk_share: Decimal = PER_TRADE_CAP_SHARE
+
+    def admit(self, proposal: Proposal, entry: PricedEntry) -> str | None:
+        del proposal
+        if (
+            entry.money_at_risk is not None
+            and entry.equity > 0
+            and entry.money_at_risk > entry.equity * self.max_money_at_risk_share
+        ):
+            return "per_trade_cap"
+        if entry.quantity > self.max_lots:
+            return "size_band"
+        return None
+
+
+SIZE_BAND: Final[SizeBand] = SizeBand()
+"""The size band every host gets until a host passes its own admit row."""
+
+
+@dataclass(frozen=True, slots=True)
+class Priced:
+    """What ``price`` answers for one proposal: the sized entry intent, or the code it skipped by.
+    The row comes back either way, so the caller writes it before any order leaves."""
+
+    row: DecisionRow
+    intent: UnitIntent | None
+    code: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Skip:
+    """A sizer's answer that cannot be sized, as the code it records and the words beside it."""
+
+    code: str
+    detail: str = ""
+
+
+_SIZER_PORTS: Final[tuple[str, ...]] = ("equity", "entry_price", "stop_price", "record")
+"""The evidence a sizer's face declares and the host passes, in the order the receipt names it."""
+
+
+def _amount(answer: object) -> Amount | _Skip:
+    """Every sizer answer as the amount the converter reads, or the skip it is. A ``Size`` states
+    lots, so it reads as a quantity amount and skips the arithmetic (AD-10)."""
+    match answer:
+        case Amount():
+            return answer
+        case Size(lots=lots, skip_reason=reason):
+            if lots is None:
+                return _Skip("sizer_skip", reason or "the sizer answered nothing")
+            return Amount(kind="quantity", value=lots, basis="gross_at_stop")
+        case Skip(reason=reason):
+            return _Skip("sizer_skip", reason)
+        case _:
+            return _Skip("sizer_silent", "the sizer answered nothing")
+
+
+def _skip_text(code: str, detail: str) -> str:
+    """The row's words. Every sized skip keeps the ``sizer: `` head the journal maps to its
+    closed ``sizer_skip`` code, and the specific code stays readable beside it."""
+    if code == "sizer_silent":
+        return "the sizer answered nothing"
+    return f"sizer: {code}" + (f" ({detail})" if detail and detail != code else "")
+
+
+def _priced_skip(proposal: Proposal, code: str, detail: str) -> Priced:
+    row = replace(proposal.row, outcome="skipped", reason=_skip_text(code, detail))
+    return Priced(row, None, code)
+
+
+def _rate(record: InstrumentRecord, facts: Account, now: Instant) -> Fact | None:
+    """The rate into the account's currency: one when the record quotes that currency, and
+    nothing when it does not, which the converter names ``rate_absent``. RC-07 supplies
+    ``market.rate:<quote>`` for the rest."""
+    if record.currency == facts.currency:
+        return Fact(Decimal(1), now, "open", "the account is in the record's quote currency")
+    return None
+
+
+def _residue_text(residue: Decimal) -> str:
+    """The converter's residue as the wire's rational, ``n/d``."""
+    exact = Fraction(residue)
+    return f"{exact.numerator}/{exact.denominator}"
 
 
 def accept_unit_intents(raw: Sequence[Mapping[str, object]]) -> Result[tuple[UnitIntent, ...]]:
@@ -467,6 +631,65 @@ class HostedUnit:
             return invalid("instant", "the evaluation instant rides the call", given=repr(instant))
         return _Run(self._core, instant).step()
 
+    def price(self, proposal: Proposal, facts: Account, admit: AdmitPort = SIZE_BAND) -> Priced:
+        """Spell one entry's size on the facts the host read for it (AD-1, AD-10).
+
+        The one call that sizes an entry: the sizer answers an amount from this evidence, the one
+        converter spells the venue's quantity and the residue from the record and the rate, and
+        the admit row catches an absurd size after it. The row comes back either way, so the
+        caller writes it before any order leaves. No account fact is read here by the exits.
+        """
+        core = self._core
+        market = next((m for m in core.markets if m.market_id == proposal.market_id), None)
+        if market is None:
+            return _priced_skip(
+                proposal, "sizer_skip", "the proposal names no market this unit runs"
+            )
+        answer = market.instances["sizer"].update(
+            {
+                "equity": facts.equity,
+                "entry_price": proposal.entry_price,
+                "stop_price": proposal.stop,
+                "record": proposal.record,
+            }
+            | dict(proposal.params)
+        )
+        amount = _amount(answer)
+        if isinstance(amount, _Skip):
+            return _priced_skip(proposal, amount.code, amount.detail)
+        converted = to_quantity(
+            amount,
+            proposal.entry_price,
+            proposal.stop,
+            proposal.record,
+            _rate(proposal.record, facts, proposal.row.instant),
+            RoundRule(now=proposal.row.instant),
+        )
+        if converted.skipped is not None or converted.quantity is None:
+            return _priced_skip(proposal, converted.skipped or "kind_unknown", "")
+        entry = PricedEntry(
+            amount=amount,
+            quantity=converted.quantity,
+            residue_r=converted.residue_r,
+            money_at_risk=amount.value if amount.kind == "money_at_risk" else None,
+            equity=facts.equity,
+        )
+        code = admit.admit(proposal, entry)
+        if code is not None:
+            return _priced_skip(proposal, code, "")
+        wire = dict(proposal.wire) | {
+            "quantity": f"{converted.quantity:f}",
+            "sizer_receipt": {
+                "inputs_used": list(_SIZER_PORTS),
+                "rounding_residue_r": _residue_text(converted.residue_r),
+            },
+        }
+        admitted = accept_unit_intents((wire,))
+        if is_refusal(admitted):
+            reason = admitted.context.get("reason")
+            return _priced_skip(proposal, "sizer_skip", str(reason) if reason else "")
+        return Priced(proposal.row, admitted.value[0], None)
+
     @property
     def calibrated_values(self) -> Mapping[str, Decimal]:
         return MappingProxyType({name: s.value for name, s in self._core.slow.items()})
@@ -484,6 +707,7 @@ class _Run:
         self.plan = unit.plan
         self.instant = instant
         self.intents: list[Mapping[str, object]] = []
+        self.proposals: list[Proposal] = []
         self.decisions: list[DecisionRow] = []
         self.calibrations: list[CalibrationRow] = []
         self.events: list[StateEvent] = list(unit.pending)
@@ -507,7 +731,6 @@ class _Run:
         return self.unit.surfaces[key].at(self.instant)
 
     def step(self) -> Result[UnitStep]:
-        account = self.surface("account")
         journal = self.surface("own_journal")
         positions: dict[str, OwnPosition | None] = {}
         fresh: dict[str, QuoteBar] = {}
@@ -537,7 +760,7 @@ class _Run:
         for m in self.unit.markets:
             bar = fresh.get(m.market_id)
             if bar is not None:
-                self.entries(m, bar, results[m.market_id], positions[m.market_id], account)
+                self.entries(m, bar, results[m.market_id], positions[m.market_id])
         if self.unit.motion is MotionSwitch.ON:
             trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
             self.motion(trades, all(p is None for p in positions.values()))
@@ -551,6 +774,7 @@ class _Run:
                 decisions=tuple(self.decisions),
                 calibrations=tuple(self.calibrations),
                 state_events=tuple(self.events),
+                proposals=tuple(self.proposals),
             )
         )
 
@@ -738,7 +962,6 @@ class _Run:
         bar: QuoteBar,
         sides: Mapping[Side, _Side],
         position: OwnPosition | None,
-        account: object,
     ) -> None:
         signalled = [s for s, r in sides.items() if r.holds]
         for side, result in sides.items():
@@ -755,9 +978,14 @@ class _Run:
             elif position is not None:
                 self.decision(m, side, "suppressed_limit", result.trail, "a position is open")
             else:
-                self.enter(m, bar, side, result, account)
+                self.enter(m, bar, side, result)
 
-    def enter(self, m: _Market, bar: QuoteBar, side: Side, result: _Side, account: object) -> None:
+    def enter(self, m: _Market, bar: QuoteBar, side: Side, result: _Side) -> None:
+        """The entry's slots held: collect what sizing it needs and no size.
+
+        The size is made by ``HostedUnit.price`` on the host's read of the account facts, so an
+        exit never waits on one and this pass reads no account fact (AD-1).
+        """
         record = m.record
         numbers = m.in_force[side]
         reference = bar.ask.close if side is Side.LONG else bar.bid.close
@@ -788,60 +1016,59 @@ class _Run:
                 )
                 if isinstance(level, Decimal):
                     targets.append({"price": str(_price(level, record)), "fraction": "1/1"})
-        if not isinstance(account, Account):
-            self.decision(m, side, "skipped", result.trail, "no account facts to size from")
-            return
-        size = m.instances["sizer"].update(
-            {
-                "equity": account.equity,
-                "entry_price": reference,
-                "stop_price": stop,
-                "record": record,
-            }
-            | self.unit.params(self.plan.sizer, numbers)
-        )
-        if not isinstance(size, Size) or size.lots is None:
-            reason = size.skip_reason if isinstance(size, Size) else "the sizer answered nothing"
-            self.decision(m, side, "skipped", result.trail, f"sizer: {reason}")
-            return
         protection: dict[str, object] = {"stop": str(stop), "targets": targets}
         per_bar = next((e for e in self.plan.exits if e.use is ExitUse.PER_BAR), None)
         if per_bar is not None:
             bars = self.unit.params(per_bar.binding, numbers).get("bars")
             if bars is not None:
                 protection["time_exit_bars"] = int(bars)
-        row = self.decision(m, side, "taken", result.trail, "all slots hold")
+        row = self.row_id()
         compiled = self.unit.compiled
         target = self.unit.target
-        self.intents.append(
-            {
-                "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
-                "intent_family": "entry",
-                "unit": {
-                    "unit_id": compiled.unit.unit_id,
-                    "version_ref": compiled.document_fingerprint.value,
-                    "compiled_fingerprint": compiled.compiled_fingerprint.value,
+        self.proposals.append(
+            Proposal(
+                wire={
+                    "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
+                    "intent_family": "entry",
+                    "unit": {
+                        "unit_id": compiled.unit.unit_id,
+                        "version_ref": compiled.document_fingerprint.value,
+                        "compiled_fingerprint": compiled.compiled_fingerprint.value,
+                    },
+                    "instrument": {"venue": record.venue, "symbol": record.symbol},
+                    "market_id": m.market_id,
+                    "direction": side.value,
+                    "reason_code": {"code": compiled.unit.family_id, "book_family": "unit"},
+                    "execution_target": {
+                        "role": target.role.value,
+                        "venue_id": target.venue_id.value,
+                        "account_id": target.account_id,
+                    },
+                    "order": {"type": "market"},
+                    "protection": protection,
+                    "not_before": bar.knowable_at.value_ns,
+                    "placeholder_labels": list(  # mock-data-scan: allow (field)
+                        compiled.placeholders
+                    ),
+                    "decision_row_id": row,
                 },
-                "instrument": {"venue": record.venue, "symbol": record.symbol},
-                "market_id": m.market_id,
-                "direction": side.value,
-                "reason_code": {"code": compiled.unit.family_id, "book_family": "unit"},
-                "execution_target": {
-                    "role": target.role.value,
-                    "venue_id": target.venue_id.value,
-                    "account_id": target.account_id,
-                },
-                "order": {"type": "market"},
-                "quantity": f"{size.lots:f}",
-                "sizer_receipt": {
-                    "inputs_used": ["equity", "entry_price", "stop_price", "record"],
-                    "rounding_residue_r": "0/1",
-                },
-                "protection": protection,
-                "not_before": bar.knowable_at.value_ns,
-                "placeholder_labels": list(compiled.placeholders),  # mock-data-scan: allow (field)
-                "decision_row_id": row,
-            }
+                row=DecisionRow(
+                    row_id=row,
+                    instant=self.instant,
+                    market_id=m.market_id,
+                    side=side,
+                    outcome="taken",
+                    slot_trail=result.trail,
+                    numbers_in_force=MappingProxyType(dict(m.in_force.get(side, {}))),
+                    reason="all slots hold",
+                ),
+                market_id=m.market_id,
+                side=side,
+                entry_price=reference,
+                stop=stop,
+                params=self.unit.params(self.plan.sizer, numbers),
+                record=record,
+            )
         )
 
     # --- motion ----------------------------------------------------------------------
@@ -1140,4 +1367,12 @@ class _UnitCallback:
         step = self.hosted.on_instant(instant)
         if isinstance(step, TypedRefusal):
             return step
+        if step.value.proposals:
+            # A unit's entry is priced by its own host (`HostedUnit.price`); the bot door has no
+            # price call and no account facts, so it refuses at the ladder rather than drop it.
+            return unsupported(
+                "contract_format_version",
+                "a unit is hosted through qml.protocol.unit.construct_unit, so its entry is "
+                "priced and sent there; the bot door refuses a unit's entry",
+            )
         return [intent.to_wire() for intent in step.value.intents]
