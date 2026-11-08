@@ -291,6 +291,41 @@ def test_allowed_lines_reports_marked_lines() -> None:
     assert scanner.allowed_lines("a = 1\nb = 2  # mock-data-scan: allow\n") == frozenset({2})
 
 
+# --- the trading node's placeholder-origin domain term -----------------------
+
+_EFFECT_MATRIX = "qmn/src/qmn/protection/effect_matrix.py"
+_RUNTIME = "qmn/src/qmn/app/runtime.py"
+
+
+def _rules_in(source: str, filename: str) -> list[str]:
+    return [f.rule for f in scanner.scan_source(source, filename)]
+
+
+def test_placeholder_origin_domain_term_passes_in_the_node_modules() -> None:
+    effect_matrix = (
+        '__all__ = ["PLACEHOLDER_KILL_EFFECTS", "PLACEHOLDER_ORIGIN"]\n'
+        'PLACEHOLDER_ORIGIN: Final[str] = "placeholder"\n'
+    )
+    assert _rules_in(effect_matrix, _EFFECT_MATRIX) == []
+    assert _rules_in('alarm = {"origin": "placeholder"}\n', _RUNTIME) == []
+
+
+def test_placeholder_origin_outside_the_node_modules_is_still_flagged() -> None:
+    assert _rules_in('origin = "placeholder"\n', "qmn/src/qmn/venue/client.py") == [
+        scanner.RULE_PLACEHOLDER
+    ]
+    assert _rules_in('origin = "placeholder"\n', "packages/qmf-risk/src/qmf_risk/x.py") == [
+        scanner.RULE_PLACEHOLDER
+    ]
+    assert _rules_in('__all__ = ["PLACEHOLDER_ORIGIN"]\n', _RUNTIME) == [scanner.RULE_PLACEHOLDER]
+
+
+def test_other_placeholder_values_in_the_node_modules_are_still_flagged() -> None:
+    assert _rules_in('X = "changeme"\n', _EFFECT_MATRIX) == [scanner.RULE_PLACEHOLDER]
+    assert _rules_in('X = "placeholder value"\n', _RUNTIME) == [scanner.RULE_PLACEHOLDER]
+    assert _rules_in('X = "PLACEHOLDER"\n', _RUNTIME) == [scanner.RULE_PLACEHOLDER]
+
+
 # --- Finding, rendering, ordering -------------------------------------------
 
 
