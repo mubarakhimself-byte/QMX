@@ -1,1 +1,0 @@
-`stats.py` in the work folder has bugs. `mean([1, 2, 3, 4])` should be 2.5, `median([5, 1, 3])` should be 3 and `median([4, 1, 3, 2])` should be 2.5. Fix the file so both functions are right. Keep the function names.

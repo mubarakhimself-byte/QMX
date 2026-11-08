@@ -86,20 +86,19 @@ The canonical QMF toolchain, pinned for byte-identical results on every machine
 | pytest-cov | `>=7,<8` | MIT | Coverage measurement + the Tier-1 floor. |
 | poethepoet | `==0.48.0` | MIT | Task runner exposing `poe fmt / lint / types / test / check`. |
 
-## SSSF factory-gate group (`dev`, essentials) and `scan`
+## Left in `dev` from the retired factory, and `scan`
 
-Preserved from the factory stamp; the merge gate runs `ruff check .`,
-`mypy adws`, and `pytest -q adws/tests` against `adws/`.
+The first six rows are left over. Nothing at the root needs them for itself. Removing them changes `uv.lock`, which CI reads with `uv sync --frozen`, so that is a later step with `uv lock`.
 
 | Name | Version | Licence | Why |
 |---|---|---|---|
-| mypy | (lockfile) | MIT | Type-checks `adws` for the SSSF gate (`mypy adws`). |
-| types-PyYAML | (lockfile) | Apache-2.0 | Stubs so `mypy adws` resolves PyYAML. |
-| pydantic | (lockfile) | MIT | Imported by `adws/adw_modules`; needed for `adws/tests`. |
-| python-dotenv | (lockfile) | BSD-3-Clause | Imported by `adws/adw_modules`. |
-| pyyaml | (lockfile) | MIT | Imported by `adws/adw_modules`. |
-| rich | (lockfile) | MIT | Imported by `adws/adw_modules`. |
-| skylos | (lockfile) | MIT | AI-defect / dead-code scan; isolated in the `scan` group because its build does not install everywhere (treated as TOOL UNAVAILABLE on failure, never a pass/fail). |
+| mypy | (lockfile) | MIT | Left over, see above. |
+| types-PyYAML | (lockfile) | Apache-2.0 | Left over, see above. |
+| pydantic | (lockfile) | MIT | Left over, see above. |
+| python-dotenv | (lockfile) | BSD-3-Clause | Left over, see above. |
+| pyyaml | (lockfile) | MIT | Left over, see above. |
+| rich | (lockfile) | MIT | Left over, see above. |
+| skylos | (lockfile) | MIT | AI-defect / dead-code scan; isolated in the `scan` group because its build does not install everywhere. |
 
 ## Build backend
 

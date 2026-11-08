@@ -25,15 +25,13 @@ import sys
 from pathlib import Path
 
 from common import FAKE_HOME, SCRATCH, Log, Session, boot, chat_args, require_login, use_fake_home
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "probes" / "qma"))
 from plants import exclusive, restore, snapshot
 
 MARK = "QMXMARK"
 MARKET = "qmx-s07-market"
 PLUGIN = "qmx-s07-plant"
 PLANT_LOCK = Path("D:/Temp/qma-hp0/settings-plant.lock")
-"""The HP0 probes' plant lock, so s07 and `p_settings.py` never plant at once."""
+"""The plant lock, so two planting runs never overlap."""
 BACKUP = SCRATCH / "s07-plant-backup.json"
 
 

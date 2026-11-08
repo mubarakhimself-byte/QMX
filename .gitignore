@@ -40,9 +40,7 @@ _bmad/*
 Thumbs.db
 .DS_Store
 
-# sssf runtime
-adws/adw_data/sessions/
-adws/adw_data/sssf.db*
+# local settings, loaded by the justfile
 .env
 
 # Skylos local project state: the reference-graph index and the PyPI-existence

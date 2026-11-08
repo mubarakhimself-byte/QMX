@@ -1,9 +1,8 @@
 """L3 acceptance test — the failure-register discipline (NFR-11, R-009).
 
-Oracle: NFR-11 ("every designed failure mode ships a register entry"), AR-21/L27
-(reference usage examples), and the workspace convention conventions/failure-register.md
-that every OTHER roster package (qmf-core, qmf-data, qmf-indicators, qmf-registry,
-qmf-structure) already follows.
+Oracle: NFR-11 ("every designed failure mode ships a register entry") and the workspace
+convention conventions/failure-register.md that every OTHER roster package (qmf-core,
+qmf-data, qmf-indicators, qmf-registry, qmf-structure) already follows.
 
 Covers QA-E08-L3-015. A missing register entry is a finding (this is where R-009 gets
 its evidence).
@@ -77,14 +76,4 @@ def test_l3_015_qmf_venue_ships_a_failure_register_covering_its_refusals():
     assert not missing, (
         "the venue failure register has no complete six-field entry for refusal categories: "
         f"{sorted(missing)}"
-    )
-
-
-def test_l3_015_qmf_venue_ships_reference_usage_examples():
-    """AR-21/L27: the tier-1 distribution unit ships an examples/ directory of reference
-    usage examples (like every sibling roster package); qmf-venue's is absent."""
-    examples = VENUE_PKG / "examples"
-    assert examples.is_dir(), (
-        "qmf-venue ships NO examples/ directory (AR-21/L27); every other roster package "
-        "(qmf-core, qmf-data, qmf-indicators, qmf-registry, qmf-risk, qmf-structure) ships one"
     )

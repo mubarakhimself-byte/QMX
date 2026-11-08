@@ -3,7 +3,7 @@ which the launcher writes. Idle is the CLI three seconds after its first turn; b
 sampled every half second while it runs an 8-second Bash call.
 
 PASS when both are recorded and each working set is within 25% of HP0's bare-CLI figures
-(`scripts/probes/qma/FINDINGS.md` S18: 184.1 MB idle, 194.1 MB busy). Private commit, what a job
+(184.1 MB idle, 194.1 MB busy). Private commit, what a job
 memory limit counts, is logged beside it.
 
     s18_ram.py

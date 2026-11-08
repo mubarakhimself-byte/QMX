@@ -33,8 +33,6 @@ registration = register_forex_17ny(
 # registration.fp1_identity() / .artifact_fingerprint() — binding excluded
 ```
 
-Reference usage: `examples/registration_usage.py`.
-
 ## SemVer and the tzdata pin
 
 - Package version lives in this extension's `pyproject.toml` (`0.1.0` today) and

@@ -1,40 +1,17 @@
-# QMF V1 uv-workspace root.
-#
-# Two things live in this one file and MUST NOT be confused:
-#
-#   1. THE SSSF FACTORY-GATE STAMP (the original contents of this file). The
-#      factory's merge gate re-runs three commands against every branch:
-#          uv run --project <tree> --group dev ruff check .
-#          uv run --project <tree> --group dev mypy adws
-#          uv run --project <tree> --group dev pytest -q adws/tests
-#      That gate is FAIL-CLOSED: a command that cannot run reads RED. Its
-#      contract is the `[dependency-groups] dev` list and the `adws/tests`
-#      pytest wiring below. Both are preserved verbatim in intent — the `dev`
-#      group keeps every tool and library the gate needs, and
-#      `[tool.pytest.ini_options] testpaths = ["adws/tests"]` is unchanged.
-#
-#   2. THE QMF WORKSPACE (added by Story 1.1). `[tool.uv.workspace]` declares
-#      the seven roster packages under packages/ and the first extension under
-#      extensions/. The canonical toolchain and the `poe` task surface (Tier-1
-#      `check`, plus `check-integration` and `check-release`) gate the QMF code.
-#
-# The two coexist deliberately: the SSSF commands target `adws`, the `poe`
-# tasks target `packages/ + extensions/ + tools/`, and neither weakens the
-# other. `name`/`version` remain placeholders; nothing reads them.
+# QMF V1 uv-workspace root. `[tool.uv.workspace]` declares the members, and the
+# `poe` task surface (Tier-1 `check`, plus `check-integration` and `check-release`)
+# gates them. `name` and `version` are placeholders that only uv.lock records.
 
 [project]
 name = "sssf-project"
 version = "0.1.0"
-description = "A project the Super Simple Software Factory was stamped into; also the QMF V1 uv-workspace root"
-# The factory-stamp floor stays >=3.10 (the SSSF root is not a QMF package, and
-# keeping this floor keeps ruff's inferred target at py310 so `adws` lints
-# byte-identically to baseline). The actual CPython 3.14 pin (AR-04) lives in
+description = "The QMF V1 uv-workspace root"
+# The root floor stays >=3.10 because the root is not a QMF package, and this floor
+# keeps ruff's inferred target at py310. The actual CPython 3.14 pin (AR-04) lives in
 # `.python-version` and in every member's own `requires-python = ">=3.14,<3.15"`;
 # the workspace resolves and runs on 3.14 accordingly.
 requires-python = ">=3.10"
-# The same libraries every adws/*.py declares in its own PEP 723 header.
-# Declared here too because adws/tests/ imports adw_modules directly, so `uv run
-# --group dev pytest` needs them importable.
+# Left over from the retired factory. Removing them changes uv.lock, a later step.
 dependencies = ["pydantic", "python-dotenv", "pyyaml", "rich"]
 
 [tool.uv]
@@ -56,30 +33,27 @@ dependencies = ["pydantic", "python-dotenv", "pyyaml", "rich"]
 # the environment for `qmf.data.store` to import at test time. Installing the
 # qmf-data workspace member (below) pulls them in, so a freshly cut worktree
 # running `uv run poe check` has Parquet + DuckDB present without ever naming the
-# engine libs outside qmf-data. The SSSF `dev` group and the adws pytest wiring
-# are untouched.
+# engine libs outside qmf-data.
 #
 # `calendar-tzdata` follows the same pattern for the off-roster
 # qmf-calendar-forex extension (Story 4.1): its pinned `tzdata` is declared only
 # in the extension's own pyproject, and installing the workspace member pulls
 # that pin into the gate environment so import-time TZPATH verification can run
-# under `poe test` without weakening `dev` or the adws pytest wiring.
+# under `poe test`.
 #
 # `venue-proto` follows the SAME pattern for qmf-venue (Story 8.2; DEC-0141): its
 # pinned `protobuf` runtime is declared only in the venue's own pyproject, and
 # installing the workspace member pulls that pin into the gate environment so
 # `qmf.venue.proto` (which imports `google.protobuf` to compile the pinned Spotware
-# release IN-HOUSE) imports at test time under `poe test`. Kept out of `dev` so the
-# SSSF factory-gate contract stays byte-stable; protobuf stays declared only in
-# qmf-venue and never leaks into another package.
+# release IN-HOUSE) imports at test time under `poe test`. protobuf stays declared only
+# in qmf-venue and never leaks into another package.
 # `indicators-talib` follows the SAME pattern for qmf-indicators (Story 7.2;
 # DEC-0127): its pinned `ta-lib==0.7.1` canonical arithmetic reference is declared
 # only in the indicators' own pyproject, and installing the workspace member pulls
 # that pin (which ships a wheel-bundled C library on this tier-1 OS) into the gate
 # environment so `qmf.indicators` can assert the reference-configuration record at
-# import under `poe test`. Kept out of `dev` so the SSSF factory-gate contract stays
-# byte-stable; ta-lib stays declared only in qmf-indicators and never leaks into
-# another package.
+# import under `poe test`. ta-lib stays declared only in qmf-indicators and never leaks
+# into another package.
 default-groups = ["dev", "store-engines", "calendar-tzdata", "venue-proto", "indicators-talib", "qml-lib", "qmb-lib", "qmn-lib", "qa-suites"]
 
 [tool.uv.workspace]
@@ -125,16 +99,11 @@ qmb = { workspace = true }
 qmn = { workspace = true }
 
 [dependency-groups]
-# THE GATE'S CONTRACT — plus the QMF canonical toolchain, one environment for
-# both gates. The last four (pydantic, python-dotenv, pyyaml, rich) and mypy /
-# types-PyYAML are the SSSF factory-gate essentials and MUST stay: adws/tests/
-# imports adw_modules, which imports them, and the gate runs `mypy adws`.
-#
-# The pinned QMF toolchain (AD-3/AD-4; DEC-0101/0102) is added on top: ruff,
-# pyright (strict), pytest 9.x, poethepoet, and pytest-cov. Exact pins give
-# byte-identical results on every machine; the committed uv.lock nails the rest.
+# The pinned QMF toolchain (AD-3/AD-4; DEC-0101/0102): ruff, pyright (strict),
+# pytest 9.x, poethepoet, and pytest-cov. Exact pins give byte-identical results on
+# every machine; the committed uv.lock nails the rest.
 dev = [
-    # SSSF factory-gate essentials (do not remove)
+    # Left over from the retired factory. Removing them changes uv.lock, a later step.
     "mypy",
     "types-PyYAML",
     "pydantic",
@@ -152,23 +121,20 @@ dev = [
 
 # The QMF store engines, provisioned by default (see `default-groups` above).
 # This group installs the qmf-data workspace member, which transitively brings in
-# pyarrow + duckdb — the CT-11/CT-09 store engines qmf-data.store imports. Kept
-# out of `dev` so the SSSF factory-gate contract in `dev` stays byte-stable, and
-# named here so a reader sees exactly why the workspace installs a member package
+# pyarrow + duckdb — the CT-11/CT-09 store engines qmf-data.store imports. Named
+# here so a reader sees exactly why the workspace installs a member package
 # (Story 3.1; DEC-0117).
 store-engines = ["qmf-data"]
 
 # The independent QA verification suites (`qa/tests`, the separate `qa-verify`
 # gate; 2026-08-27 QA phase) use hypothesis for their property layers. It was
 # ad-hoc-installed during the QA phase and pruned by the next `uv sync`;
-# declared here so the gate always runs. Kept out of `dev` so the SSSF
-# factory-gate contract stays byte-stable.
+# declared here so the gate always runs.
 qa-suites = ["hypothesis>=6,<7"]
 
 # The forex calendar's pinned tzdata, provisioned by default. Installs the
 # qmf-calendar-forex workspace member so `tzdata==2025.2` is present for
-# import-time TZPATH / tzdb verification under `poe test`. Kept out of `dev` so
-# the SSSF factory-gate contract stays byte-stable (Story 4.1; DEC-0106). The other
+# import-time TZPATH / tzdb verification under `poe test` (Story 4.1; DEC-0106). The other
 # three carry only calendar files, which QMB and the node find in the env (C-38).
 calendar-tzdata = [
     "qmf-calendar-forex",
@@ -179,60 +145,54 @@ calendar-tzdata = [
 
 # The venue transport's pinned protobuf runtime, provisioned by default. Installs
 # the qmf-venue workspace member so `protobuf==7.36.0` is present for the in-house
-# proto compilation `qmf.venue.proto` performs under `poe test`. Kept out of `dev`
-# so the SSSF factory-gate contract stays byte-stable, and named here so a reader
+# proto compilation `qmf.venue.proto` performs under `poe test`. Named here so a reader
 # sees exactly why the workspace installs the venue member (Story 8.2; DEC-0141).
 venue-proto = ["qmf-venue"]
 
 # The indicators' pinned canonical arithmetic reference, provisioned by default.
 # Installs the qmf-indicators workspace member so `ta-lib==0.7.1` is present for the
 # import-time reference-configuration assertion `qmf.indicators` performs under
-# `poe test`. Kept out of `dev` so the SSSF factory-gate contract stays byte-stable,
-# and named here so a reader sees exactly why the workspace installs the indicators
-# member (Story 7.2; DEC-0127).
+# `poe test`. Named here so a reader sees exactly why the workspace installs the
+# indicators member (Story 7.2; DEC-0127).
 indicators-talib = ["qmf-indicators"]
 
 # The qml bot-authoring library, provisioned by default. Installs the qml workspace
 # member so `import qml` resolves under `poe test` / `poe types` without adding a
 # third-party pin — qml consumes only qmf-core, qmf-registry, and qmf-risk (Story
-# 11.1; DEC-0180). Kept out of `dev` so the SSSF factory-gate contract stays
-# byte-stable.
+# 11.1; DEC-0180).
 qml-lib = ["qml"]
 
 # The qmb experimentation/backtesting library plus CLI, provisioned by default.
 # Installs the qmb workspace member so `import qmb` and the `qmb` console script
 # resolve under `poe test` / `poe types`. click==8.4.2 and optuna==4.9.0 are
-# declared only in qmb's own pyproject (Story 13.1; DEC-0168). Kept out of `dev`
-# so the SSSF factory-gate contract stays byte-stable.
+# declared only in qmb's own pyproject (Story 13.1; DEC-0168).
 qmb-lib = ["qmb"]
 
 # The qmn trading node, provisioned by default. Installs the qmn workspace member
 # so `import qmn` resolves under `poe test` / `poe types`. qmn declares qmf-core,
 # qmf-risk (Story 26.1), qmf-venue (DEC-0186, DEC-0241), and qmb (Story 24.4);
-# protobuf stays declared only in qmf-venue. Kept out of `dev` so the SSSF
-# factory-gate contract stays byte-stable.
+# protobuf stays declared only in qmf-venue.
 qmn-lib = ["qmn"]
 
 # skylos is SEPARATE from `dev`, and not because it is optional - because it
 # does not install everywhere. It depends on tree-sitter-dart-orchard, which
 # publishes an sdist only and needs an MSVC toolchain to build on Windows; one
 # shared group would take ruff, pytest and mypy down with it on every
-# `uv sync`. adw_modules/quality.py treats every uv provisioning failure from
-# this group as TOOL UNAVAILABLE ("incomplete"), never as a pass or a fail.
+# `uv sync`.
 scan = ["skylos"]
 
 [tool.pytest.ini_options]
 addopts = "-n auto --dist worksteal"
-# SSSF contract: a bare `pytest` (and the gate's `pytest -q adws/tests`) targets
-# the factory suite. `poe test` passes `packages extensions qml qmb qmn` explicitly,
-# which overrides this default and collects the QMF package suites plus apps.
-testpaths = ["adws/tests"]
+# A bare `pytest` with no target stays inside these suites and never searches the whole
+# tree. `poe test` passes `packages extensions qml qmb qmn` explicitly, which overrides
+# this default and collects the QMF package suites plus apps.
+testpaths = ["tools/tests", "qml/tests", "qmb/tests", "qmn/tests"]
 markers = [
     "serial: requires exclusive access to shared resources",
     "live: credentialed live-venue smoke; not part of the credential-free gate",
 ]
 # QMF package sources on the import path, so `qmf.*` resolves from src/ without
-# an install at Tier 1 (additive; adws/tests never import qmf and are unaffected).
+# an install at Tier 1.
 pythonpath = [
     "packages/qmf-core/src",
     "packages/qmf-registry/src",
@@ -254,18 +214,8 @@ pythonpath = [
     "tools",
 ]
 
-[tool.mypy]
-# SSSF gate: `mypy adws` only. QMF workspace code is type-checked by pyright
-# (strict) via `poe types`; mypy stays scoped to the factory machinery.
-python_version = "3.10"
-files = ["adws"]
-# adw_data/ is runtime session output and stamped prompt files, not source.
-exclude = "adws/adw_data"
-
 [tool.ruff]
-# adw_data/ holds runtime session output and the stamped prompt/config files,
-# copied verbatim from the skill template - not source this project owns.
-# recorder/ is the SSSF status-dashboard tooling stamped in at baseline; it is
+# recorder/ is status-dashboard tooling stamped in at baseline; it is
 # not QMF roster code and not linted here (the same "scope to shipped code"
 # posture the CI applies to the AI-defect scanner).
 # tools/tests/fixtures/ holds deliberately-broken sample modules (money-path
@@ -275,13 +225,12 @@ exclude = "adws/adw_data"
 # quality surface (Story 40.1; AR-Q01/AR-Q11). Parent ruff must not own it —
 # QMA pins ruff 0.16.5 while this workspace pins 0.16.3.
 # qa/ is the independent verification corpus (OR-10 / skylos exclude twin): not
-# shipped code; SSSF `ruff check .` must not own its thousands of assert-S101 hits.
+# shipped code; a root `ruff check .` must not own its thousands of assert-S101 hits.
 # _docwork/ is documentation-factory scratch (skylos twin) — same ruling.
 # tests/ and examples/ at the worktree root are empty path anchors so the nested
 # qmx-agents quality command `ruff check packages tests examples` (run from this
 # CWD via `uv run --project qmx-agents …`) does not E902 on missing paths.
 extend-exclude = [
-    "adws/adw_data",
     "recorder",
     "tools/tests/fixtures",
     "qmx-agents",
@@ -298,8 +247,7 @@ line-length = 100
 # defaults while the `ignore`/`per-file-ignores` below referenced rules (PLW1510,
 # S101) that were never enabled — the gate read far stronger than it was. The
 # families below are the pragmatic strong set; the noisy design-threshold and
-# false-positive-prone rules are held out in `ignore` with a reason each, and adws
-# (read-only factory machinery, see per-file-ignores) is kept at its baseline.
+# false-positive-prone rules are held out in `ignore` with a reason each.
 select = ["E", "W", "F", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
 ignore = [
     # every subprocess call inspects returncode itself - explicit check= is noise here
@@ -323,12 +271,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# adws/ is the SSSF factory machinery and is READ-ONLY in this worktree, yet the
-# SSSF merge gate runs `ruff check .` over the WHOLE tree. Exempt adws from every
-# family newly enabled above (everything beyond ruff's E4/E7/E9/F + F baseline) so
-# it keeps linting byte-identically to baseline and the root gate stays green with
-# zero adws edits. Only adds the carve-out; nothing here weakens packages/ code.
-"adws/**" = ["E1", "E2", "E3", "E5", "W", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
 # Tests assert (S101 is the whole point of a test); use fake tokens/secrets as
 # fixtures (S105/S106/S107); and do deliberate local imports to exercise import-time
 # behaviour (PLC0415). Test files may also reach into a package's private benchmark
@@ -342,8 +284,6 @@ ignore = [
 # Example scripts use `assert` as a teaching/verification device (like a doctest —
 # it shows the reader the expected result); they carry no other carve-out.
 "packages/*/examples/*" = ["S101"]
-"extensions/*/examples/*" = ["S101"]
-"qml/examples/*" = ["S101"]
 "qmb/examples/*" = ["S101"]
 # QMB composition-root sandbox runner: stdlib process management (B-5).
 # Dynamically-evasive bots are out of V1 scope; this is not a restricted interpreter.
@@ -354,9 +294,8 @@ ignore = [
 "qmb/src/qmb/orchestrator/*" = ["S404"]
 
 [tool.pyright]
-# Strict, workspace-wide over the QMF code (AR-11). adws is mypy's job, not
-# pyright's, so it is not included here.
-include = ["packages", "extensions", "qml", "qmb", "qmn", "tools"]
+# Strict, workspace-wide over the QMF code (AR-11).
+include =["packages", "extensions", "qml", "qmb", "qmn", "tools"]
 # Pin the analysis platform to the ratified tier-1 OS (AR-04/AR-23: Windows).
 # The orchestrator's process-watch seam uses the Windows process APIs
 # (ctypes.WinDLL); pinning makes the battery CI job on a Linux runner render
@@ -402,9 +341,7 @@ pythonVersion = "3.14"
 #
 # What is subtracted, and why: the non-code trees — transcripts, planning material,
 # HTML artifacts, prose — which are noise to a code scanner and a false-positive
-# farm for a secret scanner; plus `adws`, the software-factory machinery, held
-# completely out of scope so no agent in any lane ever "fixes" the factory while
-# chasing a Skylos alert.
+# farm for a secret scanner.
 #
 # Matching semantics (skylos/core/file_discovery.py::should_exclude_path): a
 # pattern with no slash and no wildcard matches a path COMPONENT at any depth,
@@ -421,9 +358,8 @@ pythonVersion = "3.14"
 # help: it feeds the same set the probe ignores. This list stays the one source
 # of truth; CI derives from it, and a local `skylos .` still reads it directly.
 exclude = [
-    "adws",          # software-factory machinery — never touched by a scan-driven fix
-    "_bmad",         # BMad planning machinery — same ruling as adws
-    "qa",            # the independent QA verification corpus (2026-08-27 phase): per-epic
+    "_bmad",         # BMad planning machinery
+    "qa",           # the independent QA verification corpus (2026-08-27 phase): per-epic
                      # suites, trace artifacts and the qa-verify runner — verification
                      # machinery, not shipped code; the OR-10 gate numbers were ruled over
                      # the shipped tree, which this corpus deliberately sits outside
@@ -434,8 +370,7 @@ exclude = [
     "_bmad-output",  # planning artifacts
     "_docwork",      # documentation-factory scratch
     "tracker",       # run tracking
-    "queue",         # agent briefs
-    "specs",         # specification prose
+    "specs",        # specification prose
     "app_docs",      # transcripts and HTML artifacts
     "qmx-agents",    # nested QMA uv workspace — own lockfile and quality surface (Story 40.1)
 ]
@@ -503,7 +438,7 @@ max_dead_code = 1000000
 test-all = "python tools/test_all.py"
 # The canonical QMF commands (AR-11), byte-identical on every machine. ruff /
 # ruff-format / pyright / pytest target the shipped workspace (packages/,
-# extensions/, qml/, qmb/, tools/); the SSSF gate independently covers adws.
+# extensions/, qml/, qmb/, tools/).
 fmt = "ruff format packages extensions qml qmb qmn tools"
 fmt-check = "ruff format --check packages extensions qml qmb qmn tools"
 lint = "ruff check packages extensions qml qmb qmn tools"
@@ -538,7 +473,7 @@ build-all = "uv build --all-packages"
 isolated-build = "python tools/isolated_build_check.py"
 
 [tool.poe.tasks.check]
-# Tier 1 — every factory work unit. Format, lint, strict types, unit tests +
+# Tier 1. Format, lint, strict types, unit tests +
 # coverage floor, the workspace-tool suite, the money-path float scanner (NFR-02
 # enforcing FR-001), the ambient-nondeterminism scanner (NFR-02 enforcing FR-002),
 # the mock-data scanner (no constructed stand-in data ships), and the secret-scan gate

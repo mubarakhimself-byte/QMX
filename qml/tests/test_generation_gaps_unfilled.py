@@ -57,7 +57,6 @@ T = TypeVar("T")
 
 _REPO = Path(__file__).resolve().parents[2]
 _QML_SRC = _REPO / "qml" / "src" / "qml"
-_QML_EXAMPLES = _REPO / "qml" / "examples"
 _QMB_SRC = _REPO / "qmb" / "src" / "qmb"
 _AGENT_PACKAGES = _REPO / "qmx-agents" / "packages"
 _CONTRACTS = _REPO / "docs" / "contracts"
@@ -377,7 +376,6 @@ def test_no_prose_in_this_epic_fills_gap_0063() -> None:
     roots = (
         _QML_SRC / "generation",
         _QML_SRC / "host",
-        _QML_EXAMPLES,
     )
     fills: list[str] = []
     for root in roots:

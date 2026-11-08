@@ -211,17 +211,3 @@ def test_e1_i03_single_fp1_implementation_only_in_qmf_core() -> None:
         "packages computing an fp1 fingerprint outside qmf-core (DEC-0108 single "
         f"implementation): {sorted(offenders)}"
     )
-
-
-# E1-I04 — SSSF factory-gate stamp preserved -----------------------------------
-def test_e1_i04_sssf_factory_gate_stamp_survives() -> None:
-    """Story 1.1 AC / root pyproject comments: the workspace-root pyproject preserves
-    the SSSF gate contract — the [dependency-groups] dev list and
-    testpaths = ["adws/tests"] survive, and adws/tests is present and runnable."""
-    root_pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "[dependency-groups]" in root_pyproject
-    assert 'testpaths = ["adws/tests"]' in root_pyproject
-    assert "\ndev = [" in root_pyproject
-    adws_tests = ROOT / "adws" / "tests"
-    assert adws_tests.is_dir()
-    assert list(adws_tests.glob("test_*.py")), "adws/tests carries no runnable test files"

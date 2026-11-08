@@ -57,7 +57,7 @@ SOURCE: Final = Path(
     )
 )
 ROOT: Final = Path(__file__).resolve().parents[3]
-QUESTIONS: Final = ROOT / "scripts" / "probes" / "library" / "questions.json"
+QUESTIONS: Final = ROOT / "scripts" / "live" / "library" / "questions.json"
 LANE_LOCK: Final = Path("D:/QMX-worktrees/.engine-lane-lock")
 OPERATOR: Final = Principal("operator")
 TOP: Final = 5

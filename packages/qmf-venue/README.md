@@ -22,10 +22,7 @@ connection manager and first cTrader adapter:
 | [CT-21](../../docs/contracts/ct-21-venue-secret-session.yaml) | `qmf.venue.connection` | Opaque `SecretRef` / session seam; account bindings; sole in-memory secret-value holder |
 
 Canonical component spec: [`docs/components/qmf-venue.md`](../../docs/components/qmf-venue.md).
-Reference usages: [`examples/account_binding_usage.py`](examples/account_binding_usage.py)
-(CT-21) and [`examples/observation_events_usage.py`](examples/observation_events_usage.py)
-(CT-20). Build, lint, type-check, and test through the workspace `poe` tasks —
-never in isolation.
+Build, lint, type-check, and test through the workspace `poe` tasks — never in isolation.
 
 ## ConnectionManager authority
 
