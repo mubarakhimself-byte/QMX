@@ -59,8 +59,9 @@ def test_a_library_sizer_is_enrolled() -> None:
 
 
 def test_the_exit_contract_feeds_only_host_evidence() -> None:
-    """A stop is fed its bar each bar, a target the entry and the stop once, and a per-bar exit
-    nothing, which is exactly what `_Run` builds (`unit.py:570-577`, `:774-779`, `:686`)."""
+    """A stop is read with nothing once at entry to get its level, then fed its bar each bar, a
+    target the entry and the stop once, and a per-bar exit nothing, which is exactly what `_Run`
+    builds (`unit.py:756-760`, `:570-577`, `:774-779`, `:686`)."""
     bar = {
         "open": Decimal("1.0850"),
         "high": Decimal("1.0855"),
@@ -69,12 +70,12 @@ def test_the_exit_contract_feeds_only_host_evidence() -> None:
     }
 
     fed = {
-        use: {frozenset(evidence) for evidence in contracts._host_evidence(use, bar, {})}
+        use: {frozenset(evidence) for _, evidence in contracts._host_calls(use, [bar], {})}
         for use in ExitUse
     }
 
     assert fed == {
-        ExitUse.STOP: {frozenset({"series"})},
+        ExitUse.STOP: {frozenset({"series"}), frozenset()},
         ExitUse.TARGET: {frozenset({"entry_price", "stop_price"})},
         ExitUse.PER_BAR: {frozenset()},
     }

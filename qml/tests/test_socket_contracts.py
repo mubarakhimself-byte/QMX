@@ -229,34 +229,41 @@ def _exit_breaks(use: ExitUse, block: Block, params: Mapping[str, Decimal]) -> l
     breaks: list[str] = []
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
-        bars = _bars()[:1] if use is ExitUse.TARGET else _bars()
-        for i, bar in enumerate(bars):
-            for evidence in _host_evidence(use, bar, params):
-                answer = instance.update(evidence)
-                state = cast("object", answer.state) if isinstance(answer, Signal) else None
-                if use is ExitUse.PER_BAR:
-                    answered = isinstance(state, bool)
-                else:
-                    answered = isinstance(answer, Decimal) and answer.is_finite()
-                if answer is None or answered:
-                    continue
-                breaks.append(f"exit contract, {side.value} bar {i}: {answer!r} is not {wanted}")
+        for where, evidence in _host_calls(use, _bars(), params):
+            answer = instance.update(evidence)
+            state = cast("object", answer.state) if isinstance(answer, Signal) else None
+            if use is ExitUse.PER_BAR:
+                answered = isinstance(state, bool)
+            else:
+                answered = isinstance(answer, Decimal) and answer.is_finite()
+            if answer is None or answered:
+                continue
+            breaks.append(f"exit contract, {side.value} {where}: {answer!r} is not {wanted}")
     return breaks
 
 
-def _host_evidence(
-    use: ExitUse, bar: Mapping[str, Decimal], params: Mapping[str, Decimal]
-) -> list[Mapping[str, object]]:
-    """The evidence the unit host hands an exit of this use, and no other key: a stop gets its
-    bar each bar (`unit.py:570-577`), a target the entry and the stop once (`unit.py:774-779`),
-    and a per-bar exit nothing at all (`_Run.exits`, `unit.py:686`)."""
+def _host_calls(
+    use: ExitUse, bars: Sequence[Mapping[str, Decimal]], params: Mapping[str, Decimal]
+) -> list[tuple[str, Mapping[str, object]]]:
+    """The calls the unit host makes to an exit of this use, and the evidence each carries: a stop
+    is read with nothing once at entry to get its level (`unit.py:756-760`), then fed its bar each
+    bar (`unit.py:570-577`); a target is read once at entry with the entry and the stop
+    (`unit.py:774-779`); and a per-bar exit is read with nothing at each new bar (`:686`)."""
     match use:
         case ExitUse.STOP:
-            return [{"series": bar, **params}]
+            calls: list[tuple[str, Mapping[str, object]]] = [("at entry", {})]
+            for i, bar in enumerate(bars):
+                calls.append((f"bar {i}", {"series": bar, **params}))
+            return calls
         case ExitUse.TARGET:
-            return [{"entry_price": Decimal("1.0850"), "stop_price": Decimal("1.0820"), **params}]
+            entry: Mapping[str, object] = {
+                "entry_price": Decimal("1.0850"),
+                "stop_price": Decimal("1.0820"),
+                **params,
+            }
+            return [("at entry", entry)]
         case ExitUse.PER_BAR:
-            return [{}]
+            return [(f"bar {i}", {}) for i in range(len(bars))]
 
 
 def _run(side: Side) -> list[dict[str, Decimal]]:
@@ -283,14 +290,9 @@ def _never_acts(use: ExitUse, block: Block, params: Mapping[str, Decimal]) -> li
     breaks: list[str] = []
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
-        if use is ExitUse.TARGET:
-            answers = [instance.update(e) for e in _host_evidence(use, _bars()[0], params)]
-        else:
-            answers = [
-                instance.update(evidence)
-                for bar in _run(side)
-                for evidence in _host_evidence(use, bar, params)
-            ]
+        answers = [
+            instance.update(evidence) for _, evidence in _host_calls(use, _run(side), params)
+        ]
         acted = (
             any(isinstance(a, Signal) and a.state for a in answers)
             if use is ExitUse.PER_BAR
@@ -584,10 +586,10 @@ def test_the_per_bar_exit_closes_at_bar_48_through_the_host_and_a_capped_exit_re
 
 def test_an_exit_must_answer_what_its_entry_declares() -> None:
     assert _exit_breaks(ExitUse.STOP, _Fake(1.082), {})[:1] == [
-        "exit contract, long bar 0: 1.082 is not a price level"
+        "exit contract, long at entry: 1.082 is not a price level"
     ]
     assert _exit_breaks(ExitUse.STOP, _Fake(Signal(state=True)), {})[:1] == [
-        "exit contract, long bar 0: Signal(state=True, value=None) is not a price level"
+        "exit contract, long at entry: Signal(state=True, value=None) is not a price level"
     ]
     assert _exit_breaks(ExitUse.PER_BAR, _Fake(Signal(state=1)), {})[:1] == [  # pyright: ignore[reportArgumentType]
         "exit contract, long bar 0: Signal(state=1, value=None) is not a Signal"
@@ -595,6 +597,19 @@ def test_an_exit_must_answer_what_its_entry_declares() -> None:
     assert _declares(OutputType.QUANTITY) == [
         "exit contract: its entry declares quantity, not level or exit_action"
     ]
+
+
+def test_a_stop_that_raises_on_the_entry_read_fails_the_exit_contract() -> None:
+    """The host reads a stop with nothing once at entry to get its level (`unit.py:756-760`), so a
+    stop that needs its bar must fail the contract rather than pass it and raise in the unit."""
+
+    def raises_on_entry(evidence: Mapping[str, object]) -> Decimal:
+        if not evidence:
+            raise KeyError("series")
+        return Decimal("1.0800")
+
+    with pytest.raises(KeyError, match="series"):
+        _exit_breaks(ExitUse.STOP, _Fake(raises_on_entry), {})
 
 
 def test_an_exit_that_never_acts_on_a_position_it_should_close_breaks_the_exit_contract() -> None:
