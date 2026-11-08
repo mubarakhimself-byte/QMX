@@ -57,7 +57,6 @@ from qma.harness.tools import HostRead
 from qma.telemetry import THIS_PC, configured, target
 from qmf.core import TypedRefusal, is_refusal
 from qml.compile import CompileContext, CompiledUnit, compile_unit
-from qml.numbers import InstrumentRecord, parse_record
 from qmx_apps.artifacts import Ending, Lander
 from qmx_apps.artifacts import Landing as AppLanding
 from qmx_apps.artifacts import Ticket as AppTicket
@@ -162,7 +161,7 @@ from qmx_router.server import (
     node_app,
 )
 from qmx_tools.functions import entry_clashes, entry_items, write_entry_status
-from qmx_tools.gather import FIXTURE_RECORDS, check_unit, entry_problems, gather
+from qmx_tools.gather import check_unit, entry_problems, gather
 from qmx_tools.service import attach_node
 from uvicorn.config import STARTUP_FAILURE
 
@@ -200,7 +199,7 @@ from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, appe
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 from qmx_host.vault_acl import KeyRefused, VaultRefused, owner_only, read_key
-from qmx_host.venue_records import VenueRecords, node_call
+from qmx_host.venue_records import VenueRecords, node_call, record_markets, refresh_s
 
 type Role = Literal["pc", "node", "server"]
 """`server` is the node role plus the Library service: on the server the one `qmx_host` process
@@ -1203,7 +1202,17 @@ async def serve(
                     store=store,
                 )
                 records = records_job(home, control, role, door, store, nodes)
-                venue_records = VenueRecords(node_call(runtime), store) if role == "pc" else None
+                node_settings = control.settings_get("node")
+                venue_records = (
+                    VenueRecords(
+                        node_call(runtime),
+                        store,
+                        every_s=refresh_s(node_settings),
+                        markets=record_markets(node_settings),
+                    )
+                    if role == "pc"
+                    else None
+                )
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
@@ -1802,7 +1811,7 @@ class LanderLibrary:
 
     def __init__(self, store: Store) -> None:
         self.store = store
-        self._units: dict[str, RunUnit | str | None] = {}
+        self._units: dict[str, tuple[Mapping[str, JsonObject], RunUnit | str]] = {}
 
     def find(self, item: str) -> str | None:
         head = self.store.head(item, MAIN)
@@ -1849,24 +1858,30 @@ class LanderLibrary:
             seen.add(item)
 
     def unit(self, pin: str) -> RunUnit | str | None:
-        """The unit document `pin` names, compiled with the blocks and records `gather` finds;
+        """The unit document `pin` names, compiled with the blocks and records `gather` finds now;
         why it does not compile; or None when the pin names an object of another kind. An object
-        never changes, so each pin compiles once per host."""
-        if pin not in self._units:
-            self._units[pin] = self._compiled(pin)
-        return self._units[pin]
-
-    def _compiled(self, pin: str) -> RunUnit | str | None:
+        never changes but the records it reads do, so a pin compiles again only when they moved.
+        The documents are the key, because a fixture, a first item and an item replacing an
+        archived one can all read as version 1."""
         view = self.store.get(OPERATOR_READ, pin)
         if view.kind != "unit":
             return None
         document = cast(dict[str, object], view.fields)
-        context = gather(self.store, document).context
-        compiled = compile_unit(document, context)
-        if not isinstance(compiled, CompiledUnit):
+        gathered = gather(self.store, document)
+        held = self._units.get(pin)
+        if held is not None and held[0] == gathered.record_documents:
+            return held[1]
+        compiled = compile_unit(document, gathered.context)
+        found: RunUnit | str
+        if isinstance(compiled, CompiledUnit):
+            found = RunUnit(
+                document, gathered.context, compiled, gathered.record_documents, gathered.warnings
+            )
+        else:
             first = compiled[0].message if compiled else "the unit does not compile"
-            return f"the unit {pin} does not compile: {first}"
-        return RunUnit(document, context, compiled)
+            found = f"the unit {pin} does not compile: {first}"
+        self._units[pin] = (gathered.record_documents, found)
+        return found
 
     def compiled_fingerprint(self, unit: str) -> str | None:
         found = self.unit(unit) if self.holds(unit) else None
@@ -1897,22 +1912,14 @@ class RunUnit:
     document: dict[str, object]
     context: CompileContext
     compiled: CompiledUnit
+    record_documents: Mapping[str, JsonObject]
+    fixture_records: tuple[str, ...]
+    """`gather`'s warnings. Any other warning leaves a market with no record, and such a unit does
+    not compile, so on a run these only name markets on a fixture."""
 
     @property
     def markets(self) -> tuple[str, ...]:
         return tuple(market.market_id for market, _ in self.compiled.plan.markets)
-
-
-def _record_file(record: InstrumentRecord) -> Path | None:
-    """The fixture file `gather` read `record` from: records are QML's fixtures until C-02."""
-    for path in sorted(FIXTURE_RECORDS.glob("*.json")):
-        parsed = parse_record(json.loads(path.read_text("utf-8")))
-        if not is_refusal(parsed) and (parsed.value.venue, parsed.value.symbol) == (
-            record.venue,
-            record.symbol,
-        ):
-            return path
-    return None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -1922,9 +1929,10 @@ class QmbRun:
 
     For a unit document it lays the run out before the job starts (Part B AD-202 step 1), so
     the tester reads files only: `in/request.json` with the core's fields filled (among them
-    `[qmb] gap_bars_refuse` and `calibrated_min_fills`, and the study's `allow_gaps` unless the
-    request sets its own), the unit, its pinned blocks, its markets' records, and each market's
-    bid and ask bars for the window. The
+    `[qmb] gap_bars_refuse` and `calibrated_min_fills`, `allow_gaps` as a named study states it
+    and otherwise as the request does, and `fixture_records` naming any market on a test fixture),
+    the unit, its pinned blocks, the record documents `gather` read, and each market's bid and ask
+    bars for the window. The
     bars are the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` that dukascopy-node
     saves, read from `[qmb] bars` (default the market store's `bars/` folder)."""
 
@@ -2008,11 +2016,13 @@ class QmbRun:
             "gap_bars_refuse": settings.get("gap_bars_refuse"),
             "calibrated_min_fills": settings.get("calibrated_min_fills"),
             "motion": "on",
-            "allow_gaps": study.get("allow_gaps", False),
+            "allow_gaps": False,
             **ticket.request,
+            **({"allow_gaps": study["allow_gaps"]} if "allow_gaps" in study else {}),
             "kind": run_kind(ticket.job),
             "run_id": ticket.run_id,
             "markets": list(found.markets),
+            "fixture_records": list(found.fixture_records),
         }
         root.mkdir(parents=True, exist_ok=True)
         (root / "request.json").write_text(json.dumps(request, indent=2), "utf-8")
@@ -2023,10 +2033,10 @@ class QmbRun:
             (block / "block.py").write_bytes(source)
             (block / "entry.json").write_bytes(found.context.entries[pin])
         (root / "records").mkdir(exist_ok=True)
-        for market, record in found.context.records.items():
-            source_file = _record_file(record)
-            if source_file is not None:
-                shutil.copyfile(source_file, root / "records" / f"{market}.json")
+        for market, document in found.record_documents.items():
+            (root / "records" / f"{market}.json").write_text(
+                json.dumps(document, indent=2), "utf-8"
+            )
         for market, sides in bars.items():
             (root / "bars" / market).mkdir(parents=True, exist_ok=True)
             for side, path in sides.items():

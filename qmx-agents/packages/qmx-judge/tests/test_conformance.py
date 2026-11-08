@@ -99,7 +99,9 @@ class World:
     dummy: str
     backtest: Mapping[str, Any]
 
-    def conformance(self, app_id: str, version: str = QMB_VERSION) -> ConformanceRun:
+    def conformance(self, app_id: str, version: str | None = None) -> ConformanceRun:
+        asked = version or (QMB_VERSION if app_id == "qmb" else "1.0.0")
+
         def run_job(
             app: str, job: str, inputs: Mapping[str, object], principal: str
         ) -> Mapping[str, object]:
@@ -108,7 +110,7 @@ class World:
             )
 
         return run_conformance(
-            app_id, version, run_job=run_job, library=self.library, principal="operator"
+            app_id, asked, run_job=run_job, library=self.library, principal="operator"
         )
 
     def landed(self, item: str, trades: list[dict[str, Any]]) -> str:

@@ -74,6 +74,7 @@ type SettingsSection = Literal[
     "records",
     "journals",
     "apps",
+    "node",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -357,6 +358,31 @@ JOURNALS_DEFAULTS: Final[Document] = {"settle_days": 1}
 """`[journals]` with its harvest default: a journal month closes a day after it ends, for late rows
 from a machine whose clock was off."""
 
+NODE_DEFAULTS: Final[Document] = {
+    "record_markets": [
+        {
+            "symbol": "EURUSD",
+            "market_id": "eurusd",
+            "klass": "fx",
+            "calendar_ref": "fx-24x5@1",
+            "zone": "America/New_York",
+            "day_boundary": "17:00",
+        },
+        {
+            "symbol": "XAUUSD",
+            "market_id": "gold",
+            "klass": "metal",
+            "calendar_ref": "metals-24x5@1",
+            "zone": "America/New_York",
+            "day_boundary": "17:00",
+        },
+    ],
+    "records_refresh_s": 86_400,
+}
+"""`[node]` with every default: the markets whose instrument records land from the node's cTrader
+read, starting at the dummy's two, and how often that read runs again, starting at one day. A row
+holds a market's symbol and what cTrader does not state about it, each as text."""
+
 CTRADER_MCP: Final[Document] = {"credential_ref": "qmx/ctrader-mcp", "venue": "ctrader"}
 """The `[mcp_servers] ctrader` row's fixed keys (C-36): cTrader's Remote MCP, shipped off. He
 pastes its url and one demo account's token, which stays in Credential Manager. `venue` makes the
@@ -446,6 +472,28 @@ def _check_units(values: Document) -> None:
         parse_table(_merged(UNITS_DEFAULTS, values)["identity_table"])
     except IdentityTableError as error:
         raise ControlError("invalid_units", str(error)) from error
+
+
+def _check_node(values: Document) -> None:
+    """Refuse a `[node]` row that is not its six facts as text, or a refresh that is no positive
+    number of seconds, before it is saved."""
+    rows = values.get("record_markets", [])
+    keys = cast("list[dict[str, str]]", NODE_DEFAULTS["record_markets"])[0].keys()
+    good = isinstance(rows, list) and all(
+        isinstance(row, dict)
+        and row.keys() == keys
+        and all(isinstance(fact, str) and fact for fact in row.values())
+        for row in rows
+    )
+    if not good:
+        raise ControlError(
+            "invalid_settings", f"[node] record_markets rows each hold {', '.join(keys)} as text."
+        )
+    every = values.get("records_refresh_s", 1)
+    if isinstance(every, bool) or not isinstance(every, int | float) or every <= 0:
+        raise ControlError(
+            "invalid_settings", "[node] records_refresh_s is a positive number of seconds."
+        )
 
 
 def _check_telemetry(values: Document, engine: Document) -> None:
@@ -1097,6 +1145,8 @@ class ControlService:
                 values = _merged(JOURNALS_DEFAULTS, values)
             if section == "apps":
                 values = _merged(APPS_DEFAULTS, values)
+            if section == "node":
+                values = _merged(NODE_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:
@@ -1267,6 +1317,8 @@ class ControlService:
             _check_units(values)
         if section == "qmb":
             self._check_default_tester(values)
+        if section == "node":
+            _check_node(values)
         if section == "backup":
             _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
         elif section in ("brokers", "connections"):

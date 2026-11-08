@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -42,8 +42,13 @@ from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
     landers,
     study_check,
 )
+from qmx_host.venue_records import (  # pyright: ignore[reportMissingTypeStubs]
+    Market,
+    land,
+    records_of,
+)
 from qmx_library.port import Draft
-from qmx_library.principal import Principal, drafts_ref
+from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
 from qmx_tools.functions import domain_functions
 from qmx_tools.gather import DUMMY, template
@@ -190,7 +195,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.2"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.3"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -285,19 +290,6 @@ def test_an_agent_writes_adx_above_25_and_a_job_runs_it(world: World) -> None:
     assert at_25["labels"]["zero_trades"] is False
     assert at_25["measures"]["trades"] == 1
     assert at_99["labels"]["zero_trades"] is True
-
-
-def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: World) -> None:
-    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
-
-    fills = report(world.store, answer["result_id"])["fills"]
-    entries = [fill for fill in fills if fill["kind"] == "entry"]
-    assert entries
-    assert all(
-        Decimal(f["quantity"])
-        == Decimal(f["receipt_quantity"]).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-        for f in entries
-    )
 
 
 def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
@@ -502,6 +494,136 @@ def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -
     assert answer["status"] == "finished"
     assert report(world.store, answer["result_id"])["holes"] == []
     assert (written["gap_bars_refuse"], written["calibrated_min_fills"]) == (4, 7)
+
+
+type OnMain = Callable[..., str]
+
+
+@pytest.fixture
+def on_main(world: World) -> Generator[OnMain]:
+    """What the node read lands on the real store through the host's own `venue_records`. Each item
+    is withdrawn after its test, so the module's other literals stay on the fixtures."""
+    items: set[str] = set()
+
+    def node_read(market: Market, **symbol: int) -> str:
+        answer = {
+            "schema_version": "qmx.node.records/1",
+            "venue": {"name": "icmarkets-ctrader", "platform": "ctrader", "sandbox": "demo"},
+            "account": {"id": "9000", "world": "demo", "leverage": "30"},
+            "instruments": [
+                {
+                    "symbol": market.symbol,
+                    "quote_currency": "USD",
+                    "schedule_zone": "UTC",
+                    "trading_mode": "ENABLED",
+                    **symbol,
+                }
+            ],
+        }
+        rows = {row.kind: row for row in land(world.store, records_of(answer, [market]))}
+        assert rows["instrument"].outcome == "landed"
+        items.add(rows["instrument"].item)
+        return rows["instrument"].item
+
+    yield node_read
+    for item in items:
+        world.store.archive(OPERATOR, item, "the test is over")
+
+
+GOLD = Market("XAUUSD", "gold", "metal", "metals-24x5@1", "America/New_York", "17:00")
+GOLD_SYMBOL = {"digits": 2, "pip_position": 1, "lot_size": 10_000}
+EURUSD = Market("EURUSD", "eurusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
+GBPUSD = Market("GBPUSD", "gbpusd", "fx", "fx-24x5@1", "America/New_York", "17:00")
+FX_SYMBOL = {"digits": 5, "pip_position": 4, "lot_size": 10_000_000}
+EURUSD_ON_THE_FIXTURE = (
+    "no Library record for this market, so it reads QML's test fixture: fx.eurusd reads eurusd.json"
+)
+
+
+def laid_record(world: World, run_id: str, market_id: str) -> dict[str, Any]:
+    """The record a finished run's folder holds, as the tester read it."""
+    folder = Volume(world.runtime.home, "qmb").root / "data" / "runs" / run_id / "in" / "records"
+    return cast("dict[str, Any]", json.loads((folder / f"{market_id}.json").read_text("utf-8")))
+
+
+def on_main_now(world: World, item: str) -> dict[str, Any]:
+    """An item's fields at its head on `main`, with the version the Library counts for it."""
+    head = world.store.head(item, MAIN)
+    assert head is not None
+    return {**fields(world.store, head[0]), "record_version": head[1]}
+
+
+def test_a_record_on_main_reaches_the_run_and_its_fills(world: World, on_main: OnMain) -> None:
+    item = on_main(GOLD, **GOLD_SYMBOL, step_volume=1_000, min_volume=1_000)
+
+    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
+
+    laid = laid_record(world, answer["run_id"], "metal.xauusd")
+    gold = [
+        fill
+        for fill in report(world.store, answer["result_id"])["fills"]
+        if fill["market_id"] == "metal.xauusd"
+    ]
+    assert laid == on_main_now(world, item)
+    assert (laid["lot_step"], laid["record_version"]) == ("0.1", 1)
+    assert gold
+    assert {Decimal(fill["quantity"]) % Decimal("0.1") for fill in gold} == {Decimal(0)}
+    assert fields(world.store, answer["result_id"])["labels"]["fixture_records"] == [
+        EURUSD_ON_THE_FIXTURE
+    ]
+
+
+def test_a_market_with_only_a_library_record_runs(world: World, on_main: OnMain) -> None:
+    item = on_main(GBPUSD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    bars = Path(str(world.control.settings_get("qmb")["bars"]))
+    for side in ("bid", "ask"):
+        month = f"m15-{side}-2025-03-01-2025-04-01.csv"
+        shutil.copyfile(bars / f"eurusd-{month}", bars / f"gbpusd-{month}")
+    document = template(DUMMY)
+    document["markets"] = [
+        {
+            "market_id": "fx.gbpusd",
+            "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": "GBPUSD"},
+        }
+    ]
+    draft = Draft("unit", "unit-gbpusd", "gbpusd", fields=cast("Any", document))
+    unit = world.store.put(
+        OPERATOR, draft, on=drafts_ref("unit-gbpusd"), expected_head=None
+    ).object_id
+
+    answer = world.backtest["backtest_run"](unit=unit, **GAPS)["result"]
+
+    assert answer["status"] == "finished"
+    assert laid_record(world, answer["run_id"], "fx.gbpusd") == on_main_now(world, item)
+    assert fields(world.store, answer["result_id"])["labels"]["fixture_records"] == []
+
+
+def test_a_record_moved_on_main_shows_in_the_next_run(world: World, on_main: OnMain) -> None:
+    on_main(EURUSD, **FX_SYMBOL, step_volume=100_000, min_volume=100_000)
+    run = world.backtest["backtest_run"]
+
+    first = run(unit=world.dummy, **GAPS)["result"]
+    on_main(EURUSD, **FX_SYMBOL, step_volume=100_000, min_volume=500_000)
+    second = run(unit=world.dummy, **GAPS)["result"]
+
+    before = laid_record(world, first["run_id"], "fx.eurusd")
+    after = laid_record(world, second["run_id"], "fx.eurusd")
+    assert (before["min_lot"], before["record_version"]) == ("0.01", 1)
+    assert (after["min_lot"], after["record_version"]) == ("0.05", 2)
+
+
+def test_a_study_forbidding_gaps_beats_a_chat_allowing_them(world: World) -> None:
+    spec = {"origin": "written", "preset": "shipped", "markets": "admitted", "allow_gaps": False}
+    draft = Draft("study-spec", "study-no-gaps", "no gaps", fields=cast("Any", spec))
+    world.store.register_checker(STUDY_CHECKER, study_check)
+    study = world.store.put(OPERATOR, draft, on="main", expected_head=None).object_id
+
+    answer = world.backtest["backtest_run"](unit=world.dummy, study=study, **GAPS)["result"]
+
+    assert (answer["status"], fields(world.store, answer["result_id"]).get("reason")) == (
+        "failed",
+        SUNDAY_HOLE,
+    )
 
 
 def test_the_first_start_click_keeps_qmb_running_at_every_host_start(

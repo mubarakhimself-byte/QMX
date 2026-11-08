@@ -59,7 +59,13 @@ from qmx_host.connect_compute import ports as compute_ports
 from qmx_host.connect_logs import MISSING_PROGRAMS, monitor, monitoring_on
 from qmx_host.jobs import Stopped
 from qmx_host.venue_records import Call as NodeCall
-from qmx_host.venue_records import bound_accounts, read_and_land, said, self_test_passed
+from qmx_host.venue_records import (
+    bound_accounts,
+    read_and_land,
+    record_markets,
+    said,
+    self_test_passed,
+)
 
 if TYPE_CHECKING:
     from qmx_apps.supervisor import Supervisor
@@ -721,8 +727,9 @@ def _land_records(run: Run) -> None:
     if control is None or not self_test_passed(call):
         run.say("records: they land on main once the self-test on a bound account passes")
         return
+    markets = record_markets(control.settings_get("node"))
     for account in bound_accounts(call):
-        run.say(said(read_and_land(call, control.library.store, account)))
+        run.say(said(read_and_land(call, control.library.store, account, markets)))
 
 
 def _apps_here(names: Sequence[str], run: Run) -> list[str]:

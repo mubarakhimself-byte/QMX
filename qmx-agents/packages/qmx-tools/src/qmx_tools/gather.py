@@ -44,9 +44,7 @@ DUMMY: Final = "dummy-trend-pullback"
 STDLIB: Final[Traversable] = files("qml.blocks") / "stdlib"
 TEMPLATES: Final[Traversable] = files("qml.unit") / "templates"
 FIXTURE_RECORDS: Final = Path(qml.__file__).resolve().parents[2] / "tests" / "fixtures" / "records"
-FIXTURE_WARNING: Final = (
-    "instrument records are QML's test fixtures until the instrument kind lands (C-02)"
-)
+FIXTURE_WARNING: Final = "no Library record for this market, so it reads QML's test fixture"
 _PIN: Final = re.compile(ENTRY_REF_PATTERN)
 
 
@@ -54,6 +52,9 @@ _PIN: Final = re.compile(ENTRY_REF_PATTERN)
 class Gathered:
     context: CompileContext
     warnings: tuple[str, ...]
+    record_documents: Mapping[str, JsonObject]
+    """Each record in `context.records` as the document it was parsed from: the item's fields with
+    `record_version`, or the fixture's. A run folder holds these."""
 
 
 def entry_face(fields: Mapping[str, object]) -> dict[str, object]:
@@ -106,13 +107,14 @@ def _named(value: object) -> set[str]:
     return found
 
 
-def _fixtures() -> dict[tuple[str, str], tuple[str, InstrumentRecord]]:
-    found: dict[tuple[str, str], tuple[str, InstrumentRecord]] = {}
+def _fixtures() -> dict[tuple[str, str], tuple[str, InstrumentRecord, JsonObject]]:
+    found: dict[tuple[str, str], tuple[str, InstrumentRecord, JsonObject]] = {}
     for path in sorted(FIXTURE_RECORDS.glob("*.json")):
-        parsed = parse_record(json.loads(path.read_text("utf-8")))
+        document = cast("JsonObject", json.loads(path.read_text("utf-8")))
+        parsed = parse_record(document)
         if not is_refusal(parsed):
             record = parsed.value
-            found[record.venue, record.symbol] = (path.name, record)
+            found[record.venue, record.symbol] = (path.name, record, document)
     return found
 
 
@@ -141,9 +143,9 @@ def _record(
     store: Store | None,
     ref: SymbolRef,
     market_id: str,
-    fixtures: dict[tuple[str, str], tuple[str, InstrumentRecord]],
-) -> tuple[InstrumentRecord | None, str | None]:
-    """The record a market reads and the warning that comes with it, if any."""
+    fixtures: dict[tuple[str, str], tuple[str, InstrumentRecord, JsonObject]],
+) -> tuple[tuple[InstrumentRecord, JsonObject] | None, str | None]:
+    """The record a market reads with its document, and the warning that comes with it, if any."""
     held = [] if store is None else _held(store, ref)
     if len(held) > 1:
         items = ", ".join(item for item, _, _ in held)
@@ -153,15 +155,17 @@ def _record(
         )
     if held:
         item, fields, version = held[0]
-        parsed = parse_record({**fields, "record_version": version})
+        document: JsonObject = {**fields, "record_version": version}
+        parsed = parse_record(document)
         if is_refusal(parsed):
             reason = parsed.context.get("reason")
             return None, f"{market_id}: the instrument item {item} is not a full record: {reason}"
-        return parsed.value, None
+        return (parsed.value, document), None
     matched = fixtures.get((ref.venue, ref.symbol))
     if matched is None:
         return None, None
-    return matched[1], f"{FIXTURE_WARNING}: {market_id} reads {matched[0]}"
+    name, record, document = matched
+    return (record, document), f"{FIXTURE_WARNING}: {market_id} reads {name}"
 
 
 def gather(store: Store | None, document: object) -> Gathered:
@@ -170,6 +174,7 @@ def gather(store: Store | None, document: object) -> Gathered:
     entries: dict[str, bytes] = {}
     sources: dict[str, bytes] = {}
     records: dict[str, InstrumentRecord] = {}
+    documents: dict[str, JsonObject] = {}
     warnings: list[str] = []
     unit = parse(document).unit
     if unit is not None:
@@ -185,12 +190,12 @@ def gather(store: Store | None, document: object) -> Gathered:
             ref = market.instrument_ref
             if not isinstance(ref, SymbolRef):
                 continue
-            record, warning = _record(store, ref, market.market_id, fixtures)
-            if record is not None:
-                records[market.market_id] = record
+            read, warning = _record(store, ref, market.market_id, fixtures)
+            if read is not None:
+                records[market.market_id], documents[market.market_id] = read
             if warning is not None:
                 warnings.append(warning)
-    return Gathered(CompileContext(sources, entries, records), tuple(warnings))
+    return Gathered(CompileContext(sources, entries, records), tuple(warnings), documents)
 
 
 def check_unit(store: Store | None, document: object) -> tuple[CheckResult, tuple[str, ...]]:
