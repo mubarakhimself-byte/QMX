@@ -8,6 +8,7 @@ import copy
 import json
 from collections.abc import Callable
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -74,6 +75,16 @@ _CENSUS = frozenset(
     """.split()
 )
 """Every field of qmx.unit/1. The PR's census table says why each stands."""
+
+_GUIDE = Path(__file__).resolve().parents[1] / "EXTENDING.md"
+_READS = [
+    {
+        "reading": "news@1",
+        "market": "fx.eurusd",
+        "fallback": "treat_as_absent",
+        "stale_after_s": 60,
+    }
+]
 
 
 def _sides(document: Document) -> dict[str, int]:
@@ -454,11 +465,47 @@ def _schema_fields(shape: Shape) -> set[str]:
             return set()
 
 
-def test_every_field_of_the_schema_is_in_the_census() -> None:
-    assert _schema_fields(shape_of()) == _CENSUS, (
+def _guide_refusals() -> dict[str, str]:
+    """The generated guide's field table: each field, and the code format 4 refuses it with."""
+    rows: dict[str, str] = {}
+    for line in _GUIDE.read_text("utf-8").splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) == 4 and cells[0].startswith("`"):
+            rows[cells[0].strip("`")] = "" if cells[2] == "-" else cells[2].strip("`")
+    return rows
+
+
+def _unlisted(fields: set[str]) -> set[str]:
+    return fields - _CENSUS
+
+
+def test_every_unit_field_is_run_refused_or_labelled() -> None:
+    """Every schema field is in the census and the guide, `reads` refuses with its code and
+    pointer, and a field the census does not hold is named, not waved through."""
+    fields = _schema_fields(shape_of())
+    assert fields == _CENSUS, (
         "a unit schema field is not in this list. Make the compiled unit read it, refuse it in "
         "qml/compile/compiler.py, or keep it only if it labels, then name it here"
     )
+
+    assert _GUIDE.is_file(), "qml/EXTENDING.md is generated; run tools/qml/extending.py"
+    guide = _guide_refusals()
+    assert set(guide) == _CENSUS, (
+        "qml/EXTENDING.md and the census disagree about the unit's fields; regenerate the "
+        "guide with tools/qml/extending.py"
+    )
+    assert guide["Unit.reads"] == "reads_not_built"
+
+    document = cast("Document", _document())
+    _put("reads", _READS)(document)
+    problems = compile_unit(document, _context())
+    assert isinstance(problems, tuple), "the reads document compiled"
+    assert [(p.kind, p.where) for p in problems if p.kind == "reads_not_built"] == [
+        ("reads_not_built", "/reads")
+    ]
+
+    assert _unlisted(fields) == set()
+    assert _unlisted(fields | {"Unit.probe"}) == {"Unit.probe"}
 
 
 def test_a_mirror_of_a_side_neutral_block_says_state_both_sides() -> None:
