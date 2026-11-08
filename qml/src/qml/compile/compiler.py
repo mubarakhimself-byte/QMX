@@ -3,8 +3,7 @@
 The host passes everything as data: the decoded document, the bytes of each pinned block's
 ``block.py`` and ``entry.json``, and the instrument record of each market. The compiler reads
 no file and no clock. It refuses a document with any problem and returns every problem at once:
-layer A (shape), layer C (numbers), the loader's, and the wiring problems found here. Layers B
-and D to F join when the checker lands (A6).
+the checker's layers A to F, the loader's, and what compiler format 1 does not run yet.
 
 What the compiler decides, so the closure stays data plus blocks:
 
@@ -38,13 +37,12 @@ from qml.blocks.api import (
     PORT_QUANTUM_SIGNIFICANT_DIGITS,
     Block,
     EntryFace,
-    FaceProblem,
     OutputType,
     parse_entry,
 )
 from qml.catalogue.loader import Loaded, LockEntry, load
+from qml.check.layers import check_layers
 from qml.motion.engine import MIN_TRADES, SHRINK_K, SLOW_CADENCE_TRADES, SlowNumber
-from qml.numbers.check import check_numbers
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import (
     Binding,
@@ -271,38 +269,13 @@ class _Wiring:
         self.loaded = loaded
         self.faces = faces
         self.problems = problems
-        self.stream = unit.streams[0].name if unit.streams else ""
 
-    def bind(
-        self, binding: Binding, where: str, key: str, earlier: Sequence[str]
-    ) -> BoundBlock | None:
+    def bind(self, binding: Binding, key: str) -> BoundBlock | None:
+        """The binding wired to its block; layer B names one whose block does not resolve."""
         pin = str(binding.block)
         block, face = self.loaded.blocks.get(pin), self.faces.get(pin)
         if block is None or face is None:
-            self.problems.add("block_not_pinned", f"{where}/block", f"{pin} is not in the lock")
             return None
-        for name in face.parameters:
-            if name not in binding.params:
-                self.problems.add(
-                    "parameter_missing", f"{where}/params", f"{pin} needs its parameter {name}"
-                )
-        for name, param in binding.params.items():
-            if isinstance(param, NumberParam) and param.number not in self.unit.numbers:
-                self.problems.add(
-                    "undeclared_number",
-                    f"{where}/params/{name}",
-                    f"{param.number} is not declared under numbers",
-                )
-        for port, ref in binding.inputs.items():
-            stream, _, field = ref.partition(".")
-            if stream == self.stream and field in {"", "open", "high", "low", "close"}:
-                continue
-            if ref not in earlier:
-                self.problems.add(
-                    "unknown_input",
-                    f"{where}/inputs/{port}",
-                    f"{ref} is neither a field of stream {self.stream} nor an earlier binding",
-                )
         return BoundBlock(
             key=key,
             name=binding.name,
@@ -319,7 +292,6 @@ class _Wiring:
             return None
         _, slots = found
         planned: list[SlotPlan] = []
-        names: list[str] = []
         for slot_name, slot in slots.items():
             where = f"/logic/{side.value}/slots/{slot_name}"
             if slot.combiner.kind not in COMBINERS:
@@ -329,14 +301,11 @@ class _Wiring:
                     f"combiner {slot.combiner.kind.value} is not in compiler format "
                     f"{COMPILER_FORMAT_VERSION}",
                 )
-            bound: list[BoundBlock] = []
-            for index, binding in enumerate(slot.bindings):
-                one = self.bind(
-                    binding, f"{where}/bindings/{index}", f"{side.value}.{binding.name}", names
-                )
-                names.append(binding.name)
-                if one is not None:
-                    bound.append(one)
+            bound = [
+                one
+                for binding in slot.bindings
+                if (one := self.bind(binding, f"{side.value}.{binding.name}")) is not None
+            ]
             planned.append(
                 SlotPlan(
                     name=slot_name,
@@ -350,7 +319,7 @@ class _Wiring:
         return SidePlan(side, tuple(planned))
 
     def exit(self, binding: ScopedBinding, index: int) -> ExitPlan | None:
-        bound = self.bind(binding, f"/exit_set/{index}", f"exit.{binding.name}", ())
+        bound = self.bind(binding, f"exit.{binding.name}")
         if bound is None:
             return None
         output = bound.face.output
@@ -499,42 +468,26 @@ def _warm_up(plan: Plan) -> tuple[int, int]:
 
 
 def _faces(
-    unit: Unit, context: CompileContext, problems: _Problems
+    unit: Unit, context: CompileContext
 ) -> tuple[tuple[LockEntry, ...], dict[str, EntryFace]]:
+    """The lock and the faces that read; layer B names every pin whose face does not."""
     lock = tuple(LockEntry(p.entry_id, p.version, p.fingerprint) for p in unit.pins)
     faces: dict[str, EntryFace] = {}
-    for index, entry in enumerate(lock):
+    for entry in lock:
         raw = context.entries.get(entry.pin)
         face = parse_entry(raw) if raw is not None else None
-        if not isinstance(face, EntryFace):
-            detail = face.message if isinstance(face, FaceProblem) else "no entry.json was given"
-            problems.add("entry_face", f"/pins/{index}", f"{entry.pin}: {detail}")
-            continue
-        if face.fingerprint != entry.fingerprint:
-            problems.add(
-                "entry_face",
-                f"/pins/{index}/fingerprint",
-                f"{entry.pin}'s entry names {face.fingerprint}, the pin {entry.fingerprint}",
-            )
-        faces[entry.pin] = face
+        if isinstance(face, EntryFace):
+            faces[entry.pin] = face
     return lock, faces
 
 
-def _markets(
-    unit: Unit, context: CompileContext, problems: _Problems
-) -> tuple[tuple[Market, InstrumentRecord], ...]:
-    out: list[tuple[Market, InstrumentRecord]] = []
-    for index, market in enumerate(unit.markets):
-        record = context.records.get(market.market_id)
-        if record is None:
-            problems.add(
-                "record_missing",
-                f"/markets/{index}",
-                f"no instrument record was given for {market.market_id}",
-            )
-        else:
-            out.append((market, record))
-    return tuple(out)
+def _markets(unit: Unit, context: CompileContext) -> tuple[tuple[Market, InstrumentRecord], ...]:
+    """Each market with its record; layer D names a market whose record is missing."""
+    return tuple(
+        (market, record)
+        for market in unit.markets
+        if (record := context.records.get(market.market_id)) is not None
+    )
 
 
 def _shape_problems(unit: Unit, problems: _Problems) -> None:
@@ -544,8 +497,6 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
         problems.add("reads_not_built", "/reads", "compiler format 1 reads no readings")
     if unit.halts.position or unit.halts.unit or unit.halts.account:
         problems.add("halts_not_built", "/halts", "compiler format 1 runs no halt blocks")
-    if unit.sizer is None:
-        problems.add("sizer_missing", "/sizer", "a unit that enters needs a sizer")
 
 
 def compile_unit(
@@ -560,23 +511,25 @@ def compile_unit(
         )
     unit = parsed.unit
     problems = _Problems()
-    numbers = check_numbers(unit, context.records)
+    checked = check_layers(
+        unit, entries=context.entries, sources=context.sources, records=context.records
+    )
     problems.found.extend(
-        CompileProblem(p.layer, p.kind.value, "/".join(p.where), p.message) for p in numbers.errors
+        CompileProblem(p.layer, p.kind.value, "/".join(p.where), p.message) for p in checked.errors
     )
     _shape_problems(unit, problems)
-    lock, faces = _faces(unit, context, problems)
+    lock, faces = _faces(unit, context)
     loaded = load(lock, context.sources)
     if not isinstance(loaded, Loaded):
         problems.found.extend(
             CompileProblem("compile", p.kind.value, p.pin, p.message) for p in loaded
         )
         return tuple(problems.found)
-    markets = _markets(unit, context, problems)
+    markets = _markets(unit, context)
     wiring = _Wiring(unit, loaded, faces, problems)
     sides = tuple(s for side in (Side.LONG, Side.SHORT) if (s := wiring.side(side)) is not None)
     exits = tuple(e for i, b in enumerate(unit.exit_set) if (e := wiring.exit(b, i)) is not None)
-    sizer = wiring.bind(unit.sizer, "/sizer", "sizer", ()) if unit.sizer is not None else None
+    sizer = wiring.bind(unit.sizer, "sizer") if unit.sizer is not None else None
     derived, slow = _motion(unit, sides, loaded, problems)
     document_fp = fingerprint(document)
     if is_refusal(document_fp):

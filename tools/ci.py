@@ -56,6 +56,8 @@ def main() -> int:
             commands.append((workspace, ["run", "--no-sync", "python", "-m", "poethepoet", task]))
     for task in ("money-path-scan", "secret-scan"):
         commands.append((ROOT, ["run", "--no-sync", "python", "-m", "poethepoet", task]))
+    corpus_gate = ["python", "-m", "pytest", "qml/tests/test_check_layers.py", "-k", "corpus", "-q"]
+    commands.append((ROOT, ["run", "--no-sync", *corpus_gate]))
     commands.append((ROOT, ["run", "--no-sync", "python", "tools/test_all.py"]))
     for workspace, command in commands:
         print(f"{workspace.name}: uv {' '.join(command)}", flush=True)
