@@ -10,8 +10,13 @@ client order id and the positions by their label, and attributes each record
 (:mod:`qmn.app.attribution`) against the sends the node's own journal holds. Then:
 
 - each UNKNOWN outcome resolves from what the venue shows: the order filled, so its unit books
-  the fill at the venue's price, or the venue holds nothing from it, so the entry is dropped.
-  Nothing is ever sent again on an UNKNOWN; an order the venue still shows open stays UNKNOWN.
+  the fill at the venue's price and quantity, or the venue holds nothing from it, so the entry
+  is dropped. Nothing is ever sent again on an UNKNOWN; an order the venue still shows open
+  stays UNKNOWN. A venue that lists no filled order, as cTrader's reconcile lists pending ones
+  only, still shows the position: one open position with the order's label, market and side
+  that no other order opened is the order's, under the venue's name, at every later run while
+  it stays open. The order reads absent only when no such position is open, and two of them
+  keep it UNKNOWN with an alarm.
 - a twin or a foreign node's record stands the account down: no new entry, with an alarm.
 - a position that is not the node's is never touched and never adopted. It is shown as
   "not ours, protected", and an untagged one raises the ``not_ours`` alarm once.
@@ -21,7 +26,8 @@ client order id and the positions by their label, and attributes each record
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -44,7 +50,7 @@ from qmn.app.attribution import (
     attribute,
 )
 
-__all__ = ["Ours", "ReadsBack", "Reconciler", "Resolves", "journal_sends"]
+__all__ = ["Found", "Ours", "ReadsBack", "Reconciler", "Resolves", "journal_sends"]
 
 _STAND_DOWN = {
     Claim.TWIN: "the node cannot prove the account is its own: a twin with its tag trades it",
@@ -58,12 +64,23 @@ class ReadsBack(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class Found:
+    """Where an UNKNOWN entry went at the venue: the position it opened, by the venue's name,
+    and the venue's fill price."""
+
+    position: str
+    price: Decimal
+    quantity: Decimal | None
+    """What the venue holds in the position; None when it closed before the read."""
+
+
 class Resolves(Protocol):
     """A hosted unit, which may hold an order whose outcome is UNKNOWN."""
 
-    def resolve(self, client_order_id: str, price: Decimal | None, *, protected: bool) -> bool:
-        """Settle the order: filled at the venue's ``price``, or never taken when ``price`` is
-        None. Answers False when the order is not this unit's."""
+    def resolve(self, client_order_id: str, found: Found | None, *, protected: bool) -> bool:
+        """Settle the order: filled into ``found``, or never taken when ``found`` is None.
+        Answers False when the order is not this unit's."""
         ...
 
 
@@ -105,6 +122,9 @@ class _Account:
     not_ours: tuple[dict[str, object], ...] = ()
     mine: tuple[Ours, ...] = ()
     """The node's own positions the last run read at the venue."""
+    labelled: dict[str, VenueOrder] = field(default_factory=dict[str, VenueOrder])
+    """The orders read as filled into a position found by their label, by client order id,
+    while that position is open: the venue lists no order for it."""
 
 
 @dataclass
@@ -162,8 +182,29 @@ class Reconciler:
             if held.session != session
             else "unknown"
         )
-        found = attribute(read.value, tag=self.tag, sent=sends.value)
-        resolved = [self._resolve(name, read.value, units) for name in sorted(unknown)]
+        open_positions = {p.position for p in read.value.positions}
+        listed = {o.client_order_id for o in read.value.orders}
+        carried = {
+            name: order
+            for name, order in held.labelled.items()
+            if order.position in open_positions and name not in listed
+        }
+        found_by_label, twice = _by_label(
+            ReadBack(read.value.orders + tuple(carried.values()), read.value.positions),
+            unknown,
+            sends.value,
+        )
+        labelled = held.labelled = carried | found_by_label
+        venue = ReadBack(
+            tuple(o for o in read.value.orders if o.client_order_id not in labelled)
+            + tuple(labelled.values()),
+            read.value.positions,
+        )
+        found = attribute(venue, tag=self.tag, sent=sends.value)
+        resolved = [
+            self._resolve(name, venue, sends.value, units, twice.get(name, ()))
+            for name in sorted(unknown)
+        ]
         held.session, held.tried = session, frozenset(unknown)
         held.stand_down = found.stand_down
         held.not_ours = tuple(
@@ -205,36 +246,61 @@ class Reconciler:
         )
 
     def _resolve(
-        self, name: str, read: ReadBack, units: Sequence[Resolves]
+        self,
+        name: str,
+        read: ReadBack,
+        sends: Mapping[str, Mapping[str, object]],
+        units: Sequence[Resolves],
+        twice: tuple[str, ...],
     ) -> dict[str, object] | None:
+        if twice:
+            self._raise(
+                ("label_twice", name),
+                {
+                    "alarm": "label_twice",
+                    "client_order_id": name,
+                    "positions": list(twice),
+                    "action": "no_new_entries",
+                    "why": "more than one open position carries the label of an order whose"
+                    " answer was lost, so the node cannot tell which one it opened",
+                },
+            )
+            return None
         order = next((o for o in read.orders if o.client_order_id == name), None)
         if order is not None and order.state is OrderState.OPEN:
             return None
-        filled = order is not None and order.state is OrderState.FILLED and order.price is not None
-        price = cast("VenueOrder", order).price if filled else None
         position = next(
             (p for p in read.positions if order is not None and p.position == order.position), None
         )
+        found = _found(order, position)
         protected = position is None or position.stop is not None
-        if not any(unit.resolve(name, price, protected=protected) for unit in units):
+        if not any(unit.resolve(name, found, protected=protected) for unit in units):
             return None
         if not protected and position is not None:
             self._raise(
                 ("unprotected", name),
                 {
                     "alarm": "protection_escalation",
-                    "position": name,
+                    "position": position.position,
                     "market_id": position.market_id,
                     "action": "closing_reduce_only",
                     "why": "the venue holds no stop on an order whose answer was lost",
                     "origin": "placeholder",
                 },
             )
-        return {
+        if found is None:
+            return {"client_order_id": name, "outcome": "absent"}
+        row: dict[str, object] = {
             "client_order_id": name,
-            "outcome": "filled" if filled else "absent",
-            "price": None if price is None else str(price),
+            "outcome": "filled",
+            "price": str(found.price),
         }
+        if found.position != name:
+            row["position"] = found.position
+        sent = sends.get(name, {}).get("quantity")
+        if found.quantity is not None and sent is not None and found.quantity != Decimal(str(sent)):
+            row["quantity"] = str(found.quantity)
+        return row
 
     def _alarms(self, account: str, found: Attribution) -> None:
         for claim, alarm in ((Claim.TWIN, "twin"), (Claim.FOREIGN, "foreign_claimant")):
@@ -268,6 +334,65 @@ class Reconciler:
         if key not in self._raised:
             self._raised.add(key)
             self.on_alarm(alarm)
+
+
+def _found(order: VenueOrder | None, position: VenuePosition | None) -> Found | None:
+    """Where a filled order went: its position at the venue's fill price, the order's own price
+    when it carries one. None when the venue holds nothing from it."""
+    if order is None or order.state is not OrderState.FILLED:
+        return None
+    if position is not None:
+        price = position.entry_price if order.price is None else order.price
+        return Found(position.position, price, position.quantity)
+    if order.price is None:
+        return None
+    return Found(order.position or cast("str", order.client_order_id), order.price, None)
+
+
+def _by_label(
+    read: ReadBack, unknown: Iterable[str], sends: Mapping[str, Mapping[str, object]]
+) -> tuple[dict[str, VenueOrder], dict[str, tuple[str, ...]]]:
+    """Each UNKNOWN order the read-back shows no position of, read through the open positions
+    that carry its label on its market and side and that no other order of the node opened.
+    One such position, wanted by no other order, is the order's: the order is read as filled
+    into it. Two or more are answered by name, and the order stays UNKNOWN."""
+    opened = {o.position: o.client_order_id for o in read.orders if o.position is not None}
+    held = {p.position for p in read.positions}
+    wanted: dict[str, tuple[str, ...]] = {}
+    for name in sorted(unknown):
+        send = sends.get(name)
+        order = next((o for o in read.orders if o.client_order_id == name), None)
+        if send is None or (
+            order is not None and (order.state is not OrderState.FILLED or order.position in held)
+        ):
+            continue
+        if order is not None and order.price is not None:
+            continue
+        wanted[name] = tuple(
+            p.position
+            for p in read.positions
+            if p.label == send.get("label")
+            and p.market_id == send.get("market_id")
+            and p.side == send.get("side")
+            and opened.get(p.position, name) == name
+            and (p.position == name or p.position not in sends)
+        )
+    counted = Counter(position for positions in wanted.values() for position in positions)
+    labelled: dict[str, VenueOrder] = {}
+    twice: dict[str, tuple[str, ...]] = {}
+    for name, positions in wanted.items():
+        if len(positions) == 1 and counted[positions[0]] == 1:
+            send = sends[name]
+            labelled[name] = VenueOrder(
+                name,
+                cast("str", send["label"]),
+                cast("str", send["market_id"]),
+                OrderState.FILLED,
+                positions[0],
+            )
+        elif positions:
+            twice[name] = positions
+    return labelled, twice
 
 
 def _without_none(value: object) -> object:

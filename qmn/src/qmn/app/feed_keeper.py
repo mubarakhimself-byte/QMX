@@ -15,7 +15,9 @@ Three rules keep a reader safe across a reconnect:
   and its capabilities are re-verified; until then :attr:`FeedKeeper.ready` is false and the
   order path places no entry (TN-19).
 - After every reconnect each market's book is ``rebuilding`` until a fresh snapshot arrives.
-  A delta that comes first is dropped, so no reader ever sees half a book (EX-02).
+  A delta that comes first is dropped, so no reader ever sees half a book (EX-02). The last
+  quotes go with the dropped session, so no entry measures its stop from a price held from
+  before the drop; until a fresh quote arrives the order path places no entry.
 - A session that stays silent past ``silent_after_ns`` is dropped and opened again, so a dead
   socket that never says so is noticed.
 """
@@ -348,6 +350,7 @@ class FeedKeeper:
         self.source.close()
         self.state = SessionState.DOWN
         self.reason = reason
+        self._quotes.clear()
         for market in self.markets:
             self._books[market] = (BookState.REBUILDING, ())
 

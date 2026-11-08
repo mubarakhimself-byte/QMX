@@ -677,7 +677,7 @@ class CcxtClient:
         held = _Held(ticket.market_id, symbol, ticket.side, size, price)
         self._held[name] = held
         self._place_stop(name, held, price - gap if long else price + gap)
-        return Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, price)
+        return Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, price, quantity=size)
 
     def _place_stop(self, name: str, held: _Held, stop: Decimal) -> ErrorReading | None:
         """A reduce-only stop trigger over the whole position, then the stop it replaces

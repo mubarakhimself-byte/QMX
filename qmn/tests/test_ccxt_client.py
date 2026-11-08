@@ -26,7 +26,7 @@ from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.unit.model import Side
 from qmn.app.attribution import Claim, attribute
 from qmn.app.feed_keeper import FeedKeeper, Quote, RecordedSource, Recording
-from qmn.app.reconciler import Reconciler, journal_sends
+from qmn.app.reconciler import Found, Reconciler, journal_sends
 from qmn.app.runtime import Blocked, OrderPath, Placed, Ticket, Unknown, Venue, VenueClose, ulid
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.venue import CloseScope, OrderParameters, OrderType, TimeInForce
@@ -468,12 +468,12 @@ def test_no_entry_goes_while_the_account_holds_the_open_order_margin(tmp_path: P
 class Units:
     """The node's hosted units as reconcile resolves them."""
 
-    resolved: list[tuple[str, Decimal | None, bool]] = field(
-        default_factory=list[tuple[str, Decimal | None, bool]]
+    resolved: list[tuple[str, Found | None, bool]] = field(
+        default_factory=list[tuple[str, Found | None, bool]]
     )
 
-    def resolve(self, client_order_id: str, price: Decimal | None, *, protected: bool) -> bool:
-        self.resolved.append((client_order_id, price, protected))
+    def resolve(self, client_order_id: str, found: Found | None, *, protected: bool) -> bool:
+        self.resolved.append((client_order_id, found, protected))
         return True
 
 
@@ -489,7 +489,7 @@ def test_an_entry_whose_answer_was_lost_is_reconciled_and_its_protection_close_g
     closed = node.path.close(NAME, "crypto.eth", Side.LONG, Decimal("2490"), "protection")
 
     assert lost == Unknown("venue answer unknown for this order", NAME)
-    assert units.resolved == [(NAME, Decimal("2501.0"), False)]
+    assert units.resolved == [(NAME, Found(NAME, Decimal("2501.0"), Decimal("0.01")), False)]
     assert [a["alarm"] for a in node.alarms] == ["protection_escalation"]
     assert closed == Placed(Decimal("2501.0"))
     assert node.exchange.sent_orders()[1:] == [
