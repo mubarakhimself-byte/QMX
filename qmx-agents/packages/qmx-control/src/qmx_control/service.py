@@ -68,6 +68,7 @@ type SettingsSection = Literal[
     "observers",
     "telemetry",
     "data",
+    "units",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -292,6 +293,74 @@ TELEMETRY_DEFAULTS: Final[Document] = {
 }
 """`[telemetry]` with every default: nothing is sent, and OpenObserve on this PC keeps a 1 GB disk
 cache and 30 days."""
+
+
+def _identity_row(label: str, result: str, counted_try: bool, click: bool) -> Document:
+    return {
+        "label": label,
+        "result": result,
+        "counted_try": counted_try,
+        "click_before_live": click,
+    }
+
+
+UNITS_DEFAULTS: Final[Document] = {
+    "identity_table": [
+        _identity_row("motion_inside_range", "calibration_row", False, False),
+        _identity_row("learned_retrain_in_bounds", "calibration_row", False, False),
+        _identity_row("learned_retrain_out_of_bounds", "new_version", True, True),
+        *(
+            _identity_row(label, "new_version", True, True)
+            for label in (
+                "range_change",
+                "motion_rule_change",
+                "cadence_change",
+                "fixed_value_change",
+                "bar_change",
+                "session_change",
+                "markets_change",
+                "market_settings_adopted",
+                "block_fix",
+                "ambiguity_resolved",
+            )
+        ),
+        *(
+            _identity_row(label, "new_unit", True, True)
+            for label in (
+                "block_swap",
+                "role_added",
+                "role_removed",
+                "combiner_change",
+                "transplant",
+                "market_logic_change",
+                "rewrite",
+                "structure_change",
+            )
+        ),
+        _identity_row("title_change", "none", False, False),
+    ],
+    "lifecycle": {"auto_paper": False},
+}
+"""`[units]` with every default (Part A AD-115): which edit makes a new version or a new unit, as
+one table QML reads as data, and tested to paper waits for his click (`auto_paper` off)."""
+
+
+def _check_units(values: Document) -> None:
+    """Refuse an identity table QML cannot read, or an `auto_paper` that is not true or false."""
+    from qml.identity import IdentityTableError, parse_table  # noqa: PLC0415
+
+    try:
+        parse_table(_merged(UNITS_DEFAULTS, values)["identity_table"])
+    except IdentityTableError as error:
+        raise ControlError("invalid_units", str(error)) from error
+    lifecycle = values.get("lifecycle", {})
+    auto = (
+        cast("dict[str, object]", lifecycle).get("auto_paper", False)
+        if isinstance(lifecycle, dict)
+        else None
+    )
+    if not isinstance(auto, bool):
+        raise ControlError("invalid_units", "[units.lifecycle] auto_paper is true or false")
 
 
 def _check_telemetry(values: Document, engine: Document) -> None:
@@ -884,6 +953,8 @@ class ControlService:
                 )
             if section == "telemetry":
                 values = _merged(TELEMETRY_DEFAULTS, values)
+            if section == "units":
+                values = _merged(UNITS_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:
@@ -1017,6 +1088,8 @@ class ControlService:
                 )
         if section == "telemetry":
             _check_telemetry(values, self._stored("engine"))
+        if section == "units":
+            _check_units(values)
         if section == "backup":
             _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
         elif section in ("brokers", "connections"):
