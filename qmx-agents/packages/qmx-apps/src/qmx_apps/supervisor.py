@@ -144,6 +144,7 @@ APPS_SCHEMA: Final = (
 JOB_QUEUE: Final = "data/jobs"
 """Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
 JOB_POLL_SECONDS: Final = 0.25
+HEARTBEAT_POLL_SECONDS: Final = 0.25
 RUNS: Final = "runs"
 """One folder per opened run under the instance's `data/`: `runs/<run_id>`, where the tester writes
 its bundle's files and the lander reads them on close."""
@@ -834,10 +835,10 @@ class Supervisor:
                     for resource in await client.list_resources()
                 ]
                 self._heartbeat(instance)
-                if not instance.heartbeat:
-                    raise AppError(
-                        "heartbeat_missing", "The bootstrap did not publish a heartbeat.", 503
-                    )
+                # One read can land on the bootstrap's replace; the start's deadline bounds this.
+                while not instance.heartbeat:
+                    await asyncio.sleep(HEARTBEAT_POLL_SECONDS)
+                    self._heartbeat(instance)
                 instance.state = "running"
                 self._log(
                     app_id,
