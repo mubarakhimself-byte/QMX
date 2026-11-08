@@ -1,15 +1,15 @@
 # Weekly review
 
-Built from card R9 in `research/methodology/15-templates-researcher.md` with D10 in `17-templates-dev-pm-lab.md`. Every Monday it reads the week's runs and the open inbox from the engine itself, not from the Library, clusters the failures, and proposes at most three edits as a change card. Nothing changes until he approves an edit.
+Built from card R9 in `research/methodology/15-templates-researcher.md` with D10 in `17-templates-dev-pm-lab.md`. Every Monday it reads the week's runs and the open inbox from the engine itself, not from the Library, clusters the failures, and proposes at most three edits as a change card. Nothing changes until he approves an edit. Beside them it keeps the week's market almanac (STATE midday ruling 44): per market, the units' trades and R by UTC weekday from the unit journal, and how often each MIS reading said each word, from its reading history. Scripts make every number in it.
 
 ## Steps
 
-1. `The week's runs and inbox` reads every run started in the last seven days from the engine's ledger and service (its status, tokens, and each failed step or failed check), the parked runs, and the open inbox items. This review's own run is left out.
+1. `The week's runs and inbox` reads every run started in the last seven days from the engine's ledger and service (its status, tokens, and each failed step or failed check), the parked runs, and the open inbox items. This review's own run is left out. It also reads the almanac through `journal_query` and `readings_query` (whose holdout refuses a held-out window by name), with the slow lane's shared `scripts/door.py`.
 2. `Any run this week?` ends the run silently when no run started.
 3. `Cluster the failures` (role `reviewer`) groups the failures by signature and names a likely cause.
 4. `Propose at most three edits` (role `writer`) targets a prompt, a question battery, a brief, skill text or a pre-check rule.
 5. `Reject loosening edits` rejects any edit that loosens a gate, threshold, budget, retry count or limit, and marks every other edit untested.
-6. `Change card` puts the engine's runs, parked runs and inbox items, exactly as reported, beside the clusters and the edits. `Render and grade` checks it against `schemas/output.json` and checks the numbers in the clusters and edits against the week.
+6. `Change card` puts the engine's runs, parked runs and inbox items, exactly as reported, beside the clusters, the edits and the almanac. `Render and grade` checks it against `schemas/output.json` and checks the numbers in the clusters and edits against the week.
 
 ## Test runs
 
@@ -22,3 +22,5 @@ A run started with `{"fixture": true}` reads `fixtures/week.json`, a synthetic w
 - His thumbs, board iteration counts, calibration outcomes (Brier scores), replication decay and triage misses: no such records exist yet.
 - The lessons table of past proposals: workflow memory rows are a later packet.
 - D10's code health of Lab artifacts (lint, types, tests, dead code, no-future tests, reproducibility reruns, data snapshot integrity, dependency drift, orphans, fix drafts): they need the Lab, the sandbox and the data store.
+- The almanac on a week with no run: `Any run this week?` still ends that week silently, so its almanac is not delivered.
+- An almanac page per market session: the shipped calendars hold a market's open and close, not its sessions, so the almanac keys on the UTC weekday.

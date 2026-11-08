@@ -1,61 +1,234 @@
 {
   "schema": "qmx.workflow/1",
   "id": "dc-decay-and-limit-report",
-  "name": "Decay and limit report",
+  "name": "Decay check: each unit's recent trades against its own record",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "day": {
+        "type": "string",
+        "description": "the record ends with this UTC day, YYYY-MM-DD; the day before the run by default"
+      },
+      "record_days": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 90,
+        "description": "the days of trades read, a starting default he changes"
+      },
+      "recent_trades": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 20,
+        "description": "the recent trades judged against the record before them"
+      },
+      "min_record_trades": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 20,
+        "description": "a unit with fewer earlier trades is too thin to judge"
+      },
+      "watch_drop_r": {
+        "type": "string",
+        "default": "0.25",
+        "description": "Watch when the recent expectancy sits this many R below the record's"
+      },
+      "alarm_at_r": {
+        "type": "string",
+        "default": "0",
+        "description": "Alarm when the recent expectancy is at or below this many R while the record's is above it"
+      },
+      "watch_streak": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 5,
+        "description": "Watch at this many losses in a row among the recent trades"
+      },
+      "alarm_streak": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 8,
+        "description": "Alarm at this many losses in a row among the recent trades"
+      },
+      "units": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "the unit ids to check; every unit with trades by default"
+      },
+      "world": {
+        "enum": [
+          "paper",
+          "demo",
+          "live",
+          "backtest"
+        ],
+        "description": "one world only; every world by default"
+      }
+    }
+  },
   "outputs": {
     "type": "object",
-    "description": "red, amber, green per unit with its failed tests, and tighten-only cards"
+    "description": "OK, Watch or Alarm per unit with the numbers behind it, a note explaining every flagged unit, and one tighten card per flagged unit, all landed as proposals; nothing moves a unit"
   },
   "settings": {
-    "timezone": "America/New_York",
+    "timezone": "UTC",
     "on_error": "park",
-    "caller_policy": "any",
-    "memory": {"scopes": ["workflow"]}
+    "caller_policy": "any"
   },
   "nodes": [
-    {"id": "start", "name": "Daily after the wrap", "type": "trigger", "typeVersion": 1,
-     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
-    {"id": "journal", "name": "Load journals and baselines", "type": "script", "typeVersion": 1,
-     "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/journal.py"}},
-    {"id": "decay", "name": "Decay tests and levels", "type": "script", "typeVersion": 1,
-     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/decay.py"}},
-    {"id": "flagged", "name": "Any amber or red?", "type": "rule", "typeVersion": 1,
-     "position": [660, 0], "effect": "none", "parameters": {"expr": "items.flagged != []"}},
-    {"id": "explain", "name": "Explain each flagged unit", "type": "llm", "typeVersion": 1,
-     "position": [880, -120], "role": "scanner", "effect": "none",
-     "parameters": {"prompt_ref": "prompts/explain.md",
-                    "schema_ref": "schemas/explanations.json"}},
-    {"id": "cards", "name": "Tighten-only cards", "type": "script", "typeVersion": 1,
-     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/cards.py"}},
-    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
-     "position": [1320, 0], "effect": "none",
-     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
-                    "schema_ref": "schemas/output.json"}},
-    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
-     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
-     "position": [1540, 120], "effect": "none", "retry": {"max_tries": 1},
-     "parameters": {"script": "scripts/stop.py"}}
+    {
+      "id": "start",
+      "name": "Each day at 00:30 UTC",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "kinds": [
+          "cron",
+          "manual"
+        ]
+      }
+    },
+    {
+      "id": "read",
+      "name": "Judge each unit's recent trades",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/read.py",
+        "door_ref": "scripts/door.py"
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "Nothing flagged?",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "expr": "items.quiet"
+      }
+    },
+    {
+      "id": "write",
+      "name": "Explain each flagged unit",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        660,
+        120
+      ],
+      "role": "writer",
+      "effect": "none",
+      "parameters": {
+        "prompt_ref": "prompts/explain.md",
+        "schema_ref": "schemas/note.json"
+      }
+    },
+    {
+      "id": "check",
+      "name": "Check every number's receipt",
+      "type": "subworkflow",
+      "typeVersion": 1,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "workflow": "receipts-grader"
+      }
+    },
+    {
+      "id": "land",
+      "name": "Land the note and the tighten cards",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/land.py"
+      }
+    }
   ],
   "connections": {
-    "Daily after the wrap": {"main": [[{"node": "Load journals and baselines", "port": "in",
-                                        "map": "one"}]]},
-    "Load journals and baselines": {"main": [[{"node": "Decay tests and levels", "port": "in",
-                                               "map": "one"},
-                                              {"node": "Render and grade", "port": "in",
-                                               "map": "one"}]]},
-    "Decay tests and levels": {"main": [[{"node": "Any amber or red?", "port": "in", "map": "one"},
-                                         {"node": "Tighten-only cards", "port": "in",
-                                          "map": "one"}]]},
-    "Any amber or red?": {"true": [[{"node": "Explain each flagged unit", "port": "in",
-                                     "map": "one"}]]},
-    "Explain each flagged unit": {"main": [[{"node": "Tighten-only cards", "port": "in",
-                                             "map": "one"}]]},
-    "Tighten-only cards": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
-                         "fail": [[{"node": "Stop on a failed check", "port": "in",
-                                    "map": "one"}]]}
+    "Each day at 00:30 UTC": {
+      "main": [
+        [
+          {
+            "node": "Judge each unit's recent trades",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Judge each unit's recent trades": {
+      "main": [
+        [
+          {
+            "node": "Nothing flagged?",
+            "port": "in",
+            "map": "one"
+          },
+          {
+            "node": "Land the note and the tighten cards",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Nothing flagged?": {
+      "false": [
+        [
+          {
+            "node": "Explain each flagged unit",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Explain each flagged unit": {
+      "main": [
+        [
+          {
+            "node": "Check every number's receipt",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Check every number's receipt": {
+      "main": [
+        [
+          {
+            "node": "Land the note and the tighten cards",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
   },
-  "meta": {"template": "decay-and-limit-report", "needs": ["trading-node"]}
+  "meta": {
+    "template": "decay-and-limit-report"
+  }
 }

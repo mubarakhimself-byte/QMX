@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["title", "text", "receipts"],
+  "properties": {
+    "title": {"type": "string"},
+    "text": {"type": "string"},
+    "receipts": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

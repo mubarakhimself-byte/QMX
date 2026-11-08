@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "required": ["title", "text", "receipts", "forecasts"],
+  "properties": {
+    "title": {"type": "string"},
+    "text": {"type": "string"},
+    "receipts": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "forecasts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["market", "call", "confidence"],
+        "properties": {
+          "market": {"type": "string"},
+          "call": {
+            "type": "object",
+            "required": ["direction"],
+            "properties": {"direction": {"enum": ["up", "down"]}}
+          },
+          "confidence": {"type": "string"}
+        }
+      }
+    }
+  }
+}

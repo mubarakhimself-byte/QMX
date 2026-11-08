@@ -8,18 +8,32 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 from fake_library import fake_service
 from fake_port import TOKENS, FakePort
+from qmf.core import canonical_bytes, fingerprint_bytes, is_refusal
+from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts, envelope_json
+from qmf.data.series import SeriesKey, SeriesStore
+from qmf.readings.record import (  # pyright: ignore[reportMissingTypeStubs]
+    Health,
+    ReadingRecord,
+    ReadingRef,
+    ReadingSource,
+    Tier,
+    TimeBase,
+)
 from qmx_home import resolve
 from qmx_library.store import Store
+from scheduled import Clock
 
 from qmx_engine.__main__ import main
 from qmx_engine.definition.folder import load
@@ -28,6 +42,7 @@ from qmx_engine.ledger import redact
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle, drafts_ref
+from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import ALIASES, CATALOG, PACK, SHARED, find
 from qmx_engine.templates.install import install, listing
@@ -57,6 +72,20 @@ U3 = PACK / "u3-dictionary-expansion"
 U4 = PACK / "u4-librarian"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
 CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
+SLOW_LANE = (
+    "t7-trade-journal-review",
+    "dm-demo-monitor",
+    "dc-decay-and-limit-report",
+    "s1-pre-session-shortlist",
+    "s2-tag-units-to-markets",
+    "s3-mis-check",
+    "s4-daily-data-review",
+    "s5-live-day-replay",
+)
+"""The B20 slow-lane templates: each reads through `scripts/door.py` and lands its note and cards
+through `scripts/land.py`, one file each, the same in every one of them."""
+GRADED = tuple(folder for folder in SLOW_LANE if folder != "s5-live-day-replay")
+"""The slow-lane templates whose note a model writes, graded by the `receipts-grader` block."""
 JUDGED = (
     "d3-iterate-against-qmb",
     "l4-overnight-lab-loop",
@@ -79,6 +108,7 @@ NO_RENDER = frozenset(
         "u2-where-its-rules-hold",
         "u3-dictionary-expansion",
         "u4-librarian",
+        *SLOW_LANE,
     }
 )
 """Script-first templates with no grader and no deliver step, so they carry no block copy.
@@ -87,7 +117,8 @@ NO_RENDER = frozenset(
 land their own output and have nothing to render or grade (DR6); `extract-source` hands the
 extraction back to its caller and lands no Library object of its own (DR7). The four B19
 templates write no prose: their numbers come from scripts and the core's referee, and what they
-land is a card, a draft or a report on the run's own ref.
+land is a card, a draft or a report on the run's own ref. The B20 slow lane grades its notes with
+the `receipts-grader` block instead, and lands them with its own `scripts/land.py`.
 """
 
 BLOCK_COPIES = {
@@ -138,6 +169,23 @@ BLOCK_COPIES = {
     "understand-extract/scripts/card_holes.py": ("a-fill-the-library/scripts/card_holes.py",),
     "understand-extract/prompts/extract.md": ("a-fill-the-library/prompts/extract.md",),
     "understand-extract/schemas/cards.json": ("a-fill-the-library/schemas/cards.json",),
+    **{
+        f"receipts-grader/{name}": tuple(f"{folder}/receipts-grader/{name}" for folder in GRADED)
+        for name in (
+            "definition.json",
+            "scripts/receipts.py",
+            "scripts/deliver.py",
+            "scripts/stop.py",
+        )
+    },
+    **{
+        f"forecast/{name}": (f"s1-pre-session-shortlist/forecast/{name}",)
+        for name in (
+            "definition.json",
+            "scripts/forecast_write.py",
+            "scripts/forecast_score.py",
+        )
+    },
     **{
         f"calibrate/{name}": tuple(f"{folder}/{name}" for folder in CALIBRATED)
         for name in (
@@ -290,8 +338,8 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
 def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 50
-    assert len(set(ids)) == 50
+    assert len(ids) == 55
+    assert len(set(ids)) == 55
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
@@ -305,6 +353,9 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "morning-market-brief",
         "research-desk-overnight",
         "copilot-eval-battery",
+        "demo-trades-fill-quality",
+        "trade-journal-in-risk-units",
+        "decay-and-limit-report",
         "strategy-idea-to-paper-tested",
         "revolution-loop",
         "ask-the-panel",
@@ -323,12 +374,17 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "where-a-failed-unit-still-holds",
         "expand-the-dictionary-from-a-source",
         "find-repeated-code-and-gaps-in-the-dictionary",
+        "shortlist-markets-before-each-session",
+        "tag-units-to-markets",
+        "check-the-mis-against-an-agents-read",
+        "review-the-days-data",
+        "replay-a-live-day-and-diff-it",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
-    assert sum(1 for t in CATALOG if t.needs) == 22
+    assert sum(1 for t in CATALOG if t.needs) == 19
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
@@ -370,6 +426,11 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "where-a-failed-unit-still-holds",
         "expand-the-dictionary-from-a-source",
         "find-repeated-code-and-gaps-in-the-dictionary",
+        "shortlist-markets-before-each-session",
+        "tag-units-to-markets",
+        "check-the-mis-against-an-agents-read",
+        "review-the-days-data",
+        "replay-a-live-day-and-diff-it",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -622,7 +683,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_28_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_36_disabled_saves_19_drafts_and_a_second_install_changes_nothing(
     home: Path,
 ) -> None:
     with fake_service(home, harness=answers()) as svc:
@@ -638,9 +699,9 @@ def test_install_publishes_28_disabled_saves_22_drafts_and_a_second_install_chan
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 50
+    assert [i.action for i in second] == ["unchanged"] * 55
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 28
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 36
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -657,6 +718,8 @@ def test_install_publishes_28_disabled_saves_22_drafts_and_a_second_install_chan
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
+        ("dc-decay-and-limit-report", "cron", False),
+        ("dm-demo-monitor", "cron", False),
         ("download-binance", "cron", False),
         ("download-ccxt", "cron", False),
         ("download-dukascopy", "cron", False),
@@ -664,8 +727,13 @@ def test_install_publishes_28_disabled_saves_22_drafts_and_a_second_install_chan
         ("refresh-ccxt-records", "cron", False),
         ("rs1-paper-scout", "cron", False),
         ("rv-weekly-review", "cron", False),
+        ("s1-pre-session-shortlist", "cron", False),
+        ("s2-tag-units-to-markets", "cron", False),
+        ("s3-mis-check", "cron", False),
+        ("s4-daily-data-review", "cron", False),
         ("t3-news-calendar-watch", "cron", False),
         ("t4-research-desk-overnight", "cron", False),
+        ("t7-trade-journal-review", "cron", False),
     ]
 
 
@@ -730,7 +798,7 @@ def test_t4_fails_when_the_coordinator_writes_a_line_no_kept_claim_backs(home: P
     assert (report.status, brief) == ("failed", None)
 
 
-def test_db_reads_every_node_fact_as_could_not_check_and_a_quiet_day_costs_nothing(
+def test_db_reads_the_journals_marks_the_calendar_and_a_quiet_day_costs_nothing(
     tmp_path: Path,
 ) -> None:
     busy, card = try_template(qmx_folder(tmp_path / "busy"), DB, {"fixture": "busy"})
@@ -738,7 +806,16 @@ def test_db_reads_every_node_fact_as_could_not_check_and_a_quiet_day_costs_nothi
     quiet, still = try_template(qmx_folder(tmp_path / "quiet"), DB, {"fixture": "quiet"}, port)
 
     assert busy.status == "passed"
-    assert set(card["node_facts"].values()) == {"could not check: trading node"}
+    assert card["node_facts"] == {
+        "account_equity": "could not check: trading node",
+        "kill_line_cushion_r": "could not check: trading node",
+        "open_risk_r": "could not check: trading node",
+        "open_positions": "could not check: trading node",
+        "unit_states": "could not check: trading node",
+        "overnight_pnl_r": "nothing recorded",
+        "session_conditions": "nothing recorded",
+    }
+    assert {e["marked"] for e in card["tiles"]["events"]} == {"qmx.marked/1"}
     assert [d["run_id"] for d in card["decisions"]] == ["fixture-rs4"]
     assert [e["title"] for e in card["tiles"]["events"]] == [
         "CPI Flash Estimate y/y",
@@ -1152,3 +1229,515 @@ def test_b_asks_qmb_for_a_walk_forward_only_when_the_run_names_ranges() -> None:
     }
     assert plain["walk_forward"] is None
     assert (asked["ok"], asked["window"]) == (True, {"start": "2020-01-01", "end": "2023-01-01"})
+
+
+T7 = PACK / "t7-trade-journal-review"
+DAY = datetime(2025, 1, 2, tzinfo=UTC)
+
+
+def journal(
+    home: Path, stream: str, subject: str, kind: str, rows: list[tuple[int, dict[str, Any]]]
+) -> None:
+    """One month of a journal as the records job files it: each row its minute after midnight on
+    2 January 2025 and its record."""
+    key = SeriesKey.try_create(f"journal-{stream}", subject, kind, 2025, 1, "paper.this-pc")
+    assert not is_refusal(key)
+    committed = SeriesStore(home / "market" / "series").commit(
+        key.value,
+        [
+            (int((DAY + timedelta(minutes=minute)).timestamp()) * 1_000, seq, json.dumps(record))
+            for seq, (minute, record) in enumerate(rows)
+        ],
+    )
+    assert not is_refusal(committed)
+
+
+def unit_row(kind: str, n: int, market: str, body: dict[str, Any], **envelope: Any) -> Any:
+    return {
+        "kind": kind,
+        "record_id": f"node@this-pc/{kind}-{n}",
+        "world": "paper",
+        "machine": "this-pc",
+        "unit_id": "dummy",
+        "market_id": market,
+        "backfilled": False,
+        "body": body,
+    } | envelope
+
+
+def dummy_day(home: Path) -> None:
+    """The dummy's 2 January: four decisions and three trades on two markets."""
+    eurusd, gold = "fx.eurusd", "metal.xauusd"
+    journal(home, "unit", "dummy", "signal", [
+        (480, unit_row("signal", 1, eurusd, {"outcome": "taken"})),
+        (495, unit_row("signal", 2, eurusd, {"outcome": "skipped", "reason": "spread_wide"})),
+        (540, unit_row("signal", 3, eurusd, {"outcome": "blocked", "reason": "max_positions"})),
+        (720, unit_row("signal", 4, gold, {"outcome": "taken"})),
+    ])  # fmt: skip
+    journal(home, "unit", "dummy", "trade", [
+        (600, unit_row("trade", 1, eurusd, {"r": "1.5"})),
+        (660, unit_row("trade", 2, eurusd, {"r": "-0.5"})),
+        (780, unit_row("trade", 3, gold, {"r": "2.0"})),
+    ])  # fmt: skip
+
+
+def slow_run(
+    home: Path,
+    folder: Path,
+    inputs: Any,
+    planted: dict[str, Any] | None = None,
+    clock: Clock | None = None,
+) -> tuple[Any, dict[str, Any]]:
+    """`folder` test-run with `inputs` on `clock`, each model turn answered by `planted` by its
+    prompt's first words: its report and what each step printed, by node id."""
+    port = answers(planted={k: json.dumps(v) for k, v in (planted or {}).items()})
+    with fake_service(home, harness=port, clock=clock) as svc:
+        item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+    with Reader.open(home) as reader:
+        printed = {
+            str(e.data["node_id"]): cast(dict[str, Any], e.data["outputs"])["main"]
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished" and "main" in cast(dict[str, Any], e.data["outputs"])
+        }
+    return report, printed
+
+
+def landed(home: Path) -> list[tuple[str, dict[str, Any]]]:
+    """The type and metadata of every artifact the runs landed, without the runner's
+    `write_key`."""
+    with LibraryFake.open(home) as library:
+        stored = [library.get(e.object_id) for e in library.events()]
+    return [
+        (
+            str(s.fields["type"]),
+            {
+                k: v
+                for k, v in cast(dict[str, Any], s.fields["metadata"]).items()
+                if k != "write_key"
+            },
+        )
+        for s in stored
+        if s.kind == "artifact" and s.fields["type"] not in ("run-file", "trace")
+    ]
+
+
+def failure(home: Path, run_id: str) -> str:
+    """Why the run's first failed step failed."""
+    with Reader.open(home) as reader:
+        return next(
+            str(e.data["message"]) for e in reader.events(run_id) if e.kind == "node_failed"
+        )
+
+
+UNIT_NOTE: dict[str, Any] = {
+    "title": "The units on 2025-01-02",
+    "text": "dummy traded 2 of its 4 decisions, skipped 1 for a wide spread and missed 1 at "
+    "max positions. Its 3 trades made 3.0R: 1.0R on fx.eurusd and 2.0R on metal.xauusd.",
+    "receipts": ["read"],
+}
+
+
+def test_the_unit_review_says_what_each_unit_traded_skipped_and_missed(home: Path) -> None:
+    dummy_day(home)
+
+    report, printed = slow_run(
+        home, T7, {"day": "2025-01-02"}, {"You write QMX's unit review": UNIT_NOTE}
+    )
+
+    assert report.status == "passed", report.reason
+    [unit] = printed["read"]["findings"]["units"]
+    assert {k: v for k, v in unit.items() if k != "markets"} == {
+        "unit": "dummy", "decisions": 4, "traded": 2, "skipped": 1, "missed": 1,
+        "trades": 3, "r": "3.0",
+    }  # fmt: skip
+    assert [(m["market"], m["missed"], m["reasons"], m["r"]) for m in unit["markets"]] == [
+        ("fx.eurusd", 1, {"max_positions": 1, "spread_wide": 1}, "1.0"),
+        ("metal.xauusd", 0, {}, "2.0"),
+    ]
+    [note] = [m for t, m in landed(home) if t == "note"]
+    assert (note["text"], note["receipts"], note["proposal"]) == (UNIT_NOTE["text"], ["read"], True)
+    assert note["author"] == "agent:t7-trade-journal-review"
+    assert {t for t, _ in landed(home)} == {"note", "unit-review"}
+
+
+def test_a_unit_review_with_a_number_no_step_printed_fails_and_lands_no_note(home: Path) -> None:
+    dummy_day(home)
+    invented = UNIT_NOTE | {"text": UNIT_NOTE["text"] + " It would have made 4.5R more."}
+
+    report, _ = slow_run(home, T7, {"day": "2025-01-02"}, {"You write QMX's unit review": invented})
+
+    assert report.status == "failed"
+    assert (
+        "node stop failed: qmx_failure: the note fails its receipts: no cited receipt holds 4.5;"
+        in failure(home, report.run_id)
+    )
+    assert [t for t, _ in landed(home) if t == "note"] == []
+
+
+DM = PACK / "dm-demo-monitor"
+FILL_NOTE: dict[str, Any] = {
+    "title": "Demo fills on 2025-01-02",
+    "text": "demo-1 had 3 fills on fx.eurusd, which left 0.04R of sizing residue. Its 1 trade "
+    "made 1.5R and its stop was gapped through.",
+    "receipts": ["read"],
+}
+
+
+def test_the_demo_monitor_counts_fills_and_residue_and_reads_lot_rounding_as_no_partial_fill(
+    home: Path,
+) -> None:
+    """A fill's `receipt_quantity` is the sizer's ask and its `quantity` that ask rounded to lots,
+    so the gap between them is `residue_r`, never a partial fill."""
+    demo = {"world": "demo", "unit_id": "demo-1"}
+    journal(home, "unit", "demo-1", "fill", [
+        (480, unit_row("fill", 1, "fx.eurusd", {"kind": "entry", "quantity": "1.0",
+                                               "receipt_quantity": "1.00", "residue_r": "0"},
+                       **demo)),
+        (600, unit_row("fill", 2, "fx.eurusd", {"kind": "exit", "quantity": "1.0",
+                                               "residue_r": "0"}, **demo)),
+        (720, unit_row("fill", 3, "fx.eurusd", {"kind": "entry", "quantity": "0.48",
+                                               "receipt_quantity": "0.50", "residue_r": "0.04"},
+                       **demo)),
+    ])  # fmt: skip
+    journal(home, "unit", "demo-1", "trade", [
+        (600, unit_row("trade", 1, "fx.eurusd", {"r": "1.5", "exit_kind": "stop",
+                                                "gap_through_stop": True}, **demo)),
+    ])  # fmt: skip
+
+    report, printed = slow_run(
+        home, DM, {"day": "2025-01-02"}, {"You write QMX's fill-quality note": FILL_NOTE}
+    )
+
+    assert report.status == "passed", report.reason
+    counted = [{"unit": "demo-1", "markets": [{
+        "market": "fx.eurusd", "fills": 3, "residue_r": "0.04", "trades": 1, "r": "1.5",
+        "gaps_through_stop": 1, "exits": {"stop": 1}, "with_market_minute": 0,
+    }]}]  # fmt: skip
+    assert printed["read"]["findings"]["units"] == counted
+    [fill_quality] = [m for t, m in landed(home) if t == "fill-quality"]
+    assert fill_quality["units"] == counted
+    [note] = [m for t, m in landed(home) if t == "note"]
+    assert (note["text"], note["proposal"]) == (FILL_NOTE["text"], True)
+
+
+def test_every_slow_lane_template_reads_and_lands_through_one_copy_of_its_shared_scripts() -> None:
+    doors = {
+        (PACK / f / "scripts" / "door.py").read_bytes() for f in (*SLOW_LANE, DB.name, RV.name)
+    }
+    lands = {(PACK / f / "scripts" / "land.py").read_bytes() for f in SLOW_LANE}
+
+    assert (len(doors), len(lands)) == (1, 1)
+
+
+def test_the_slow_lane_writes_only_artifacts_on_its_own_run_and_asks_qmb_only_to_replay() -> None:
+    """Level 0 AD-31's blast-radius fact: agents write notes and drafts only. Every Library write
+    a slow-lane script lists is a `put_artifact`, which the runner makes on the run's own ref; no
+    script links, publishes or moves a ref, and the one app step asks QMB's read-only replay."""
+    ops: set[str] = set()
+    apps: list[tuple[str, str]] = []
+    for folder in (*SLOW_LANE, DB.name, RV.name):
+        scripts = [p.read_text("utf-8") for p in (PACK / folder).rglob("*.py")]
+        ops |= {op for text in scripts for op in re.findall(r'"op": "(\w+)"', text)}
+        definition = json.loads((PACK / folder / "definition.json").read_text("utf-8"))
+        apps += [
+            (n["parameters"]["app"], n["parameters"]["job"])
+            for n in definition["nodes"]
+            if n["type"] == "app_op"
+        ]
+
+    assert ops == {"put_artifact"}
+    assert apps == [("qmb", "jobs/replay_check.py")]
+
+
+DC = PACK / "dc-decay-and-limit-report"
+S1 = PACK / "s1-pre-session-shortlist"
+S2 = PACK / "s2-tag-units-to-markets"
+S3 = PACK / "s3-mis-check"
+S4 = PACK / "s4-daily-data-review"
+S5 = PACK / "s5-live-day-replay"
+
+
+def trades(unit: str, market: str, rs: list[str]) -> list[tuple[int, dict[str, Any]]]:
+    return [
+        (minute, unit_row("trade", minute, market, {"r": r}, unit_id=unit))
+        for minute, r in enumerate(rs)
+    ]
+
+
+def test_the_decay_check_alarms_on_a_fading_record_and_proposes_only_to_tighten(
+    home: Path,
+) -> None:
+    journal(home, "unit", "fading", "trade",
+            trades("fading", "fx.eurusd", ["1.0"] * 20 + ["-1", "0.5"] * 10))  # fmt: skip
+    journal(home, "unit", "steady", "trade", trades("steady", "fx.eurusd", ["0.5"] * 40))
+    note = {
+        "title": "Decay check to 2025-01-02: 1 unit flagged",
+        "text": "fading is in Alarm: its last 20 trades average -0.25R against 1.00R over the 20 "
+        "before them. Is that bad luck or a real change? One tighten card waits for you.",
+        "receipts": ["read"],
+    }
+
+    report, printed = slow_run(home, DC, {"day": "2025-01-02"}, {"You explain QMX's decay": note})
+
+    assert report.status == "passed", report.reason
+    assert [(u["unit"], u["status"], u["recent_expectancy_r"], u["record_expectancy_r"])
+            for u in printed["read"]["findings"]["units"]] == [
+        ("fading", "Alarm", "-0.25", "1.00"),
+        ("steady", "OK", "0.50", "0.50"),
+    ]  # fmt: skip
+    [decay] = [m for t, m in landed(home) if t == "decay-check"]
+    cards = [m for t, m in landed(home) if t == "proposal-card"]
+    assert [(c["subject"], c["ask"], c["proposal"]) for c in cards] == [("fading", "tighten", True)]
+    assert cards[0]["evidence"] == [printed["read"]["library_written"][0]["object_id"]]
+    assert decay["flagged"] == 1
+
+
+def test_the_decay_check_on_a_steady_record_asks_no_model_and_proposes_nothing(
+    home: Path,
+) -> None:
+    journal(home, "unit", "steady", "trade", trades("steady", "fx.eurusd", ["0.5"] * 40))
+    port = answers()
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(DC.name, Bundle.read(DC), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={"day": "2025-01-02"}))
+
+    assert (report.status, port.chats) == ("passed", [])
+    assert [m["text"] for t, m in landed(home) if t == "note"] == [
+        "1 units judged, all OK; 0 too thin to judge. Nothing is proposed."
+    ]
+    assert [t for t, _ in landed(home) if t == "proposal-card"] == []
+
+
+def readings(home: Path, market: str, reading: str, said: list[tuple[int, str]]) -> None:
+    """The MIS's history of one reading on one market in January 2025, as the records job files
+    it: each row its minute after midnight on 2 January and its word."""
+    rows: list[tuple[object, ...]] = []
+    for seq, (minute, word) in enumerate(said):
+        ns = int((DAY + timedelta(minutes=minute)).timestamp()) * 1_000_000_000
+        body = ReadingRecord(
+            reading=ReadingRef(reading, "1", fingerprint_bytes(reading.encode())),
+            source=ReadingSource.MIS,
+            machine="this-pc",
+            market_id=market,
+            instrument=market.upper(),
+            tier=Tier.SESSION,
+            time_base=TimeBase.CLOCK,
+            health=Health.FRESH,
+            data_level=1,
+            fallback_step=0,
+            inputs_received_at=ns,
+            computed_at=ns,
+            stale_after_s=28_800,
+            word=word,
+        ).body()
+        record = envelope_json(
+            RowFacts(ts_recv=ns, clock_ok=True, market_id=market),
+            record_id=f"mis@this-pc/{reading}-{ns}",
+            stream=JournalStream.READINGS,
+            kind="reading",
+            schema_version=1,
+            writer_id="mis@this-pc",
+            seq=seq,
+            ts_write=ns,
+            world=JournalWorld.LIVE,
+            machine="this-pc",
+            build="test",
+            body=body,
+        )
+        made = canonical_bytes(record)
+        assert not is_refusal(made)
+        rows.append((ns // 1_000_000, seq, made.value.decode()))
+    key = SeriesKey.try_create(
+        "journal-readings", f"mis.{market}", "reading", 2025, 1, "live.this-pc"
+    )
+    assert not is_refusal(key)
+    assert not is_refusal(SeriesStore(home / "market" / "series").commit(key.value, rows))
+
+
+def holdout(home: Path, month: str) -> None:
+    """His Settings `[data]` holdout turned on from `month`."""
+    (home / "settings.toml").write_text(
+        f'[data]\nholdout = true\nholdout_boundary = "{month}"\n', encoding="utf-8"
+    )
+
+
+def test_tagging_proposes_dropping_a_market_whose_record_fell_with_its_reading_words(
+    home: Path,
+) -> None:
+    readings(home, "fx.eurusd", "efficiency-ratio", [(0, "choppy")])
+    journal(home, "unit", "dummy", "trade", trades("dummy", "fx.eurusd", ["-0.5"] * 20))
+    note = {
+        "title": "Markets for the week to 2025-01-02: 1 proposed for a drop",
+        "text": "dummy on fx.eurusd: 20 trades averaging -0.50R, all of them while "
+        "efficiency-ratio said choppy, for -10.0R.",
+        "receipts": ["read"],
+    }
+
+    report, printed = slow_run(
+        home,
+        S2,
+        {"day": "2025-01-02", "readings": ["efficiency-ratio"]},
+        {"You explain QMX's weekly market tags": note},
+    )
+
+    assert report.status == "passed", report.reason
+    [record] = printed["read"]["findings"]["records"]
+    assert record["by_reading"] == {"efficiency-ratio": {"choppy": {"trades": 20, "r": "-10.0"}}}
+    [card] = [m for t, m in landed(home) if t == "proposal-card"]
+    assert (card["subject"], card["ask"], card["placeholders"]) == (
+        "dummy",
+        "drop_market",
+        ["fx.eurusd"],
+    )
+
+
+MIS_DAY = [(480, "choppy"), (540, "choppy"), (720, "efficient")]
+
+
+def test_the_mis_check_lands_each_disagreement_linked_to_its_reading_row(home: Path) -> None:
+    readings(home, "fx.eurusd", "efficiency-ratio", MIS_DAY)
+    afternoon = {
+        "market": "fx.eurusd",
+        "reading": "efficiency-ratio",
+        "at": "2025-01-02T12:00:00.000Z",
+        "agent_reads": "choppy",
+        "why": "price kept reversing all afternoon",
+    }
+    nowhere = afternoon | {"at": "2025-01-02T10:00:00.000Z"}
+    answer = {
+        "title": "MIS check for 2025-01-02",
+        "text": "The MIS published 3 efficiency-ratio rows for fx.eurusd. I read its turn to "
+        "efficient at midday as still choppy.",
+        "receipts": ["read"],
+        "disagreements": [afternoon, nowhere],
+    }
+
+    report, printed = slow_run(
+        home,
+        S3,
+        {"day": "2025-01-02", "readings": ["efficiency-ratio"]},
+        {"You check QMX's MIS": answer},
+    )
+
+    assert report.status == "passed", report.reason
+    [checked] = printed["read"]["findings"]["checked"]
+    assert [(c["at"], c["said"]) for c in checked["changes"]] == [
+        ("2025-01-02T08:00:00.000Z", "choppy"),
+        ("2025-01-02T12:00:00.000Z", "efficient"),
+    ]
+    [note] = [m for t, m in landed(home) if t == "note"]
+    assert note["note_kind"] == "disagreement"
+    assert note["title"] == "MIS check for 2025-01-02: 1 change point read differently"
+    assert note["about"] == [
+        {"rel": "reading", "ref": "efficiency-ratio|fx.eurusd|2025-01-02T12:00:00.000Z"}
+    ]
+    assert note["examples"] == [afternoon | {"mis_said": "efficient"}]
+    assert [d["at"] for d in printed["examples"]["dropped"]] == ["2025-01-02T10:00:00.000Z"]
+
+
+def test_the_mis_check_never_reads_a_held_out_window_and_says_so(home: Path) -> None:
+    readings(home, "fx.eurusd", "efficiency-ratio", MIS_DAY)
+    holdout(home, "2025-01")
+    port = answers()
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(S3.name, Bundle.read(S3), 0, caller=OPERATOR).item
+        inputs: Any = {"day": "2025-01-02", "readings": ["efficiency-ratio"]}
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+    findings = finished_output(home, report, "read")["findings"]
+
+    assert (report.status, port.chats, findings["checked"]) == ("passed", [], [])
+    assert findings["refused"]["efficiency-ratio"].startswith(
+        "the study's holdout seals reading history from 2025-01-01T00:00:00.000Z; this window "
+        "reaches journal-readings/"
+    )
+
+
+def test_the_shortlist_names_the_opening_market_a_unit_fits_and_dates_its_call(
+    home: Path,
+) -> None:
+    readings(home, "fx.eurusd", "efficiency-ratio", [(420, "choppy")])
+    journal(home, "unit", "dummy", "trade",
+            [(600, unit_row("trade", 1, "fx.eurusd", {"r": "1.5"})),
+             (660, unit_row("trade", 2, "fx.eurusd", {"r": "-0.5"}))])  # fmt: skip
+    answer = {
+        "title": "Shortlist: fx.eurusd",
+        "text": "fx.eurusd opens its next session at midnight while efficiency-ratio says "
+        "choppy. dummy fits: 2 trades under that word for 1.0R.",
+        "receipts": ["read"],
+        "forecasts": [{"market": "fx.eurusd", "call": {"direction": "up"}, "confidence": "0.55"}],
+    }
+    clock = Clock(datetime(2025, 1, 2, 23, 40, tzinfo=UTC))
+
+    report, printed = slow_run(
+        home,
+        S1,
+        {"readings": ["efficiency-ratio"]},
+        {"You write QMX's pre-session shortlist": answer},
+        clock,
+    )
+
+    assert report.status == "passed", report.reason
+    [row] = printed["read"]["findings"]["shortlist"]
+    assert (row["market"], row["session_starts"], row["horizon"], row["words"]) == (
+        "fx.eurusd",
+        "2025-01-03T00:00:00Z",
+        "2025-01-03T08:00:00Z",
+        {"efficiency-ratio": "choppy"},
+    )
+    assert [m for t, m in landed(home) if t == "forecast"] == [
+        {
+            "market": "fx.eurusd",
+            "call": {"direction": "up"},
+            "horizon": "2025-01-03T08:00:00Z",
+            "confidence": "0.55",
+            "written_at": "2025-01-02T23:40:00Z",
+            "written_by": "agent:s1-pre-session-shortlist",
+        }
+    ]
+    assert [m["proposal"] for t, m in landed(home) if t == "note"] == [True]
+
+
+def test_the_data_review_counts_clock_flags_and_offsets_per_stream(home: Path) -> None:
+    flagged = unit_row("signal", 1, "fx.eurusd", {"outcome": "taken"}, clock_ok=False)
+    journal(home, "unit", "dummy", "signal", [(480, flagged)])
+    journal(home, "market", "fx.eurusd", "offset",
+            [(480, unit_row("offset", 1, "fx.eurusd", {"pips": "0.4"}))])  # fmt: skip
+    note = {
+        "title": "Data review for 2025-01-02",
+        "text": "No price series is held here. 1 unit row on this-pc carries a clock flag, and "
+        "fx.eurusd has 1 offset row.",
+        "receipts": ["read"],
+    }
+
+    report, printed = slow_run(
+        home, S4, {"day": "2025-01-02"}, {"You write QMX's daily data review": note}
+    )
+
+    assert report.status == "passed", report.reason
+    findings = printed["read"]["findings"]
+    assert (findings["clock_flags"], findings["offset_rows"], findings["series"]) == (
+        {"unit on this-pc": 1},
+        {"fx.eurusd": 1},
+        [],
+    )
+    assert [m["text"] for t, m in landed(home) if t == "note"] == [note["text"]]
+
+
+@pytest.mark.parametrize(
+    ("fixture", "match", "asks"),
+    [("recorded", "0.95", []), ("recorded-drift", "0.75", ["bench"])],
+)
+def test_the_live_day_replay_proposes_a_bench_only_under_its_match_setting(
+    home: Path, fixture: str, match: str, asks: list[str]
+) -> None:
+    live = unit_row("signal", 1, "fx.eurusd", {"outcome": "taken"}, world="live")
+    journal(home, "unit", "dummy", "signal", [(480, live)])
+    inputs = {"unit": "dummy", "pin": "unit-object-fixture", "day": "2025-01-02"}
+
+    report, printed = slow_run(home, S5, inputs | {"fixture": fixture})
+
+    assert report.status == "passed", report.reason
+    assert (printed["route"]["live_rows"], printed["diff"]["diff"]["match"]) == (1, match)
+    assert [m["ask"] for t, m in landed(home) if t == "proposal-card"] == asks
+    assert [m["author"] for t, m in landed(home) if t == "note"] == ["script:s5-live-day-replay"]

@@ -6,33 +6,46 @@ The edition follows the clock: `morning` before 07:00 London, `end of day` from 
 nfs.faireconomy.media (today's, and tomorrow's for the end of day). The latest live result of the
 research desk (T4), the calendar watch (T3) and the paper scout (RS1) from the last 36 hours, and
 the open inbox items, come from the engine's own ledger and inbox in the home this run lives in;
-test runs are never read. Account, cushion, positions, unit states and session conditions are node
-facts: they read `could not check: trading node` until the trading node's read model exists.
+test runs are never read. The units' result over the last day comes from the unit journal through
+`journal_query`, and the session conditions are the MIS's last words for each watchlist market
+from its reading history through `readings_query`, whose holdout refuses a held-out window by
+name. Account, cushion, open risk, positions and unit states are node facts: they read
+`could not check: trading node` until the node's read operations reach This PC. Every calendar row
+is outside text, so it carries the `qmx.marked/1` mark: the writer reads it as data, never as an
+instruction.
 
 A run started with `{"fixture": "busy"}` or `{"fixture": "quiet"}` replays the matching synthetic
-day in `fixtures/`. The home is found from the run's shared zone (`QMX_WORK_SHARED`), the one
-place a script learns where its run lives.
+day in `fixtures/`; the journals and reading history are still read from the run's own home. The
+home is found from the run's shared zone (`QMX_WORK_SHARED`), the one place a script learns where
+its run lives.
 """
 
+import importlib.util
 import json
-import os
 import sys
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+spec = importlib.util.spec_from_file_location("door", Path(__file__).with_name("door.py"))
+door = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(door)
+
 WATCHLIST = {"EURUSD": ("EUR", "USD"), "USDJPY": ("USD", "JPY")}
+MARKETS = {"EURUSD": "fx.eurusd", "USDJPY": "fx.usdjpy"}
+READINGS = ("efficiency-ratio", "variance-ratio", "hurst-exponent", "spread_state")
+MARK = "qmx.marked/1"
 NODE = "could not check: trading node"
 NODE_FACTS = (
     "account_equity",
     "kill_line_cushion_r",
     "open_risk_r",
-    "overnight_pnl_r",
     "open_positions",
     "unit_states",
-    "session_conditions",
 )
+NOTHING = "nothing recorded"
 FEED = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 IMPACT = {"High": "high", "Medium": "medium", "Low": "low"}
 FRESH_HOURS = 36
@@ -70,6 +83,34 @@ def calendar(days):
             }
         )
     return rows
+
+
+def overnight(home, now):
+    """The units' result over the last day, per unit and market, from the unit journal."""
+    window = {"start": door.iso(now - timedelta(days=1)), "end": door.iso(now)}
+    answer = door.journal(home, stream="unit", window=window, view="digest")
+    units = [
+        {"unit": r["unit_id"], "market": r["market_id"], "trades": r["trades"], "r": r["r"]}
+        for r in answer["rows"]
+        if r["trades"]
+    ]
+    if not units:
+        return NOTHING
+    return {"units": units, "r": str(sum((Decimal(u["r"]) for u in units), Decimal(0)))}
+
+
+def conditions(home, now, missing):
+    """The MIS's last word of each reading for each watchlist market over the last day."""
+    window = {"start": door.iso(now - timedelta(days=1)), "end": door.iso(now)}
+    found = {}
+    for reading in READINGS:
+        read = door.readings(home, reading, window, markets=sorted(MARKETS.values()), source="mis")
+        if "refused" in read:
+            missing.append(f"reading history: {reading}: {read['refused']}")
+            continue
+        for row in read["rows"]:
+            found.setdefault(row["market_id"], {})[reading] = row.get("word", row.get("value"))
+    return dict(sorted(found.items())) or NOTHING
 
 
 def latest_results(home, since):
@@ -116,6 +157,8 @@ def open_decisions(home):
 given = json.load(sys.stdin).get("in") or {}
 fixture = given.get("fixture") if isinstance(given, dict) else None
 missing = []
+now = door.now()
+home = door.home()
 if fixture in ("busy", "quiet"):
     day = json.loads(
         (Path(__file__).parents[1] / "fixtures" / f"day-{fixture}.json").read_text("utf-8")
@@ -123,7 +166,6 @@ if fixture in ("busy", "quiet"):
     day.pop("note")
     source = "fixture"
 else:
-    now = datetime.now(UTC)
     day = {"date": now.date().isoformat(), "edition": edition(now)}
     days = {day["date"]}
     if day["edition"] == "end of day":
@@ -133,9 +175,6 @@ else:
     except Exception as error:
         day["events"] = []
         missing.append(f"calendar: {type(error).__name__}")
-    from qmx_engine.workers.zones import home_of
-
-    home = home_of(Path(os.environ["QMX_WORK_SHARED"]))
     results = latest_results(home, (now - timedelta(hours=FRESH_HOURS)).isoformat())
     desk_run, desk = results.get("t4-research-desk-overnight", (None, {}))
     day["desk"] = [
@@ -155,6 +194,10 @@ else:
             missing.append(f"{workflow}: no live result in the last {FRESH_HOURS} hours")
     source = "engine"
 
+facts = dict.fromkeys(NODE_FACTS, NODE)
+facts["overnight_pnl_r"] = overnight(home, now)
+facts["session_conditions"] = conditions(home, now, missing)
+day["events"] = [e | {"marked": MARK} for e in day["events"]]
 notable = [e for e in day["events"] if e["impact"] != "low"]
 quiet = not (notable or day["desk"] or day["alerts"] or day["research"] or day["decisions"])
 print(
@@ -162,7 +205,7 @@ print(
         day
         | {
             "watchlist": sorted(WATCHLIST),
-            "node_facts": dict.fromkeys(NODE_FACTS, NODE),
+            "node_facts": facts,
             "quiet": quiet,
             "could_not_check": missing,
             "source": source,

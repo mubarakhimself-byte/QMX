@@ -1,0 +1,216 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "s2-tag-units-to-markets",
+  "name": "Tag each unit to the markets its record holds on",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "day": {
+        "type": "string",
+        "description": "the record ends with this UTC day, YYYY-MM-DD; the day before the run by default"
+      },
+      "lookback_days": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 28,
+        "description": "the days of trades read, a starting default he changes"
+      },
+      "min_trades": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 20,
+        "description": "a unit and market with fewer trades is never proposed for a drop"
+      },
+      "drop_at_r": {
+        "type": "string",
+        "default": "0",
+        "description": "propose a drop when the expectancy is at or below this many R"
+      },
+      "readings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "efficiency-ratio",
+          "variance-ratio",
+          "hurst-exponent",
+          "cusum-change-point",
+          "spread_state"
+        ],
+        "description": "the MIS readings set beside each trade, by reading id; the MIS's default packs by default"
+      },
+      "units": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "the unit ids to read; every unit with trades by default"
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "each unit's record per market and per reading state, a note explaining every proposal, and one drop_market card per market whose record fell to the drop line, all landed as proposals; nothing changes a unit's markets"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any"
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Sunday at 20:00 UTC",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "kinds": [
+          "cron",
+          "manual"
+        ]
+      }
+    },
+    {
+      "id": "read",
+      "name": "Read each unit's record per market and reading state",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/read.py",
+        "door_ref": "scripts/door.py"
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "No market to drop?",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "expr": "items.quiet"
+      }
+    },
+    {
+      "id": "write",
+      "name": "Explain each proposal",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        660,
+        120
+      ],
+      "role": "writer",
+      "effect": "none",
+      "parameters": {
+        "prompt_ref": "prompts/explain.md",
+        "schema_ref": "schemas/note.json"
+      }
+    },
+    {
+      "id": "check",
+      "name": "Check every number's receipt",
+      "type": "subworkflow",
+      "typeVersion": 1,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "workflow": "receipts-grader"
+      }
+    },
+    {
+      "id": "land",
+      "name": "Land the note and the market cards",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/land.py"
+      }
+    }
+  ],
+  "connections": {
+    "Sunday at 20:00 UTC": {
+      "main": [
+        [
+          {
+            "node": "Read each unit's record per market and reading state",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Read each unit's record per market and reading state": {
+      "main": [
+        [
+          {
+            "node": "No market to drop?",
+            "port": "in",
+            "map": "one"
+          },
+          {
+            "node": "Land the note and the market cards",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "No market to drop?": {
+      "false": [
+        [
+          {
+            "node": "Explain each proposal",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Explain each proposal": {
+      "main": [
+        [
+          {
+            "node": "Check every number's receipt",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Check every number's receipt": {
+      "main": [
+        [
+          {
+            "node": "Land the note and the market cards",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "template": "tag-units-to-markets"
+  }
+}

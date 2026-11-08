@@ -1,0 +1,51 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "s3-mis-check",
+  "name": "Check the MIS against an agent's own read of the market",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "day": {"type": "string", "description": "the UTC day to check, YYYY-MM-DD; the day before the run by default"},
+      "days": {"type": "integer", "minimum": 1, "default": 1, "description": "how many days up to and including day to check, a starting default he changes"},
+      "readings": {"type": "array", "items": {"type": "string"}, "default": ["efficiency-ratio", "variance-ratio", "hurst-exponent", "cusum-change-point", "spread_state"], "description": "the MIS readings to check, by reading id; the MIS's default packs by default"},
+      "markets": {"type": "array", "items": {"type": "string"}, "description": "the market ids to check; every market the MIS read by default"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the MIS's change points per market and reading, and a disagreement note with one example per change point the agent reads otherwise, each linked to its reading row, for him to improve the MIS; landed as a proposal"
+  },
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "Each day at 00:45 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "read", "name": "Read what the MIS said", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/read.py", "door_ref": "scripts/door.py"}},
+    {"id": "quiet", "name": "No reading history?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.quiet"}},
+    {"id": "check_mis", "name": "Read the market beside the MIS", "type": "agent",
+     "typeVersion": 1, "toolsets": ["data"], "position": [660, 120], "role": "reviewer",
+     "retry": {"max_tries": 2}, "effect": "none",
+     "parameters": {"brief_ref": "prompts/check.md", "output_schema_ref": "schemas/check.json",
+                    "tools": []}},
+    {"id": "check", "name": "Check every number's receipt", "type": "subworkflow",
+     "typeVersion": 1, "position": [880, 120], "parameters": {"workflow": "receipts-grader"}},
+    {"id": "examples", "name": "Keep the examples that point at a change point", "type": "script",
+     "typeVersion": 1, "position": [1100, 0], "effect": "none",
+     "parameters": {"script": "scripts/examples.py"}},
+    {"id": "land", "name": "Land the disagreements for him", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/land.py"}}
+  ],
+  "connections": {
+    "Each day at 00:45 UTC": {"main": [[{"node": "Read what the MIS said", "port": "in", "map": "one"}]]},
+    "Read what the MIS said": {"main": [[{"node": "No reading history?", "port": "in", "map": "one"},
+                                         {"node": "Keep the examples that point at a change point", "port": "in", "map": "one"}]]},
+    "No reading history?": {"false": [[{"node": "Read the market beside the MIS", "port": "in", "map": "one"}]]},
+    "Read the market beside the MIS": {"main": [[{"node": "Check every number's receipt", "port": "in", "map": "one"}]]},
+    "Check every number's receipt": {"main": [[{"node": "Keep the examples that point at a change point", "port": "in", "map": "one"},
+                                               {"node": "Land the disagreements for him", "port": "in", "map": "one"}]]},
+    "Keep the examples that point at a change point": {"main": [[{"node": "Land the disagreements for him", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "check-the-mis-against-an-agents-read"}
+}
