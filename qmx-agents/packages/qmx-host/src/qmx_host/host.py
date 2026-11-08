@@ -1764,8 +1764,10 @@ class QmbRun:
     leave read as its `qmx.qmb.result-bundle/1` and its files read from the run folder.
 
     For a unit document it lays the run out before the job starts (Part B AD-202 step 1), so
-    the tester reads files only: `in/request.json` with the core's fields filled, the unit, its
-    pinned blocks, its markets' records, and each market's bid and ask bars for the window. The
+    the tester reads files only: `in/request.json` with the core's fields filled (among them
+    `[qmb] gap_bars_refuse` and `calibrated_min_fills`, and the study's `allow_gaps` unless the
+    request sets its own), the unit, its pinned blocks, its markets' records, and each market's
+    bid and ask bars for the window. The
     bars are the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` that dukascopy-node
     saves, read from `[qmb] bars` (default the market store's `bars/` folder)."""
 
@@ -1839,12 +1841,17 @@ class QmbRun:
         self, root: Path, ticket: Ticket, found: RunUnit, bars: Mapping[str, Mapping[str, Path]]
     ) -> None:
         settings = self.settings()
+        pin = ticket.study
+        study = {} if pin is None else self.library.store.get(OPERATOR_READ, pin).fields
         request: dict[str, object] = {
             "schema_version": 1,
             "equity": settings.get("equity"),
             "execution_target": settings.get("execution_target"),
             "g_slice_margin": settings.get("g_slice_margin"),
+            "gap_bars_refuse": settings.get("gap_bars_refuse"),
+            "calibrated_min_fills": settings.get("calibrated_min_fills"),
             "motion": "on",
+            "allow_gaps": study.get("allow_gaps", False),
             **ticket.request,
             "kind": run_kind(ticket.job),
             "run_id": ticket.run_id,
