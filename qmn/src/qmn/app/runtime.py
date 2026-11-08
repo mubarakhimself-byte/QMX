@@ -218,7 +218,14 @@ class Deployment:
     unit_id: str
     unit_document: Mapping[str, object]
     compiled_fingerprint: str
+    logic_fingerprint: str
+    """The unit version's logic half. Empty on a document written before the split."""
+    risk_fingerprint: str
+    """The unit version's risk half. Empty on a document written before the split."""
     g_fingerprint: str
+    """The compiled fingerprint the G record names, which is the one the check ran against."""
+    g_logic_fingerprint: str
+    """The logic fingerprint the G record names. Empty on a document written before the split."""
     files: tuple[StagedFile, ...]
     account_id: str
     snapshots: tuple[Mapping[str, object], ...]
@@ -235,6 +242,13 @@ def _str(document: Mapping[str, object], name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"deployment.{name} is a non-empty string")
     return value
+
+
+def _maybe_str(document: Mapping[str, object], name: str) -> str:
+    """A field a document names or leaves out, ``""`` when it leaves it out."""
+    if document.get(name) is None:
+        return ""
+    return _str(document, name)
 
 
 def _map(document: Mapping[str, object], name: str) -> Mapping[str, object]:
@@ -277,13 +291,17 @@ def parse_deployment(document: Mapping[str, object]) -> Deployment:
     if not isinstance(files, list) or not isinstance(snapshots, list):
         raise ValueError("deployment.files and deployment.snapshots are lists")
     unit = _map(document, "unit")
+    g_record = _map(document, "g_record")
     return Deployment(
         deployment_id=_str(document, "deployment_id"),
         node_tag=_str(_map(document, "node"), "tag"),
         unit_id=_str(unit, "id"),
         unit_document=_map(document, "unit_document"),
         compiled_fingerprint=_str(document, "compiled_fingerprint"),
-        g_fingerprint=_str(_map(document, "g_record"), "compiled_fingerprint"),
+        logic_fingerprint=_maybe_str(document, "logic_fingerprint"),
+        risk_fingerprint=_maybe_str(document, "risk_fingerprint"),
+        g_fingerprint=_str(g_record, "compiled_fingerprint"),
+        g_logic_fingerprint=_maybe_str(g_record, "logic_fingerprint"),
         files=tuple(_staged(item) for item in cast("list[object]", files)),
         account_id=_str(_map(document, "account"), "id"),
         snapshots=tuple(
@@ -546,7 +564,9 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
 
     A path outside the staging folder answers ``bad_argument``. A file missing from the
     staging folder answers ``files_missing``, which the node link's outbox keeps waiting on;
-    a file of another size than the document states answers ``file_mismatch``. Only stats are
+    a file of another size than the document states answers ``file_mismatch``. A deployment that
+    names both halves is refused as ``g_record_missing`` when its G record names another logic
+    half; a document written before the split keeps the compiled-half comparison. Only stats are
     read here, so the answer stays inside the 2 s budget whatever the files weigh: there is no
     size limit. Each file's fingerprint was verified by the node link as it staged it, and the
     runtime verifies it again as it reads the file to compile (:func:`compile_staged`). A kept
@@ -556,7 +576,27 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
         deployment = parse_deployment(document)
     except ValueError as error:
         return refused("bad_argument", f"deploy: {error}")
-    if deployment.compiled_fingerprint != deployment.g_fingerprint:
+    if deployment.logic_fingerprint:
+        if not deployment.risk_fingerprint:
+            return refused(
+                "bad_argument",
+                "deploy: a deployment that names its logic fingerprint names its risk fingerprint",
+            )
+        if deployment.g_logic_fingerprint != deployment.logic_fingerprint:
+            return refused(
+                "g_record_missing",
+                "the deployment's G record tested "
+                f"{deployment.g_logic_fingerprint or 'no logic fingerprint'}, not its logic"
+                f" fingerprint {deployment.logic_fingerprint}",
+                next_step=(
+                    "Run the behaviour check on this unit version; a passing check lets it trade."
+                ),
+                value={
+                    "logic_fingerprint": deployment.logic_fingerprint,
+                    "g_record": deployment.g_logic_fingerprint,
+                },
+            )
+    elif deployment.compiled_fingerprint != deployment.g_fingerprint:
         return refused(
             "fingerprint_mismatch",
             "the deployment's compiled fingerprint is not the one its G record tested",
@@ -594,6 +634,40 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
     ]
     folder.mkdir(parents=True, exist_ok=True)
     (folder.parent / "lock.json").write_text(json.dumps(lock, sort_keys=True), "utf-8")
+    return None
+
+
+def _other_version(compiled: CompiledUnit, deployment: Deployment) -> str | None:
+    """Why ``compiled`` is not the unit version ``deployment`` names, or None when it is (AD-3).
+
+    A document written before the split names one fingerprint, the compiled half its G record
+    tested. A split document names the logic half its G record tested and the risk half his click
+    covered, so a size edit stays the same logic half on the same G record, and a logic edit is
+    refused until a G run covers the new half. The compiled comparison stays for a split document
+    too, because a lock or option change moves it beside neither half.
+    """
+    if not deployment.logic_fingerprint:
+        if compiled.compiled_fingerprint.value != deployment.g_fingerprint:
+            return (
+                f"compiled to {compiled.compiled_fingerprint.value}, not the"
+                f" {deployment.g_fingerprint} its G record tested"
+            )
+        return None
+    if compiled.compiled_fingerprint.value != deployment.compiled_fingerprint:
+        return (
+            f"compiled to {compiled.compiled_fingerprint.value}, not the"
+            f" {deployment.compiled_fingerprint} its document names"
+        )
+    if compiled.logic_fingerprint.value != deployment.logic_fingerprint:
+        return (
+            f"compiled to logic {compiled.logic_fingerprint.value}, not the"
+            f" {deployment.logic_fingerprint} its G record tested"
+        )
+    if compiled.risk_fingerprint.value != deployment.risk_fingerprint:
+        return (
+            f"compiled to risk {compiled.risk_fingerprint.value}, not the"
+            f" {deployment.risk_fingerprint} his click covered"
+        )
     return None
 
 
@@ -1589,7 +1663,7 @@ class NodeUnit:
             stream=self.compiled.plan.stream,
             records=self.records,
             bars=self.windows,
-            opened_by=self.compiled.compiled_fingerprint,
+            opened_by=self.compiled.logic_fingerprint,
             equity=equity,
             execution=self._execution,
             journal=self._port,
@@ -1639,7 +1713,7 @@ class NodeUnit:
                 side,
                 venue.quantity,
                 venue.entry_price,
-                self.compiled.compiled_fingerprint,
+                self.compiled.logic_fingerprint,
                 Instant(cast("int", send["sent_at_ns"])),
             )
             adopted = handler.adopt(
@@ -2753,12 +2827,9 @@ class Runtime:
         if isinstance(compiled, str):
             hosted.phase, hosted.detail = Phase.REFUSED, compiled
             return
-        if compiled.compiled_fingerprint.value != deployment.g_fingerprint:
-            hosted.phase = Phase.REFUSED
-            hosted.detail = (
-                f"compiled to {compiled.compiled_fingerprint.value}, not the"
-                f" {deployment.g_fingerprint} its G record tested"
-            )
+        wrong = _other_version(compiled, deployment)
+        if wrong is not None:
+            hosted.phase, hosted.detail = Phase.REFUSED, wrong
             return
         venue = self.venues.get(deployment.account_id)
         if venue is None:
@@ -3158,4 +3229,4 @@ def _why(refusal: TypedRefusal) -> str:
 
 
 def _placeholder(deployment_id: str) -> Deployment:
-    return Deployment(deployment_id, "", "", {}, "", "", (), "", (), "paper")
+    return Deployment(deployment_id, "", "", {}, "", "", "", "", "", (), "", (), "paper")
