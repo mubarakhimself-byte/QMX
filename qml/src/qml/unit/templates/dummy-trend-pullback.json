@@ -59,7 +59,7 @@
     "ema_period": {"kind": "fixed", "measure": "bars", "range": {"min": "20", "max": "300", "step": "1"}, "default": "100", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention"},
     "roc_lookback": {"kind": "fixed", "measure": "bars", "range": {"min": "5", "max": "100", "step": "1"}, "default": "20", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "builder_chosen"},
     "min_trend_strength": {
-      "kind": "calibrated", "measure": "percent", "range": {"min": "0.00", "max": "0.30", "step": "0.01"}, "default": "0.00",
+      "kind": "calibrated", "measure": "percent", "range": {"min": "0", "max": "0.0030", "step": "0.0001"}, "default": "0",
       "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20, "at": "market_day_close"}, "min_count": 20, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@1", "rule_params": {"buckets": "5"}},
       "authority": "motion_inside_range", "origin": "builder_chosen", "applies_to_open_positions": false
     },
@@ -74,10 +74,10 @@
       "motion": {"mode": "percentile_of_own_history", "source": "price", "rule_params": {"percentile": "80", "window_bars": "500"}},
       "authority": "motion_inside_range", "origin": "builder_chosen"
     },
-    "stop_buffer": {"kind": "fixed", "measure": "percent", "range": {"min": "0", "max": "1", "step": "0.01"}, "default": "0.02", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "stop_buffer": {"kind": "fixed", "measure": "percent", "range": {"min": "0", "max": "0.01", "step": "0.0001"}, "default": "0.0002", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
     "target_r": {"kind": "fixed", "measure": "r", "range": {"min": "0.5", "max": "10", "step": "0.1"}, "default": "2", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
     "time_out_bars": {"kind": "fixed", "measure": "bars", "range": {"min": "1", "max": "1000", "step": "1"}, "default": "48", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
-    "risk_fraction": {"kind": "fixed", "measure": "percent", "range": {"min": "0.01", "max": "5", "step": "0.01"}, "default": "0.5", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"}
+    "risk_fraction": {"kind": "fixed", "measure": "percent", "range": {"min": "0.0001", "max": "0.05", "step": "0.0001"}, "default": "0.005", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"}
   },
   "pins": []
 }

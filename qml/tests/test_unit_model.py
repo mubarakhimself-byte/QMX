@@ -38,7 +38,7 @@ def test_the_dummy_parses_with_zero_problems() -> None:
         "time-exit-bars@1",
     ]
     floor = unit.numbers["min_trend_strength"]
-    assert floor.range is not None and floor.range.max == Decimal("0.30")
+    assert floor.range is not None and floor.range.max == Decimal("0.0030")
     assert floor.motion.min_count == 20
     assert {name for name, spec in unit.numbers.items() if spec.origin is Origin.PLACEHOLDER} == {
         "stop_buffer",

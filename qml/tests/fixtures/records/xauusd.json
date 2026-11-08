@@ -1,0 +1,21 @@
+{
+  "venue": "icmarkets-ctrader",
+  "symbol": "XAUUSD",
+  "market_id": "gold",
+  "class": "metal",
+  "currency": "USD",
+  "digits": 2,
+  "tick_size": "0.01",
+  "contract_size": "100",
+  "value_per_point": "100",
+  "lot_step": "0.01",
+  "min_lot": "0.01",
+  "calendar_ref": "metals-24x5@1",
+  "zone": "America/New_York",
+  "day_boundary": "17:00",
+  "data_levels": {"levels": [0, 1, 2], "volume": "tick_count"},
+  "leverage": {"version": 1, "tiers": [{"up_to_lots": "1000", "leverage": "20"}]},
+  "margin": {"intraday": "0.05", "overnight": "0.05"},
+  "record_version": 1,
+  "status": "specified"
+}
