@@ -12,6 +12,12 @@ this host's clock, whether the node is reachable or not; a node that is down kee
 is retried with back-off, and it applies once (connections X1). The node, not the outbox, keeps
 the order between changes (R1-C-05).
 
+Before a trading node homed here is asked `deploy`, the link stages the deployment's files: each
+file the document names by fingerprint is copied from this machine's Library into
+`data/deployments/<deployment_id>/in/` of the node's volume and verified, with no size limit. A
+file this Library does not hold yet answers `files_missing` with its paths, so the outbox keeps
+the change waiting until the hub brings it (AD-303).
+
 Four callers use it: the core `node` rows (through `node_read`), `app_op`'s `Placements.remote`,
 and later the UI's node routes and the promote action.
 """
@@ -19,11 +25,13 @@ and later the UI's node routes and the promote action.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -34,6 +42,7 @@ import httpx
 from pydantic import JsonValue
 from qmx_apps.errors import AppError
 from qmx_apps.supervisor import Supervisor
+from qmx_apps.volume import Volume
 from qmx_control.models import Document
 from qmx_engine.admission import setting
 from qmx_engine.control_door import PRINCIPAL
@@ -62,6 +71,8 @@ CALL_TIMEOUT_S: Final = 10.0
 
 type State = Literal["waiting", "applied", "refused"]
 type Post = Callable[[str, Mapping[str, JsonValue], Mapping[str, str], float | None], JsonValue]
+type Blobs = Callable[[str], Iterable[bytes] | None]
+"""This machine's Library bytes by fingerprint (`sha256:<hex>`), or None when it holds none."""
 
 
 class Unreachable(Exception):
@@ -250,11 +261,14 @@ class NodeLink:
         tuning: Callable[[], Mapping[str, object]] = dict,
         clock: Callable[[], float] = time.time,
         post: Post = post_json,
+        blobs: Blobs | None = None,
     ) -> None:
         """`settings` are the flat engine settings the place rows live in; `tuning` is the
-        `[engine.node_link]` table; `key` reads the pairing key, None before pairing."""
+        `[engine.node_link]` table; `key` reads the pairing key, None before pairing; `blobs`
+        reads this machine's Library, which a deployment's files are staged from."""
         self.here = here
         self.apps = apps
+        self.blobs = blobs
         self.settings = settings
         self.key = key
         self.tuning = tuning
@@ -306,8 +320,64 @@ class NodeLink:
     def call_here(
         self, app: str, operation: str, arguments: Document, *, pin: Document | None = None
     ) -> JsonValue:
-        """The local supervisor's call; its answer is the operation's own."""
+        """The local supervisor's call; its answer is the operation's own. A trading node's
+        `deploy` is asked only once every file it names is staged."""
+        if app == NODE_APP and operation == "deploy":
+            missing = self.stage(arguments)
+            if missing:
+                return {
+                    "ok": False,
+                    "code": "files_missing",
+                    "message": f"this machine's Library does not hold {missing[0]} yet",
+                    "value": {"missing": cast("list[JsonValue]", missing)},
+                }
         return self.apps.call(app, operation, arguments, pin=pin).get("result")
+
+    def stage(self, arguments: Document) -> list[str]:
+        """Copy each file of the deployment into the node's staging folder, verified by its
+        fingerprint, and answer the paths this Library could not supply. A file already there
+        with its fingerprint is kept; a document the node cannot read stages nothing and is
+        refused by the node itself."""
+        document = arguments.get("deployment")
+        if not isinstance(document, dict):
+            return []
+        deployment_id, files = document.get("deployment_id"), document.get("files")
+        if not isinstance(deployment_id, str) or not isinstance(files, list):
+            return []
+        root = Volume(self.apps.home, NODE_APP).root / "data" / "deployments" / deployment_id
+        folder = root / "in"
+        missing: list[str] = []
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            path, fingerprint = item.get("path"), item.get("fingerprint")
+            if not isinstance(path, str) or not isinstance(fingerprint, str):
+                continue
+            target = (folder / path).resolve()
+            if not target.is_relative_to(folder.resolve()):
+                continue
+            if target.is_file() and _fingerprint(target) == fingerprint:
+                continue
+            if not self._copy(fingerprint, target):
+                missing.append(path)
+        return missing
+
+    def _copy(self, fingerprint: str, target: Path) -> bool:
+        chunks = None if self.blobs is None else self.blobs(fingerprint)
+        if chunks is None:
+            return False
+        target.parent.mkdir(parents=True, exist_ok=True)
+        part = target.with_name(f"{target.name}.part")
+        digest = hashlib.sha256()
+        with part.open("wb") as handle:
+            for chunk in chunks:
+                digest.update(chunk)
+                handle.write(chunk)
+        if f"sha256:{digest.hexdigest()}" != fingerprint:
+            part.unlink()
+            return False
+        os.replace(part, target)
+        return True
 
     def read(self, operation: str, arguments: Document, *, principal: str) -> JsonValue | None:
         """One of the trading node's reads, or None when no trading node is set up yet."""
@@ -405,6 +475,8 @@ class NodeLink:
                 refusal: Document = {"ok": False, "code": error.code, "message": str(error)}
                 return ("waiting" if error.code in WAITING_CODES else "refused"), refusal
             refused = isinstance(value, dict) and value.get("ok") is False
+            if refused and cast("Document", value).get("code") in WAITING_CODES:
+                return "waiting", value
             return ("refused" if refused else "applied"), value
         asked: Document = {
             "app": change.app,
@@ -524,6 +596,14 @@ class NodeLink:
         """`tick` until cancelled, waking for the next heartbeat read or the next retry."""
         while True:
             await asyncio.sleep(await asyncio.to_thread(self.tick))
+
+
+def _fingerprint(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1 << 20):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
 
 
 def _value(answer: Mapping[str, JsonValue]) -> JsonValue:

@@ -77,7 +77,13 @@ _CHANGE_KEYS: Final = frozenset({"op_id", "issued_at"})
 
 
 class BadArgumentError(Exception):
-    """An argument the operation cannot take; answered as ``bad_argument``."""
+    """An argument the operation cannot take; answered with its ``code``."""
+
+    code = "bad_argument"
+
+
+class UnknownInstrumentError(BadArgumentError):
+    code = "unknown_instrument"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +99,10 @@ class Context:
     clock_ns: Callable[[], int]
     new_id: Callable[[], str]
     started_ns: int
+    wake: Callable[[], None] = lambda: None
+    """Wakes the runtime after a change is kept, so it acts at once instead of at its tick."""
+    deploy_preflight: Callable[[Mapping[str, Json]], Answer | None] = lambda _: None
+    """``deploy``'s staged-file checks (the runtime's ``deploy_preflight``); None lets it go."""
 
     def standing(self) -> Standing:
         row = self.store.identity()
@@ -139,18 +149,45 @@ def _table(arguments: Mapping[str, Json], name: str) -> dict[str, Json]:
     return value
 
 
-def _scope(arguments: Mapping[str, Json]) -> str:
-    """A scope key: ``all``, or ``account:<id>``, ``deployment_id:<id>``, ``instrument:<id>``."""
+def _scope(arguments: Mapping[str, Json], context: Context) -> str:
+    """A scope key: ``all``, or ``account:<id>``, ``deployment_id:<id>``, ``instrument:<id>``.
+
+    An instrument is named by a market id or a symbol a deployment on this node trades; any
+    other answers ``unknown_instrument``, so a kill is never accepted at a scope that holds
+    nothing."""
     value = arguments.get("scope")
     if value in ("all", {"all": True}):
         return "all"
     if isinstance(value, dict) and len(value) == 1:
         (name, item), *_ = value.items()
         if name in _SCOPES and isinstance(item, str) and item.strip():
+            if name == "instrument" and item not in _traded(context):
+                raise UnknownInstrumentError(
+                    f"no deployment on this node trades instrument {item}; name it by a"
+                    " market id or symbol a deployment trades"
+                )
             return f"{name}:{item}"
     raise BadArgumentError(
         'scope is "all" or one of {"account": id}, {"deployment_id": id}, {"instrument": id}'
     )
+
+
+def _traded(context: Context) -> frozenset[str]:
+    """Each market id and symbol of every deployment kept on this node, withdrawn or not."""
+    found: set[str] = set()
+    for change in Target.fold(context.store.accepted()).deployments.values():
+        document = change.args.get("document")
+        unit = document.get("unit_document") if isinstance(document, dict) else None
+        markets = unit.get("markets") if isinstance(unit, dict) else None
+        for market in markets if isinstance(markets, list) else []:
+            if not isinstance(market, dict):
+                continue
+            ref = market.get("instrument_ref")
+            symbol = ref.get("symbol") if isinstance(ref, dict) else None
+            found.update(
+                item for item in (market.get("market_id"), symbol) if isinstance(item, str)
+            )
+    return frozenset(found)
 
 
 def _issued_at(value: Json) -> int:
@@ -200,6 +237,11 @@ class Target:
                 kills[scope] = level if LEVEL_RANK[level] > LEVEL_RANK[held] else held
             elif change.kind in {"pause", "resume"}:
                 scope = str(change.args["scope"])
+                if change.kind == "resume":
+                    # His resume is the only way a kill level comes down (AD-38): it clears
+                    # the kills that arrived before it at its scope, every scope for "all".
+                    for held in [s for s in kills if scope in ("all", s)]:
+                        del kills[held]
                 if change.issued_at_ns >= newest_pause.get(scope, -1):
                     newest_pause[scope] = change.issued_at_ns
                     paused[scope] = change.kind == "pause"
@@ -246,23 +288,31 @@ class ChangeSpec:
     trading, and what it answers once it is in order."""
 
     arguments: frozenset[str]
-    parse: Callable[[Mapping[str, Json], Standing], Request]
+    parse: Callable[[Mapping[str, Json], Context], Request]
     apply: Callable[[Applying], Answer]
     trades: bool = False
+    preflight: Callable[[Context, Request], Answer | None] | None = None
+    """Checks before the change is kept; a refusal here is not kept, so the same op id may be
+    asked again once what it names is in place (a staged file the node link copies)."""
 
 
-def _deploy(arguments: Mapping[str, Json], standing: Standing) -> Request:
+def _deploy(arguments: Mapping[str, Json], context: Context) -> Request:
     document = _table(arguments, "deployment")
     if document.get("schema_version") != "qmx.node.deployment/1":
         raise BadArgumentError("deployment.schema_version is qmx.node.deployment/1")
     deployment_id = _text(document, "deployment_id")
     node = _table(document, "node")
-    if node.get("tag") != standing.tag:
-        raise BadArgumentError(f"deployment.node.tag names another node, not {standing.tag}")
+    tag = context.standing().tag
+    if node.get("tag") != tag:
+        raise BadArgumentError(f"deployment.node.tag names another node, not {tag}")
     unit = document.get("unit")
     return Request(
         f"deployment:{deployment_id}",
-        {"deployment_id": deployment_id, "unit": unit if isinstance(unit, dict) else None},
+        {
+            "deployment_id": deployment_id,
+            "unit": unit if isinstance(unit, dict) else None,
+            "document": document,
+        },
     )
 
 
@@ -270,7 +320,7 @@ def _accepted_deploy(step: Applying) -> Answer:
     return ok({"deployment_id": step.request.kept["deployment_id"], "state": "accepted"})
 
 
-def _withdraw(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _withdraw(arguments: Mapping[str, Json], _: Context) -> Request:
     deployment_id = _text(arguments, "deployment_id")
     when = arguments.get("when", "flat")
     if when != "flat":
@@ -285,9 +335,9 @@ def _apply_withdraw(step: Applying) -> Answer:
     return ok({"state": "accepted"})
 
 
-def _scoped(register: str) -> Callable[[Mapping[str, Json], Standing], Request]:
-    def parse(arguments: Mapping[str, Json], _: Standing) -> Request:
-        scope = _scope(arguments)
+def _scoped(register: str) -> Callable[[Mapping[str, Json], Context], Request]:
+    def parse(arguments: Mapping[str, Json], context: Context) -> Request:
+        scope = _scope(arguments, context)
         return Request(f"{register}:{scope}", {"scope": scope})
 
     return parse
@@ -298,18 +348,21 @@ def _accepted(step: Applying) -> Answer:
 
 
 def _apply_resume(step: Applying) -> Answer:
+    """His resume clears the pause and the kill level at its scope; a kill held for all
+    still stands over a narrower scope, and is listed as an open cause."""
     scope = str(step.request.kept["scope"])
-    level = Target.fold(step.desired.accepted()).level_at(scope)
+    held = Target.fold(step.desired.accepted()).kills.get("all", KsaLevel.GREEN)
+    level = KsaLevel.GREEN if scope == "all" else held
     causes: list[Json] = [] if level is KsaLevel.GREEN else [f"kill switch at {level.value}"]
     return ok({"state": "accepted", "open_causes": causes})
 
 
-def _kill(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _kill(arguments: Mapping[str, Json], context: Context) -> Request:
     level = arguments.get("level")
     names = [item.value for item in KsaLevel]
     if not isinstance(level, str) or level.upper() not in names:
         raise BadArgumentError(f"level is one of {', '.join(names)}")
-    return Request(None, {"level": level.upper(), "scope": _scope(arguments)})
+    return Request(None, {"level": level.upper(), "scope": _scope(arguments, context)})
 
 
 def _apply_kill(step: Applying) -> Answer:
@@ -319,15 +372,15 @@ def _apply_kill(step: Applying) -> Answer:
     return ok({"level_in_force": in_force.value})
 
 
-def _flatten(arguments: Mapping[str, Json], _: Standing) -> Request:
-    return Request(None, {"scope": _scope(arguments)})
+def _flatten(arguments: Mapping[str, Json], context: Context) -> Request:
+    return Request(None, {"scope": _scope(arguments, context)})
 
 
 def _apply_flatten(step: Applying) -> Answer:
     return ok({"state": "accepted", "positions": 0})
 
 
-def _bind(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _bind(arguments: Mapping[str, Json], _: Context) -> Request:
     account = _table(arguments, "account")
     action = arguments.get("action")
     if action not in {"add", "remove"}:
@@ -340,8 +393,8 @@ def _not_set_up(step: Applying) -> Answer:
     return refused("not_set_up", "no venue is set up on this node yet", next_step=NOT_SET_UP)
 
 
-def _bare(register: str) -> Callable[[Mapping[str, Json], Standing], Request]:
-    def parse(_: Mapping[str, Json], __: Standing) -> Request:
+def _bare(register: str) -> Callable[[Mapping[str, Json], Context], Request]:
+    def parse(_: Mapping[str, Json], __: Context) -> Request:
         return Request(register, {})
 
     return parse
@@ -363,7 +416,7 @@ def _apply_confirm(step: Applying) -> Answer:
     return ok({"identity": standing.document()})
 
 
-def _take_over(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _take_over(arguments: Mapping[str, Json], _: Context) -> Request:
     old_tag = _text(arguments, "old_tag")
     if arguments.get("confirmed_gone") is not True:
         raise BadArgumentError("confirmed_gone is true: his word that the old node is gone")
@@ -377,7 +430,7 @@ def _not_yet_take_over(step: Applying) -> Answer:
     )
 
 
-def _sign_in_begin(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _sign_in_begin(arguments: Mapping[str, Json], _: Context) -> Request:
     venue = arguments.get("venue", "ctrader")
     if venue != "ctrader":
         raise BadArgumentError('venue is "ctrader"')
@@ -385,19 +438,27 @@ def _sign_in_begin(arguments: Mapping[str, Json], _: Standing) -> Request:
     return Request("grant:ctrader", {"venue": venue})
 
 
-def _sign_in_code(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _sign_in_code(arguments: Mapping[str, Json], _: Context) -> Request:
     _text(arguments, "code")
     # The one-time code is a credential, so desired never keeps it.
     return Request("grant:ctrader", {})
 
 
-def _self_test(arguments: Mapping[str, Json], _: Standing) -> Request:
+def _self_test(arguments: Mapping[str, Json], _: Context) -> Request:
     account = _text(arguments, "account")
     return Request(f"self_test:{account}", {"account": account})
 
 
 CHANGES: Final[Mapping[str, ChangeSpec]] = {
-    "deploy": ChangeSpec(frozenset({"deployment"}), _deploy, _accepted_deploy, trades=True),
+    "deploy": ChangeSpec(
+        frozenset({"deployment"}),
+        _deploy,
+        _accepted_deploy,
+        trades=True,
+        preflight=lambda context, request: context.deploy_preflight(
+            cast(dict[str, Json], request.kept["document"])
+        ),
+    ),
     "withdraw": ChangeSpec(frozenset({"deployment_id", "when"}), _withdraw, _apply_withdraw),
     "pause": ChangeSpec(frozenset({"scope"}), _scoped("pause"), _accepted),
     "resume": ChangeSpec(frozenset({"scope"}), _scoped("pause"), _apply_resume),
@@ -430,14 +491,18 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
         arrived = context.clock_ns()
         given = arguments.get("issued_at")
         issued = arrived if given is None else _issued_at(given)
-        request = spec.parse(arguments, context.standing())
+        request = spec.parse(arguments, context)
         if request.register is not None and issued - arrived > ISSUED_AHEAD_NS:
             raise BadArgumentError(
                 f"issued_at is {(issued - arrived) / 1e9:.3f} s ahead of this node's clock, past"
                 f" the {ISSUED_AHEAD_NS / 1e9:g} s clock skew it takes"
             )
     except BadArgumentError as error:
-        return refused("bad_argument", f"{name}: {error}")
+        return refused(error.code, f"{name}: {error}")
+    if spec.preflight is not None and not context.standing().mismatch:
+        stopped = spec.preflight(context, request)
+        if stopped is not None:
+            return {**stopped, "op_id": op_id}
 
     def decide(desired: Desired) -> Change:
         newer = None if request.register is None else desired.newest_applied(request.register)
@@ -482,6 +547,8 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
             ),
             "op_id": op_id,
         }
+    if kept.outcome is Outcome.ACCEPTED:
+        context.wake()
     return kept.answer
 
 
@@ -504,17 +571,27 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
         )
     if journal_problem is not None:
         reasons.append(f"The node cannot write its journal: {journal_problem}")
+    units = _observed_list(context, "runtime.units")
+    states = [str(cast(dict[str, Json], unit).get("state")) for unit in units]
+    trading = states.count("trading")
     if standing.mismatch or journal_problem is not None:
         word = "Stopped by a health check"
     elif level is not KsaLevel.GREEN or target.paused.get("all"):
         word = "Paused"
+    elif trading:
+        word = "Trading"
     else:
         word = "Ready"
     if level is not KsaLevel.GREEN:
         reasons.append(f"The kill switch is at {level.value} for all.")
     reasons.extend(f"Paused at {scope}." for scope in target.pauses())
-    units = 0
-    headline = f"{word}, no units yet" if units == 0 and word == "Ready" else word
+    if word == "Trading":
+        headline = f"Trading, {trading} unit{'' if trading == 1 else 's'}"
+    elif word == "Ready" and all(state in {"refused", "stopped"} for state in states):
+        headline = "Ready, no units yet"
+    else:
+        headline = word
+    observed_venues = context.store.observed("runtime.venues")
     free = shutil.disk_usage(context.data).free
     return ok(
         {
@@ -524,7 +601,9 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
             "reasons": reasons,
             "identity": standing.document(),
             "clock": None,
-            "venues": [
+            "venues": observed_venues
+            if isinstance(observed_venues, list) and observed_venues
+            else [
                 {
                     "venue": venue,
                     "environment": environment,
@@ -534,8 +613,15 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
                 }
                 for venue, environment in VENUES
             ],
-            "units": {"trading": 0, "warming": 0, "paused": 0, "stopped": 0},
+            "units": {
+                "trading": trading,
+                "warming": states.count("warming up"),
+                "paused": 0,
+                "stopped": sum(state in {"stopped", "refused"} for state in states),
+            },
             "kill_level": level.value,
+            "kill_effects": context.store.observed("runtime.kill"),
+            "alarms": context.store.observed("runtime.alarms"),
             "pauses": target.pauses(),
             "safe_to_restart": {"ok": True, "reasons": []},
             "contracts": SCHEMAS,
@@ -548,32 +634,49 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     )
 
 
-def _units(_: Context, arguments: Mapping[str, Json]) -> Answer:
+def _observed_list(context: Context, key: str) -> list[Json]:
+    found = context.store.observed(key)
+    return found if isinstance(found, list) else []
+
+
+def _units(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset({"deployment_id"}))
-    _text(arguments, "deployment_id", required=False)
-    return ok([])
+    wanted = _text(arguments, "deployment_id", required=False)
+    units = _observed_list(context, "runtime.units")
+    return ok(
+        [
+            unit
+            for unit in units
+            if wanted is None or cast(dict[str, Json], unit).get("deployment_id") == wanted
+        ]
+    )
 
 
-def _positions(_: Context, arguments: Mapping[str, Json]) -> Answer:
+def _positions(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset({"account"}))
     _text(arguments, "account", required=False)
-    return ok([])
+    return ok(_observed_list(context, "runtime.positions"))
 
 
 def _deployments(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset())
     target = Target.fold(context.store.accepted())
-    return ok(
-        [
+    seen = context.store.observed("runtime.deployments")
+    states = cast(dict[str, Json], seen) if isinstance(seen, dict) else {}
+    shown: list[Json] = []
+    for deployment_id, change in target.deployments.items():
+        state = cast(dict[str, Json], states.get(deployment_id) or {})
+        word = state.get("state") or "accepted"
+        shown.append(
             {
                 "deployment_id": deployment_id,
                 "unit": change.args.get("unit"),
-                "state": "withdrawing" if deployment_id in target.withdrawn else "accepted",
+                "state": "withdrawing" if deployment_id in target.withdrawn else word,
+                "detail": state.get("detail") or "",
                 "accepted_at": _iso(change.arrived_at_ns),
             }
-            for deployment_id, change in target.deployments.items()
-        ]
-    )
+        )
+    return ok(shown)
 
 
 def _passport(context: Context, arguments: Mapping[str, Json]) -> Answer:

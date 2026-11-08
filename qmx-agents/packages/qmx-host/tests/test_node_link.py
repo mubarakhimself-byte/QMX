@@ -5,6 +5,7 @@ node is down. The far host is a recorded transport here; `test_host_route.py` ru
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, cast
@@ -222,3 +223,35 @@ def test_a_change_on_a_node_homed_here_answers_only_to_the_operator(tmp_path: Pa
     again = link.change("trading-node", "pause", {}, principal="operator", op_id="L3")
     assert (first.state, first.answer, again.state) == ("applied", {"paused": True}, "applied")
     assert supervisor.calls == [("trading-node", "pause")]
+
+
+def test_deploy_waits_until_every_file_is_staged_from_this_library(tmp_path: Path) -> None:
+    supervisor = RecordingSupervisor()
+    supervisor.home = tmp_path  # type: ignore[attr-defined]
+    block, weights = b"def block(): ...\n", bytes(range(256)) * 4096
+    held = {"sha256:" + hashlib.sha256(block).hexdigest(): block}
+    link = NodeLink(
+        tmp_path,
+        here="ldn-1",
+        apps=cast(Any, supervisor),
+        settings=dict,
+        key=lambda: None,
+        blobs=lambda fingerprint: None if fingerprint not in held else [held[fingerprint]],
+    )
+    files = [
+        {"path": path, "fingerprint": "sha256:" + hashlib.sha256(raw).hexdigest()}
+        for path, raw in (("blocks/ema@1/block.py", block), ("weights/model.bin", weights))
+    ]
+    document: Document = {"deployment": {"deployment_id": "dep-1", "files": files}}
+    staged = tmp_path / "apps" / "trading-node" / "data" / "deployments" / "dep-1" / "in"
+
+    waiting = link.change("trading-node", "deploy", document, principal="operator", op_id="D1")
+    first = (waiting.state, list(supervisor.calls), sorted(p.name for p in staged.rglob("*.*")))
+    held["sha256:" + hashlib.sha256(weights).hexdigest()] = weights
+    link.flush("ldn-1")
+
+    assert first == ("waiting", [], ["block.py"])
+    assert (staged / "blocks/ema@1/block.py").read_bytes() == block
+    assert (staged / "weights/model.bin").read_bytes() == weights
+    assert supervisor.calls == [("trading-node", "deploy")]
+    assert cast(Any, link.outbox.get("D1")).state == "applied"

@@ -46,6 +46,8 @@ from qmf.venue.ctrader import MARKET_DATA_WIRE_SCALE_EXPONENT
 from qmf.venue.proto import CompiledProto
 
 __all__ = [
+    "CLIENT_ORDER_ID_MAX",
+    "LABEL_MAX",
     "PRICE_WIRE_SCALE_EXPONENT",
     "PROTO_OA_AMEND_POSITION_SLTP_REQ",
     "PROTO_OA_CANCEL_ORDER_REQ",
@@ -53,13 +55,20 @@ __all__ = [
     "PROTO_OA_NEW_ORDER_REQ",
     "VOLUME_WIRE_SCALE_EXPONENT",
     "EncodedCommand",
+    "OrderTags",
     "encode_amend_protection",
     "encode_cancel_order",
     "encode_close_all",
     "encode_close_position",
     "encode_command",
     "encode_place_order",
+    "order_tags",
 ]
+
+CLIENT_ORDER_ID_MAX: Final[int] = 50
+"""cTrader's longest ``clientOrderId``. The node's ``q<tag>-<ULID>`` is 36 characters."""
+LABEL_MAX: Final[int] = 100
+"""cTrader's longest ``label``. The node writes ``qmx:<node tag>:<unit tag>`` there."""
 
 # Spotware ProtoOA payloadType integers (Open API 5035). Not registry values:
 # they are the pinned protocol's discriminant, parallel to CTRADER_OPEN_API_PORT.
@@ -125,6 +134,36 @@ class EncodedCommand:
     envelope: bytes
     frame: bytes
     client_msg_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class OrderTags:
+    """The node's own tags on one order: its client order id and its cTrader ``label``.
+
+    Both survive on the order and its position, so reconcile can tell this node's trades from
+    another's (Part C AD-305). Build it with :func:`order_tags`, which checks cTrader's lengths.
+    """
+
+    client_order_id: str
+    label: str
+
+
+def order_tags(client_order_id: object, label: object) -> Result[OrderTags]:
+    """The two tags, refused when either is empty or longer than cTrader keeps."""
+    for name, value, longest in (
+        ("client_order_id", client_order_id, CLIENT_ORDER_ID_MAX),
+        ("label", label, LABEL_MAX),
+    ):
+        if not isinstance(value, str) or value.strip() != value or not value:
+            return _invalid(name, f"{name} is a non-empty string with no outer spaces")
+        if len(value) > longest:
+            return _invalid(
+                name,
+                f"cTrader keeps at most {longest} characters in {name}",
+                length=len(value),
+                longest=longest,
+            )
+    return Ok(OrderTags(cast("str", client_order_id), cast("str", label)))
 
 
 # --- refusal builders -------------------------------------------------------
@@ -481,8 +520,13 @@ def encode_place_order(
     symbol_id: object,
     trade_side: object,
     client_msg_id: object = None,
+    tags: object = None,
 ) -> Result[EncodedCommand]:
-    """Encode a ``place_order`` Command as ProtoOANewOrderReq (payloadType 2106)."""
+    """Encode a ``place_order`` Command as ProtoOANewOrderReq (payloadType 2106).
+
+    With ``tags`` (an :class:`OrderTags`) the order carries the node's client order id in
+    ``clientOrderId`` and its ``label``; a compiled message without a ``label`` field refuses.
+    """
     resolved = _require_command(command, CommandKind.PLACE_ORDER)
     if is_refusal(resolved):
         return resolved
@@ -583,6 +627,8 @@ def encode_place_order(
     msg_id = _client_msg_id(resolved.value, client_msg_id)
     if is_refusal(msg_id):
         return msg_id
+    if tags is not None and not isinstance(tags, OrderTags):
+        return _invalid("tags", "an order's tags are OrderTags, built by order_tags")
     inner = _message_class(proto.value, _PLACE_ORDER_NAMES)
     if is_refusal(inner):
         return inner
@@ -595,7 +641,13 @@ def encode_place_order(
         _set_int(message, ("tradeSide",), side_wire),
         _set_int(message, ("volume",), volume.value),
         _set_int(message, ("timeInForce",), tif_wire, required=False),
-        _set_str(message, ("clientOrderId",), msg_id.value, required=False),
+        _set_str(
+            message,
+            ("clientOrderId",),
+            msg_id.value if tags is None else tags.client_order_id,
+            required=tags is not None,
+        ),
+        Ok(True) if tags is None else _set_str(message, ("label",), tags.label, required=True),
     )
     for write in writes:
         if is_refusal(write):
@@ -917,8 +969,10 @@ def encode_command(
     trade_side: object = None,
     volume: object = None,
     client_msg_id: object = None,
+    tags: object = None,
 ) -> Result[EncodedCommand]:
-    """Dispatch a CT-19 Command onto the matching ProtoOA encode symbol."""
+    """Dispatch a CT-19 Command onto the matching ProtoOA encode symbol; ``tags`` ride a
+    ``place_order`` only."""
     if not isinstance(command, Command):
         return _invalid("command", "encode requires a CT-19 Command", given=type(command).__name__)
     if command.kind is CommandKind.PLACE_ORDER:
@@ -930,6 +984,7 @@ def encode_command(
             symbol_id=symbol_id,
             trade_side=trade_side,
             client_msg_id=client_msg_id,
+            tags=tags,
         )
     if command.kind is CommandKind.CANCEL_ORDER:
         return encode_cancel_order(

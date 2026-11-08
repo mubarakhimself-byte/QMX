@@ -37,12 +37,17 @@ _NODE_KINDS: Final[tuple[str, ...]] = (
     "gap",
     "stand_down",
     "spec_change",
+    "protection",
 )
 
 SPECS: Final[tuple[KindSpec, ...]] = (
     KindSpec(JournalStream.NODE, "node_lifecycle", IdRule.SEQUENCE, ("event",), _node_lifecycle),
     *(KindSpec(JournalStream.NODE, kind, IdRule.SEQUENCE) for kind in _NODE_KINDS),
+    # One row per order step, journalled before the step reaches the venue. The id is the
+    # client order id and the step, so a slice driven again repeats the row, never the order.
+    KindSpec(JournalStream.NODE, "order", IdRule.EVENT_ID, ("event_id", "client_order_id")),
     KindSpec(JournalStream.MARKET, "minute", IdRule.SEQUENCE),
+    KindSpec(JournalStream.MARKET, "bar", IdRule.SEQUENCE, ("market_id", "knowable_at")),
     KindSpec(JournalStream.MARKET, "offset", IdRule.SEQUENCE),
     KindSpec(JournalStream.READINGS, "reading", IdRule.SEQUENCE, ("source",), _reading),
 )

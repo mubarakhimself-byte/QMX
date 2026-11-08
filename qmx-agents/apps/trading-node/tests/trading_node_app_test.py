@@ -39,10 +39,10 @@ GOOD: dict[str, Document] = {
     "passport": {},
     "deployments": {},
     "withdraw": {"deployment_id": "dep-none"},
-    "pause": {"scope": {"instrument": "XAUUSD"}},
-    "resume": {"scope": {"instrument": "XAUUSD"}},
-    "kill": {"level": "YELLOW", "scope": {"instrument": "XAUUSD"}},
-    "flatten": {"scope": {"instrument": "XAUUSD"}},
+    "pause": {"scope": {"account": "demo-1"}},
+    "resume": {"scope": {"account": "demo-1"}},
+    "kill": {"level": "YELLOW", "scope": {"account": "demo-1"}},
+    "flatten": {"scope": {"account": "demo-1"}},
     "bind": {"account": {"id": "demo-1"}, "action": "add"},
     "confirm_same_node": {},
     "take_over": {"old_tag": "abcdefgh", "confirmed_gone": True},
@@ -115,6 +115,14 @@ def test_every_operation_answers_inside_two_seconds_with_no_errors(supervisor: S
         "schema_version": "qmx.node.deployment/1",
         "deployment_id": "dep-1",
         "node": {"tag": tag},
+        "unit": {"id": "dummy", "version": 1},
+        "unit_document": {},
+        "compiled_fingerprint": "fp1:sha256:" + "a" * 64,
+        "g_record": {"compiled_fingerprint": "fp1:sha256:" + "a" * 64},
+        "files": [],
+        "account": {"id": "demo-1"},
+        "snapshots": [],
+        "lane": "paper",
     }
     good: dict[str, Document] = {**GOOD, "deploy": {"deployment": deployment}}
     answered: dict[str, list[object]] = {}
@@ -205,7 +213,7 @@ def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_
 
 
 def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Supervisor) -> None:
-    scope: Document = {"instrument": "EURUSD"}
+    scope: Document = {"account": "demo-order"}
     resumed, _ = ask(
         supervisor,
         "resume",
@@ -256,9 +264,8 @@ def test_journal_tail_mid_write_returns_whole_lines_and_leaves_the_file_unchange
         stream.write_bytes(committed)
 
     rows = cast(list[Document], cast(Document, tail["value"])["rows"])
-    assert [(row["kind"], cast(Document, row["body"])["event"]) for row in rows] == [
-        ("node_lifecycle", "start")
-    ]
+    lifecycle = [row for row in rows if row["kind"] == "node_lifecycle"]
+    assert [cast(Document, row["body"])["event"] for row in lifecycle] == ["start"]
     assert after == in_flight
 
 
