@@ -11,6 +11,8 @@ reason. Secrets come from a fixture getter, never the machine's vault.
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
 import secrets
 import shutil
@@ -27,6 +29,8 @@ import pytest
 import uvicorn
 from fastmcp import FastMCP
 from pydantic import JsonValue
+from qmf.core import is_refusal
+from qmf.data.series import BAR_KIND, SeriesKey, SeriesStore
 from qmx_control.catalog import CORE_TOOLSETS, rows
 from qmx_control.service import ControlService
 from qmx_engine.ledger import redact
@@ -99,25 +103,20 @@ class Library(LanderLibrary):
 
 
 class Fakes:
-    """A data server serving `read_bars` and an OpenAI-compatible model, on 127.0.0.1 in this
-    test process, so a job that reads data and asks a model never leaves the machine."""
+    """An OpenAI-compatible model on 127.0.0.1 in this test process, so a job that asks a model
+    never leaves the machine."""
 
     def __init__(self) -> None:
         self.asked: list[Document] = []
-        server = FastMCP("Fixture data server")
-
-        @server.tool
-        def read_bars(symbol: str, timeframe: str, limit: int) -> dict[str, JsonValue]:
-            """Recorded bars for the asked market."""
-            return {"as_of": "2026-10-30", "bars": [{"close": "1.0850"}], "source": symbol}
+        server = FastMCP("Fixture model")
 
         @server.custom_route("/v1/chat/completions", methods=["POST"])
         async def chat(request: Request) -> JSONResponse:
             self.asked.append(cast(Document, await request.json()))
-            answer = {"bias": "bullish", "rationale": "Fixture model read one bar."}
+            answer = {"bias": "bullish", "rationale": "Fixture model read two bars."}
             return JSONResponse({"choices": [{"message": {"content": json.dumps(answer)}}]})
 
-        _ = read_bars, chat
+        _ = chat
         config = uvicorn.Config(server.http_app(path="/mcp"), host="127.0.0.1", port=0)
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self.server.run, daemon=True)
@@ -276,13 +275,29 @@ def conformance(host: Host) -> JsonValue:
     return {"passed": ran.verdict.passed, "says": ran.verdict.says()}
 
 
+def write_market(host: Host) -> None:
+    """Two whole days and half a third of EURUSD M1 bid bars in the host's market store, written
+    by the store's own writer. Every minute of day `d` closes at 1.08 + 0.001 d."""
+    rows: list[tuple[object, ...]] = []
+    for day, minutes in ((10, 1_440), (11, 1_440), (12, 720)):
+        start = int(datetime(2025, 3, day, tzinfo=UTC).timestamp()) * 1_000
+        price = 108_000 + 100 * day
+        rows += [(start + m * 60_000, price, price, price, price, 1.0) for m in range(minutes)]
+    key = SeriesKey.try_create("fixture", "EURUSD", BAR_KIND, 2025, 3, "bid")
+    assert not is_refusal(key), key
+    committed = SeriesStore(host.runtime.home / "market/series").commit(key.value, rows)
+    assert not is_refusal(committed), committed
+
+
 def daily_bias(host: Host) -> JsonValue:
-    """The instance pointed at the fixture data server and model, then its daily job once."""
+    """The instance pointed at a fixture market and the fixture model, then its daily job once."""
+    write_market(host)
     settings = host.home / "apps/macro-daily-bias/data/config.json"
     settings.write_text(
         json.dumps(
             {
-                "data_url": f"{host.fakes.url}/mcp",
+                "market": "fixture/EURUSD/bar-m1/bid",
+                "bars": 2,
                 "model": "fixture-model",
                 "model_url": f"{host.fakes.url}/v1",
             }
@@ -299,6 +314,56 @@ def daily_bias(host: Host) -> JsonValue:
         "prompt": str(system["content"]).splitlines()[0],
         "snapshot": json.loads(str(user["content"])),
         "bias": host.runtime.call("macro-daily-bias", "bias", {})["result"],
+    }
+
+
+ARTICLES = (623, 624, 625)
+"""Three seeded ids, each archived as the one saved MQL5 page."""
+
+
+def write_archive(host: Host) -> None:
+    """The recovered archive the README says to copy into the instance's `data/seed`."""
+    seed = host.home / "apps/mql5-articles/data/seed"
+    (seed / "md").mkdir(parents=True)
+    (seed / "raw").mkdir()
+    page = gzip.compress((Path(__file__).with_name("fixtures") / "mql5-623.html").read_bytes())
+    lines: list[str] = []
+    for article in ARTICLES:
+        markdown = f"# Article {article}\n"
+        (seed / f"md/{article}.md").write_text(markdown, encoding="utf-8")
+        (seed / f"raw/{article}.html.gz").write_bytes(page)
+        url = f"https://www.mql5.com/en/articles/{article}"
+        digest = hashlib.sha256(markdown.encode()).hexdigest()
+        row = {"id": article, "url": url, "title": f"Article {article}", "sha256": digest}
+        lines.append(json.dumps({**row, "fetch_status": "ok"}))
+    (seed / "catalog.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    config = host.home / "apps/mql5-articles/data/config.json"
+    config.write_text(json.dumps({"crawl": False}), encoding="utf-8")
+
+
+def library_articles(host: Host) -> list[str]:
+    """The artifact sha256 of each Library item an article landed as, one row per item."""
+    rows = host.store.catalog.db.execute(
+        "SELECT DISTINCT item, json_extract(fields, '$.metadata.sha256') FROM objects "
+        "WHERE kind = 'artifact' AND json_extract(fields, '$.type') = 'mql5-article'"
+    ).fetchall()
+    return sorted(str(sha) for _, sha in rows)
+
+
+def daily_articles(host: Host) -> JsonValue:
+    """The archive seeded with three articles and the crawl off, then the daily job twice: the
+    first lands one Library item per article, the second lands nothing new."""
+    write_archive(host)
+    first = host.runtime.run_job("mql5-articles", "jobs/daily.py")
+    again = host.runtime.run_job("mql5-articles", "jobs/daily.py")
+    refs = [cast(Document, ref) for ref in cast(list[JsonValue], first["artifact_refs"])]
+    return {
+        "first": first["result"],
+        "again": again["result"],
+        "landed": [len(refs), len(cast(list[JsonValue], again["artifact_refs"]))],
+        "one_item_per_article": library_articles(host)
+        == sorted(str(ref["sha256"]) for ref in refs),
+        "status": host.runtime.call("mql5-articles", "status", {})["result"],
     }
 
 
@@ -375,16 +440,19 @@ EXAMPLES: Mapping[str, Shipped] = {
                     "response_format": {"type": "json_object"},
                     "prompt": "Summarise the macro drivers in the supplied qmx-data snapshot.",
                     "snapshot": {
-                        "as_of": "2026-10-30",
-                        "bars": [{"close": "1.0850"}],
-                        "source": "EURUSD",
+                        "as_of": "2025-03-11T00:00Z",
+                        "bars": [
+                            {"t": "2025-03-10T00:00Z", "close": "1.09000"},
+                            {"t": "2025-03-11T00:00Z", "close": "1.09100"},
+                        ],
+                        "source": "fixture/EURUSD/bar-m1/bid",
                     },
                     "bias": {
                         "output": "bias",
                         "data": {
                             "bias": "bullish",
-                            "rationale": "Fixture model read one bar.",
-                            "as_of": "2026-10-30",
+                            "rationale": "Fixture model read two bars.",
+                            "as_of": "2025-03-11T00:00Z",
                             "source": "qmx-data",
                         },
                     },
@@ -401,9 +469,14 @@ EXAMPLES: Mapping[str, Shipped] = {
         jobs=(
             Job(
                 "jobs/daily.py",
-                None,
-                skipped="fetches www.mql5.com and saves through the control service at the fixed "
-                "127.0.0.1:8766, which its collector names in code",
+                daily_articles,
+                {
+                    "first": {"seeded": 3, "landed": 0, "fetched": 0},
+                    "again": {"seeded": 0, "landed": 3, "fetched": 0},
+                    "landed": [3, 0],
+                    "one_item_per_article": True,
+                    "status": {"known": 3057, "available": 3, "pending_publication": 0},
+                },
             ),
         ),
     ),
@@ -586,7 +659,7 @@ def test_the_walk_finds_seven_apps_with_an_example_for_every_operation_and_job()
     assert {app: [job.path for job in EXAMPLES[app].jobs] for app in found} == {
         app: manifest.entrypoints.jobs for app, manifest in found.items()
     }
-    assert list(skipped) == [("mql5-articles", "jobs/daily.py")]
+    assert list(skipped) == []
 
 
 def separators(name: str) -> str:

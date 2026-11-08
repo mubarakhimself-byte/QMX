@@ -2,7 +2,7 @@
 name = "macro-daily-bias-app"
 version = "1.0.0"
 requires-python = ">=3.14,<3.15"
-dependencies = ["fastmcp==4.0.11", "qmx-agents"]
+dependencies = ["fastmcp==4.0.11", "httpx==0.28.1", "qmf-core", "qmf-data"]
 
 [tool.uv]
 package = false
@@ -11,4 +11,5 @@ package = false
 members = []
 
 [tool.uv.sources]
-qmx-agents = { git = "https://github.com/MubarakHimself/QMX", rev = "e27a5136a0babbce52c08907d07a8752bab92f6f", subdirectory = "qmx-agents/packages/qmx-agents" }
+qmf-core = { path = "../../../packages/qmf-core", editable = true }
+qmf-data = { path = "../../../packages/qmf-data", editable = true }

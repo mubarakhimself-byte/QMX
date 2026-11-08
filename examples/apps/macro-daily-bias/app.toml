@@ -7,7 +7,6 @@ kind = "both"
 [entrypoints]
 mcp = "server.py"
 jobs = ["daily.py"]
-agents = ["agents/analyst.yaml"]
 ui = "ui"
 
 [suggested_trigger]
@@ -16,15 +15,13 @@ seconds = 86400
 
 [capabilities]
 network = ["127.0.0.1"]
-data_reads = []
+data_reads = ["market"]
 
 [capabilities.secrets]
-QMX_DATA_TOKEN = "qmx/control-token"
 QMX_MODEL_KEY = "qmx/cliproxy"
 # The app code still reads QMX_MODEL_KEY on its live path (macro_bias.py), and the supervisor
-# injects only declared secrets, so it stays declared here. The app moves to
-# `llm_complete(role)` through the chat's one `qmx` server in the PR that owns macro_bias.py
-# (BACKLOG, RTR4). Then this key goes.
+# injects only declared secrets, so it stays declared here. It goes once a host read serves
+# `llm_complete(role)` to apps (BACKLOG, RTR4).
 
 [operations.bias]
 description = "Read the latest persisted daily bias as an artifact under the bias output."

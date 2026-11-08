@@ -6,7 +6,6 @@ kind = "headless"
 
 [entrypoints]
 mcp = "server.py"
-agents = ["agents/watcher.yaml"]
 
 [capabilities]
 network = []
