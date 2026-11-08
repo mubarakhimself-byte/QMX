@@ -55,6 +55,8 @@ PARENT_SURFACES: Final = frozenset(
     }
 )
 """The parent-library surfaces a pack's tool may name (AD-2); every other pair is refused."""
+MARKET_STORE: Final = "market"
+"""The machine's market-data store under the home, the folder the host's market door opens."""
 
 
 def refuse_tool(name: str, tool: Document) -> None:
@@ -642,6 +644,9 @@ class Supervisor:
         if instance.profile is not None:
             environment["QMX_PROFILE"] = instance.profile
         environment["QMX_STAGE"] = self.proof_mode or "live"
+        if "market" in instance.definition.manifest.capabilities.data_reads:
+            # Read-only because it sits outside the volume, where the bootstrap refuses writes.
+            environment["QMX_MARKET_ROOT"] = str(self.home / MARKET_STORE)
         env = self.environments / instance.definition.hash
         environment["PATH"] = str(env / ("Scripts" if sys.platform == "win32" else "bin"))
         for name, service in instance.definition.manifest.capabilities.secrets.items():
