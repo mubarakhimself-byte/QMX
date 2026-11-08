@@ -113,6 +113,11 @@ class VenueDoor(Protocol):
         """The passport's ``checks``, ``grants`` and ``at``."""
         ...
 
+    def records(self, account: str, symbols: Sequence[str]) -> Answer:
+        """A bound account's facts and each named symbol's facts as the venue states them,
+        read on a fresh session. It crosses the network and holds no secret."""
+        ...
+
 
 class NoVenues:
     """A node with no venue door: every venue change answers ``not_set_up``."""
@@ -146,6 +151,9 @@ class NoVenues:
 
     def passport(self) -> dict[str, Json]:
         return {"checks": [], "grants": [], "at": None}
+
+    def records(self, account: str, symbols: Sequence[str]) -> Answer:
+        return _nothing_set_up()
 
 
 def _nothing_set_up() -> Answer:
@@ -847,6 +855,19 @@ def _passport(context: Context, arguments: Mapping[str, Json]) -> Answer:
     )
 
 
+def _records(context: Context, arguments: Mapping[str, Json]) -> Answer:
+    _known(arguments, frozenset({"account", "symbols"}))
+    account = cast(str, _text(arguments, "account"))
+    symbols = arguments.get("symbols")
+    if (
+        not isinstance(symbols, list)
+        or not symbols
+        or not all(isinstance(item, str) and item.strip() for item in symbols)
+    ):
+        raise BadArgumentError("symbols is a list of the venue's symbol names")
+    return context.venues.records(account, [str(item) for item in symbols])
+
+
 class _UnreadableError(Exception):
     """A journal file holds something the committed reader would refuse."""
 
@@ -974,6 +995,7 @@ READS: Final[Mapping[str, Callable[[Context, Mapping[str, Json]], Answer]]] = {
     "journal_tail": _journal_tail,
     "passport": _passport,
     "deployments": _deployments,
+    "records": _records,
 }
 
 

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from qmn.app.operations import READS
 from qmn.app.server import OPERATIONS
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition
@@ -38,6 +39,7 @@ GOOD: dict[str, Document] = {
     "journal_tail": {"after_sequence": -1, "streams": ["node"]},
     "passport": {},
     "deployments": {},
+    "records": {"account": "demo-1", "symbols": ["EURUSD"]},
     "withdraw": {"deployment_id": "dep-none"},
     "pause": {"scope": {"account": "demo-1"}},
     "resume": {"scope": {"account": "demo-1"}},
@@ -144,6 +146,7 @@ def test_every_operation_answers_inside_two_seconds_with_no_errors(supervisor: S
         "journal_tail": "ok",
         "passport": "ok",
         "deployments": "ok",
+        "records": "not_set_up",
         "deploy": "ok",
         "withdraw": "unknown_deployment",
         "pause": "ok",
@@ -177,10 +180,7 @@ def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_
     assert {
         (name, operation.approval, operation.state)
         for name, operation in manifest.operations.items()
-    } == {
-        (name, "domain_write" if name in OPERATIONS[:6] else "manage", "instance")
-        for name in OPERATIONS
-    }
+    } == {(name, "domain_write" if name in READS else "manage", "instance") for name in OPERATIONS}
     assert (manifest.breaker.max_errors, manifest.breaker.restart) == (1000, "backoff")
     (served,) = supervisor.registry()
     hints = {
@@ -189,7 +189,8 @@ def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_
     }
     assert hints == {
         **dict.fromkeys(
-            ("status", "units", "positions", "journal_tail", "passport", "deployments"), True
+            ("status", "units", "positions", "journal_tail", "passport", "deployments", "records"),
+            True,
         ),
         **dict.fromkeys(
             (

@@ -44,6 +44,7 @@ from qmx_engine.ports.settings import flatten
 from qmx_host.clock_probe import clock_line, probe_from
 from qmx_host.connect import Card, Kind, Run, Step
 from qmx_host.jobs import Stopped
+from qmx_host.venue_records import bound_accounts, node_call, read_and_land, said, self_test_passed
 
 if TYPE_CHECKING:
     from qmx_apps.supervisor import Supervisor
@@ -542,7 +543,20 @@ def _passport(ports: Ports, run: Run) -> Card | None:
     part.write_text(json.dumps(passport, indent=2, sort_keys=True), encoding="utf-8")
     os.replace(part, target)
     run.say(f"passport: landed in {PASSPORT}, node {status['identity'].get('tag')}")
+    _land_records(run)
     return None
+
+
+def _land_records(run: Run) -> None:
+    """Once the node's self-test passed, each bound account's account, venue and instrument
+    records land on the Library's main (C-34), so a promote finds them."""
+    call = node_call(_apps(run))
+    control = run.world.control
+    if control is None or not self_test_passed(call):
+        run.say("records: they land on main once the self-test on a bound account passes")
+        return
+    for account in bound_accounts(call):
+        run.say(said(read_and_land(call, control.library.store, account)))
 
 
 def _apps_here(ports: Ports, run: Run) -> list[str]:

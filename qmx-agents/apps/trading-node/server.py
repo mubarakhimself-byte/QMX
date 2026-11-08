@@ -3,7 +3,7 @@
 Each tool hands its raw arguments to `Node.call`, which answers every call and never raises, so
 a bad argument is an answer `ok = false` and never a tool error that counts toward the
 supervisor's breaker. The tools declare an open input schema for the same reason: FastMCP would
-otherwise refuse a mistyped argument before the node could answer it. The six reads are marked
+otherwise refuse a mistyped argument before the node could answer it. The seven reads are marked
 read-only, which is what lets the road's shadow stage call them. The node declares no job.
 """
 

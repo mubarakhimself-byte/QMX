@@ -50,6 +50,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 from types import MappingProxyType
 from typing import ClassVar, Final, TypeVar, cast
@@ -91,8 +92,11 @@ __all__ = [
     "NON_HISTORICAL_RATE_LIMIT_PER_SECOND",
     "REFRESH_TOKEN_LIFETIME_CLASS",
     "SESSION_DUTIES",
+    "CTraderAccountRow",
     "CTraderAdapter",
     "CTraderBrokerConfiguration",
+    "CTraderSymbol",
+    "CTraderTrader",
     "ConnectionEndpoint",
     "DecodedExecutionPrice",
     "DecodedTimestamp",
@@ -110,6 +114,11 @@ __all__ = [
     "decode_market_data_price",
     "decode_money",
     "decode_timestamp",
+    "parse_account_list",
+    "parse_assets",
+    "parse_symbol_ids",
+    "parse_symbols",
+    "parse_trader",
     "tick_span_within_cap",
 ]
 
@@ -1082,3 +1091,179 @@ class CTraderAdapter:
                 CapabilityFieldName.SERVER_CLOCK_AVAILABILITY: False,
             }
         )
+
+
+# --- account and symbol facts, read from the Open API's own answers (C-34) -----------------
+#
+# Each parser takes one decoded answer body (``MessageToDict`` with the proto's own field
+# names, so a 64-bit integer arrives as a digit string and an enum as its name) and keeps only
+# what cTrader stated. A fact the definitions give a default for (``accountType`` HEDGED,
+# ``tradingMode`` ENABLED) takes that default when absent; a fact with no default is never
+# guessed, so an account whose live flag is absent is refused rather than read as demo.
+
+
+@dataclass(frozen=True, slots=True)
+class CTraderAccountRow:
+    """One account an access token reaches (``ProtoOACtidTraderAccount``)."""
+
+    ctid: int
+    is_live: bool
+    trader_login: int | None
+    broker_title: str
+
+
+@dataclass(frozen=True, slots=True)
+class CTraderTrader:
+    """One account's own facts (``ProtoOATrader``). ``leverage`` is the account's leverage as
+    a ratio (``leverageInCents`` 3000 is 30), None when cTrader states none."""
+
+    ctid: int
+    broker: str
+    deposit_asset_id: int
+    leverage: Decimal | None
+    position_mode: str
+    """``hedging`` or ``netting``; a spread-betting account is refused."""
+
+
+@dataclass(frozen=True, slots=True)
+class CTraderSymbol:
+    """One symbol's trading facts (``ProtoOALightSymbol`` joined to ``ProtoOASymbol``).
+    Volumes are cTrader's: cents of the base unit, so lots are ``volume / lot_size``."""
+
+    symbol_id: int
+    name: str
+    quote_asset_id: int | None
+    digits: int
+    pip_position: int
+    lot_size: int
+    step_volume: int
+    min_volume: int
+    max_volume: int | None
+    schedule_zone: str | None
+    trading_mode: str
+
+
+_POSITION_MODES: Final[Mapping[str, str]] = MappingProxyType(
+    {"HEDGED": "hedging", "NETTED": "netting"}
+)
+
+
+def _wire_int(value: object) -> int | None:
+    """A Protobuf integer as ``MessageToDict`` writes it: an int, or a digit string for 64-bit."""
+    if isinstance(value, str) and value.lstrip("-").isdigit():
+        return int(value)
+    return _as_plain_int(value)
+
+
+def _rows(value: object) -> list[Mapping[str, object]]:
+    items = cast("list[object]", value) if isinstance(value, list) else []
+    return [cast("Mapping[str, object]", item) for item in items if isinstance(item, dict)]
+
+
+def parse_account_list(body: Mapping[str, object]) -> Result[tuple[CTraderAccountRow, ...]]:
+    """``ProtoOAGetAccountListByAccessTokenRes``: every account with its live flag."""
+    found: list[CTraderAccountRow] = []
+    for row in _rows(body.get("ctidTraderAccount")):
+        ctid, live = _wire_int(row.get("ctidTraderAccountId")), row.get("isLive")
+        if ctid is None:
+            return _invalid("ctidTraderAccountId", "an account row names no account number")
+        if not isinstance(live, bool):
+            return _invalid(
+                "isLive", "cTrader did not state whether the account is live", ctid=ctid
+            )
+        found.append(
+            CTraderAccountRow(
+                ctid,
+                live,
+                _wire_int(row.get("traderLogin")),
+                str(row.get("brokerTitleShort") or ""),
+            )
+        )
+    return Ok(tuple(found))
+
+
+def parse_trader(body: Mapping[str, object]) -> Result[CTraderTrader]:
+    """``ProtoOATraderRes``: the broker, the deposit asset, the leverage and the position mode."""
+    trader = cast("Mapping[str, object]", body.get("trader") or {})
+    ctid, asset = (
+        _wire_int(trader.get("ctidTraderAccountId")),
+        _wire_int(trader.get("depositAssetId")),
+    )
+    if ctid is None or asset is None:
+        return _invalid("trader", "cTrader did not state the account or its deposit asset")
+    word = str(trader.get("accountType") or "HEDGED")
+    mode = _POSITION_MODES.get(word)
+    if mode is None:
+        return _invalid("accountType", "only hedged and netted accounts are read", given=word)
+    cents = _wire_int(trader.get("leverageInCents"))
+    return Ok(
+        CTraderTrader(
+            ctid,
+            str(trader.get("brokerName") or ""),
+            asset,
+            None if cents is None else Decimal(cents).scaleb(-2),
+            mode,
+        )
+    )
+
+
+def parse_assets(body: Mapping[str, object]) -> Result[Mapping[int, str]]:
+    """``ProtoOAAssetListRes``: each asset's name by its id."""
+    names: dict[int, str] = {}
+    for row in _rows(body.get("asset")):
+        ident, name = _wire_int(row.get("assetId")), row.get("name")
+        if ident is None or not isinstance(name, str) or not name:
+            return _invalid("asset", "an asset row names no id or no name")
+        names[ident] = name
+    return Ok(MappingProxyType(names))
+
+
+def parse_symbol_ids(body: Mapping[str, object]) -> Mapping[str, tuple[int, int | None]]:
+    """``ProtoOASymbolsListRes``: each symbol name's id and quote asset id."""
+    listed: dict[str, tuple[int, int | None]] = {}
+    for row in _rows(body.get("symbol")):
+        ident, name = _wire_int(row.get("symbolId")), row.get("symbolName")
+        if ident is not None and isinstance(name, str) and name:
+            listed[name] = (ident, _wire_int(row.get("quoteAssetId")))
+    return MappingProxyType(listed)
+
+
+def parse_symbols(
+    body: Mapping[str, object], listed: Mapping[str, tuple[int, int | None]]
+) -> Result[tuple[CTraderSymbol, ...]]:
+    """``ProtoOASymbolByIdRes`` for symbols in ``listed``: digits, pip position, lot size and
+    volume steps. A symbol missing any of them is refused, since a size crosses into cTrader
+    volume through them."""
+    names = {ident: (name, quote) for name, (ident, quote) in listed.items()}
+    found: list[CTraderSymbol] = []
+    for row in _rows(body.get("symbol")):
+        ident = _wire_int(row.get("symbolId"))
+        if ident is None or ident not in names:
+            continue
+        name, quote = names[ident]
+        facts = [
+            _wire_int(row.get(key))
+            for key in ("digits", "pipPosition", "lotSize", "stepVolume", "minVolume")
+        ]
+        if any(fact is None for fact in facts) or not all(cast("list[int]", facts)[2:]):
+            return _invalid(
+                "symbol", "cTrader did not state the symbol's digits and volumes", symbol=name
+            )
+        digits, pip, lot, step, least = cast("list[int]", facts)
+        zone = row.get("scheduleTimeZone")
+        found.append(
+            CTraderSymbol(
+                ident,
+                name,
+                quote,
+                digits,
+                pip,
+                lot,
+                step,
+                least,
+                _wire_int(row.get("maxVolume")),
+                zone if isinstance(zone, str) and zone else None,
+                str(row.get("tradingMode") or "ENABLED"),
+            )
+        )
+    return Ok(tuple(found))

@@ -39,11 +39,11 @@ from __future__ import annotations
 
 import asyncio
 import ssl
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final, Protocol, cast
+from typing import Final, Protocol, TypeAlias, cast
 
 from qmf.core import (
     Account,
@@ -84,10 +84,18 @@ from qmf.venue.connection import (
 )
 from qmf.venue.ctrader import (
     MARKET_DATA_WIRE_SCALE_EXPONENT,
+    CTraderAccountRow,
+    CTraderSymbol,
+    CTraderTrader,
     decode_execution_price,
     decode_market_data_price,
     decode_money,
     decode_timestamp,
+    parse_account_list,
+    parse_assets,
+    parse_symbol_ids,
+    parse_symbols,
+    parse_trader,
 )
 from qmf.venue.encode import (
     EncodedCommand,
@@ -123,11 +131,17 @@ __all__ = [
     "CT13_SEVEN_EVENT_TYPES",
     "READBACK_WIRE_KINDS",
     "VOLUME_WIRE_SCALE_EXPONENT",
+    "Ask",
     "JournalMapping",
     "LiveCTraderClient",
+    "VenueFacts",
     "WireKind",
     "ct13_journal_event_type",
     "decode_volume",
+    "read_account_list",
+    "read_symbols",
+    "read_trader",
+    "read_venue_facts",
 ]
 
 
@@ -1672,6 +1686,126 @@ class LiveCTraderClient:
             "balances": tuple(balances),
         }
         return evidence, earliest, bool(positions) and bool(balances)
+
+
+# --- the account, venue and instrument facts a deploy reads (C-34) ---------------------------
+
+Ask: TypeAlias = Callable[[str, Mapping[str, object]], Result[Mapping[str, object]]]
+"""One Open API request by message name and values, answered with the answer's body; an error
+answer is a refusal. The binding's ``OpenApi.ask`` over a fresh read-only session."""
+
+
+@dataclass(frozen=True, slots=True)
+class VenueFacts:
+    """What cTrader states about one account and the symbols asked for. ``trader`` is None for
+    a live account: its facts sit on the live host, which the node never reaches, so only the
+    account list's row is read."""
+
+    account: CTraderAccountRow
+    grant_scope: str
+    trader: CTraderTrader | None
+    assets: Mapping[int, str]
+    symbols: tuple[CTraderSymbol, ...]
+    missing: tuple[str, ...]
+    """The names asked for that the account does not list."""
+
+
+def read_account_list(
+    ask: Ask, *, client_id: str, client_secret: str, access: str
+) -> Result[tuple[str, tuple[CTraderAccountRow, ...]]]:
+    """Authorise the app, then list what the access token reaches, each account with its
+    live flag, and the scope it was granted under."""
+    app = ask("ProtoOAApplicationAuthReq", {"clientId": client_id, "clientSecret": client_secret})
+    if is_refusal(app):
+        return app
+    listed = ask("ProtoOAGetAccountListByAccessTokenReq", {"accessToken": access})
+    if is_refusal(listed):
+        return listed
+    rows = parse_account_list(listed.value)
+    if is_refusal(rows):
+        return rows
+    return Ok((str(listed.value.get("permissionScope") or "SCOPE_TRADE"), rows.value))
+
+
+def read_trader(
+    ask: Ask, *, ctid: int, access: str
+) -> Result[tuple[CTraderTrader, Mapping[int, str]]]:
+    """Authorise the account, then read its own facts and the asset names its deposit and its
+    symbols' quotes are named by."""
+    auth = ask("ProtoOAAccountAuthReq", {"ctidTraderAccountId": ctid, "accessToken": access})
+    if is_refusal(auth):
+        return auth
+    trader = ask("ProtoOATraderReq", {"ctidTraderAccountId": ctid})
+    if is_refusal(trader):
+        return trader
+    parsed = parse_trader(trader.value)
+    if is_refusal(parsed):
+        return parsed
+    assets = ask("ProtoOAAssetListReq", {"ctidTraderAccountId": ctid})
+    if is_refusal(assets):
+        return assets
+    names = parse_assets(assets.value)
+    if is_refusal(names):
+        return names
+    return Ok((parsed.value, names.value))
+
+
+def read_symbols(
+    ask: Ask, *, ctid: int, names: Sequence[str]
+) -> Result[tuple[tuple[CTraderSymbol, ...], tuple[str, ...]]]:
+    """Each named symbol's digits, pip position, lot size and volume steps, and the names the
+    account does not list. The account is authorised already."""
+    listed = ask("ProtoOASymbolsListReq", {"ctidTraderAccountId": ctid})
+    if is_refusal(listed):
+        return listed
+    ids = parse_symbol_ids(listed.value)
+    wanted = {name: ids[name] for name in names if name in ids}
+    missing = tuple(name for name in names if name not in ids)
+    if not wanted:
+        return Ok(((), missing))
+    detail = ask(
+        "ProtoOASymbolByIdReq",
+        {"ctidTraderAccountId": ctid, "symbolId": [ident for ident, _ in wanted.values()]},
+    )
+    if is_refusal(detail):
+        return detail
+    symbols = parse_symbols(detail.value, wanted)
+    if is_refusal(symbols):
+        return symbols
+    answered = {symbol.name for symbol in symbols.value}
+    return Ok((symbols.value, (*missing, *(name for name in wanted if name not in answered))))
+
+
+def read_venue_facts(
+    ask: Ask,
+    *,
+    client_id: str,
+    client_secret: str,
+    access: str,
+    ctid: int,
+    names: Sequence[str],
+) -> Result[VenueFacts]:
+    """The three reads in order. The account's world is its live flag in the account list; a
+    live account is read from that row alone."""
+    listing = read_account_list(
+        ask, client_id=client_id, client_secret=client_secret, access=access
+    )
+    if is_refusal(listing):
+        return listing
+    scope, rows = listing.value
+    row = next((item for item in rows if item.ctid == ctid), None)
+    if row is None:
+        return _invalid("ctid", "the grant does not reach this cTrader account", ctid=ctid)
+    if row.is_live:
+        return Ok(VenueFacts(row, scope, None, MappingProxyType({}), (), tuple(names)))
+    trader = read_trader(ask, ctid=ctid, access=access)
+    if is_refusal(trader):
+        return trader
+    symbols = read_symbols(ask, ctid=ctid, names=names)
+    if is_refusal(symbols):
+        return symbols
+    found, missing = symbols.value
+    return Ok(VenueFacts(row, scope, trader.value[0], trader.value[1], found, missing))
 
 
 def _unknown_after_encode(

@@ -22,7 +22,7 @@ import secrets
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Final, TypeAlias, cast
 from urllib.parse import urlsplit
 
-from qmf.core import Account, AccountRole, Result, VenueId, is_refusal
+from qmf.core import Account, AccountRole, Ok, Result, VenueId, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import JournalWriter, WriterScope
 
@@ -91,6 +91,7 @@ from qmn.venue.ctrader_account import (
     Wire,
     account_listing,
 )
+from qmn.venue.live import VenueFacts, read_venue_facts
 
 __all__ = [
     "BUILD",
@@ -616,6 +617,65 @@ class CTraderDoor:
         self._app = registration(self.keys())
         return ok({"state": "accepted"})
 
+    def records(self, account: str, symbols: Sequence[str]) -> Answer:
+        """A bound account's facts and each named symbol's, read on a fresh session beside the
+        bound one. The account's world is cTrader's live flag for it, never the binding's."""
+        if self._app is None:
+            return _not_set_up()
+        kept = next((item for item in self._kept() if item["id"] == account), None)
+        if kept is None:
+            return refused("not_bound", f"account {account} is not bound on this node")
+        given = self._credentials()
+        if given is None:
+            return refused(
+                "not_signed_in",
+                "the node holds no usable cTrader grant",
+                next_step="Sign in on cTrader's own page from the node's card first.",
+            )
+        codec, wire = self.codec(), self.open_wire(self.host)
+        if is_refusal(codec):
+            return refused(
+                "definitions_missing", "the pinned cTrader definitions could not be read"
+            )
+        if is_refusal(wire):
+            return refused("venue_unreachable", "the cTrader session did not open")
+        api = OpenApi(codec.value, wire.value, self.steady_ns)
+
+        def ask(name: str, values: Mapping[str, object]) -> Result[Mapping[str, object]]:
+            answered = api.ask(name, values)
+            return answered if is_refusal(answered) else Ok(answered.value.body)
+
+        client_id, client_secret, access = given
+        ctid = kept.get("ctid")
+        try:
+            facts = read_venue_facts(
+                ask,
+                client_id=client_id,
+                client_secret=client_secret,
+                access=access,
+                ctid=ctid if isinstance(ctid, int) else int(account),
+                names=symbols,
+            )
+        finally:
+            wire.value.close()
+        if is_refusal(facts):
+            return refused(
+                "venue_refused",
+                f"cTrader did not answer the records read: {facts.context.get('reason')}",
+            )
+        identity = self.store.identity()
+        return ok(
+            _records_answer(
+                facts.value,
+                account=account,
+                venue=str(kept.get("venue")),
+                owner=None
+                if identity is None
+                else {"install_id": identity.install_id, "tag": self.tag},
+                at=_iso(self.clock_ns()),
+            )
+        )
+
     # --- the self-test, on the runtime thread ---------------------------------------------
 
     def _self_test(self, account: str, venue: CTraderVenue, feed: FeedKeeper) -> None:
@@ -821,6 +881,53 @@ class CTraderDoor:
 
 def _not_set_up() -> Answer:
     return refused("not_set_up", "no venue is set up on this node yet", next_step=NOT_SET_UP)
+
+
+def _records_answer(
+    facts: VenueFacts, *, account: str, venue: str, owner: Json, at: str
+) -> dict[str, Json]:
+    """The ``records`` answer: cTrader's facts in its own units, volumes in cents of the base
+    unit and leverage as a ratio, for the host to map onto its record kinds."""
+    trader = facts.trader
+    row: dict[str, Json] = {
+        "id": account,
+        "ctid": facts.account.ctid,
+        "world": "live" if facts.account.is_live else "demo",
+        "broker": trader.broker
+        if trader is not None and trader.broker
+        else facts.account.broker_title,
+        "grant_scope": facts.grant_scope,
+        "owner": owner,
+    }
+    if trader is not None:
+        row["position_mode"] = trader.position_mode
+        row["base_currency"] = facts.assets.get(trader.deposit_asset_id)
+        row["leverage"] = None if trader.leverage is None else f"{trader.leverage.normalize():f}"
+    return {
+        "schema_version": "qmx.node.records/1",
+        "venue": {"name": venue, "platform": "ctrader", "sandbox": "demo"},
+        "account": row,
+        "instruments": [
+            {
+                "symbol": symbol.name,
+                "symbol_id": symbol.symbol_id,
+                "quote_currency": None
+                if symbol.quote_asset_id is None
+                else facts.assets.get(symbol.quote_asset_id),
+                "digits": symbol.digits,
+                "pip_position": symbol.pip_position,
+                "lot_size": symbol.lot_size,
+                "step_volume": symbol.step_volume,
+                "min_volume": symbol.min_volume,
+                "max_volume": symbol.max_volume,
+                "schedule_zone": symbol.schedule_zone,
+                "trading_mode": symbol.trading_mode,
+            }
+            for symbol in facts.symbols
+        ],
+        "missing": list(facts.missing),
+        "at": at,
+    }
 
 
 def from_environment() -> Node:

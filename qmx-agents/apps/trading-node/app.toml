@@ -61,6 +61,12 @@ approval = "domain_write"
 reversibility = "none"
 state = "instance"
 
+[operations.records]
+description = "A bound account's facts and each named symbol's facts as the venue states them, read on a fresh session; no secret."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
 [operations.deploy]
 description = "Accept a deployment document (qmx.node.deployment/1) for this node into what it should run."
 approval = "manage"
