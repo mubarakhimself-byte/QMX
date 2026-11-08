@@ -8,13 +8,14 @@ before the body is read. It is a host route and never a catalog row, so no agent
 has a tool that reaches it.
 
 For a move into paper or live it builds the deployment document (`qmx.node.deployment/1`) from
-the Library: the unit document, every pinned block file by fingerprint, the passing G
-`test-report` of its compiled fingerprint, the starting numbers, the instrument, venue and
-account records. It asks the node `deploy` through the node link, and only once the node took
-it or queued it does it record the move through the host's one lifecycle writer. A move to
-parked or retired is recorded first and then asks `withdraw` of every deployment his clicks put
-on that market. The event id and the deployment id derive from the click's op id, so the same
-click sent again lands nothing new and answers what the first answered.
+the Library: the unit document, every pinned block file by fingerprint, both halves of the unit
+version and the passing G `test-report` that covers its logic half, the starting numbers, the
+instrument, venue and account records. It asks the node `deploy` through the node link, and only
+once the node took it or queued it does it record the move through the host's one lifecycle
+writer. A move to parked or retired is recorded first and then asks `withdraw` of every
+deployment his clicks put on that market. The event id and the deployment id derive from the
+click's op id, so the same click sent again lands nothing new and answers what the first
+answered.
 
 Nothing here sends an order, binds an account or reads a secret: the node decides what trades.
 """
@@ -373,7 +374,7 @@ class Promoter:
             probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
             self._allowed(probe, known)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
-        report = self._g_record(compiled.compiled_fingerprint.value, click.market_id)
+        report, tested = self._g_record(compiled, click.market_id)
         account = _one(
             _main(self.store, "account", "account_id", click.account.id),
             f"account {click.account.id}",
@@ -395,12 +396,21 @@ class Promoter:
                 )
         if again is not None:
             deployment = self._deployment(
-                click, click.node, ask, document, compiled, lane, report, account, again.event_id
+                click,
+                click.node,
+                ask,
+                document,
+                compiled,
+                lane,
+                report,
+                tested,
+                account,
+                again.event_id,
             )
             return _done(again.event_id, _shown(self._deployed(deployment)), ask)
         event = self._event(click, digest, current, compiled.compiled_fingerprint.value, report)
         deployment = self._deployment(
-            click, click.node, ask, document, compiled, lane, report, account, event.event_id
+            click, click.node, ask, document, compiled, lane, report, tested, account, event.event_id
         )
         answer = _shown(self._deployed(deployment))
         try:
@@ -562,8 +572,20 @@ class Promoter:
             raise Refused("no_g_record", f"the unit does not compile: {first}", "Fix the unit.")
         return document, compiled
 
-    def _g_record(self, compiled: str, market: str) -> str:
-        found = self.records.g_record(compiled, (market,))
+    def _g_record(self, compiled: CompiledUnit, market: str) -> tuple[str, str]:
+        """A passing layer G report that covers this unit version, and the fingerprint it names.
+
+        Layer G checks the logic half, which a size edit leaves alone, so ask for that half first.
+        A report written before the split names the compiled half, which is the same version
+        while nothing else moved, so ask for that half too.
+        """
+        found: GRecord | None = None
+        covered = compiled.logic_fingerprint.value
+        for asked in (compiled.logic_fingerprint.value, compiled.compiled_fingerprint.value):
+            found = self.records.g_record(asked, (market,))
+            if found is not None:
+                covered = asked
+                break
         if found is None or not found.safety_passed:
             why = (
                 f"no G test-report on {market}"
@@ -572,10 +594,10 @@ class Promoter:
             )
             raise Refused(
                 "no_g_record",
-                f"{why} for compiled fingerprint {compiled}",
+                f"{why} for compiled fingerprint {compiled.logic_fingerprint.value}",
                 "Run the behaviour check on this version; a passing check lets it trade.",
             )
-        return found.object_id
+        return found.object_id, covered
 
     def _deployment(
         self,
@@ -586,9 +608,13 @@ class Promoter:
         compiled: CompiledUnit,
         lane: Lane,
         report: str,
+        tested: str,
         account: Held,
         lifecycle_event: str,
     ) -> Document:
+        """His click's document: both halves of the unit version, and the G report that covers the
+        logic half. The `lifecycle_event` is the click that covered the risk half, because one
+        click carries the whole version."""
         markets = _markets(document)
         records = [self._instrument(market) for market in markets]
         admitted = next(
@@ -619,10 +645,13 @@ class Promoter:
             "unit": {"id": click.unit.id, "version": click.unit.version},
             "unit_document": cast("JsonValue", dict(document)),
             "compiled_fingerprint": compiled.compiled_fingerprint.value,
+            "logic_fingerprint": compiled.logic_fingerprint.value,
+            "risk_fingerprint": compiled.risk_fingerprint.value,
             "g_record": {
                 "id": report_held.item,
                 "version": report_held.version,
-                "compiled_fingerprint": compiled.compiled_fingerprint.value,
+                "compiled_fingerprint": tested,
+                "logic_fingerprint": compiled.logic_fingerprint.value,
             },
             "files": self._files(document),
             "starting": cast("JsonValue", starting(document, lane, rows)),

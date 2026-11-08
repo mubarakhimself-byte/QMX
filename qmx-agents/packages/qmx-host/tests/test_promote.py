@@ -298,8 +298,18 @@ def test_his_click_promotes_the_dummy_to_paper_and_the_node_takes_one_deployment
         "paper",
         {"tag": TAG, "install_id": None},
     )
-    assert sent["g_record"] == {"id": "qmbr-g-pass", "version": 1, "compiled_fingerprint": fp}
-    assert sent["compiled_fingerprint"] == fp
+    logic = rig.compiled.logic_fingerprint.value
+    assert sent["g_record"] == {
+        "id": "qmbr-g-pass",
+        "version": 1,
+        "compiled_fingerprint": fp,
+        "logic_fingerprint": logic,
+    }
+    assert (sent["compiled_fingerprint"], sent["logic_fingerprint"], sent["risk_fingerprint"]) == (
+        fp,
+        logic,
+        rig.compiled.risk_fingerprint.value,
+    )
     assert sent["starting"] == {"source": "defaults", "values": DEFAULTS}
     assert sent["unit"] == {"id": DUMMY, "version": rig.unit}
     assert sent["lifecycle_event"] == answer["value"]["lifecycle_event_id"]
@@ -379,9 +389,9 @@ def test_the_same_click_sent_twice_lands_nothing_new(rig: Rig) -> None:
 
 
 def test_a_unit_with_no_passing_g_report_is_refused(rig: Rig) -> None:
-    fp = rig.compiled.compiled_fingerprint.value
+    fp = rig.compiled.logic_fingerprint.value
     none = rig.click(op_id="click-1", to="paper")
-    g_report(rig.store, fp, verdict="fail")
+    g_report(rig.store, rig.compiled.compiled_fingerprint.value, verdict="fail")
     failed = rig.click(op_id="click-2", to="paper")
 
     assert (none[0], none[1]["code"], none[1]["message"]) == (
@@ -395,8 +405,8 @@ def test_a_unit_with_no_passing_g_report_is_refused(rig: Rig) -> None:
 
 
 def test_a_move_on_a_market_no_behaviour_check_saw_is_refused(rig: Rig) -> None:
-    fp = rig.compiled.compiled_fingerprint.value
-    g_report(rig.store, fp, saw=("metal.xauusd",))
+    fp = rig.compiled.logic_fingerprint.value
+    g_report(rig.store, rig.compiled.compiled_fingerprint.value, saw=("metal.xauusd",))
 
     status, answer = rig.click(op_id="click-1", to="paper")
 
