@@ -21,7 +21,6 @@ from qml.catalogue.index import row as index_row
 from qml.catalogue.loader import block_fingerprint
 from qml.catalogue.roles import NEAREST_SUGGESTIONS
 from qml.door import explain, new
-from qmn.doors.api import read_status
 from qmx_control.library import OPERATOR
 from qmx_judge.judge import (
     STUDY_KIND,
@@ -57,6 +56,7 @@ if TYPE_CHECKING:
     from qmx_library.store import Store
 
 UNIT_KIND: Final = "unit"
+NO_NODE: Final = "no trading node is set up yet"
 REPO: Final = Path(qml.__file__).resolve().parents[3]
 
 
@@ -356,11 +356,48 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         """Save named content as an immutable artifact and return its reference."""
         return ctx.output(ctx.save(Artifact.model_validate(artifact)), "saved", response_format)
 
+    def node_read(
+        operation: str, arguments: dict[str, Any], response_format: ResponseFormat
+    ) -> dict[str, Any]:
+        """One of the trading node's reads through the host's node link (Part C AD-303)."""
+        found = None if ctx.node is None else ctx.node.node_read(operation, arguments)
+        if found is None:
+            found = {"set_up": False, "message": NO_NODE}
+        return ctx.output(found, "node", response_format)
+
     def node_state(response_format: ResponseFormat = "concise") -> dict[str, Any]:
-        """Read QMN lifecycle and provenance. No trading or node-control powers are exposed."""
-        if ctx.node is None:
-            raise ValueError("No node configured; inject the host's QMN DoorRuntime")
-        return ctx.output(unwrap(read_status(ctx.node)), "node", response_format)
+        """Read the trading node's state. No trading or node-control powers are exposed."""
+        return node_read("status", {}, response_format)
+
+    def node_units(
+        deployment_id: str | None = None, response_format: ResponseFormat = "concise"
+    ) -> dict[str, Any]:
+        """Read the trading node's units, or one deployment's."""
+        given = {} if deployment_id is None else {"deployment_id": deployment_id}
+        return node_read("units", given, response_format)
+
+    def node_positions(
+        account: str | None = None, response_format: ResponseFormat = "concise"
+    ) -> dict[str, Any]:
+        """Read the trading node's open positions, or one account's."""
+        return node_read(
+            "positions", {} if account is None else {"account": account}, response_format
+        )
+
+    def node_journal_tail(
+        after_sequence: int = 0,
+        streams: list[str] | None = None,
+        response_format: ResponseFormat = "concise",
+    ) -> dict[str, Any]:
+        """Read the trading node's journal rows after a sequence."""
+        given: dict[str, Any] = {"after_sequence": after_sequence}
+        if streams is not None:
+            given["streams"] = streams
+        return node_read("journal_tail", given, response_format)
+
+    def node_passport(response_format: ResponseFormat = "concise") -> dict[str, Any]:
+        """Read the trading node's passport."""
+        return node_read("passport", {}, response_format)
 
     def propose_order(
         proposal: OrderProposal, response_format: ResponseFormat = "concise"
@@ -399,7 +436,14 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "library_search": library_search,
             "library_save": library_save,
         },
-        "node": {"node_state": node_state, "propose_order": propose_order},
+        "node": {
+            "node_state": node_state,
+            "node_units": node_units,
+            "node_positions": node_positions,
+            "node_journal_tail": node_journal_tail,
+            "node_passport": node_passport,
+            "propose_order": propose_order,
+        },
         "unit": unit_functions(ctx),
         "blocks": block_functions(ctx),
     }

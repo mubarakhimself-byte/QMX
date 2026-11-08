@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Se
 from contextlib import asynccontextmanager
 from functools import wraps
 from hashlib import sha256
+from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Any, Final
 from urllib.parse import urlsplit
@@ -412,7 +413,7 @@ def create_app(
         finally:
             service.close()
 
-    app = FastAPI(title="QMX control", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="QMX control", version=version("qmx-control"), lifespan=lifespan)
     bearer = HTTPBearer()
 
     def authenticate(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)]) -> None:

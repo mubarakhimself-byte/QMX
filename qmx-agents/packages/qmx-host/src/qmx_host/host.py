@@ -94,6 +94,7 @@ from qmx_engine.ports.library import LibraryRefused as EngineLibraryRefused
 from qmx_engine.ports.router import Refused, Reply
 from qmx_engine.ports.router import Row as EngineRow
 from qmx_engine.ports.router import adopt as adopt_router
+from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.runner import Engine
 from qmx_engine.service.forward import (
     Forwarder,
@@ -159,6 +160,7 @@ from qmx_router.server import (
     node_app,
 )
 from qmx_tools.gather import FIXTURE_RECORDS, check_unit, entry_problems, gather
+from qmx_tools.service import attach_node
 from uvicorn.config import STARTUP_FAILURE
 
 from qmx_host.app_logs import AppLogs
@@ -179,11 +181,13 @@ from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.first_start import enable_first_party, land_dummy, land_port, land_wave
+from qmx_host.host_route import ANSWERS, Answering, Answers, host_router
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
+from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.publish_collection import publish_collection_router
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
@@ -1069,6 +1073,8 @@ async def serve(
     sidecar = (
         asyncio.create_task(node_sidecar(home, passes)) if role in ("node", "server") else None
     )
+    nodes = node_link(home, control, name)
+    attach_node(control, nodes)
     try:
         door = market_door(home, control, role)
         control.app_runtime().attach_facts(lambda: host_facts(control, role, name, door))
@@ -1123,6 +1129,7 @@ async def serve(
                         control,
                         harness=HarnessAdapter(harness),
                         library=EngineLibraryAdapter(store),
+                        placements=nodes.placements(),
                     ) as engine:
                         core = engine.svc.ctx.engine
                         placed = (
@@ -1139,6 +1146,19 @@ async def serve(
                         harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
                         origin = ui_origin if role == "pc" else ""
                         answering = [*answering_router(home, engine), drain_router(core)]
+                        answering.append(
+                            host_router(
+                                Answering(
+                                    nodes,
+                                    key=pairing_key(home),
+                                    heartbeats=lambda: heartbeats_read(home, name)({}),
+                                    store_root=lambda: (
+                                        door.store_root if isinstance(door, MarketDoor) else None
+                                    ),
+                                    answers=Answers(home / ANSWERS),
+                                )
+                            )
+                        )
                         answering.append(templates_router(engine))
                         answering.append(backups_router(backups))
                         answering.append(maintenance_router(backups, triggers_of(control)))
@@ -1177,6 +1197,7 @@ async def serve(
                         )
                         exporting = asyncio.create_task(harness.idle_exports())
                         holding = asyncio.create_task(asking.hold_all())
+                        linking = asyncio.create_task(nodes.keep())
                         refreshing = asyncio.create_task(keep_facts(control))
                         shipping = asyncio.create_task(shipper.run())
                         syncing: list[asyncio.Task[None]] = []
@@ -1205,6 +1226,7 @@ async def serve(
                                 beating,
                                 exporting,
                                 holding,
+                                linking,
                                 refreshing,
                                 shipping,
                                 *syncing,
@@ -1223,6 +1245,7 @@ async def serve(
         finally:
             await harness.close()
     finally:
+        attach_node(control, None)
         supervising.cancel()
         with suppress(asyncio.CancelledError):
             await supervising
@@ -1505,6 +1528,33 @@ def hub_link(home: Path, control: ControlService) -> HubLink | None:
     if not isinstance(url, str) or not url or not key_file.exists():
         return None
     return HubLink(url, key_file.read_text(encoding="utf-8").strip())
+
+
+def pairing_key(home: Path) -> Callable[[], str | None]:
+    """The home's pairing key, read at each use, so a key paired after the start is used."""
+
+    def read() -> str | None:
+        found = home / PAIRING_KEY
+        return found.read_text(encoding="utf-8").strip() if found.exists() else None
+
+    return read
+
+
+def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
+    """This host's one node link (Part C AD-303), over its supervisor and its place rows."""
+
+    def tuning() -> Mapping[str, object]:
+        found = section(control, "engine").get("node_link")
+        return cast("Mapping[str, object]", found) if isinstance(found, dict) else {}
+
+    return NodeLink(
+        home,
+        here=name,
+        apps=control.app_runtime(),
+        settings=ControlSettings(control).values,
+        key=pairing_key(home),
+        tuning=tuning,
+    )
 
 
 def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forwarder]:

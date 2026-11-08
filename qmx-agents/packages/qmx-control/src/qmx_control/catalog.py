@@ -334,7 +334,51 @@ DOMAIN_ROWS: Final = (
         "decide; it never publishes or promotes a unit.",
     ),
     _row("research", "qml_run", "domain_fn", "qml_run", "read"),
-    _row("node", "state", "domain_fn", "node_state", "read"),
+    _row(
+        "node",
+        "state",
+        "domain_fn",
+        "node_state",
+        "read",
+        "Read the trading node's state: its lifecycle, its units' counts and its last broker"
+        " contact. Reads only; when no trading node is set up yet the answer says so.",
+    ),
+    _row(
+        "node",
+        "units",
+        "domain_fn",
+        "node_units",
+        "read",
+        "Read the trading node's units: each deployment's state. Pass `deployment_id` for one."
+        " Reads only.",
+    ),
+    _row(
+        "node",
+        "positions",
+        "domain_fn",
+        "node_positions",
+        "read",
+        "Read the trading node's open positions with their owner tags and protection. Pass"
+        " `account` for one account. Reads only.",
+    ),
+    _row(
+        "node",
+        "journal_tail",
+        "domain_fn",
+        "node_journal_tail",
+        "read",
+        "Read the trading node's journal rows after `after_sequence`, and the next sequence to"
+        " ask from. Pass `streams` to narrow. Reads only.",
+    ),
+    _row(
+        "node",
+        "passport",
+        "domain_fn",
+        "node_passport",
+        "read",
+        "Read the trading node's passport: its identity, versions, clock and venue round trips."
+        " Reads only.",
+    ),
     _row(
         "unit",
         "new",

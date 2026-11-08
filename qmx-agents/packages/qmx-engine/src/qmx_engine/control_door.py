@@ -36,7 +36,8 @@ from qmx_control.service import ControlService
 from qmx_engine.definition.lint import redact
 from qmx_engine.ledger.inbox_table import InboxRefused
 from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
-from qmx_engine.nodes.app_op import AppOp
+from qmx_engine.nodes.app_op import AppOp, Placements
+from qmx_engine.nodes.base import NodeJob, NodeResult
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
@@ -145,6 +146,21 @@ def card(act: str, title: str, method: str, path: str, body: Document) -> Docume
         "message": f"Only you can {act} this. Press the button to {act} it.",
         "button": {"method": method, "path": path, "body": body},
     }
+
+
+class AsRun:
+    """`app_op` acting as its run, so a job asked of another machine carries the pass principal
+    `run:<run_id>` whether a door or the scheduler started the run (Part C AD-303)."""
+
+    def __init__(self, node: AppOp) -> None:
+        self.node = node
+
+    async def run(self, job: NodeJob) -> NodeResult:
+        token = PRINCIPAL.set(Caller("workflow", job.run_id))
+        try:
+            return await self.node.run(job)
+        finally:
+            PRINCIPAL.reset(token)
 
 
 def as_run(run_id: str) -> contextvars.Context:
@@ -295,17 +311,24 @@ class EngineDoor:
         clock: Clock | None = None,
         wait_seconds: float = WAIT_SECONDS,
         principal: Callable[[], Caller] = PRINCIPAL.get,
+        placements: Placements | None = None,
     ) -> AsyncGenerator[EngineDoor]:
         """The engine on `control`'s home, attached for as long as the block runs, with the
         scheduler ticking (a limit-paused run wakes only while it ticks). `principal` names the
-        caller of a door, read on the caller's thread. `library` is the host's Library store."""
+        caller of a door, read on the caller's thread. `library` is the host's Library store.
+        `placements` say where `app_op` runs a job (Level 0 AD-46): the host's node link, whose
+        `remote` asks an app's home on another machine; None runs every job here."""
         with EngineService.open(
             control.home,
             library=library,
             settings=settings or ControlSettings(control),
             harness=harness,
             clock=clock,
-            executors={"app_op": AppOp(control.app_job, dispatch=control.app_job)},
+            executors={
+                "app_op": AsRun(
+                    AppOp(control.app_job, dispatch=control.app_job, placements=placements)
+                )
+            },
         ) as svc:
             scheduler = Scheduler(
                 svc.ctx, credentials=configured_refs(control), skills=shipped_skills()
