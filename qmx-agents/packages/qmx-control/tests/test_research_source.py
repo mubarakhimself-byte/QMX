@@ -1,85 +1,106 @@
-"""The article outbox uses the real control service's MCP schema."""
+"""The article job's `outputs` land through the host into the real control Library."""
 
 from __future__ import annotations
 
-import asyncio
-import json
+import hashlib
 import runpy
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import httpx
 import pytest
-from fastmcp import Client
+from qmx_apps.manifest import Definition
+from qmx_engine.ledger import redact
+from qmx_library.store import Store as Library
 
-from qmx_control.server import create_mcp
 from qmx_control.service import ControlService
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "examples/apps/mql5-articles"))
+APP = Path(__file__).resolve().parents[4] / "examples/apps/mql5-articles"
+FIXTURE = Path(__file__).resolve().parents[2] / "qmx-apps/tests/fixtures/mql5-623.html"
+URL = "https://www.mql5.com/en/articles/623"
+TITLE = "Interview with Sergey Pankratyev (ATC 2012)"
+
+sys.path.insert(0, str(APP))
 
 
-def test_article_publishes_to_real_control_library(tmp_path: Path) -> None:
-    from collector import Store, article_url, parse_article
+@pytest.fixture
+def control(tmp_path: Path) -> Generator[ControlService]:
+    service = ControlService(tmp_path / "home", secret_getter=lambda _service, _name: None)
+    with Library.open(tmp_path / "library", redactor=redact) as library:
+        service.attach_library(library)
+        try:
+            yield service
+        finally:
+            service.close()
 
-    source = Path(__file__).resolve().parents[2] / "qmx-apps/tests/fixtures/mql5-623.html"
-    store = Store(tmp_path / "app")
-    metadata, markdown = parse_article(source.read_text(encoding="utf-8"), article_url(623))
-    store.save(623, source.read_bytes(), markdown, metadata)
-    service = ControlService(tmp_path / "control")
 
-    async def run() -> None:
-        async with Client(create_mcp(service)) as client:
-            assert await store.publish(client) == 1
-            assert await store.publish(client) == 0
+def land(control: ControlService, answer: dict[str, Any]) -> list[dict[str, Any]]:
+    """What the host does with a job answer that carries `outputs`: land each one."""
+    outputs = [(item["output"], item["data"]) for item in answer["outputs"]]
+    return control.app_runtime().artifacts.save_all(Definition.load(APP), outputs)
 
-    asyncio.run(run())
-    saved = service.library_search(article_url(623))
-    assert len(saved) == 1
-    assert saved[0]["kind"] == "article"
-    assert saved[0]["source"] == article_url(623)
-    content = saved[0]["content"]
-    assert isinstance(content, dict)
-    assert content["markdown"] == markdown
-    assert content["source_url"] == article_url(623)
-    assert content["title"] == metadata["title"]
-    assert saved[0]["fetched_date"] == str(content["fetched_at"])[:10]
-    assert service.library_search(article_url(623)) == saved
+
+def articles(control: ControlService) -> list[dict[str, Any]]:
+    return [item for item in control.library_search() if item["kind"] == "app-output"]
+
+
+def test_a_saved_article_lands_in_the_real_control_library_once(
+    control: ControlService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from collector import Store, parse_article, run_daily
+
+    store = Store(control.home / "apps/mql5-articles")
+    (store.root / "data/config.json").write_text('{"crawl": false}', encoding="utf-8")
+    metadata, markdown = parse_article(FIXTURE.read_text(encoding="utf-8"), URL)
+    store.save(623, FIXTURE.read_bytes(), markdown, metadata)
+    monkeypatch.setenv("QMX_VOLUME", str(store.root))
+
+    first = run_daily()
+    land(control, first)
+    land(control, first)
+    again = run_daily()
+
+    [saved] = articles(control)
+    assert saved["title"] == "mql5-articles mql5-article"
+    assert saved["content"] == {
+        "title": TITLE,
+        "source_url": URL,
+        "sha256": hashlib.sha256(markdown.encode()).hexdigest(),
+        "published": "2012-12-27T05:53Z",
+        "markdown": markdown,
+    }
+    assert markdown.startswith(f"# {TITLE}\n")
+    assert (again["landed"], again["outputs"]) == (1, [])
     assert store.status()["pending_publication"] == 0
 
 
-def test_daily_entrypoint_publishes_offline_and_respects_robots(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_the_daily_entrypoint_respects_robots_and_still_lands_the_saved_article(
+    control: ControlService, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import collector
+    from collector import Store
 
-    app = Path(__file__).resolve().parents[4] / "examples/apps/mql5-articles"
-    store = collector.Store(tmp_path / "app")
-    store.save(623, b"<article>saved</article>", "# Saved", {"title": "Saved"})
-    service = ControlService(tmp_path / "control")
+    store = Store(control.home / "apps/mql5-articles")
+    store.save(623, b"<article>saved</article>", "# Saved\n", {"title": "Saved"})
     calls: list[str] = []
 
-    def library(url: str, *, auth: str) -> Client[Any]:
-        assert url == "http://127.0.0.1:8766/mcp/" and auth == "fixture-token"
-        return Client(create_mcp(service))
-
-    def respond(request: httpx.Request) -> httpx.Response:
+    def mql5(_transport: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
         calls.append(str(request.url))
-        assert request.url.path == "/robots.txt"
         return httpx.Response(200, text="User-agent: *\nDisallow: /\n")
 
-    def http(*, timeout: float) -> httpx.Client:
-        assert timeout == 20
-        return httpx.Client(transport=httpx.MockTransport(respond))
-
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", mql5)
     monkeypatch.setenv("QMX_VOLUME", str(store.root))
-    monkeypatch.setenv("QMX_CONTROL_TOKEN", "fixture-token")
-    monkeypatch.setattr(collector, "Client", library)
-    monkeypatch.setattr(collector, "httpx", SimpleNamespace(Client=http))
-    namespace = runpy.run_path(str(app / "jobs/daily.py"))
-    namespace["run"]()
-    result = json.loads(capsys.readouterr().out)
-    assert result == {"discovered": 0, "fetched": 0, "deferred": 0, "seeded": 0, "published": 1}
+    answer = runpy.run_path(str(APP / "jobs/daily.py"))["run"]()
+    land(control, answer)
+
     assert calls == ["https://www.mql5.com/robots.txt"]
-    assert len(service.library_search(collector.article_url(623))) == 1
+    assert {key: value for key, value in answer.items() if key != "outputs"} == {
+        "discovered": 0,
+        "fetched": 0,
+        "deferred": 0,
+        "seeded": 0,
+        "landed": 0,
+    }
+    assert [item["content"]["title"] for item in articles(control)] == ["Saved"]
+    assert [item["content"]["source_url"] for item in articles(control)] == [URL]
