@@ -1,0 +1,16 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "u4-librarian",
+  "name": "Find repeated code, clashing names and gaps in the dictionary",
+  "inputs": {"type": "object", "properties": {}},
+  "outputs": {"type": "object", "description": "repeated code with a one-block proposal per cluster, name clashes and gaps, each with its pins and fingerprints; nothing changed"},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "scan", "name": "Scan the dictionary", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/scan.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Scan the dictionary", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "find-repeated-code-and-gaps-in-the-dictionary"}
+}

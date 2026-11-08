@@ -1,0 +1,26 @@
+{
+  "verdict": {
+    "verdict_id": "verdict-fixture-contexts",
+    "overall": "fail",
+    "says": "Did not hold everywhere. fx.gbpusd holds; fx.eurusd fails the try-corrected step. Behind it: 4 tries, 4 effective.",
+    "raw_tries": 4,
+    "effective_tries": 4,
+    "result_ids": [
+      "result-fixture-sweep",
+      "result-fixture-whatif"
+    ],
+    "cards": {},
+    "per_market": [
+      {
+        "market": "fx.eurusd",
+        "outcome": "fail",
+        "trades": 88
+      },
+      {
+        "market": "fx.gbpusd",
+        "outcome": "pass",
+        "trades": 112
+      }
+    ]
+  }
+}

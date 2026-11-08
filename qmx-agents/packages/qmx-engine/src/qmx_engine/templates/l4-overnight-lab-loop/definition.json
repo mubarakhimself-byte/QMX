@@ -65,5 +65,5 @@
     "Assemble the morning card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "overnight-lab-loop", "needs": ["qmb-door"]}
+  "meta": {"template": "overnight-lab-loop", "needs": ["real-library"]}
 }

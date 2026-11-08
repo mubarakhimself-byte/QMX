@@ -53,5 +53,5 @@
     "Assemble the card and scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "first-backtest-from-an-idea", "needs": ["qmb-door"]}
+  "meta": {"template": "first-backtest-from-an-idea", "needs": ["real-library"]}
 }

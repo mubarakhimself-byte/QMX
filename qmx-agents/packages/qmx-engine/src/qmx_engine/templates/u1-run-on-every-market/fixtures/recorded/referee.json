@@ -1,0 +1,25 @@
+{
+  "verdict": {
+    "verdict_id": "verdict-fixture-every-market",
+    "overall": "fail",
+    "says": "Did not hold. fx.eurusd holds; metal.xauusd fails the try-corrected step. Behind it: 3 tries, 3 effective.",
+    "raw_tries": 3,
+    "effective_tries": 3,
+    "result_ids": [
+      "result-fixture-sweep"
+    ],
+    "cards": {},
+    "per_market": [
+      {
+        "market": "fx.eurusd",
+        "outcome": "pass",
+        "trades": 104
+      },
+      {
+        "market": "metal.xauusd",
+        "outcome": "fail",
+        "trades": 131
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # Get a first backtest result from an idea
 
-Waits for QMB's doors for agents and the Lab's Toolbox and data check (`needs: qmb-door`).
+Waits for a workflow read of the Library: the Toolbox and data facts its first step checks the idea against (`needs: real-library`). QMB's own door is there now.
 
 Built from card L1 (idea to first result in at most two iterations) in `research/methodology/17-templates-dev-pm-lab.md`. He says "buy pullbacks to the 20 EMA in London when the daily trend is up" and sees an in-sample backtest of what he meant. An iteration is one round trip in which he looks and says "not that"; the target is two, one at the card and one at the result.
 

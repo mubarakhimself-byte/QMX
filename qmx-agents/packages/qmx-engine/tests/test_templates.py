@@ -50,15 +50,20 @@ PANEL = PACK / "ask-the-panel"
 CLIPPINGS = PACK / "clippings-into-research"
 DIGEST = PACK / "morning-digest"
 CRYSTALLISE = PACK / "crystallise-a-workflow"
+B = PACK / "b-build-and-prove"
+U1 = PACK / "u1-run-on-every-market"
+U2 = PACK / "u2-where-its-rules-hold"
+U3 = PACK / "u3-dictionary-expansion"
+U4 = PACK / "u4-librarian"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
 CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
 JUDGED = (
-    "b-build-and-prove",
     "d3-iterate-against-qmb",
     "l4-overnight-lab-loop",
     "d4-variant-comparison",
 )
-"""The templates that call the `judge` block as their child in place of a copied gate script."""
+"""The templates that call the `judge` block as their child in place of a copied gate script. `b`
+asks the core's referee, `backtest_judge_run`, because no workflow reads a family's tries."""
 
 NO_RENDER = frozenset(
     {
@@ -70,13 +75,19 @@ NO_RENDER = frozenset(
         "extract-source",
         "feed",
         "refresh-ccxt-records",
+        "u1-run-on-every-market",
+        "u2-where-its-rules-hold",
+        "u3-dictionary-expansion",
+        "u4-librarian",
     }
 )
 """Script-first templates with no grader and no deliver step, so they carry no block copy.
 
 `connections-health` was the first; the feed and the three downloaders
 land their own output and have nothing to render or grade (DR6); `extract-source` hands the
-extraction back to its caller and lands no Library object of its own (DR7).
+extraction back to its caller and lands no Library object of its own (DR7). The four B19
+templates write no prose: their numbers come from scripts and the core's referee, and what they
+land is a card, a draft or a report on the run's own ref.
 """
 
 BLOCK_COPIES = {
@@ -198,6 +209,12 @@ def answers(
         "Summarise every new clipping into a research note line": recorded(CLIPPINGS, "notes.json"),
         "Write the morning digest from what ran": recorded(DIGEST, "digest.json"),
         "Label the sampled items the way you would label": recorded(CRYSTALLISE, "sample.json"),
+        "You turn his one-line trading idea": recorded(B, "claim.json"),
+        "You build one QMX trading unit": recorded(B, "build.json"),
+        "You ask QMX's referee": recorded(B, "referee-fail.json"),
+        "You explain why a trading unit died": recorded(B, "explanation.json"),
+        "You are the writer of QMX's build-and-prove scorecard": recorded(B, "summary.json"),
+        "You draft dictionary entries": recorded(U3, "drafts.json"),
     } | (planted or {})
     chunked: dict[str, Callable[[str], str]] = {
         "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
@@ -273,8 +290,8 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
 def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 46
-    assert len(set(ids)) == 46
+    assert len(ids) == 50
+    assert len(set(ids)) == 50
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
@@ -288,6 +305,7 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "morning-market-brief",
         "research-desk-overnight",
         "copilot-eval-battery",
+        "strategy-idea-to-paper-tested",
         "revolution-loop",
         "ask-the-panel",
         "clippings-into-research",
@@ -301,12 +319,16 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "download-ccxt",
         "extract-source",
         "refresh-ccxt-records",
+        "run-a-unit-on-every-market",
+        "where-a-failed-unit-still-holds",
+        "expand-the-dictionary-from-a-source",
+        "find-repeated-code-and-gaps-in-the-dictionary",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
-    assert sum(1 for t in CATALOG if t.needs) == 23
+    assert sum(1 for t in CATALOG if t.needs) == 22
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
@@ -344,6 +366,10 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "download-ccxt",
         "extract-source",
         "refresh-ccxt-records",
+        "run-a-unit-on-every-market",
+        "where-a-failed-unit-still-holds",
+        "expand-the-dictionary-from-a-source",
+        "find-repeated-code-and-gaps-in-the-dictionary",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -596,7 +622,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_28_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
     home: Path,
 ) -> None:
     with fake_service(home, harness=answers()) as svc:
@@ -612,9 +638,9 @@ def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_chan
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 46
+    assert [i.action for i in second] == ["unchanged"] * 50
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 23
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 28
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -653,10 +679,10 @@ def test_installing_by_an_old_id_installs_the_renamed_template(home: Path) -> No
         (
             "strategy-idea-to-paper-tested",
             "Turn a strategy idea into a tested strategy, ending on paper",
-            "saved draft",
+            "published",
         )
     ]
-    assert [row.status for row in found] == ["validated draft, needs: qmb-door"]
+    assert [row.status for row in found] == ["published, disabled"]
     assert drafted.item == "b-build-and-prove"
 
 
@@ -847,3 +873,282 @@ def test_the_cli_installs_one_template_into_the_homes_real_store(
     assert "connections-health published: 0.1.0" in capsys.readouterr().out
     assert on_main == ["connections-health"]
     assert not (home / "engine" / "library-fake.sqlite").exists()
+
+
+IDEA = {
+    "idea": "buy pullbacks to the 50 EMA when the trend is up",
+    "window": {"start": "2025-01-01", "end": "2025-03-31"},
+    "study": {"min_in_sample_days": 60},
+}
+
+
+def scorecard(
+    home: Path, fixture: str, planted: dict[str, str] | None = None
+) -> tuple[Any, Any, list[str]]:
+    """b test-run from a sentence on a recorded QMB run: its report, the delivered scorecard and
+    the nodes that finished."""
+    port = answers(planted=planted)
+    report, delivered = try_template(home, B, {**IDEA, "fixture": fixture}, port)
+    with Reader.open(home) as reader:
+        ran = [
+            str(e.data["node_id"])
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished"
+        ]
+    return report, delivered, ran
+
+
+def test_b_turns_a_sentence_into_a_verdict_and_a_death_certificate(home: Path) -> None:
+    report, card, ran = scorecard(home, "fail")
+
+    assert report.status == "passed", report.reason
+    assert card["stage_reached"] == "verdict"
+    assert card["unit"] == {"item": "unit-item-fixture", "pin": "unit-object-fixture"}
+    assert card["check"] == {
+        "verdict": "pass",
+        "rounds": 0,
+        "stopped": "passed",
+        "problem_set": card["check"]["problem_set"],
+    }
+    assert card["judge"]["overall"] == "fail"
+    assert card["certificate"] == {
+        "unit": "unit-object-fixture",
+        "verdict": "verdict-fixture-fail",
+        "cause": "behaviour",
+        "classifier_version": "1",
+    }
+    assert card["explanation"].startswith("The unit's edge did not survive its costs")
+    assert card["proposal"] is None
+    assert [s["stage"] for s in card["lineage"]] == ["unit", "result"]
+    assert "propose" not in ran
+    assert {"backtest", "robustness"}.isdisjoint(ran)
+
+
+def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home: Path) -> None:
+    report, card, ran = scorecard(
+        home, "pass", {"You ask QMX's referee": recorded(B, "referee-pass.json")}
+    )
+
+    assert report.status == "passed", report.reason
+    assert card["proposal"] == {
+        "subject": "unit-object-fixture",
+        "ask": "paper",
+        "evidence": [
+            "verdict-fixture-pass",
+            "result-fixture-backtest",
+            "result-fixture-robustness",
+        ],
+        "verdict": "verdict-fixture-pass",
+        "tries": {"raw": 2, "effective": 2},
+        "why": json.loads(recorded(B, "referee-pass.json"))["verdict"]["says"],
+        "cost": {"qmb_runs": 2},
+        "made_by": card["proposal"]["made_by"],
+    }
+    assert card["certificate"] is None
+    assert "certify" not in ran
+
+
+def test_b_tests_nothing_when_the_check_step_had_to_fix_the_saved_unit(home: Path) -> None:
+    built = json.loads(recorded(B, "build.json"))
+    built["unit"]["numbers"]["time_out_bars"]["default"] = "47.5"
+    fixed = {"unit": json.loads(recorded(B, "build.json"))["unit"]}
+    report, card, ran = scorecard(
+        home,
+        "fail",
+        {
+            "You build one QMX trading unit": json.dumps(built),
+            "You fix a QMX unit document": json.dumps(fixed),
+        },
+    )
+
+    assert report.status == "passed", report.reason
+    assert card["stage_reached"] == "unit"
+    assert card["verdict"] == (
+        "could not test: the unit-check step fixed the builder's unit in 1 round(s), so the saved "
+        "draft unit-item-fixture is not the checked document; it is not tested"
+    )
+    assert card["judge"] is None
+    assert "referee" not in ran
+
+
+def finished_output(home: Path, report: Any, node_id: str) -> Any:
+    with Reader.open(home) as reader:
+        return next(
+            cast(dict[str, Any], e.data["outputs"])["main"]
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished" and e.data.get("node_id") == node_id
+        )
+
+
+def test_the_referee_step_is_one_brief_and_one_schema_in_every_template_that_asks_it() -> None:
+    for name in ("prompts/referee.md", "schemas/referee.json"):
+        copies = {(folder / name).read_bytes() for folder in (B, U1, U2)}
+        assert len(copies) == 1, name
+
+
+def test_run_on_every_market_gives_one_row_per_market_under_one_verdict(home: Path) -> None:
+    port = answers(planted={"You ask QMX's referee": recorded(U1, "referee.json")})
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(U1.name, Bundle.read(U1), 0, caller=OPERATOR).item
+        inputs = {**cast(dict[str, Any], find("run-a-unit-on-every-market").test_inputs)}
+        inputs["markets"] = ["fx.eurusd", "metal.xauusd", "fx.usdjpy"]
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+
+    table = finished_output(home, report, "table")
+    assert report.status == "passed", report.reason
+    assert table["markets"] == [
+        {"market": "fx.eurusd", "outcome": "pass", "trades": 104},
+        {"market": "metal.xauusd", "outcome": "fail", "trades": 131},
+    ]
+    assert table["unjudged"] == ["fx.usdjpy"]
+    assert table["verdict"]["raw_tries"] == 3
+
+
+def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home: Path) -> None:
+    port = answers(planted={"You ask QMX's referee": recorded(U2, "referee.json")})
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(U2.name, Bundle.read(U2), 0, caller=OPERATOR).item
+        inputs = find("where-a-failed-unit-still-holds").test_inputs
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+
+    out = finished_output(home, report, "report")
+    assert report.status == "passed", report.reason
+    assert (out["holds"], out["fails"], out["sessions"]) == (
+        ["fx.gbpusd"],
+        ["fx.eurusd"],
+        [{"from": 7, "to": 16}],
+    )
+    assert {k: out["card"][k] for k in ("subject", "ask", "evidence", "placeholders", "why")} == {
+        "subject": "unit-object-fixture",
+        "ask": "admit_market",
+        "evidence": ["verdict-fixture-contexts", "result-fixture-sweep", "result-fixture-whatif"],
+        "placeholders": {"markets": ["fx.gbpusd"]},
+        "why": "the rules hold on fx.gbpusd, with the sessions 7:00 to 16:00 UTC tried and "
+        "counted. Did not hold everywhere. fx.gbpusd holds; fx.eurusd fails the try-corrected "
+        "step. Behind it: 4 tries, 4 effective.",
+    }
+
+
+def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(home: Path) -> None:
+    with fake_service(home, harness=answers()) as svc:
+        item = svc.drafts.put(U3.name, Bundle.read(U3), 0, caller=OPERATOR).item
+        inputs = find("expand-the-dictionary-from-a-source").test_inputs
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+
+    out = finished_output(home, report, "check")
+    requests = finished_output(home, report, "match")["library_written"]
+    assert report.status == "passed", report.reason
+    assert out["matched"] == [{"sentence": "Wait for the EMA to turn up", "entry": "ema@1"}]
+    assert out["append_requests"] == [
+        "Time the turn with the smoothed close fixture",
+        "Enter when the Wolfe wave completes its fifth point",
+    ]
+    assert [(d["pin"], d["status"]) for d in out["drafts"]] == [
+        ("smoothed-close-fixture@1", "implemented")
+    ]
+    assert [(r["pin"], r["problems"][0]["message"]) for r in out["refused"]] == [
+        ("wolfe-wave@1", "the entry has no schema, component_type, origin, definition")
+    ]
+    assert [w["refused"] for w in requests] == [None, None]
+    assert [w["refused"] for w in out["library_written"]] == [None]
+
+
+def expand_with(home: Path, *entries: dict[str, Any]) -> Any:
+    """Run the dictionary expansion with the agent's drafts replaced by these entries, each with
+    the shipped fixture draft's code."""
+    fixture = json.loads(recorded(U3, "drafts.json"))["entries"][0]
+    drafts = [{"for": fixture["for"], "entry": e, "code": fixture["code"]} for e in entries]
+    planted = json.dumps({"entries": drafts, "already_held": []})
+    port = answers(planted={"You draft dictionary entries": planted})
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(U3.name, Bundle.read(U3), 0, caller=OPERATOR).item
+        inputs = find("expand-the-dictionary-from-a-source").test_inputs
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+    assert report.status == "passed", report.reason
+    return finished_output(home, report, "check")
+
+
+def test_a_draft_that_takes_another_entrys_name_is_refused(home: Path) -> None:
+    entry = json.loads(recorded(U3, "drafts.json"))["entries"][0]["entry"]
+    out = expand_with(home, {**entry, "aliases": ["ema"]})
+
+    assert out["drafts"] == []
+    assert [(r["pin"], [p["message"] for p in r["problems"]]) for r in out["refused"]] == [
+        ("smoothed-close-fixture@1", ["'ema' already names ema"])
+    ]
+    assert out.get("library_written", []) == []
+
+
+def test_a_draft_that_takes_an_earlier_drafts_name_in_the_same_run_is_refused(
+    home: Path,
+) -> None:
+    entry = json.loads(recorded(U3, "drafts.json"))["entries"][0]["entry"]
+    out = expand_with(home, entry, {**entry, "entry_id": "smoothed-close-copy"})
+
+    assert [d["pin"] for d in out["drafts"]] == ["smoothed-close-fixture@1"]
+    assert [(r["pin"], [p["message"] for p in r["problems"]]) for r in out["refused"]] == [
+        (
+            "smoothed-close-copy@1",
+            ["'smoothed close fixture' already names smoothed-close-fixture"],
+        )
+    ]
+    assert [w["refused"] for w in out["library_written"]] == [None]
+
+
+def test_the_librarian_reports_with_receipts_and_lands_only_its_report(home: Path) -> None:
+    with fake_service(home, harness=answers()) as svc:
+        item = svc.drafts.put(U4.name, Bundle.read(U4), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={}))
+
+    out = finished_output(home, report, "scan")
+    seed = [g for g in out["gaps"] if g["pin"] == "anchored-vwap@1"]
+    assert report.status == "passed", report.reason
+    assert out["repeated_code"] == []
+    assert out["clashes"] == []
+    assert out["notices"] == []
+    assert seed == [
+        {"pin": "anchored-vwap@1", "status": "specified", "missing": ["implementation: code"]}
+    ]
+    assert out["scanned"]["qml"] > 0
+    assert [(w["op"], w["refused"]) for w in out["library_written"]] == [("put_artifact", None)]
+
+
+def test_b_asks_qmb_for_a_walk_forward_only_when_the_run_names_ranges() -> None:
+    sealed = {
+        "memo_key": "k",
+        "spec": {
+            "study": {"folds": 3},
+            "windows": {
+                "in_sample": {"start": "2020-01-01", "end": "2023-01-01"},
+                "folds": [{"start": "2023-01-01", "end": "2024-01-02"}],
+                "holdout": {"start": "2024-01-02", "end": "2025-01-01"},
+            },
+        },
+    }
+    built: dict[str, Any] = {"item": "u", "object_id": "unit-pin", "unit": {}}
+    report = {"verdict": "pass", "rounds": 0, "stopped": "passed", "problem_set": "p", "why": ""}
+    ranges = {"ema_period": ["50", "100"]}
+
+    def ready(inputs: dict[str, Any]) -> Any:
+        given: list[Any] = [inputs, sealed, built, {"outputs": {"report": {"main": report}}}]
+        ran = subprocess.run(
+            [sys.executable, "-I", str(B / "scripts" / "ready.py")],
+            input=json.dumps({"in": given}),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
+        )
+        return json.loads(ran.stdout)
+
+    asked = ready({"idea": "i", "window": {}, "ranges": ranges})
+    plain = ready({"idea": "i", "window": {}})
+
+    assert asked["walk_forward"] == {
+        "unit": "unit-pin",
+        "window": {"start": "2020-01-01", "end": "2024-01-02"},
+        "split": {"folds": 3},
+        "ranges": {"ema_period": ["50", "100"]},
+    }
+    assert plain["walk_forward"] is None
+    assert (asked["ok"], asked["window"]) == (True, {"start": "2020-01-01", "end": "2023-01-01"})

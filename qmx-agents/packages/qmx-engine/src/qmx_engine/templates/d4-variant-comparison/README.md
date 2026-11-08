@@ -1,6 +1,6 @@
 # Variant generation and comparison
 
-Waits for QMB's doors for agents: compile and backtest (`needs: qmb-door`).
+Waits for a workflow read of the Library: the family's tries its `judge` child counts, and each variant's daily returns, which live in the result's files (`needs: real-library`). QMB's own door is there now.
 
 Built from card D4 (variant generation and comparison) in `research/methodology/17-templates-dev-pm-lab.md`. It turns his request ("try this on GBPUSD and on 15 minutes") into labelled variants of one strategy and compares them fairly: the same windows, the same costs, every variant counted as a trial, and a warning when the leader's edge could be luck.
 

@@ -6,11 +6,14 @@ runs them on QMB, fanned out (card D4 steps 5 and 6). The holdout is never used 
 request over the variant set: the study `spec`, the `study` id, the landed `results` and the
 `tries`.
 
-Until QMB's doors for agents exist this template stays a draft (`needs: qmb-door`) and this script
-refuses to guess.
+Until a workflow can read the family's tries this template stays a draft (`needs: real-library`)
+and this script refuses to guess.
 """
 
 import sys
 
-sys.stderr.write("waits for QMB's compile and backtest doors for agents (needs: qmb-door)")
+sys.stderr.write(
+    "waits for a workflow read of the family's tries and each variant's daily returns "
+    "(needs: real-library)"
+)
 raise SystemExit(1)

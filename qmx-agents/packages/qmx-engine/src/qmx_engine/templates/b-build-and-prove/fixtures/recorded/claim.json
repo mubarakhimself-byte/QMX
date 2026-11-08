@@ -1,0 +1,18 @@
+{
+  "claim": {
+    "edge": "pullbacks to the moving average resume an up trend",
+    "horizon": "a few hours"
+  },
+  "markets": [
+    "fx.eurusd",
+    "metal.xauusd"
+  ],
+  "rules": [
+    "enter long on a pullback to the trend's moving average while the trend is up",
+    "exit at the stop or the target the template sets",
+    "size by the template's risk per trade"
+  ],
+  "open_questions": [
+    "which moving average: the template's default stands"
+  ]
+}

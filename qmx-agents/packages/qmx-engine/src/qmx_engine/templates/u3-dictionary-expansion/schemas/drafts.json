@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["entries", "already_held"],
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["for", "entry", "code"],
+        "properties": {
+          "for": {"type": "string", "description": "the append request's sentence"},
+          "entry": {"type": "object", "description": "the entry draft, in the dictionary's entry form"},
+          "code": {"type": ["string", "null"], "description": "the block.py source, or null"}
+        }
+      }
+    },
+    "already_held": {
+      "type": "array",
+      "items": {"type": "object", "required": ["sentence", "pin"], "properties": {"sentence": {"type": "string"}, "pin": {"type": "string"}}}
+    }
+  }
+}

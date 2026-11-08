@@ -1,6 +1,6 @@
 # Iterate against QMB with overfit guards
 
-Waits for QMB's doors for agents: reports, family ledger, compile, walk-forward, robustness and sealed holdout (`needs: qmb-door`).
+Waits for a workflow read of the Library: the parent's reports, its family's tries and its sealed holdout (`needs: real-library`). QMB's own door is there now.
 
 Built from card D3 (iterate against QMB with overfit guards, the old WF2 core) in `research/methodology/17-templates-dev-pm-lab.md`. It improves one strategy honestly: it reads the reports, diagnoses why the strategy is weak, makes 3 or 4 structurally different children, retests, keeps survivors, and stops on a budget or a plateau. Every child counts as a trial and the holdout is touched once.
 

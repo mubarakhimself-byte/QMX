@@ -1,0 +1,58 @@
+{
+  "fail": {
+    "backtest": {
+      "app_id": "qmb",
+      "job": "jobs/backtest.py",
+      "version": "1.0.0",
+      "run_id": "qmbr-pc-fail-backtest",
+      "result": {
+        "output": "backtest-result",
+        "data": {
+          "run_id": "qmbr-pc-fail-backtest",
+          "status": "finished"
+        }
+      }
+    },
+    "robustness": {
+      "app_id": "qmb",
+      "job": "jobs/robustness.py",
+      "version": "1.0.0",
+      "run_id": "qmbr-pc-fail-robustness",
+      "result": {
+        "output": "backtest-result",
+        "data": {
+          "run_id": "qmbr-pc-fail-robustness",
+          "status": "finished"
+        }
+      }
+    }
+  },
+  "pass": {
+    "backtest": {
+      "app_id": "qmb",
+      "job": "jobs/backtest.py",
+      "version": "1.0.0",
+      "run_id": "qmbr-pc-pass-backtest",
+      "result": {
+        "output": "backtest-result",
+        "data": {
+          "run_id": "qmbr-pc-pass-backtest",
+          "status": "finished"
+        }
+      }
+    },
+    "robustness": {
+      "app_id": "qmb",
+      "job": "jobs/robustness.py",
+      "version": "1.0.0",
+      "run_id": "qmbr-pc-pass-robustness",
+      "result": {
+        "output": "backtest-result",
+        "data": {
+          "run_id": "qmbr-pc-pass-robustness",
+          "status": "finished"
+        }
+      }
+    }
+  }
+}

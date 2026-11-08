@@ -61,6 +61,9 @@ def card(file: CardFile, *ids: str) -> tuple[Card, ...]:
 
 NODE: Final[tuple[Need, ...]] = ("trading-node",)
 QMB: Final[tuple[Need, ...]] = ("qmb-door",)
+LIBRARY: Final[tuple[Need, ...]] = ("real-library",)
+"""The template reads Library rows a workflow cannot read yet: a family's tries, its reports or
+its sealed holdout (a script reads four verbs, `nodes/script.py` `READS`)."""
 SANDBOX: Final[tuple[Need, ...]] = ("sandbox",)
 """A placed attempt runs under the sandbox tool server (AD-25, H8); the template is a draft until
 that placement exists, which is what `meta.needs` records."""
@@ -244,9 +247,14 @@ CATALOG: Final[tuple[Template, ...]] = (
         "strategy-idea-to-paper-tested",
         "Turn a strategy idea into a tested strategy, ending on paper",
         card("17", "D2", "D3"),
-        "TP4",
-        QMB,
+        "B19",
         folder="b-build-and-prove",
+        test_inputs={
+            "idea": "buy pullbacks to the 50 EMA when the trend is up",
+            "window": {"start": "2025-01-01", "end": "2025-03-31"},
+            "study": {"min_in_sample_days": 60},
+            "fixture": "fail",
+        },
     ),
     Template(
         "source-to-a-lab-test",
@@ -278,7 +286,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Get a first backtest result from an idea",
         card("17", "L1"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="l1-idea-to-first-result",
     ),
     Template(
@@ -286,7 +294,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Overnight Lab loop",
         card("17", "L4"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="l4-overnight-lab-loop",
         triggers=(Cron("0 23 * * *", "Europe/London"),),
     ),
@@ -303,7 +311,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Iterate against QMB with overfit guards",
         card("17", "D3"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="d3-iterate-against-qmb",
     ),
     Template(
@@ -311,7 +319,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Variant generation and comparison",
         card("17", "D4"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="d4-variant-comparison",
     ),
     Template(
@@ -481,6 +489,58 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="refresh-ccxt-records",
         triggers=(Cron("0 4 * * *", "UTC"),),
         test_inputs={"fixture": True},
+    ),
+    Template(
+        "run-a-unit-on-every-market",
+        "Run a unit on every market it trades",
+        card("17", "D4"),
+        "B19",
+        folder="u1-run-on-every-market",
+        test_inputs={
+            "unit": "unit-object-fixture",
+            "window": {"start": "2025-01-01", "end": "2025-03-31"},
+            "markets": ["fx.eurusd", "metal.xauusd"],
+            "fixture": "recorded",
+        },
+    ),
+    Template(
+        "where-a-failed-unit-still-holds",
+        "Find where a failed unit's rules still hold",
+        card("15", "R6"),
+        "B19",
+        folder="u2-where-its-rules-hold",
+        test_inputs={
+            "unit": "unit-object-fixture",
+            "window": {"start": "2025-01-01", "end": "2025-03-31"},
+            "markets": ["fx.eurusd", "fx.gbpusd"],
+            "sessions": [{"from": 7, "to": 16}],
+            "fixture": "recorded",
+        },
+    ),
+    Template(
+        "expand-the-dictionary-from-a-source",
+        "Expand the dictionary from a source",
+        card("15", "R2"),
+        "B19",
+        folder="u3-dictionary-expansion",
+        test_inputs={
+            "source": {
+                "title": "A fixture note on trend timing",
+                "date": "2026-11-02",
+                "text": (
+                    "Wait for the EMA to turn up. Time the turn with the smoothed close fixture. "
+                    "Enter when the Wolfe wave completes its fifth point."
+                ),
+            }
+        },
+    ),
+    Template(
+        "find-repeated-code-and-gaps-in-the-dictionary",
+        "Find repeated code, clashing names and gaps in the dictionary",
+        card("17", "D1"),
+        "B19",
+        folder="u4-librarian",
+        test_inputs={},
     ),
 )
 

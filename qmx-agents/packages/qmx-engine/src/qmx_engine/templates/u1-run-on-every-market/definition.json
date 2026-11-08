@@ -1,0 +1,42 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "u1-run-on-every-market",
+  "name": "Run a unit on every market it trades",
+  "inputs": {
+    "type": "object",
+    "required": ["unit", "window", "markets"],
+    "properties": {
+      "unit": {"type": "string", "description": "the unit's Library pin, the object id of the version to run"},
+      "window": {
+        "type": "object",
+        "required": ["start", "end"],
+        "description": "the data range, start and end dates; QMB must hold each market's bars",
+        "properties": {"start": {"type": "string"}, "end": {"type": "string"}}
+      },
+      "markets": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "his admitted markets, each one the unit trades, such as fx.eurusd"},
+      "fixture": {"enum": ["recorded"], "description": "test runs only: replay a recorded QMB run instead of asking QMB"}
+    }
+  },
+  "outputs": {"type": "object", "description": "one row per market with the referee's outcome, and the verdict over every market as one family"},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "route", "name": "Route the run", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/route.py"}, "effect": "none"},
+    {"id": "replay", "name": "Recorded run?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.recorded is not None"}, "effect": "none"},
+    {"id": "recorded", "name": "Replay the recorded run", "type": "script", "typeVersion": 1, "position": [660, 120], "parameters": {"script": "scripts/recorded.py", "fixture_ref": "fixtures/qmb.json"}, "effect": "none"},
+    {"id": "ask", "name": "The sweep QMB runs", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/ask.py"}, "effect": "none"},
+    {"id": "sweep", "name": "Sweep every market on QMB", "type": "app_op", "typeVersion": 1, "position": [880, 0], "parameters": {"app": "qmb", "job": "jobs/sweep.py", "inputs": {}}},
+    {"id": "referee", "name": "Ask the referee", "type": "agent", "typeVersion": 1, "toolsets": ["backtest"], "position": [1100, 0], "role": "judge", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/referee.md", "output_schema_ref": "schemas/referee.json", "tools": []}, "effect": "none"},
+    {"id": "table", "name": "One row per market", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/table.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Route the run", "port": "in", "map": "one"}]]},
+    "Route the run": {"main": [[{"node": "Recorded run?", "port": "in", "map": "one"}, {"node": "One row per market", "port": "in", "map": "one"}]]},
+    "Recorded run?": {"true": [[{"node": "Replay the recorded run", "port": "in", "map": "one"}]], "false": [[{"node": "The sweep QMB runs", "port": "in", "map": "one"}]]},
+    "The sweep QMB runs": {"main": [[{"node": "Sweep every market on QMB", "port": "in", "map": "one"}]]},
+    "Sweep every market on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Replay the recorded run": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Ask the referee": {"main": [[{"node": "One row per market", "port": "in", "map": "one", "required": true}]]}
+  },
+  "meta": {"template": "run-a-unit-on-every-market"}
+}

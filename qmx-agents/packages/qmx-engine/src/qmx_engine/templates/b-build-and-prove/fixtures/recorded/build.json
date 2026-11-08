@@ -1,0 +1,490 @@
+{
+  "item": "unit-item-fixture",
+  "object_id": "unit-object-fixture",
+  "unit": {
+    "schema": "qmx.unit/1",
+    "unit_id": "dummy-trend-pullback",
+    "family_id": "trend-pullback",
+    "title": "Trend pullback (dummy)",
+    "claim_card": {
+      "idea": "buy pullbacks in an uptrend, sell rallies in a downtrend",
+      "sources": [
+        {
+          "source_ref": "qmx:template",
+          "locator": "built-in",
+          "dated": "2026-10-31"
+        }
+      ],
+      "written_at": "2026-10-31T00:00:00Z"
+    },
+    "markets": [
+      {
+        "market_id": "fx.eurusd",
+        "instrument_ref": {
+          "venue": "icmarkets-ctrader",
+          "symbol": "EURUSD"
+        }
+      },
+      {
+        "market_id": "metal.xauusd",
+        "instrument_ref": {
+          "venue": "icmarkets-ctrader",
+          "symbol": "XAUUSD"
+        }
+      }
+    ],
+    "streams": [
+      {
+        "name": "m15",
+        "market": "*",
+        "bar": {
+          "kind": "time",
+          "size": "900"
+        },
+        "input": "closed_bars",
+        "price": "bid_ask"
+      }
+    ],
+    "direction": "both",
+    "logic": {
+      "long": {
+        "slots": {
+          "context": {
+            "role": "context",
+            "combiner": {
+              "kind": "all",
+              "when_inputs_absent": "no_signal"
+            },
+            "bindings": [
+              {
+                "name": "trend",
+                "block": "ema@1",
+                "params": {
+                  "period": {
+                    "number": "ema_period"
+                  }
+                },
+                "inputs": {
+                  "series": "m15.close"
+                }
+              },
+              {
+                "name": "strength",
+                "block": "roc-of-series@1",
+                "params": {
+                  "lookback": {
+                    "number": "roc_lookback"
+                  },
+                  "floor": {
+                    "number": "min_trend_strength"
+                  }
+                },
+                "inputs": {
+                  "series": "trend"
+                }
+              }
+            ]
+          },
+          "trigger": {
+            "role": "trigger",
+            "combiner": {
+              "kind": "all",
+              "when_inputs_absent": "no_signal"
+            },
+            "bindings": [
+              {
+                "name": "rsi_cross",
+                "block": "rsi-cross-back@1",
+                "params": {
+                  "period": {
+                    "number": "rsi_period"
+                  },
+                  "level": {
+                    "number": "rsi_low"
+                  }
+                },
+                "inputs": {
+                  "series": "m15.close"
+                }
+              }
+            ]
+          },
+          "entry_order": {
+            "role": "entry_order",
+            "combiner": {
+              "kind": "all",
+              "when_inputs_absent": "no_signal"
+            },
+            "bindings": [
+              {
+                "name": "next_open",
+                "block": "market-next-open@1",
+                "params": {},
+                "inputs": {}
+              }
+            ]
+          }
+        }
+      },
+      "short": {
+        "slots": {
+          "context": {
+            "role": "context",
+            "combiner": {
+              "kind": "all",
+              "when_inputs_absent": "no_signal"
+            },
+            "bindings": [
+              {
+                "name": "trend",
+                "block": "ema@1",
+                "params": {
+                  "period": {
+                    "number": "ema_period"
+                  }
+                },
+                "inputs": {
+                  "series": "m15.close"
+                }
+              },
+              {
+                "name": "strength",
+                "block": "roc-of-series@1",
+                "params": {
+                  "lookback": {
+                    "number": "roc_lookback"
+                  },
+                  "floor": {
+                    "number": "min_trend_strength"
+                  }
+                },
+                "inputs": {
+                  "series": "trend"
+                }
+              }
+            ]
+          },
+          "trigger": {
+            "role": "trigger",
+            "combiner": {
+              "kind": "all",
+              "when_inputs_absent": "no_signal"
+            },
+            "bindings": [
+              {
+                "name": "rsi_cross",
+                "block": "rsi-cross-back@1",
+                "params": {
+                  "period": {
+                    "number": "rsi_period"
+                  },
+                  "level": {
+                    "number": "rsi_high"
+                  }
+                },
+                "inputs": {
+                  "series": "m15.close"
+                }
+              }
+            ]
+          },
+          "entry_order": {
+            "role": "entry_order",
+            "combiner": {
+              "kind": "all",
+              "when_inputs_absent": "no_signal"
+            },
+            "bindings": [
+              {
+                "name": "next_open",
+                "block": "market-next-open@1",
+                "params": {},
+                "inputs": {}
+              }
+            ]
+          }
+        }
+      }
+    },
+    "exit_set": [
+      {
+        "name": "swing_stop",
+        "scope": "position",
+        "block": "swing-stop-buffer@1",
+        "params": {
+          "buffer": {
+            "number": "stop_buffer"
+          }
+        },
+        "inputs": {
+          "series": "m15"
+        }
+      },
+      {
+        "name": "target_2r",
+        "scope": "position",
+        "block": "target-r-multiple@1",
+        "params": {
+          "multiple": {
+            "number": "target_r"
+          }
+        },
+        "inputs": {}
+      },
+      {
+        "name": "time_out",
+        "scope": "position",
+        "block": "time-exit-bars@1",
+        "params": {
+          "bars": {
+            "number": "time_out_bars"
+          }
+        },
+        "inputs": {}
+      }
+    ],
+    "sizer": {
+      "name": "fixed_fraction",
+      "block": "fixed-fraction-at-stop@1",
+      "params": {
+        "fraction": {
+          "number": "risk_fraction"
+        }
+      },
+      "inputs": {}
+    },
+    "halts": {
+      "position": [],
+      "unit": [],
+      "account": []
+    },
+    "reads": [],
+    "numbers": {
+      "ema_period": {
+        "kind": "fixed",
+        "measure": "bars",
+        "range": {
+          "min": "20",
+          "max": "300",
+          "step": "1"
+        },
+        "default": "100",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "published_convention"
+      },
+      "roc_lookback": {
+        "kind": "fixed",
+        "measure": "bars",
+        "range": {
+          "min": "5",
+          "max": "100",
+          "step": "1"
+        },
+        "default": "20",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "builder_chosen"
+      },
+      "min_trend_strength": {
+        "kind": "calibrated",
+        "measure": "percent",
+        "range": {
+          "min": "0",
+          "max": "0.0030",
+          "step": "0.0001"
+        },
+        "default": "0",
+        "motion": {
+          "mode": "shrink_from_own_trades",
+          "source": "own_record",
+          "cadence": {
+            "every_closed_trades": 20,
+            "at": "market_day_close"
+          },
+          "min_count": 20,
+          "shrink_k": 100,
+          "step_limit": 1,
+          "rule": "trend-floor-from-record@1",
+          "rule_params": {
+            "buckets": "5"
+          }
+        },
+        "authority": "motion_inside_range",
+        "origin": "builder_chosen",
+        "applies_to_open_positions": false
+      },
+      "rsi_period": {
+        "kind": "fixed",
+        "measure": "bars",
+        "range": {
+          "min": "2",
+          "max": "50",
+          "step": "1"
+        },
+        "default": "14",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "published_convention"
+      },
+      "rsi_low": {
+        "kind": "derived",
+        "measure": "ratio",
+        "range": {
+          "min": "0",
+          "max": "100",
+          "step": "0.01"
+        },
+        "default": "30",
+        "motion": {
+          "mode": "percentile_of_own_history",
+          "source": "rsi_cross",
+          "rule_params": {
+            "percentile": "20",
+            "window_bars": "500"
+          }
+        },
+        "authority": "motion_inside_range",
+        "origin": "builder_chosen"
+      },
+      "rsi_high": {
+        "kind": "derived",
+        "measure": "ratio",
+        "range": {
+          "min": "0",
+          "max": "100",
+          "step": "0.01"
+        },
+        "default": "70",
+        "motion": {
+          "mode": "percentile_of_own_history",
+          "source": "rsi_cross",
+          "rule_params": {
+            "percentile": "80",
+            "window_bars": "500"
+          }
+        },
+        "authority": "motion_inside_range",
+        "origin": "builder_chosen"
+      },
+      "stop_buffer": {
+        "kind": "fixed",
+        "measure": "percent",
+        "range": {
+          "min": "0",
+          "max": "0.01",
+          "step": "0.0001"
+        },
+        "default": "0.0002",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "placeholder"
+      },
+      "target_r": {
+        "kind": "fixed",
+        "measure": "r",
+        "range": {
+          "min": "0.5",
+          "max": "10",
+          "step": "0.1"
+        },
+        "default": "2",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "placeholder"
+      },
+      "time_out_bars": {
+        "kind": "fixed",
+        "measure": "bars",
+        "range": {
+          "min": "1",
+          "max": "1000",
+          "step": "1"
+        },
+        "default": "48",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "placeholder"
+      },
+      "risk_fraction": {
+        "kind": "fixed",
+        "measure": "percent",
+        "range": {
+          "min": "0.0001",
+          "max": "0.05",
+          "step": "0.0001"
+        },
+        "default": "0.005",
+        "motion": {
+          "mode": "fixed"
+        },
+        "authority": "motion_inside_range",
+        "origin": "placeholder"
+      }
+    },
+    "pins": [
+      {
+        "entry_id": "ema",
+        "version": 1,
+        "fingerprint": "fp1:sha256:83996dbbf75d4cddefe157cccdffe61c9e86da3f79f7a4a1e6cc4f8f172112f4"
+      },
+      {
+        "entry_id": "fixed-fraction-at-stop",
+        "version": 1,
+        "fingerprint": "fp1:sha256:e965437208a8db07e44c579d463d8c8c789d826451089097a8290fdd63cd90bf"
+      },
+      {
+        "entry_id": "market-next-open",
+        "version": 1,
+        "fingerprint": "fp1:sha256:f95d99d7c9081c78186bb04ef36ba6bfac263067cc5e66a716672b2bfb366637"
+      },
+      {
+        "entry_id": "percentile-of-own-history",
+        "version": 1,
+        "fingerprint": "fp1:sha256:3bf3b12e4f579135da6bc1e362376a1de7097db214195f91d61fbbaec23be717"
+      },
+      {
+        "entry_id": "roc-of-series",
+        "version": 1,
+        "fingerprint": "fp1:sha256:1b66c16724b58cf7e43db0f4b5ceaf691d0bbe7e56e89bc3f7718026adde3a00"
+      },
+      {
+        "entry_id": "rsi-cross-back",
+        "version": 1,
+        "fingerprint": "fp1:sha256:dd94e7693df3f3c0e9020be6784d3fb23682ea1fbb033f44a2aaa1975593a4c2"
+      },
+      {
+        "entry_id": "swing-stop-buffer",
+        "version": 1,
+        "fingerprint": "fp1:sha256:db0cf634b2f2a91aff715079fc0e2cf4d1da19a2db04f316e78dc37960aedc52"
+      },
+      {
+        "entry_id": "target-r-multiple",
+        "version": 1,
+        "fingerprint": "fp1:sha256:24236124fd2b0d83a6d41db124d9a1de1cbdf5c029c138338605be2e5356ca5e"
+      },
+      {
+        "entry_id": "time-exit-bars",
+        "version": 1,
+        "fingerprint": "fp1:sha256:f19fa95dab6ce35827e90d82d2e1f41ffbdb1f53dadf601c3d74213db0430dc5"
+      },
+      {
+        "entry_id": "trend-floor-from-record",
+        "version": 1,
+        "fingerprint": "fp1:sha256:e825e436371e7382efdc0fb680caf3e988e13ae23b5949016a9866799bb76ac6"
+      }
+    ]
+  }
+}

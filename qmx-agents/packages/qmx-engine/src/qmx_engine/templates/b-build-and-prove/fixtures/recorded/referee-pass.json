@@ -1,0 +1,29 @@
+{
+  "verdict": {
+    "verdict_id": "verdict-fixture-pass",
+    "overall": "pass",
+    "says": "Holds. fx.eurusd and metal.xauusd pass every step. Behind it: 2 tries, 2 effective.",
+    "raw_tries": 2,
+    "effective_tries": 2,
+    "result_ids": [
+      "result-fixture-backtest",
+      "result-fixture-robustness"
+    ],
+    "cards": {
+      "baseline-card": "baseline-fixture",
+      "proposal-card": "proposal-fixture"
+    },
+    "per_market": [
+      {
+        "market": "fx.eurusd",
+        "outcome": "pass",
+        "trades": 41
+      },
+      {
+        "market": "metal.xauusd",
+        "outcome": "pass",
+        "trades": 69
+      }
+    ]
+  }
+}
