@@ -53,6 +53,14 @@ def place_of(key: str) -> str | None:
     return None
 
 
+def market_of(key: str) -> str | None:
+    """The market a `market.<market_id>.calendar` key routes, or None for any other key."""
+    parts = key.split(".")
+    if len(parts) == 3 and parts[0] == "market" and parts[1] and parts[2] == "calendar":
+        return parts[1]
+    return None
+
+
 def can_run(settings: Mapping[str, object], name: str) -> bool:
     """Whether the place `name` can run work: its `placement.<name>.can` holds `run`. A row that
     names no `can` runs, as every row did before storages joined the list (design 06 section 4);

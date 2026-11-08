@@ -1,0 +1,63 @@
+{
+  "schema": "qmx.calendar/1",
+  "calendar_ref": "cme-grains@1",
+  "name": "CBOT grain futures (ZC, ZS, ZW)",
+  "zone": "America/Chicago",
+  "issued": "2026-11-02",
+  "max_age_days": 31,
+  "source": "CME Group CBOT grain hours: Sunday to Friday 19:00 to 07:45 and 08:30 to 13:20 Central Time; shut on Christmas Day and New Year's Day; early closes before holidays are not modelled in version 1",
+  "sessions": [
+    {
+      "open": "sun 19:00",
+      "close": "mon 07:45"
+    },
+    {
+      "open": "mon 19:00",
+      "close": "tue 07:45"
+    },
+    {
+      "open": "tue 19:00",
+      "close": "wed 07:45"
+    },
+    {
+      "open": "wed 19:00",
+      "close": "thu 07:45"
+    },
+    {
+      "open": "thu 19:00",
+      "close": "fri 07:45"
+    },
+    {
+      "open": "mon 08:30",
+      "close": "mon 13:20"
+    },
+    {
+      "open": "tue 08:30",
+      "close": "tue 13:20"
+    },
+    {
+      "open": "wed 08:30",
+      "close": "wed 13:20"
+    },
+    {
+      "open": "thu 08:30",
+      "close": "thu 13:20"
+    },
+    {
+      "open": "fri 08:30",
+      "close": "fri 13:20"
+    }
+  ],
+  "closures": [
+    {
+      "from": "2026-12-24T16:00",
+      "to": "2026-12-27T17:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2026-12-31T16:00",
+      "to": "2027-01-03T17:00",
+      "why": "New Year's Day"
+    }
+  ]
+}

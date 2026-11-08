@@ -14,6 +14,11 @@ which costs a digest line; only a missing key is a provider failure, which raise
 `market_open` is a precheck a trigger names by that word: the market is shut on Saturdays,
 Sundays and every `market.holidays` date, each read in the trigger's IANA zone, and a fire while
 it is shut is held until the next open day begins (Claude's default calendar).
+`market_open:<market_id>` checks that market's own calendar instead (Part C AD-320): the
+`market.<market_id>.calendar` row names it, because one market id is shared by every venue that
+lists it and each venue keeps its own hours. Calendars are versioned data the `qmf-calendar-*`
+extensions ship, each read in its market's zone with a maximum age past which it still decides
+but says it is stale. Instants stay UTC; only the rule reads local time.
 
 A fire whose pinned version is built on a quarantined input (Library AD-22: a `consumed`,
 `derived-from` or `uses` path up to an item the operator quarantined) is blocked with
@@ -38,11 +43,15 @@ from `connection.<id>.word` rows in `settings`; the scheduler passes them from t
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from functools import cache
 from pathlib import Path
-from typing import Final, Literal, cast
+from types import MappingProxyType
+from typing import Final, Literal, TypeGuard, cast
 from zoneinfo import ZoneInfo
 
 from qmx_control.service import ControlService
@@ -59,7 +68,22 @@ type Cause = Literal["config", "provider"]
 PLUGIN_SKILLS: Final = Path(__file__).resolve().parents[5] / "plugin" / "skills"
 """`qmx-agents/plugin/skills`, the skills QMX ships."""
 MARKET_OPEN: Final = "market_open"
+MARKET_PREFIX: Final = f"{MARKET_OPEN}:"
 WEEKEND: Final = (5, 6)
+EXTENSIONS: Final = Path(__file__).resolve().parents[6] / "extensions"
+"""The repository's `extensions/`, where each `qmf-calendar-*` package ships calendars as data."""
+CALENDAR_SCHEMA: Final = "qmx.calendar/1"
+CALENDAR_KEYS: Final = frozenset(
+    {"schema", "calendar_ref", "name", "zone", "issued", "max_age_days", "source", "sessions"}
+    | {"closures", "funding"}
+)
+CALENDAR_REF: Final = re.compile(r"[a-z0-9][a-z0-9-]*@[1-9][0-9]*")
+DAYS: Final = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+DAY_MINUTES: Final = 24 * 60
+OPEN_HORIZON_DAYS: Final = 400
+"""How far ahead a shut calendar is searched for its next open. A calendar that stays shut longer
+is a broken calendar, so the fire is blocked as a configuration fault; no shipped closure comes
+near it."""
 PLACEMENT_STATES: Final = ("available", "configured", "authorized", "reachable", "healthy")
 """DEC-0428's order, ratified in AD-20: a placement is a fact checked in this order, never a
 sticker on a node."""
@@ -306,10 +330,158 @@ def placement_wait(workflow: Workflow, kinds: Mapping[str, Collection[str]]) -> 
     return None
 
 
-def market_shut_until(now: datetime, zone: str, holidays: Collection[str]) -> datetime | None:
-    """None while the market is open at `now`; else the UTC instant its next open day begins."""
-    where = ZoneInfo(zone)
+@dataclass(frozen=True, slots=True)
+class Calendar:
+    """One market calendar, read in its own zone. `sessions` are weekly `[open, close)` spans in
+    minutes from Monday 00:00 local, a close at or before its open running into the next week;
+    `None` is open around the clock. `closures` are `[from, to)` local spans that override them."""
 
+    ref: str
+    zone: ZoneInfo
+    sessions: tuple[tuple[int, int], ...] | None
+    closures: tuple[tuple[datetime, datetime], ...]
+    issued: date
+    max_age_days: int
+
+    def open_at(self, instant: datetime) -> bool:
+        local = instant.astimezone(self.zone)
+        if any(start <= local < end for start, end in self.closures):
+            return False
+        if self.sessions is None:
+            return True
+        minute = local.weekday() * DAY_MINUTES + local.hour * 60 + local.minute
+        return any(_within(minute, opens, closes) for opens, closes in self.sessions)
+
+    def next_open(self, instant: datetime) -> datetime | None:
+        """The first UTC instant after `instant` at which it opens, or None when it stays shut
+        for `OPEN_HORIZON_DAYS`."""
+        day = instant.astimezone(self.zone).date()
+        for _ in range(OPEN_HORIZON_DAYS):
+            for found in sorted(self._edges(day)):
+                if found > instant and self.open_at(found):
+                    return found.astimezone(UTC)
+            day += timedelta(days=1)
+        return None
+
+    def days_past_max_age(self, now: datetime) -> int:
+        return max(0, (now.astimezone(self.zone).date() - self.issued).days - self.max_age_days)
+
+    def _edges(self, day: date) -> list[datetime]:
+        found = [end for _, end in self.closures if end.date() == day]
+        for opens, _ in self.sessions or ():
+            if opens // DAY_MINUTES == day.weekday():
+                at = time(opens % DAY_MINUTES // 60, opens % 60)
+                found.append(datetime.combine(day, at, self.zone))
+        return found
+
+
+@dataclass(frozen=True, slots=True)
+class Shut:
+    until: datetime
+    reason: str
+
+
+def _within(minute: int, opens: int, closes: int) -> bool:
+    if opens < closes:
+        return opens <= minute < closes
+    return minute >= opens or minute < closes
+
+
+def _week_minute(text: str) -> int:
+    day, _, clock = text.partition(" ")
+    hours, minutes = (int(part) for part in clock.split(":"))
+    if day not in DAYS or not (0 <= hours < 24 and 0 <= minutes < 60):
+        raise ValueError(f"not a weekday and a local HH:MM: {text!r}")
+    return DAYS.index(day) * DAY_MINUTES + hours * 60 + minutes
+
+
+def parse_calendar(document: Mapping[str, object]) -> Calendar:
+    """A `qmx.calendar/1` document, refused with the first fault it holds."""
+    extra = set(document) - CALENDAR_KEYS
+    if extra:
+        raise ValueError(f"unknown calendar keys: {sorted(extra)}")
+    if document.get("schema") != CALENDAR_SCHEMA:
+        raise ValueError(f"schema is not {CALENDAR_SCHEMA}")
+    ref, zone, issued = (str(document.get(key, "")) for key in ("calendar_ref", "zone", "issued"))
+    if CALENDAR_REF.fullmatch(ref) is None:
+        raise ValueError(f"calendar_ref is not id@version: {ref!r}")
+    where = ZoneInfo(zone)
+    age = document.get("max_age_days")
+    if not isinstance(age, int) or age < 1:
+        raise ValueError(f"{ref}: max_age_days is not a whole number of days")
+    raw = document.get("sessions")
+    sessions = None
+    if raw != "always":
+        if not isinstance(raw, list) or not raw:
+            raise ValueError(f"{ref}: sessions is neither 'always' nor a list of spans")
+        spans = cast(list[Mapping[str, str]], raw)
+        sessions = tuple((_week_minute(s["open"]), _week_minute(s["close"])) for s in spans)
+    closures = tuple(
+        (
+            datetime.fromisoformat(c["from"]).replace(tzinfo=where),
+            datetime.fromisoformat(c["to"]).replace(tzinfo=where),
+        )
+        for c in cast(list[Mapping[str, str]], document.get("closures", []))
+    )
+    if any(start >= end for start, end in closures):
+        raise ValueError(f"{ref}: a closure ends before it starts")
+    return Calendar(ref, where, sessions, closures, date.fromisoformat(issued), age)
+
+
+@cache
+def shipped_calendars(folder: Path = EXTENSIONS) -> Mapping[str, Calendar]:
+    """Every calendar the `qmf-calendar-*` packages ship, plus the built-in forex week, by ref."""
+    found = {FOREX_WEEK.ref: FOREX_WEEK}
+    for path in sorted(folder.glob("qmf-calendar-*/src/qmf/calendar_*/calendars/*.json")):
+        calendar = parse_calendar(json.loads(path.read_text(encoding="utf-8")))
+        if f"{calendar.ref}.json" != path.name:
+            raise ValueError(f"{path.name} holds {calendar.ref}")
+        found[calendar.ref] = calendar
+    return MappingProxyType(found)
+
+
+def is_market_check(ref: str | None) -> TypeGuard[str]:
+    return ref is not None and (ref == MARKET_OPEN or ref.startswith(MARKET_PREFIX))
+
+
+def market_shut(
+    now: datetime, ref: str, zone: str, settings: Mapping[str, object]
+) -> Shut | Blocked | None:
+    """None while the market is open at `now`. Bare `market_open` keeps the default rule in the
+    trigger's zone. `market_open:<market_id>` reads the calendar its `market.<market_id>.calendar`
+    row names, in the market's zone; a market with no row, or a row naming a calendar QMX does not
+    ship, is the workflow's configuration fault."""
+    if ref == MARKET_OPEN:
+        until = _weekday_open(now, ZoneInfo(zone), _holidays(settings))
+        return None if until is None else Shut(until, f"the market is shut in {zone}")
+    market = ref.removeprefix(MARKET_PREFIX)
+    named = settings.get(f"market.{market}.calendar")
+    if not isinstance(named, str) or not named:
+        message = f"{market}: no market.{market}.calendar row names its calendar"
+        return Blocked("config", "market_unknown", message)
+    calendar = shipped_calendars().get(named)
+    if calendar is None:
+        return Blocked("config", "calendar_unknown", f"{market}: calendar {named} is not shipped")
+    if calendar.open_at(now):
+        return None
+    until = calendar.next_open(now)
+    if until is None:
+        message = f"{market}: calendar {named} does not open in the next {OPEN_HORIZON_DAYS} days"
+        return Blocked("config", "calendar_shut", message)
+    reason = f"{market} is shut on its calendar {named} in {calendar.zone.key}"
+    late = calendar.days_past_max_age(now)
+    if late:
+        reason += f" (the calendar is {late} days past its {calendar.max_age_days}-day maximum age)"
+    return Shut(until, reason)
+
+
+def _holidays(settings: Mapping[str, object]) -> tuple[str, ...]:
+    found = settings.get("market.holidays")
+    days = cast(tuple[object, ...], found) if isinstance(found, tuple) else ()
+    return tuple(str(day) for day in days)
+
+
+def _weekday_open(now: datetime, where: ZoneInfo, holidays: Collection[str]) -> datetime | None:
     def shut(day: date) -> bool:
         return day.weekday() in WEEKEND or day.isoformat() in holidays
 
@@ -319,3 +491,22 @@ def market_shut_until(now: datetime, zone: str, holidays: Collection[str]) -> da
     while shut(day):
         day += timedelta(days=1)
     return datetime.combine(day, time(0), where).astimezone(UTC)
+
+
+FOREX_WEEK: Final = parse_calendar(
+    {
+        "schema": CALENDAR_SCHEMA,
+        "calendar_ref": "fx-24x5@1",
+        "zone": "America/New_York",
+        "issued": "2026-11-02",
+        "max_age_days": 31,
+        "sessions": [{"open": "sun 17:00", "close": "fri 17:00"}],
+        "closures": [
+            {"from": "2026-12-24T17:00", "to": "2026-12-27T17:00"},
+            {"from": "2026-12-31T17:00", "to": "2027-01-03T17:00"},
+        ],
+    }
+)
+"""The 17:00 New York forex week with the two full closes of `qmf-calendar-forex` (25 December and
+1 January, each a trading date that starts at 17:00 the day before). That extension holds its rule
+as code, so the engine carries it here as data until the extension ships a calendar file."""

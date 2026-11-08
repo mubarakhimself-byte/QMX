@@ -1,0 +1,58 @@
+{
+  "schema": "qmx.calendar/1",
+  "calendar_ref": "jp-index-cfd@1",
+  "name": "Japanese index CFDs (JP225), which follow Osaka's Nikkei 225 futures",
+  "zone": "Asia/Tokyo",
+  "issued": "2026-11-02",
+  "max_age_days": 31,
+  "source": "Osaka Exchange Nikkei 225 futures: a day session 08:45 to 15:45 and a night session 17:00 to 06:00 the next morning, Monday to Friday; shut over the year-end break; holiday trading days are open",
+  "sessions": [
+    {
+      "open": "mon 08:45",
+      "close": "mon 15:45"
+    },
+    {
+      "open": "mon 17:00",
+      "close": "tue 06:00"
+    },
+    {
+      "open": "tue 08:45",
+      "close": "tue 15:45"
+    },
+    {
+      "open": "tue 17:00",
+      "close": "wed 06:00"
+    },
+    {
+      "open": "wed 08:45",
+      "close": "wed 15:45"
+    },
+    {
+      "open": "wed 17:00",
+      "close": "thu 06:00"
+    },
+    {
+      "open": "thu 08:45",
+      "close": "thu 15:45"
+    },
+    {
+      "open": "thu 17:00",
+      "close": "fri 06:00"
+    },
+    {
+      "open": "fri 08:45",
+      "close": "fri 15:45"
+    },
+    {
+      "open": "fri 17:00",
+      "close": "sat 06:00"
+    }
+  ],
+  "closures": [
+    {
+      "from": "2026-12-31T06:00",
+      "to": "2027-01-04T08:45",
+      "why": "year-end break"
+    }
+  ]
+}
