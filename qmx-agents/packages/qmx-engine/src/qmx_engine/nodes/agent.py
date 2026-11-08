@@ -5,11 +5,15 @@ The chat's Surface (AD-62) is built from what the node declares: its built-in `t
 its `toolsets` and its `skills` filter, with nothing else offered. The brief and the output schema
 ride the chat's system text as its last slot, so every chunk reads them from the cache and each turn
 sends only its payload. Every span carries the digest of the surface the chat launched with. The
-`engine` policy answers its asks: in its read-only form it denies every write and every undeclared
-tool with a reason the agent reads (AD-60). An agent has no turn, tool-call or run-time ceiling
-(AD-40): the runner's stuck detector (AD-16) reads `look` every tick and calls `stop` when the
-attempt stopped moving, loops or does not converge. A stopped chat is interrupted; a looping or
-flailing one then gets one summary turn and ends `stalled` with that summary.
+`engine` policy answers its asks and denies every undeclared tool with a reason the agent reads.
+A node that declares no write tool is read-only. One that declares a write tool works in its
+attempt overlay (AGW, AD-60, AD-51): the chat is born there, its file writes are allowed only
+under it, and when the attempt ends `ok` only the node's declared `outputs.files` commit into the
+run's `work/`; the chat's CLI is closed and the overlay deleted however the attempt ends. An
+agent has no turn, tool-call or run-time ceiling (AD-40): the runner's stuck detector (AD-16)
+reads `look` every tick and calls `stop` when the attempt stopped moving, loops or does not
+converge. A stopped chat is interrupted; a looping or flailing one then gets one summary turn and
+ends `stalled` with that summary.
 
 The warm-first gate is the runner's, at dispatch (AD-9): `hold` returns the event a chunk waits on
 before it starts, so a held chunk writes no `node_started` and is never an idle attempt. The first
@@ -57,12 +61,15 @@ from qmx_engine.nodes.llm import (
     repair,
 )
 from qmx_engine.nodes.script import failed
+from qmx_engine.policy import WRITES
 from qmx_engine.ports.harness_adapter import HarnessPort, Refusal, ToolCall, Turn
 from qmx_engine.ports.memory import MemoryPort
 from qmx_engine.ports.router import adopted
 from qmx_engine.prompts import payload, static
 from qmx_engine.roles import DEFAULT_WINDOW, Candidate
 from qmx_engine.sink import HookData
+from qmx_engine.workers.local import attempt_keys, declared_outputs
+from qmx_engine.workers.zones import Overlay, RunZone, ZoneError
 
 LATER_MODES: Final = frozenset({"cli_inside", "host_harness"})
 RESUMED: Final = (
@@ -92,6 +99,10 @@ class Declared:
     tools: tuple[str, ...]
     toolsets: tuple[str, ...]
     skills: tuple[str, ...]
+
+    @property
+    def writes(self) -> bool:
+        return bool(WRITES & set(self.tools))
 
 
 class Agent:
@@ -172,20 +183,49 @@ class Agent:
             tuple(names(node, "toolsets")),
             tuple(names(node, "skills")),
         )
+        zone = RunZone(Path(job.workspace)) if declared.writes and job.workspace else None
+        if declared.writes and zone is None:
+            message = "an agent node that declares a write tool needs its run's zone"
+            return failed("bad_definition", message, retryable=False)
+        try:
+            overlay = zone.open(job) if zone is not None else None
+        except ZoneError as error:
+            return Failed(error.code, error.message, signature(error.code, error.message), False)
         attempt = Attempt(
-            self, job, candidate, static(brief, [], schema), schema, declared, warming
+            self, job, candidate, static(brief, [], schema), schema, declared, warming, overlay
         )
         self.attempts[job.idempotency_key] = attempt
         try:
-            return await attempt.run()
-        except asyncio.CancelledError:
-            if attempt.chat:
-                with contextlib.suppress(Exception):
-                    await self.harness.interrupt(attempt.chat)
-            raise
+            try:
+                result = await attempt.run()
+            except asyncio.CancelledError:
+                if attempt.chat:
+                    with contextlib.suppress(Exception):
+                        await self.harness.interrupt(attempt.chat)
+                raise
+            finally:
+                if attempt.chat:
+                    self.harness.listen(attempt.chat, None)
+                    if overlay is not None:
+                        await self.harness.close(attempt.chat)
+            if zone is not None and overlay is not None and isinstance(result, Ok):
+                result = self.commit(zone, job, overlay, result)
+            return result
         finally:
-            if attempt.chat:
-                self.harness.listen(attempt.chat, None)
+            if zone is not None and overlay is not None:
+                zone.discard(overlay.path)
+
+    def commit(self, zone: RunZone, job: NodeJob, overlay: Overlay, result: Ok) -> NodeResult:
+        """Only the declared `outputs.files` leave the overlay, as for a script step (AD-51); an
+        agent returns no artifacts. Runs without awaiting, so no other commit interleaves."""
+        try:
+            done = zone.commit(job, overlay, declared_outputs(job).files, (), attempt_keys(job))
+        except ZoneError as error:
+            return Failed(error.code, error.message, signature(error.code, error.message), False)
+        if done.sha256 or done.deleted:
+            self.record("zone_committed", done.data())
+        zone.finish(done)
+        return result
 
 
 LARGE_WINDOW: Final = 512_000
@@ -217,9 +257,12 @@ class Attempt:
         schema: JsonObject,
         declared: Declared,
         warming: asyncio.Event | None = None,
+        overlay: Overlay | None = None,
     ) -> None:
         self.agent = agent
         self.warming = warming
+        self.overlay = overlay
+        """The attempt's overlay when its node declares a write tool; the chat is born in it."""
         self.job = job
         self.candidate = candidate
         self.system = system
@@ -347,7 +390,7 @@ class Attempt:
                 profile=candidate.profile,
                 model=candidate.model,
                 effort=candidate.effort,
-                workspace=self.agent.workspace,
+                workspace=self.agent.workspace if self.overlay is None else self.overlay.path,
                 tools=self.declared.tools,
                 toolsets=self.declared.toolsets,
                 skills=self.declared.skills,
