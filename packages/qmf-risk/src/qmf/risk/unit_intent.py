@@ -204,7 +204,7 @@ class UnitEntryIntent:
             },
             "protection": protection,
             "not_before": self.not_before.value_ns,
-            "placeholder_labels": list(self.placeholder_labels),
+            "placeholder_labels": list(self.placeholder_labels),  # mock-data-scan: allow (field)
             "decision_row_id": self.decision_row_id,
         }
 
@@ -416,7 +416,8 @@ def _read_entry(fields: _Fields) -> UnitEntryIntent:
         protection=protection,
         not_before=_read_instant(fields.required("not_before"), fields.at("not_before")),
         placeholder_labels=_read_labels(
-            fields.required("placeholder_labels"), fields.at("placeholder_labels")
+            fields.required("placeholder_labels"),  # mock-data-scan: allow (receipt field)
+            fields.at("placeholder_labels"),  # mock-data-scan: allow (receipt field)
         ),
         decision_row_id=fields.text("decision_row_id"),
     )
