@@ -9,12 +9,12 @@ from typing import Any, ClassVar, cast
 
 import pytest
 from fastmcp import Client
-from qmb.host.library_landing import BacktestResult, Stored
 from qmb.results.ct32 import as_ct32_artifact
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
+from qmx_judge.landing import BacktestResult, Stored
 
 from qmx_tools import DomainContext
 from qmx_tools.functions import domain_functions

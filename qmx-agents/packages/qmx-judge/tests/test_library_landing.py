@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-from qmb.host.library_landing import BacktestResult, Stored, land
+from qmx_judge.landing import BacktestResult, Stored, land
 
 
 class RecordingLibrary:

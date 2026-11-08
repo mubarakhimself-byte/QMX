@@ -24,6 +24,7 @@ def main() -> int:
     engine = agents / "packages/qmx-engine"
     host = agents / "packages/qmx-host"
     library = agents / "packages/qmx-library"
+    judge = agents / "packages/qmx-judge"
     router = agents / "packages/qmx-router"
     memory = agents / "packages/qmx-memory"
     hub = agents / "packages/qmx-hub"
@@ -45,6 +46,7 @@ def main() -> int:
         engine,
         host,
         library,
+        judge,
         router,
         memory,
         hub,

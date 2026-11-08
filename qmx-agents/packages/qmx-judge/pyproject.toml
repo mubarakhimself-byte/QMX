@@ -1,0 +1,41 @@
+[project]
+name = "qmx-judge"
+version = "0.1.0"
+description = "The core's referee: the run record, the one lander and the try ledger, outside every tester"
+requires-python = ">=3.14,<3.15"
+dependencies = ["qmf-core"]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+qmf-core = { workspace = "../../.." }
+qmx-library = { workspace = true }
+
+[dependency-groups]
+dev = ["ruff==0.16.5", "pyright==1.1.411", "pytest>=9,<10", "pytest-xdist>=3.8,<4", "pytest-cov>=7,<8", "poethepoet==0.48.0", "qmx-library", "types-jsonschema"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-n 2 --dist worksteal"
+markers = ["serial: requires exclusive access to shared resources"]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+extend-exclude = []
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
+
+[tool.pyright]
+include = ["src", "tests"]
+# qma-harness ships no py.typed; the Library the tests land into imports it through the engine.
+extraPaths = ["src", "../qma-harness/src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+[tool.poe.tasks]
+fmt-check = "ruff format --config pyproject.toml --check src tests"
+lint = "ruff check --config pyproject.toml src tests"
+types = "python -m pyright"
