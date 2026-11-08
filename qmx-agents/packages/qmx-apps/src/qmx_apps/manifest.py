@@ -167,10 +167,15 @@ class Operation(StrictModel):
 class Contract(StrictModel):
     """A schema an app declares at a seam, and how long an output under it stays fresh. Written
     as `[provides.<name>] schema = { ... }` with an optional `stale_after` in seconds; the bare
-    form `[provides.<name>] type = "object" ...` is the same contract without a `stale_after`."""
+    form `[provides.<name>] type = "object" ...` is the same contract without a `stale_after`.
+
+    `lander` names a core lander the host registered (AD-33 change 2): every job of the app is
+    opened by it before it queues, and an output under this contract reaches the Library only
+    through its close."""
 
     schema_: Document = Field(alias="schema")
     stale_after: float | None = Field(default=None, gt=0)
+    lander: str | None = Field(default=None, min_length=1)
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, populate_by_name=True)
 
@@ -180,7 +185,7 @@ class Contract(StrictModel):
         if not isinstance(data, dict):
             return data
         table = dict(cast(dict[str, object], data))
-        if "schema" not in table or set(table) - {"schema", "stale_after"}:
+        if "schema" not in table or set(table) - {"schema", "stale_after", "lander"}:
             return {"schema": table}
         return table
 
@@ -207,6 +212,18 @@ class AppDefinition(StrictModel):
     @property
     def budget(self) -> Isolation:
         return self.isolation
+
+    @property
+    def lander(self) -> str | None:
+        """The one lander the app's provides name, if any."""
+        return next((it.lander for it in self.provides.values() if it.lander is not None), None)
+
+    @model_validator(mode="after")
+    def _one_lander(self) -> AppDefinition:
+        named = {it.lander for it in self.provides.values() if it.lander is not None}
+        if len(named) > 1:
+            raise ValueError(f"An app lands through one lander; its provides name {sorted(named)}.")
+        return self
 
     @model_validator(mode="before")
     @classmethod
