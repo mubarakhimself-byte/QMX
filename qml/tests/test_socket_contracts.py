@@ -1,9 +1,10 @@
 """The risk socket's four slot contracts, which every block in a slot must pass (A15, AD-116).
 
-Every shipped block whose entry names a sizer, exit or halt component is enrolled here
-automatically, so a risk-session block that lands in the stdlib meets its slot's contract
-before anything binds it. The cross-unit hook is the host's, so its stand-in is checked by name.
-An exit's answers are checked on the evidence the host really passes.
+Every block whose entry names a sizer, exit or halt component is enrolled here automatically,
+whether it sits in the stdlib or in a component-shaped fixture folder saved beside the tests, so
+a risk-session block meets its slot's contract before anything binds it. Each slot is fed the
+evidence its host really builds and no other key. The cross-unit hook is the host's, so its
+stand-in is checked by name.
 """
 # pyright: reportPrivateUsage=false
 
@@ -35,7 +36,7 @@ from qml.blocks.api import (
     parse_entry,
 )
 from qml.catalogue import Loaded, LockEntry, load
-from qml.compile import compile_unit
+from qml.compile import ExitUse, compile_unit
 from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import OwnPosition
 from qml.unit.model import Scope
@@ -52,10 +53,9 @@ from test_compile_dummy import (
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
+_COMPONENTS = _QML / "tests" / "fixtures" / "components"
 _RECORDS = _QML / "tests" / "fixtures" / "records"
 _SLOTS = ("sizer", "exit", "halt")
-_CEILING = Decimal("0.005")
-"""His risk_fraction ceiling in these trades; a test bound, equal to the dummy's 0.5%."""
 
 
 def _record(name: str) -> InstrumentRecord:
@@ -93,27 +93,73 @@ class _Shipped:
     params: Mapping[str, Decimal]
 
 
-def _shipped() -> dict[str, _Shipped]:
-    """Every stdlib block in a socket slot, loaded through the one loader."""
-    found: dict[str, _Shipped] = {}
-    for entry in sorted(_STDLIB.glob("*/*/entry.json")):
+def _entries() -> dict[str, tuple[Path, EntryFace]]:
+    """Every entry in a socket slot, from the stdlib and from a component-shaped fixture folder
+    saved beside the tests (qml's tests hold no Library)."""
+    found: dict[str, tuple[Path, EntryFace]] = {}
+    for entry in sorted([*_STDLIB.glob("*/*/entry.json"), *_COMPONENTS.glob("*/entry.json")]):
         face = parse_entry(entry.read_bytes())
         assert isinstance(face, EntryFace), face
-        if face.component_type not in _SLOTS:
+        if face.component_type in _SLOTS:
+            found[face.pin] = (entry, face)
+    return found
+
+
+def _exit_use(face: EntryFace) -> ExitUse | None:
+    """The use the compiler binds an exit to, by its face and never its name
+    (`compiler.py:340-347`): a per-bar action, a target when it reads the stop, or a stop."""
+    output = face.output
+    if output.type is OutputType.EXIT_ACTION:
+        return ExitUse.PER_BAR
+    if output.type is OutputType.LEVEL and output.measure == "price":
+        reads_stop = any(port.port == "stop_price" for port in face.inputs)
+        return ExitUse.TARGET if reads_stop else ExitUse.STOP
+    return None
+
+
+def _feedable(face: EntryFace) -> bool:
+    """Whether a host feeds what an exit declares. A per-bar exit is fed nothing and a stop is
+    fed its bar, never the position (`compiler.py:350-364` refuses the other shapes), so the
+    contract would otherwise judge evidence no host gives."""
+    if face.component_type != "exit":
+        return True
+    use = _exit_use(face)
+    if use is ExitUse.PER_BAR:
+        return not face.inputs
+    if use is ExitUse.STOP:
+        return all(port.stream_kind != "position" for port in face.inputs)
+    return True
+
+
+def _shipped() -> dict[str, _Shipped]:
+    """Every block in a socket slot a host can bind, loaded through the one loader."""
+    found: dict[str, _Shipped] = {}
+    for pin, (entry, face) in _entries().items():
+        if not _feedable(face):
             continue
         lock = [LockEntry(face.entry_id, face.version, face.fingerprint)]
-        loaded = load(lock, {face.pin: (entry.parent / "block.py").read_bytes()})
+        loaded = load(lock, {pin: (entry.parent / "block.py").read_bytes()})
         assert isinstance(loaded, Loaded), loaded
         raw = cast("dict[str, dict[str, str]]", json.loads(entry.read_text("utf-8"))["parameters"])
         params = {name: Decimal(spec["default"]) for name, spec in raw.items()}
-        found[face.pin] = _Shipped(face, loaded.blocks[face.pin], params)
+        found[pin] = _Shipped(face, loaded.blocks[pin], params)
     return found
 
+
+_COMPONENT_CONTROL = "library-sizer-answers-a-float@1"
+"""The Library fixture that answers a float: the contract must bite it, which proves enrolment."""
+
+_FLOAT_BREAKS = [
+    f"sizer contract, {trade.name}: answered 0.25, not a Size" for trade in _TRADES
+]
 
 _SHIPPED = _shipped()
 
 
-def _sized(answer: object, trade: _Trade) -> list[str]:
+def _sized(answer: object, trade: _Trade, fraction: Decimal | None) -> list[str]:
+    """What breaks the sizer contract: the answer's shape, and any size above the lot rule's
+    output at the fraction the block's own evidence declares. A block that declares no fraction
+    states no risk to bound, so its answer is checked against the lot rule alone."""
     if not isinstance(answer, Size):
         return [f"answered {answer!r}, not a Size"]
     size = cast("object", answer.lots)
@@ -123,15 +169,19 @@ def _sized(answer: object, trade: _Trade) -> list[str]:
         return [f"the size {size!r} is a {type(size).__name__}, not an exact Decimal"]
     if answer.skip_reason is not None:
         return ["answered both a size and a skip"]
+    if fraction is None:
+        return ["declares no fraction, so the contract cannot bound its risk"]
     risk = abs(trade.entry - trade.stop) * trade.record.value_per_point
     if risk == 0:
         return [f"sized {size} lots with the stop at the entry"]
-    ceiling = lots(trade.equity * _CEILING / risk, trade.record)
+    ceiling = lots(trade.equity * fraction / risk, trade.record)
     if is_refusal(ceiling):
         return [f"sized {size} lots where the lot rule skips"]
     most = Decimal(ceiling.value.value).scaleb(-ceiling.value.scale)
     if size > most:
-        return [f"{size} lots is above {most}, the lot rule's output at his risk ceiling"]
+        return [
+            f"{size} lots is above {most}, the lot rule's output at the declared fraction {fraction}"
+        ]
     own = lots(size, trade.record)
     if is_refusal(own) or Decimal(own.value.value).scaleb(-own.value.scale) != size:
         return [f"{size} lots is off {trade.record.symbol}'s lot rule"]
@@ -139,6 +189,7 @@ def _sized(answer: object, trade: _Trade) -> list[str]:
 
 
 def _sizer_breaks(block: Block, params: Mapping[str, Decimal]) -> list[str]:
+    fraction = params.get("fraction")
     breaks: list[str] = []
     for trade in _TRADES:
         evidence = {
@@ -149,7 +200,7 @@ def _sizer_breaks(block: Block, params: Mapping[str, Decimal]) -> list[str]:
             **params,
         }
         answer = block.make(params, {}).update(evidence)
-        breaks += [f"sizer contract, {trade.name}: {b}" for b in _sized(answer, trade)]
+        breaks += [f"sizer contract, {trade.name}: {b}" for b in _sized(answer, trade, fraction)]
     return breaks
 
 
@@ -168,41 +219,44 @@ def _bars() -> list[dict[str, Decimal]]:
     ]
 
 
-_ANSWERS = {OutputType.LEVEL: "a price level", OutputType.EXIT_ACTION: "a Signal"}
+def _declares(output: OutputType) -> list[str]:
+    """The exit contract's refusal of a face no exit use takes."""
+    return [f"exit contract: its entry declares {output.value}, not level or exit_action"]
 
 
-def _exit_breaks(output: OutputType, block: Block, params: Mapping[str, Decimal]) -> list[str]:
-    wanted = _ANSWERS.get(output)
-    if wanted is None:
-        return [f"exit contract: its entry declares {output.value}, not level or exit_action"]
+def _exit_breaks(use: ExitUse, block: Block, params: Mapping[str, Decimal]) -> list[str]:
+    wanted = "a Signal" if use is ExitUse.PER_BAR else "a price level"
     breaks: list[str] = []
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
-        for i, bar in enumerate(_bars()):
-            for evidence in _host_evidence(output, bar, params):
+        bars = _bars()[:1] if use is ExitUse.TARGET else _bars()
+        for i, bar in enumerate(bars):
+            for evidence in _host_evidence(use, bar, params):
                 answer = instance.update(evidence)
-                level = isinstance(answer, Decimal) and answer.is_finite()
                 state = cast("object", answer.state) if isinstance(answer, Signal) else None
-                if answer is None or (level and output is OutputType.LEVEL):
-                    continue
-                if isinstance(state, bool) and output is OutputType.EXIT_ACTION:
+                if use is ExitUse.PER_BAR:
+                    answered = isinstance(state, bool)
+                else:
+                    answered = isinstance(answer, Decimal) and answer.is_finite()
+                if answer is None or answered:
                     continue
                 breaks.append(f"exit contract, {side.value} bar {i}: {answer!r} is not {wanted}")
     return breaks
 
 
 def _host_evidence(
-    output: OutputType, bar: Mapping[str, Decimal], params: Mapping[str, Decimal]
+    use: ExitUse, bar: Mapping[str, Decimal], params: Mapping[str, Decimal]
 ) -> list[Mapping[str, object]]:
-    """What the unit host hands an exit: a per-bar exit nothing; a level its bar each bar, nothing
-    when a stop is read at entry, and the entry and the stop when a target is read."""
-    if output is OutputType.EXIT_ACTION:
-        return [{}]
-    return [
-        {"series": bar, **params},
-        {},
-        {"entry_price": Decimal("1.0850"), "stop_price": Decimal("1.0820"), **params},
-    ]
+    """The evidence the unit host hands an exit of this use, and no other key: a stop gets its
+    bar each bar (`unit.py:570-577`), a target the entry and the stop once (`unit.py:774-779`),
+    and a per-bar exit nothing at all (`_Run.exits`, `unit.py:686`)."""
+    match use:
+        case ExitUse.STOP:
+            return [{"series": bar, **params}]
+        case ExitUse.TARGET:
+            return [{"entry_price": Decimal("1.0850"), "stop_price": Decimal("1.0820"), **params}]
+        case ExitUse.PER_BAR:
+            return [{}]
 
 
 def _run(side: Side) -> list[dict[str, Decimal]]:
@@ -224,21 +278,22 @@ def _run(side: Side) -> list[dict[str, Decimal]]:
     ]
 
 
-def _never_acts(output: OutputType, block: Block, params: Mapping[str, Decimal]) -> list[str]:
-    """An exit that never closes, or never answers a level, on a position it should close."""
+def _never_acts(use: ExitUse, block: Block, params: Mapping[str, Decimal]) -> list[str]:
+    """An exit that never closes, or never answers a level, on evidence the host gives it."""
     breaks: list[str] = []
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
-        stop = Decimal("0.95") if side is Side.LONG else Decimal("1.05")
-        answers = [
-            instance.update(
-                {"series": bar, "entry_price": Decimal("1.0000"), "stop_price": stop} | dict(params)
-            )
-            for bar in _run(side)
-        ]
+        if use is ExitUse.TARGET:
+            answers = [instance.update(e) for e in _host_evidence(use, _bars()[0], params)]
+        else:
+            answers = [
+                instance.update(evidence)
+                for bar in _run(side)
+                for evidence in _host_evidence(use, bar, params)
+            ]
         acted = (
             any(isinstance(a, Signal) and a.state for a in answers)
-            if output is OutputType.EXIT_ACTION
+            if use is ExitUse.PER_BAR
             else any(isinstance(a, Decimal) for a in answers)
         )
         if not acted:
@@ -303,9 +358,11 @@ def _breaks(shipped: _Shipped) -> list[str]:
         case "sizer":
             return _sizer_breaks(shipped.block, shipped.params)
         case "exit":
-            output = shipped.face.output.type
-            return _exit_breaks(output, shipped.block, shipped.params) + _never_acts(
-                output, shipped.block, shipped.params
+            use = _exit_use(shipped.face)
+            if use is None:
+                return _declares(shipped.face.output.type)
+            return _exit_breaks(use, shipped.block, shipped.params) + _never_acts(
+                use, shipped.block, shipped.params
             )
         case _:
             return _halt_breaks(shipped.block, shipped.params, _SESSION)
@@ -398,14 +455,40 @@ def _rounds_up(evidence: Mapping[str, object]) -> Size:
     entry, stop = cast("Decimal", evidence["entry_price"]), cast("Decimal", evidence["stop_price"])
     if entry == stop:
         return Size(lots=None, skip_reason="no distance to the stop")
-    wanted = cast("Decimal", evidence["equity"]) * _CEILING
+    wanted = cast("Decimal", evidence["equity"]) * cast("Decimal", evidence["fraction"])
     steps = math.ceil(wanted / (abs(entry - stop) * record.value_per_point) / record.lot_step)
     return Size(lots=steps * record.lot_step)
 
 
-@pytest.mark.parametrize("pin", sorted(_SHIPPED))
-def test_every_shipped_socket_block_meets_its_slot_contract(pin: str) -> None:
-    assert _breaks(_SHIPPED[pin]) == []
+@pytest.mark.parametrize(
+    ("pin", "breaks"),
+    [(pin, _FLOAT_BREAKS if pin == _COMPONENT_CONTROL else []) for pin in sorted(_SHIPPED)],
+)
+def test_every_enrolled_socket_block_answers_its_slot_contract(
+    pin: str, breaks: list[str]
+) -> None:
+    """Every enrolled block answers the contract; the Library fixture is the known-bad control
+    that proves a block saved beside the tests is judged with the same messages."""
+    assert _breaks(_SHIPPED[pin]) == breaks
+
+
+_UNBUILT_EXITS = frozenset(
+    {
+        "offset-gated-trailing-stop@1",
+        "profit-fraction-trailing-stop@1",
+        "stepped-profit-stop@1",
+        "peak-holdings-giveback-exit@1",
+        "roi-table-exit@1",
+        "unrealised-profit-cap@1",
+    }
+)
+"""The exits the compiler refuses by shape: a stop that reads the position, and a per-bar exit
+that reads anything (`compiler.py:350-364`). A host feeds neither what it declares."""
+
+
+def test_an_exit_the_host_cannot_feed_is_named_not_enrolled() -> None:
+    every = {pin for pin, (_, face) in _entries().items() if face.component_type == "exit"}
+    assert every - set(_SHIPPED) == _UNBUILT_EXITS
 
 
 def test_the_dummys_sizer_answers_the_lot_rule_at_half_a_percent() -> None:
@@ -436,15 +519,22 @@ def test_a_sizer_answering_a_float_breaks_the_sizer_contract() -> None:
 
 
 def test_a_sizer_above_the_lot_rules_output_breaks_the_sizer_contract() -> None:
-    assert _sizer_breaks(_Fake(_rounds_up), {}) == [
-        "sizer contract, xauusd 14.50: 0.04 lots is above 0.03, the lot rule's output at his "
-        "risk ceiling",
+    assert _sizer_breaks(_Fake(_rounds_up), {"fraction": Decimal("0.005")}) == [
+        "sizer contract, xauusd 14.50: 0.04 lots is above 0.03, the lot rule's output at the "
+        "declared fraction 0.005",
         "sizer contract, eurusd below the minimum lot: sized 0.01 lots where the lot rule skips",
     ]
 
 
+def test_a_sizer_that_declares_no_fraction_breaks_the_sizer_contract() -> None:
+    assert _sizer_breaks(_Fake(Size(lots=Decimal("500"))), {}) == [
+        f"sizer contract, {trade.name}: declares no fraction, so the contract cannot bound its risk"
+        for trade in _TRADES
+    ]
+
+
 def test_a_risk_session_sizer_that_is_not_a_placeholder_meets_the_sizer_contract() -> None:
-    assert _sizer_breaks(_Fake(_half_risk), {}) == []
+    assert _sizer_breaks(_Fake(_half_risk), {"fraction": Decimal("0.0025")}) == []
 
 
 def _capped() -> dict[str, object]:
@@ -493,16 +583,16 @@ def test_the_per_bar_exit_closes_at_bar_48_through_the_host_and_a_capped_exit_re
 
 
 def test_an_exit_must_answer_what_its_entry_declares() -> None:
-    assert _exit_breaks(OutputType.LEVEL, _Fake(1.082), {})[:1] == [
+    assert _exit_breaks(ExitUse.STOP, _Fake(1.082), {})[:1] == [
         "exit contract, long bar 0: 1.082 is not a price level"
     ]
-    assert _exit_breaks(OutputType.LEVEL, _Fake(Signal(state=True)), {})[:1] == [
+    assert _exit_breaks(ExitUse.STOP, _Fake(Signal(state=True)), {})[:1] == [
         "exit contract, long bar 0: Signal(state=True, value=None) is not a price level"
     ]
-    assert _exit_breaks(OutputType.EXIT_ACTION, _Fake(Signal(state=1)), {})[:1] == [  # pyright: ignore[reportArgumentType]
+    assert _exit_breaks(ExitUse.PER_BAR, _Fake(Signal(state=1)), {})[:1] == [  # pyright: ignore[reportArgumentType]
         "exit contract, long bar 0: Signal(state=1, value=None) is not a Signal"
     ]
-    assert _exit_breaks(OutputType.QUANTITY, _Fake(None), {}) == [
+    assert _declares(OutputType.QUANTITY) == [
         "exit contract: its entry declares quantity, not level or exit_action"
     ]
 
@@ -513,10 +603,10 @@ def test_an_exit_that_never_acts_on_a_position_it_should_close_breaks_the_exit_c
         "exit contract, short: never acted on a position that ran its way and came back",
     ]
 
-    assert _never_acts(OutputType.LEVEL, _Fake(None), {}) == never
-    assert _never_acts(OutputType.EXIT_ACTION, _Fake(Signal(state=False)), {}) == never
-    assert _never_acts(OutputType.LEVEL, _Fake(Decimal("0.95")), {}) == []
-    assert _never_acts(OutputType.EXIT_ACTION, _Fake(Signal(state=True)), {}) == []
+    assert _never_acts(ExitUse.STOP, _Fake(None), {}) == never
+    assert _never_acts(ExitUse.PER_BAR, _Fake(Signal(state=False)), {}) == never
+    assert _never_acts(ExitUse.STOP, _Fake(Decimal("0.95")), {}) == []
+    assert _never_acts(ExitUse.PER_BAR, _Fake(Signal(state=True)), {}) == []
 
 
 def test_a_halt_answers_none_or_a_halt_with_its_reason() -> None:

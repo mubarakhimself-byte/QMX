@@ -1,0 +1,88 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "library-sizer-answers-a-float",
+  "version": 1,
+  "family": "fixed-fractional",
+  "aliases": [
+    "library control sizer"
+  ],
+  "origin": "agent",
+  "component_type": "sizer",
+  "definition": "A Library control whose sizer answer is a bare float, saved outside the stdlib in the component shape the Library uses.",
+  "boundaries": "A test fixture for the socket contract, never shipped to a unit.",
+  "recognition": "It answers 0.25 for every trade, whatever the evidence says.",
+  "eligible_roles": [
+    "sizer"
+  ],
+  "sources": [
+    {
+      "source_ref": "qml/tests/test_socket_contracts.py",
+      "quote": "The sizer slot refuses an answer that is not a Size, so this control must fail the contract.",
+      "dated": "2026-11-08"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "equity",
+      "stream_kind": "account",
+      "measure": "money",
+      "data_level": null
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "stop_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null,
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "quantity",
+    "measure": "lots"
+  },
+  "parameters": {
+    "fraction": {
+      "measure": "percent",
+      "default": "0.005",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0.0001",
+        "max": "0.05",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:04811906eb2faf1c074937f6143a5524f03a3f560e3692f2ed34f1cb046c9244"
+}
