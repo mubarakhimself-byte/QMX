@@ -193,15 +193,15 @@ def test_the_dummy_compiles_to_a_stable_fingerprint_that_moves_with_the_document
     changed = _document()
     numbers = cast("dict[str, dict[str, object]]", changed["numbers"])
     numbers["ema_period"]["default"] = "99"
+    logic_only = _compiled(changed)
 
     assert first.compiled_fingerprint == second.compiled_fingerprint
-    assert _compiled(changed).compiled_fingerprint != first.compiled_fingerprint
+    assert logic_only.compiled_fingerprint != first.compiled_fingerprint
     assert first.warm_up == {"m15": 921}  # EMA(100) settles at 900, then ROC(20) needs 21 more
     assert first.placeholders == ("swing_stop", "target_2r", "time_out", "fixed_fraction")
 
-    # `ema_period` is bound by the context slot, so the logic half moves and the risk half
-    # does not. With the size number's edit above, this pins which half each edit lands in.
-    logic_only = _compiled(changed)
+    # `ema_period` is bound by the context slot, so this edit moves the logic half and leaves
+    # the risk half. A size edit is the mirror, and the section's tests pin that one.
     assert logic_only.logic_fingerprint != first.logic_fingerprint
     assert logic_only.risk_fingerprint == first.risk_fingerprint
 
