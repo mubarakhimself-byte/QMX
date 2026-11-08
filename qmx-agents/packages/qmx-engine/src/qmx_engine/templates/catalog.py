@@ -188,11 +188,11 @@ CATALOG: Final[tuple[Template, ...]] = (
     ),
     Template(
         "trading-guards-alive",
-        "Check that the trading guards are alive",
+        "Watch each trading node and say when it is unwell",
         card("16", "R1", "R6"),
-        "TP3",
-        NODE,
+        "B21",
         folder="gw-guard-watchdogs",
+        triggers=(Cron("*/5 * * * *", "UTC"),),
     ),
     Template(
         "correlation-and-exposure-drift",
@@ -216,11 +216,11 @@ CATALOG: Final[tuple[Template, ...]] = (
     ),
     Template(
         "incident-post-mortem",
-        "Incident post-mortem",
+        "Explain a node incident: what restarted or stopped, why and when",
         card("16", "R8"),
-        "TP3",
-        NODE,
+        "B21",
         folder="rk8-incident-post-mortem",
+        triggers=(Cron("50 0 * * *", "UTC"),),
     ),
     Template(
         "portfolio-combination-study",
