@@ -13,7 +13,7 @@
   "origin": "qml",
   "component_type": "calendar",
   "definition": "Seconds from the nearest perpetual funding settlement, which falls every interval seconds from 00:00 UTC, negative before it and positive after.",
-  "boundaries": "interval divides the day: 28800 for an eight-hour venue, 3600 for Hyperliquid's hourly funding; the instrument record's funding_interval holds the venue's value. A venue that moves its funding times is not modelled. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "boundaries": "interval divides the day: 28800 for an eight-hour venue, 3600 for Hyperliquid's hourly funding; the instrument record's funding_interval holds the venue's value. A venue that moves its funding times is not modelled. Bars without a time are missing. QML's unit runtime passes each bar its close time, so inside a unit this value reads from the first bar. As a lone slot binding it holds nothing: bind value-above to it to gate on the seconds.",
   "recognition": "A perp unit exits before a settlement it would pay.",
   "eligible_roles": [
     "context",

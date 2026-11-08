@@ -87,12 +87,15 @@ class TradeRange:
 
 @dataclass(frozen=True, slots=True)
 class Move:
-    """What one cadence run answered: the old and new value and the trades it read."""
+    """What one cadence run answered: the old and new value, the trades it read, and their mean R
+    and mean stamp, signed as stamped."""
 
     old: Decimal
     new: Decimal
     read_trades: TradeRange
     watermark: Instant
+    mean_r: Decimal
+    mean_stamp: Decimal
 
 
 def _key(trade: ClosedTrade) -> tuple[int, str]:
@@ -150,5 +153,7 @@ def calibrate(
         new=answer,
         read_trades=TradeRange(state.read[0][0], state.read[-1][0], len(state.read)),
         watermark=Instant(state.watermark[0]),
+        mean_r=sum((r for _, _, r in state.read), Decimal(0)) / len(state.read),
+        mean_stamp=sum((stamp for _, stamp, _ in state.read), Decimal(0)) / len(state.read),
     )
     return replace(ran, value=answer), move

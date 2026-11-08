@@ -5,7 +5,6 @@ real door over the shipped month. Never "check pass, zero signal, no reason" (UT
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Final, cast
@@ -13,6 +12,7 @@ from typing import Any, Final, cast
 from qmf.risk.unit_intent import UnitExitIntent
 from qml.check import check
 from qml.compile import CompiledUnit, compile_unit
+from qml.compile.compiler import BLOCKS_NOT_BUILT
 from qml.protocol.unit import OwnPosition, TraceLevel, construct_unit
 from qml.unit.model import Side
 from test_compile_dummy import (
@@ -30,6 +30,8 @@ Document = dict[str, Any]
 _STDLIB = Path(__file__).resolve().parents[1] / "src" / "qml" / "blocks" / "stdlib"
 _MARKET = "fx.eurusd"
 _REFUSED, _FIRED, _READ, _SILENT = "refused", "fired", "read", "silent"
+_RIGHT_SHAPE: Final[dict[str, str]] = {"bars": "m15", "series": "m15.close"}
+_OTHER_SHAPE: Final[dict[str, str]] = {"bars": "m15.close", "series": "m15"}
 _DUMMYS_OWN = frozenset(
     {
         "ema",
@@ -46,95 +48,9 @@ _DUMMYS_OWN = frozenset(
 )
 """The test helper pins every stdlib block, and layer F scans each pin, so a sweep pins these."""
 
-_FEEDS = "its output is no condition, and R05's feeder rule or binding_not_read answers it"
-_CLOSE = "a price series fed whole bars, and R05 compares the bar's close"
-_CLOCK = "the runtime passes no time, and R05 feeds it, then binding_not_read answers a lone one"
-_HALT = "a halt reads a surface no slot is fed, so R05 must answer it as a binding it cannot read"
-
-PENDING_R05: Final[Mapping[str, str]] = {
-    "accelerator-oscillator": _FEEDS,
-    "account-daily-loss-halt": _HALT,
-    "adx": _FEEDS,
-    "alligator-line": _CLOSE,
-    "aroon-down": _FEEDS,
-    "aroon-oscillator": _FEEDS,
-    "aroon-up": _FEEDS,
-    "atr-simple": _FEEDS,
-    "atr-wilder": _FEEDS,
-    "awesome-oscillator": _FEEDS,
-    "bar-range-pressure": _FEEDS,
-    "bar-true-range": _FEEDS,
-    "bears-power": _FEEDS,
-    "bulls-power": _FEEDS,
-    "cci": _FEEDS,
-    "chande-momentum-oscillator": _FEEDS,
-    "choppiness-index": _FEEDS,
-    "close-to-close-volatility": _FEEDS,
-    "demarker": _FEEDS,
-    "dickey-fuller-statistic": _FEEDS,
-    "efficiency-ratio": _FEEDS,
-    "eia-natural-gas-storage-report-clock": _CLOCK,
-    "eia-petroleum-status-report-clock": _CLOCK,
-    "equity-drawdown-halt": _HALT,
-    "fixed-fraction-at-stop": _FEEDS,
-    "fractal-high-level": _FEEDS,
-    "fractal-low-level": _FEEDS,
-    "garman-klass-volatility": _FEEDS,
-    "gator-oscillator": _FEEDS,
-    "half-life-of-mean-reversion": _FEEDS,
-    "heikin-ashi-close": _CLOSE,
-    "heikin-ashi-open": _CLOSE,
-    "hurst-exponent": _FEEDS,
-    "ichimoku-senkou-a": _CLOSE,
-    "lbma-gold-auction-clock": _CLOCK,
-    "lbma-silver-auction-clock": _CLOCK,
-    "linear-regression-slope": _FEEDS,
-    "lo-mackinlay-z-statistic": _FEEDS,
-    "losing-days-halt": _HALT,
-    "macd-histogram": _FEEDS,
-    "macd-line": _FEEDS,
-    "macd-signal": _FEEDS,
-    "minus-directional-indicator": _FEEDS,
-    "momentum-ratio": _FEEDS,
-    "momersion": _FEEDS,
-    "moving-average-fractal-adaptive": _CLOSE,
-    "offset-gated-trailing-stop": _FEEDS,
-    "parabolic-sar": _FEEDS,
-    "parkinson-volatility": _FEEDS,
-    "peak-holdings-giveback-exit": _FEEDS,
-    "percentage-price-oscillator": _FEEDS,
-    "percentile-of-own-history": _FEEDS,
-    "permutation-entropy": _FEEDS,
-    "perp-funding-settlement-clock": _CLOCK,
-    "plus-directional-indicator": _FEEDS,
-    "price-channel-midpoint": _CLOSE,
-    "profit-fraction-trailing-stop": _FEEDS,
-    "relative-vigor-index": _FEEDS,
-    "relative-vigor-signal": _FEEDS,
-    "return-autocorrelation": _FEEDS,
-    "rogers-satchell-volatility": _FEEDS,
-    "roi-table-exit": _FEEDS,
-    "rolling-standard-deviation": _FEEDS,
-    "rsi-series": _FEEDS,
-    "session-fill-limit-halt": _HALT,
-    "session-loss-limit-halt": _HALT,
-    "stepped-profit-stop": _FEEDS,
-    "stochastic-d": _FEEDS,
-    "stochastic-k": _FEEDS,
-    "swing-stop-buffer": _FEEDS,
-    "target-r-multiple": _FEEDS,
-    "trend-floor-from-record": _FEEDS,
-    "trix": _FEEDS,
-    "ultimate-oscillator": _FEEDS,
-    "unrealised-profit-cap": _FEEDS,
-    "variance-ratio": _FEEDS,
-    "williams-percent-r": _FEEDS,
-    "z-score": _FEEDS,
-}
-"""Each silent today as a lone trigger, with what ends that. R05 deletes this table."""
-
-READ_NEVER_FIRED: Final[list[str]] = []
-"""Read as a condition on the shipped month and never held. A change here is on purpose."""
+READ_NEVER_FIRED: Final[list[str]] = ["value-above"]
+"""Read as a condition on the shipped month and never held. A change here is on purpose. The sweep
+feeds `value-above` the close, and a EURUSD close is never above its default level of 25."""
 
 _CONTEXT = _context()
 _BARS = {_MARKET: _slice()[_MARKET]}
@@ -148,10 +64,8 @@ def _faces() -> dict[str, Document]:
     }
 
 
-def _probe(face: Document) -> Document:
-    """A binding of `face` at its default parameters, feeding a bars port the stream and a series
-    port its close."""
-    fed = {"bars": "m15", "series": "m15.close"}
+def _probe(face: Document, fed: dict[str, str] = _RIGHT_SHAPE) -> Document:
+    """A binding of `face` at its default parameters, its ports fed as `fed` says."""
     return {
         "name": "probe",
         "block": f"{face['entry_id']}@1",
@@ -177,10 +91,10 @@ def _base(probe: str) -> Document:
     return document
 
 
-def _trigger_document(face: Document) -> Document:
+def _trigger_document(face: Document, fed: dict[str, str] = _RIGHT_SHAPE) -> Document:
     document = _base(face["entry_id"])
     for side in ("long", "short"):
-        document["logic"][side]["slots"]["trigger"]["bindings"] = [_probe(face)]
+        document["logic"][side]["slots"]["trigger"]["bindings"] = [_probe(face, fed)]
     for number in ("rsi_low", "rsi_high", "rsi_period"):
         del document["numbers"][number]
     return document
@@ -289,11 +203,74 @@ def test_every_stdlib_block_acts_or_refuses() -> None:
 
     silent = sorted(name for name, found in triggers.items() if found == _SILENT)
     silent += sorted(f"{name} as an exit" for name, found in exits.items() if found == _SILENT)
-    assert silent == sorted(PENDING_R05)
+    assert silent == []
     assert [name for name, found in triggers.items() if found == _READ] == READ_NEVER_FIRED
     assert sorted(name for name, found in exits.items() if found != _REFUSED) == [
         "swing-stop-buffer",
         "target-r-multiple",
         "time-exit-bars",
     ]
-    assert len(faces) == 112
+    assert len(faces) == 113
+
+
+def _refuses_the_feed(document: Document) -> bool:
+    problems = compile_unit(document, _CONTEXT)
+    return isinstance(problems, tuple) and any(
+        p.kind == "binding_not_read" and "Feed it" in p.message for p in problems
+    )
+
+
+def test_every_block_fed_the_other_shape_refuses_and_none_fed_the_right_shape_does() -> None:
+    """Check pass and no trades again if a whole bar reached a value port, or a value a bar port.
+    A block on other facts, an exit or a block not built refuses for that reason first."""
+    fed = [
+        face
+        for name, face in _faces().items()
+        if {port["stream_kind"] for port in face["inputs"]} in ({"series"}, {"bars"})
+        and face["output"]["type"] != "exit_action"
+        and f"{name}@1" not in BLOCKS_NOT_BUILT
+    ]
+
+    wrong = [f["entry_id"] for f in fed if _refuses_the_feed(_trigger_document(f, _OTHER_SHAPE))]
+    right = [f["entry_id"] for f in fed if _refuses_the_feed(_trigger_document(f))]
+
+    assert wrong == [f["entry_id"] for f in fed]
+    assert right == []
+    assert len(wrong) == 81
+
+
+_SESSION_BLOCKS: Final[tuple[str, ...]] = (
+    "initial-balance-high",
+    "initial-balance-low",
+    "initial-balance-range-extension",
+    "session-running-high",
+    "session-running-low",
+    "session-running-range",
+    "tpo-point-of-control",
+    "tpo-value-area-high",
+    "tpo-value-area-low",
+    "vwap-session-anchored",
+)
+_VOLUME_BLOCKS: Final[tuple[str, ...]] = (
+    "accumulation-distribution",
+    "chaikin-oscillator",
+    "force-index",
+    "market-facilitation-index",
+    "money-flow-index",
+    "on-balance-volume",
+    "vwap-session-anchored",
+)
+
+
+def test_session_and_volume_blocks_still_refuse_now_bars_carry_time() -> None:
+    """A session block on a fixed UTC second is an hour wrong most of the year, so `time` reaches
+    blocks only with this refusal in place (call 4). Volume waits for its own repair (call 5)."""
+    faces = _faces()
+
+    for name in (*_SESSION_BLOCKS, *_VOLUME_BLOCKS):
+        problems = compile_unit(_trigger_document(faces[name]), _CONTEXT)
+
+        assert isinstance(problems, tuple), name
+        assert ("block_not_built", "/logic/long/slots/trigger/bindings/0/block") in {
+            (p.kind, p.where) for p in problems
+        }, name

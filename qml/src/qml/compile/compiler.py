@@ -9,9 +9,12 @@ unit that compiles trades as it reads, and a part with nothing behind it refuses
 What the compiler decides, so the closure stays data plus blocks:
 
 - Sides follow ``direction``. A side the unit does not trade is not built.
-- A slot binding is a condition by its output. A ``Signal`` holds or not. A price ``series``
-  output (the dummy's EMA) is a level the side's price must be beyond: the binding's own input
-  above it on the long side, below it on the short side. An ``entry_order`` output holds.
+- A slot binding is a condition by its output. An ``event`` or ``state`` output holds or not. A
+  price ``series`` output (the dummy's EMA) is a level the side's price must be beyond: the
+  binding's own input above it on the long side, below it on the short side, and the bar's close
+  when that input is a whole bar. An ``entry_order`` output holds.
+- A binding with any other output is a feeder when a later binding or a derived number reads it,
+  and it refuses when nothing does. A binding that reads a surface no slot is fed refuses too.
 - An exit binding's use comes from its face. A price ``level`` that reads the position's
   ``stop_price`` is the target; any other price ``level`` is the protective stop; an
   ``exit_action`` runs once per bar for each open position. A unit runs one of each use, and it
@@ -29,7 +32,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass, fields, replace
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
@@ -93,7 +97,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 2
+COMPILER_FORMAT_VERSION: Final[int] = 3
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -132,6 +136,12 @@ BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
     "vwap-session-anchored@1": _CLOCK,
 }
 """A binding on one of these refuses, with what it needs. A pin alone does not."""
+_HOLDING_OUTPUTS: Final[frozenset[OutputType]] = frozenset(
+    {OutputType.EVENT, OutputType.STATE, OutputType.ENTRY_ORDER}
+)
+_SLOT_PORT_KINDS: Final[frozenset[str]] = frozenset({"series", "bars"})
+"""The input kinds a slot binding is fed, as layer B wires them. Account, position, record and
+trades facts reach a sizer, an exit or a rule through their own doors, and never a slot."""
 DERIVED_BLOCKS: Final[Mapping[MotionMode, str]] = {
     MotionMode.PERCENTILE_OF_OWN_HISTORY: "percentile-of-own-history@1",
 }
@@ -174,12 +184,21 @@ class BoundBlock:
 
 @dataclass(frozen=True, slots=True)
 class SlotPlan:
+    """``feeders`` names the bindings that only feed a later binding or a derived number, so they
+    are no conditions. A slot left with no conditions holds, whatever its combiner."""
+
     name: str
     role: Role
     combiner: CombinerKind
     absent_is_false: bool
     k: int | None
     bindings: tuple[BoundBlock, ...]
+    where: str
+    feeders: frozenset[str] = frozenset()
+
+    @property
+    def has_conditions(self) -> bool:
+        return len(self.bindings) > len(self.feeders)
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,6 +328,14 @@ def _side_slots(unit: Unit, side: Side) -> tuple[Side, Mapping[str, Slot]] | Non
     return None
 
 
+def _holds_a_slot(face: EntryFace) -> bool:
+    """Whether the runtime reads ``face``'s output as a condition."""
+    output = face.output
+    return output.type in _HOLDING_OUTPUTS or (
+        output.type is OutputType.SERIES and output.measure == "price"
+    )
+
+
 def _exit_use(face: EntryFace) -> ExitUse | None:
     output = face.output
     if output.type is OutputType.EXIT_ACTION:
@@ -428,6 +455,7 @@ class _Wiring:
                     absent_is_false=slot.combiner.when_inputs_absent.value == "treat_as_false",
                     k=slot.combiner.k,
                     bindings=tuple(bound),
+                    where=where,
                 )
             )
         return SidePlan(side, tuple(planned))
@@ -632,6 +660,88 @@ def _motion(
             ) or SLOW_CADENCE_TRADES
             slow.append(SlowPlan(SlowNumber(name, rule, stamp, every), block, params))
     return tuple(derived), tuple(slow)
+
+
+def _wrong_feed(b: BoundBlock, streams: AbstractSet[str]) -> str | None:
+    """Why a port of ``b`` would never answer. ``resolve`` hands a whole bar for a stream's bare
+    name and one value or nothing for any other ref, and each port reads only one of those."""
+    for port in b.face.inputs:
+        ref = b.inputs.get(port.port)
+        if ref is None:
+            continue
+        stream, _, part = ref.partition(".")
+        whole_bar = stream in streams and not part
+        if whole_bar and port.stream_kind == "series":
+            return (
+                f"{b.pin}'s {port.port} port takes one value, and {ref} is a whole bar. "
+                f"Feed it {stream}.close or a binding that gives a value"
+            )
+        if not whole_bar and port.stream_kind == "bars":
+            return (
+                f"{b.pin}'s {port.port} port takes a whole bar, and {ref} is not one. "
+                f"Feed it {' or '.join(sorted(streams))}"
+            )
+    return None
+
+
+def _not_read(b: BoundBlock, read: AbstractSet[str], streams: AbstractSet[str]) -> str | None:
+    """Why ``b`` can neither hold nor feed, by the shape of its face and never by its name, so an
+    agent's block of the same shape refuses too. A block not built yet answers only for that."""
+    if b.pin in BLOCKS_NOT_BUILT:
+        return None
+    if b.face.output.type is OutputType.EXIT_ACTION:
+        return f"{b.pin} is an exit, and a slot never acts on one. Put it in /exit_set"
+    unfed = next((p for p in b.face.inputs if p.stream_kind not in _SLOT_PORT_KINDS), None)
+    if unfed is not None:
+        return (
+            f"{b.pin} reads its {unfed.stream_kind} port {unfed.port}, which no slot is fed, so it "
+            "can neither hold nor feed here"
+        )
+    wrong_feed = _wrong_feed(b, streams)
+    if wrong_feed is not None:
+        return wrong_feed
+    if _holds_a_slot(b.face) or b.name in read:
+        return None
+    return (
+        f"{b.pin} outputs a {b.face.output.type.value} that cannot hold a slot, and nothing reads "
+        f"it. Bind value-above@1 with inputs.series {b.name} to compare it with a level"
+    )
+
+
+def _with_feeders(
+    side: SidePlan,
+    derived: Sequence[DerivedPlan],
+    streams: AbstractSet[str],
+    problems: _Problems,
+) -> SidePlan:
+    """``side`` with its feeders marked. A binding that can neither hold nor feed refuses."""
+    read = {d.source for d in derived if d.side is side.side}
+    feeders: set[str] = set()
+    for b in reversed([b for slot in side.slots for b in slot.bindings]):
+        why = _not_read(b, read, streams)
+        if why is not None:
+            problems.add("binding_not_read", b.where, why)
+        elif not _holds_a_slot(b.face):
+            feeders.add(b.name)
+        read.update(b.inputs.values())
+    marked: list[SlotPlan] = []
+    for slot in side.slots:
+        mine = frozenset(b.name for b in slot.bindings if b.name in feeders)
+        conditions = len(slot.bindings) - len(mine)
+        if (
+            conditions
+            and mine
+            and slot.combiner is CombinerKind.K_OF_N
+            and (slot.k or 0) > conditions
+        ):
+            problems.add(
+                "combiner_not_built",
+                f"{slot.where}/combiner/k",
+                f"k_of_n needs a k of at most {conditions}, the conditions this slot holds, "
+                "because a binding that only feeds is no condition",
+            )
+        marked.append(replace(slot, feeders=mine))
+    return replace(side, slots=tuple(marked))
 
 
 def _values(bound: BoundBlock, defaults: Mapping[str, Decimal]) -> dict[str, Decimal]:
@@ -935,6 +1045,8 @@ def compile_unit(
     exits = wiring.exits()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
     derived, slow = _motion(unit, sides, loaded, faces, problems)
+    streams = frozenset(s.name for s in unit.streams)
+    sides = tuple(_with_feeders(s, derived, streams, problems) for s in sides)
     document_fp = fingerprint(document)
     if is_refusal(document_fp):
         problems.add("document_fingerprint", "", str(document_fp.context.get("reason")))

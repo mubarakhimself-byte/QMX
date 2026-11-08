@@ -104,6 +104,7 @@ class World:
     runtime: Supervisor
     dummy: str
     backtest: Mapping[str, Callable[..., dict[str, Any]]]
+    tools: Mapping[str, Mapping[str, Callable[..., dict[str, Any]]]]
 
 
 @pytest.fixture(scope="module")
@@ -130,7 +131,8 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> Generator[World]:
         context = DomainContext(root=root / "tools")
         context.control, context.library = control, control.library
         try:
-            yield World(control, store, runtime, dummy, domain_functions(context)["backtest"])
+            tools = domain_functions(context)
+            yield World(control, store, runtime, dummy, tools["backtest"], tools)
         finally:
             control.close()
 
@@ -188,7 +190,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.1"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.2"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -220,6 +222,69 @@ def test_a_long_only_unit_makes_no_short_fills(world: World) -> None:
     assert trades(long_only)["short"] == 0
     assert trades(long_only)["long"] >= 1
     assert trades(both)["short"] >= 1
+
+
+def test_an_agent_writes_adx_above_25_and_a_job_runs_it(world: World) -> None:
+    def pin(entry_id: str) -> dict[str, Any]:
+        entry = world.tools["blocks"]["blocks_get"](entry_id=entry_id)["entry"]
+        return {key: entry[key] for key in ("entry_id", "version", "fingerprint")}
+
+    slot = {
+        "role": "filter",
+        "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+        "bindings": [
+            {
+                "name": "adx",
+                "block": "adx@1",
+                "params": {"period": {"value": "14"}},
+                "inputs": {"series": "m15"},
+            },
+            {
+                "name": "strong",
+                "block": "value-above@1",
+                "params": {"level": {"number": "adx_level"}, "below": {"value": "0"}},
+                "inputs": {"series": "adx"},
+            },
+        ],
+    }
+    number = {
+        "kind": "fixed",
+        "measure": "ratio",
+        "range": {"min": "0", "max": "100", "step": "1"},
+        "default": "25",
+        "motion": {"mode": "fixed"},
+        "authority": "motion_inside_range",
+        "origin": "builder_chosen",
+    }
+    unit_new, unit_check = world.tools["unit"]["unit_new"], world.tools["unit"]["unit_check"]
+    made = unit_new(
+        overrides={
+            "/logic/long/slots/strength": slot,
+            "/logic/short/slots/strength": slot,
+            "/numbers/adx_level": number,
+            "/pins": [
+                *cast("list[object]", template(DUMMY)["pins"]),
+                pin("adx"),
+                pin("value-above"),
+            ],
+        },
+        title="ADX above 25",
+    )
+
+    def run_at(level: str) -> dict[str, Any]:
+        document = made["document"]
+        document["numbers"]["adx_level"]["default"] = level
+        checked = unit_check(document=document, item=made["item"])
+        assert checked["verdict"] == "pass", checked["errors"]
+        answer = world.backtest["backtest_run"](unit=checked["saved"]["object_id"], **GAPS)
+        assert answer["result"]["status"] == "finished"
+        return fields(world.store, answer["result"]["result_id"])
+
+    at_25, at_99 = run_at("25"), run_at("99")
+
+    assert at_25["labels"]["zero_trades"] is False
+    assert at_25["measures"]["trades"] == 1
+    assert at_99["labels"]["zero_trades"] is True
 
 
 def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: World) -> None:
