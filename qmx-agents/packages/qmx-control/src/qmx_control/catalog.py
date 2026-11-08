@@ -321,6 +321,18 @@ DOMAIN_ROWS: Final = (
         "Compare two landed `backtest-result`s by result id: measures that differ, and trades "
         "found in one only or differing.",
     ),
+    _row(
+        "backtest",
+        "judge_run",
+        "domain_fn",
+        "backtest_judge_run",
+        "domain_write",
+        "Judge landed `backtest-result`s by result id with the core's referee, under a study "
+        "spec (or the results' own, or a quick one). Every market is judged by one rule, shrunk "
+        "toward the unit's whole result, and deflated by the family's effective tries. Lands the "
+        "verdict and its cards and answers it in plain words with the tries behind it. Scripts "
+        "decide; it never publishes or promotes a unit.",
+    ),
     _row("research", "qml_run", "domain_fn", "qml_run", "read"),
     _row("node", "state", "domain_fn", "node_state", "read"),
     _row(

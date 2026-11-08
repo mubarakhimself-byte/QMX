@@ -1,0 +1,72 @@
+{
+  "kind": "death-certificate",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "unit": {
+        "type": "string"
+      },
+      "verdict": {
+        "type": "string"
+      },
+      "cause": {
+        "type": "string",
+        "enum": [
+          "no_signal",
+          "costs",
+          "overfit",
+          "decay",
+          "no_trades",
+          "data",
+          "behaviour"
+        ]
+      },
+      "classifier_version": {
+        "type": "string"
+      },
+      "memory_row": {
+        "type": "string"
+      }
+    }
+  },
+  "blobs": {
+    "explanation": {
+      "media_type": "text/markdown"
+    }
+  },
+  "card": {
+    "facts": [
+      "unit",
+      "cause",
+      "classifier_version"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

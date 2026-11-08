@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import difflib
+import importlib.metadata
 import json
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 import qml
-from qmf.core import Instant
+from qmf.core import Instant, fingerprint, is_refusal
 from qml.catalogue.entry import ENTRY_SCHEMA, Computed, compute_status, corpus_problems
 from qml.catalogue.index import find as find_rows
 from qml.catalogue.index import match as match_text
@@ -22,8 +23,17 @@ from qml.catalogue.roles import NEAREST_SUGGESTIONS
 from qml.door import explain, new
 from qmn.doors.api import read_status
 from qmx_control.library import OPERATOR
-from qmx_judge.landing import REPORT_SLOT, RESULT_KIND
-from qmx_judge.tries import try_item
+from qmx_judge.judge import (
+    STUDY_KIND,
+    JudgedResult,
+    JudgeRefused,
+    judge,
+    land_judgement,
+    parse_spec,
+    quick_spec,
+)
+from qmx_judge.landing import REPORT_SLOT, RESULT_KIND, Stored
+from qmx_judge.tries import TRY_KIND, try_item
 from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, drafts_ref
@@ -244,6 +254,55 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         )
         return {**page, "same_trades": not rows, "measures": measures}
 
+    def backtest_judge_run(
+        results: list[str], study: str | None = None, response_format: ResponseFormat = "concise"
+    ) -> dict[str, Any]:
+        """Judge landed results with the core's referee and land the verdict. Answers the
+        verdict in plain words, with the raw and effective tries behind it."""
+        store = ctx.library.store
+        judged = [_judged(store, result_id) for result_id in results]
+        pin, spec_fields = _study(store, study, judged)
+        tries = _tries(store, judged)
+        family = [
+            found
+            for result_id in sorted(_landed_results(tries) - set(results))
+            if (found := _judged(store, result_id)).status == "finished"
+        ]
+        principal = ctx.control._caller()  # pyright: ignore[reportPrivateUsage]
+        try:
+            spec = parse_spec(spec_fields)
+            verdict = judge(
+                spec,
+                study=pin,
+                results=judged,
+                tries=tries,
+                family=family,
+                principal=principal,
+                versions={"checker": f"qml {importlib.metadata.version('qml')}"},
+            )
+            landed = land_judgement(
+                _JudgeLibrary(store), verdict, results=judged, spec=spec, writer=str(OPERATOR)
+            )
+        except JudgeRefused as refused:
+            raise ValueError("; ".join(refused.problems)) from refused
+        return ctx.output(
+            {
+                "verdict_id": landed.verdict,
+                "overall": verdict.overall,
+                "says": verdict.says(),
+                "raw_tries": verdict.raw_tries,
+                "effective_tries": verdict.effective_tries,
+                "study": pin,
+                "cards": dict(landed.cards),
+                "per_market": [
+                    {"market": m.market, "outcome": m.outcome, "trades": m.trades}
+                    for m in verdict.per_market
+                ],
+            },
+            "verdict",
+            response_format,
+        )
+
     def qml_run(
         bot_ref: str,
         instants: list[int],
@@ -333,6 +392,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "backtest_status": backtest_status,
             "backtest_results": backtest_results,
             "backtest_compare": backtest_compare,
+            "backtest_judge_run": backtest_judge_run,
         },
         "research": {
             "qml_run": qml_run,
@@ -343,6 +403,104 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         "unit": unit_functions(ctx),
         "blocks": block_functions(ctx),
     }
+
+
+class _JudgeLibrary:
+    """The judge's Library port over this home's store: records onto `main` as the operator,
+    each item found before it is written, each edge kept once by the store."""
+
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    def find(self, item: str) -> str | None:
+        head = self.store.head(item, MAIN)
+        return None if head is None else head[0]
+
+    def put(
+        self,
+        kind: str,
+        fields: Mapping[str, object],
+        blobs: Mapping[str, bytes],
+        *,
+        item: str | None,
+        title: str,
+        summary: str,
+        principal: str,
+    ) -> Stored:
+        draft = Draft(kind, item, title, summary, fields=cast("JsonObject", dict(fields)))
+        return Stored(self.store.put(OPERATOR, draft, on=MAIN, expected_head=None).object_id)
+
+    def link(self, from_id: str, relation: str, to_id: str, *, principal: str) -> str:
+        return self.store.relate(OPERATOR, from_id, relation, to_id)
+
+
+def _judged(store: Store, result_id: str) -> JudgedResult:
+    """A landed result and its report's trades, as the judge reads them."""
+    try:
+        view = store.get(OPERATOR, result_id)
+    except LibraryRefused as error:
+        raise ValueError(f"{result_id}: {error}") from error
+    if view.kind != RESULT_KIND:
+        raise ValueError(f"{result_id} is a {view.kind}; pass the result_id of a backtest")
+    report = view.blobs.get(REPORT_SLOT)
+    body = cast(
+        "dict[str, Any]", {} if report is None else json.loads(store.read_blob(report.blob_id))
+    )
+    trades = cast("list[dict[str, Any]]", body.get("trades", []))
+    needed = {"market_id", "closed_at", "r"}
+    unnamed = [str(t.get("trade_id")) for t in trades if not needed <= set(t)]
+    if unnamed:
+        raise ValueError(f"{result_id}: trade {unnamed[0]} names no market_id, closed_at and r")
+    return JudgedResult.read(result_id, view.fields, trades)
+
+
+def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple[str, JsonObject]:
+    """The study the verdict is judged under: the one named, else the results' own, else a quick
+    spec over every admitted market, landed once per unit."""
+    own = (store.get(OPERATOR, r.result_id).fields.get("study") for r in judged)
+    named = study or next((pin for pin in own if isinstance(pin, str)), None)
+    if named is not None:
+        view = store.get(OPERATOR, named)
+        if view.kind != STUDY_KIND:
+            raise ValueError(f"{named} is a {view.kind}; pass the id of a study-spec")
+        return named, view.fields
+    unit = judged[0].unit if judged else ""
+    claim = store.get(OPERATOR, unit).fields.get("claim_card") if store.catalog.row(unit) else None
+    idea = cast("dict[str, Any]", claim).get("idea") if isinstance(claim, dict) else None
+    fields = cast("JsonObject", quick_spec(idea if isinstance(idea, str) else None))
+    key = fingerprint({"unit": unit, "spec": fields})
+    item = f"study-quick-{unit if is_refusal(key) else key.value.digest[:24]}"
+    head = store.head(item, MAIN)
+    if head is not None:
+        return head[0], fields
+    draft = Draft(STUDY_KIND, item, f"quick study of {unit}", fields=fields)
+    return store.put(OPERATOR, draft, on=MAIN, expected_head=None).object_id, fields
+
+
+def _tries(store: Store, judged: list[JudgedResult]) -> list[dict[str, Any]]:
+    """Every `try` of the results' families, and each result's own run tries."""
+    found: dict[str, dict[str, Any]] = {}
+    for result in judged:
+        for state in ("opened", "landed"):
+            head = store.head(try_item(result.run_id, state), MAIN)
+            if head is not None:
+                found[head[0]] = dict(store.get(OPERATOR, head[0]).fields)
+    families = {str(row["family"]) for row in found.values() if row.get("family")}
+    for family in sorted(families):
+        for object_id in store.with_field(TRY_KIND, "family", family):
+            found[object_id] = dict(store.get(OPERATOR, object_id).fields)
+    return list(found.values())
+
+
+def _landed_results(tries: list[dict[str, Any]]) -> set[str]:
+    """The result each landed run links to, after the try it closes. A behaviour check's try
+    links its `test-report`, which is no result to judge."""
+    linked = (
+        cast("list[str]", row.get("links") or [])
+        for row in tries
+        if row.get("state") == "landed" and row.get("kind") in ("run", "whatif_rerun")
+    )
+    return {links[1] for links in linked if len(links) > 1}
 
 
 def _templates() -> list[str]:

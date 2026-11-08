@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import runpy
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +14,9 @@ from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
 from qmx_control.library import OPERATOR
+from qmx_judge.judge import spec_problems
 from qmx_judge.tries import try_item
+from qmx_library.kinds import Problem
 from qmx_library.port import Draft
 from qmx_library.principal import MAIN
 
@@ -124,13 +127,24 @@ def test_a_sealed_month_is_refused_with_its_reason(tmp_path: Path) -> None:
 
 
 RUN = "qmbr-pc-RECORDED"
+TRADE = {
+    "trade_id": "t1",
+    "market_id": "fx.eurusd",
+    "closed_at": 1_740_787_200_000_000_000,
+    "money": "12.50",
+    "r": "1.25",
+}
 
 
 def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
     """One run as the lander leaves it: its two try rows and its result. QMB itself is never
     started here; the app's own tests start it (`qmx-agents/apps/qmb/tests`)."""
     store = context.library.store
-    report = b'{"trades": [{"trade_id": "t1", "money": "12.50", "r": "1.25"}]}'
+    store.register_checker(
+        "qmx.study-spec/1", lambda fields: [Problem(text) for text in spec_problems(fields)]
+    )
+    unit = store.put(OPERATOR, Draft("note", "u", "u", fields={}), on=MAIN, expected_head=None)
+    report = json.dumps({"trades": [TRADE]}).encode()
     result = store.put(
         OPERATOR,
         Draft(
@@ -141,6 +155,7 @@ def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
                 "run_id": RUN,
                 "status": "finished",
                 "principal": "agent:unnamed",
+                "unit": unit.object_id,
                 "measures": {"trades": 1, "net_money": "12.50", "total_r": "1.25"},
             },
             blobs={"report": report},
@@ -148,7 +163,13 @@ def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
         on=MAIN,
         expected_head=None,
     ).object_id
-    opened = {"kind": "run", "run_id": RUN, "unit": "u", "principal": "agent:unnamed"}
+    opened = {
+        "kind": "run",
+        "run_id": RUN,
+        "unit": "u",
+        "family": unit.object_id,
+        "principal": "agent:unnamed",
+    }
     store.put(
         OPERATOR,
         Draft("try", try_item(RUN, "opened"), "opened", fields={**opened, "state": "opened"}),
@@ -162,6 +183,21 @@ def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
             try_item(RUN, "landed"),
             "landed",
             fields={**opened, "state": "landed", "links": ["opened", result]},
+        ),
+        on=MAIN,
+        expected_head=None,
+    )
+    report_id = store.put(
+        OPERATOR, Draft("test-report", "g", "g", fields={}), on=MAIN, expected_head=None
+    ).object_id
+    check = {**opened, "kind": "check", "run_id": "qmbr-pc-CHECK", "state": "landed"}
+    store.put(
+        OPERATOR,
+        Draft(
+            "try",
+            try_item("qmbr-pc-CHECK", "landed"),
+            "check",
+            fields={**check, "links": ["o", report_id]},
         ),
         on=MAIN,
         expected_head=None,
@@ -215,9 +251,19 @@ def test_all_thirteen_tools_use_engines(
     assert (status["state"], status["result_id"]) == ("landed", landed)
     read = backtest["backtest_results"](result_id=landed)
     assert read["summary"]["measures"]["total_r"] == "1.25"
-    assert read["result"] == [{"trade_id": "t1", "money": "12.50", "r": "1.25"}]
+    assert read["result"] == [TRADE]
     compared = backtest["backtest_compare"](left=landed, right=landed)
     assert (compared["same_trades"], compared["measures"]) == (True, {})
+    judged = backtest["backtest_judge_run"](results=[landed])["result"]
+    assert judged["says"] == (
+        "Too thin to judge by the shipped preset. fx.eurusd is too thin to judge, 1 trade of "
+        "the 100 needed. Behind it: 1 try, 1 effective."
+    )
+    assert (judged["overall"], judged["cards"]) == ("too_thin", {})
+    store = context.library.store
+    assert store.get(OPERATOR, judged["verdict_id"]).kind == "verdict"
+    assert store.get(OPERATOR, judged["study"]).fields["origin"] == "quick"
+    assert backtest["backtest_judge_run"](results=[landed])["result"] == judged
     research = functions["research"]
     assert (
         research["qml_run"](bot_ref="recorded", instants=[1_700_000_000_000_000_000])["result"][0][
@@ -294,7 +340,7 @@ def test_order_proposal_cannot_carry_execution_authority() -> None:
 
 
 @pytest.mark.parametrize(
-    "server_name,count", [("data", 4), ("backtest", 4), ("research", 3), ("node", 2)]
+    "server_name,count", [("data", 4), ("backtest", 5), ("research", 3), ("node", 2)]
 )
 def test_mcp_lists_and_calls_all_tools(
     context: DomainContext, server_name: str, count: int, monkeypatch: pytest.MonkeyPatch
@@ -325,6 +371,7 @@ def test_mcp_lists_and_calls_all_tools(
             "backtest_status": {"run_id": RUN},
             "backtest_results": {"result_id": landed},
             "backtest_compare": {"left": landed, "right": landed},
+            "backtest_judge_run": {"results": [landed]},
         }
     )
 

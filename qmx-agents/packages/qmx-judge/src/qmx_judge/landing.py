@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Final, Protocol, cast
@@ -270,7 +270,9 @@ class Lander:
     """The one lander on the supervisor's job path (Part B CONTRACTS §3, the lander port).
 
     ``writer`` is the principal the host lands records as. ``provides_of`` answers the provides
-    names of an installed app version. With ``check_first``, a run of a unit document pins the
+    names of an installed app version. ``family_of`` answers the root item of a unit pin's
+    `variant-of` lineage: every version and variant of one unit is one family, so the judge
+    counts all their runs (judge.md §2). With ``check_first``, a run of a unit document pins the
     fingerprint the unit compiles to, and runs only after a passing layer G verdict for it.
     """
 
@@ -281,6 +283,7 @@ class Lander:
     clock: Callable[[], datetime]
     mint: Callable[[], str] = new_ulid
     check_first: CheckFirst | None = None
+    family_of: Callable[[str], str] = field(kw_only=True)
 
     def open(
         self, app_id: str, version: str, job: str, inputs: Mapping[str, object], principal: str
@@ -292,11 +295,10 @@ class Lander:
         if RESULT_KIND not in self.provides_of(app_id, version):
             return None
         unit, study = inputs.get("unit"), inputs.get("study")
-        family = inputs.get("family", unit)
         checks = [
             (isinstance(unit, str) and bool(unit), "unit is the pin of the unit version"),
             (study is None or isinstance(study, str), "study is the pin of a study spec"),
-            (isinstance(family, str), "family is the root item of the unit's lineage"),
+            ("family" not in inputs, "family is the unit's lineage root, found by the lander"),
             ("run_id" not in inputs, "run_id is minted by the lander, never by the request"),
         ]
         checks += [
@@ -324,7 +326,7 @@ class Lander:
             kind="check" if checking else "run",
             state="opened",
             run_id=run_id,
-            family=str(family),
+            family=self.family_of(str(unit)),
             unit=str(unit),
             principal=principal,
             at=self.clock().isoformat(),

@@ -111,14 +111,32 @@ from qmx_home.files import Busy, Held, hold
 from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
-from qmx_judge.landing import G_CHECK, TEST_REPORT, CheckFirst, GRecord, Stored, run_kind
+from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, spec_edit, spec_problems
+from qmx_judge.landing import (
+    G_CHECK,
+    RESULT_KIND,
+    TEST_REPORT,
+    CheckFirst,
+    GRecord,
+    Stored,
+    run_kind,
+)
 from qmx_judge.landing import Lander as RunLander
 from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
+from qmx_judge.tries import TRY_KIND, spec_edit_item, try_item
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
 from qmx_library.kinds import Checker, Problem
 from qmx_library.landing import NOT_PRIMARY
-from qmx_library.port import Draft, LibraryRefused, StoreRole
+from qmx_library.port import (
+    Commit,
+    Draft,
+    LibraryRefused,
+    MergeResult,
+    ObjectId,
+    StoreRole,
+    Strategy,
+)
 from qmx_library.principal import MAIN, Act, Principal
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
@@ -163,6 +181,7 @@ from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.first_start import enable_first_party, land_dummy, land_port, land_wave
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
+from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.process_record import STATE, recorded_host
@@ -207,6 +226,7 @@ OPEN_REFUSALS: Final = (StoreRefused, LibraryRefused, EngineLibraryRefused)
 """What a store, the engine's ledger or either Library side raises when it must not open. Two
 classes share the name `LibraryRefused`, one per side of the engine's Library port."""
 UNIT_CHECKER: Final = "qml.unit/1"
+STUDY_CHECKER: Final = "qmx.study-spec/1"
 ENTRY_CHECKER: Final = "qml.entry/1"
 CHECK_FAILED: Final = "check_failed"
 
@@ -700,6 +720,39 @@ class HostStore(Store):
     """The flip he started, while one is in progress."""
     primary: Callable[[], str] | None = None
     """On the server only: which store is primary right now."""
+    lifecycle: LifecycleWriter | None = None
+    """This PC's lifecycle writer, which records the judge's move when a verdict lands."""
+
+    def put(
+        self, who: Principal, draft: Draft, *, on: str, expected_head: ObjectId | None
+    ) -> Commit:
+        commit = super().put(who, draft, on=on, expected_head=expected_head)
+        if on == MAIN and commit.object_id != commit.prev_head:
+            self._landed(who, commit.object_id)
+        return commit
+
+    def merge(
+        self, who: Principal, item: str, *, from_ref: str, into: str, strategy: Strategy = "auto"
+    ) -> MergeResult:
+        merged = super().merge(who, item, from_ref=from_ref, into=into, strategy=strategy)
+        if into == MAIN and merged.outcome in ("fast-forward", "merged"):
+            self._landed(who, merged.object_id)
+        return merged
+
+    def close(self) -> None:
+        if self.lifecycle is not None:
+            self.lifecycle.close()
+        super().close()
+
+    def _landed(self, who: Principal, object_id: ObjectId) -> None:
+        """What the host owes once a record reaches `main`, after its put has committed (a
+        checker runs inside the put and cannot write): a verdict's judge moves, and a study
+        spec's `spec_edit` try when a result exists against an earlier version of it."""
+        kind = str(self._require(object_id)[2])
+        if kind == VERDICT_KIND and self.lifecycle is not None:
+            record_judge_moves(self, self.lifecycle, object_id)
+        elif kind == STUDY_KIND:
+            land_spec_edit(self, who, object_id)
 
     def _check_owner(self, who: Principal, ref: str, act: Act) -> None:
         super()._check_owner(who, ref, act)
@@ -773,10 +826,84 @@ def entry_check(fields: JsonObject) -> list[Problem]:
     ]
 
 
+def study_check(fields: JsonObject) -> list[Problem]:
+    """`qmx.study-spec/1`, the `study-spec` kind's put check: the judge's own rules for a spec
+    beyond its shape. A new version saved after a result exists lands its `spec_edit` try from
+    the host's store once the put commits (`land_spec_edit`)."""
+    return [Problem(text, ("",), CHECK_FAILED, "study-spec") for text in spec_problems(fields)]
+
+
 def register_checkers(store: Store) -> None:
     """The checkers the Library's kind files name, registered at composition (Part A AD-112)."""
     store.register_checker(UNIT_CHECKER, unit_problems(store))
     store.register_checker(ENTRY_CHECKER, entry_check)
+    store.register_checker(STUDY_CHECKER, study_check)
+
+
+JOURNALS: Final = "journals"
+"""This PC's journal root, where the host's own streams append (Part B AD-209)."""
+
+
+def lifecycle_writer(home: Path, control: ControlService, machine: str) -> LifecycleWriter:
+    """This PC's one lifecycle writer, reading `[units] lifecycle.auto_paper` at each move."""
+
+    def auto_paper() -> bool:
+        units = cast(dict[str, object], control.settings_get("units"))
+        return cast(dict[str, object], units.get("lifecycle") or {}).get("auto_paper") is True
+
+    return LifecycleWriter(home / JOURNALS, machine, f"qmx-host {qmx_version()}", auto_paper)
+
+
+def record_judge_moves(store: Store, writer: LifecycleWriter, verdict_id: str) -> list[str]:
+    """The judge's draft to tested or draft to parked moves of a landed verdict. A refusal is
+    printed: the verdict stands, and the market keeps its state."""
+    fields = store.get(OPERATOR_READ, verdict_id).fields
+    unit = str(fields.get("unit", ""))
+    document = store.get(OPERATOR_READ, unit).fields if store.catalog.row(unit) else {}
+    unit_id = str(document.get("unit_id") or unit)
+    try:
+        return writer.record_verdict(
+            judge_moves(verdict_id, fields, unit_id=unit_id, at=datetime.now(UTC))
+        )
+    except MoveRefused as refused:
+        print(f"lifecycle: {verdict_id} moved nothing: {refused}", file=sys.stderr)
+        return []
+
+
+def land_spec_edit(store: Store, who: Principal, spec_id: str) -> str | None:
+    """Land the `spec_edit` try of a study spec version whose earlier versions already have a
+    result: editing the rules after a result is a counted try (Level 0 AD-25). Once per version;
+    saving the same fields again is no edit."""
+    earlier: list[str] = []
+    queue = list(store.catalog.parents(spec_id))
+    while queue:
+        parent = queue.pop()
+        if parent not in earlier:
+            earlier.append(parent)
+            queue += store.catalog.parents(parent)
+    results = [r for e in earlier for r in store.with_field(RESULT_KIND, "study", e)]
+    fields = store.get(OPERATOR_READ, spec_id).fields
+    same = [
+        p for p in store.catalog.parents(spec_id) if store.get(OPERATOR_READ, p).fields == fields
+    ]
+    item = spec_edit_item(spec_id)
+    found = store.head(item, MAIN)
+    if not results or same or found is not None:
+        return None if found is None else found[0]
+    first = store.get(OPERATOR_READ, results[0]).fields
+    unit, run_id = str(first.get("unit", "")), str(first.get("run_id", ""))
+    opened = store.head(try_item(run_id, "opened"), MAIN)
+    family = store.get(OPERATOR_READ, opened[0]).fields.get("family") if opened else None
+    edit = spec_edit(
+        spec_id,
+        unit=unit,
+        family=str(family or unit),
+        principal=str(who),
+        at=datetime.now(UTC).isoformat(),
+    )
+    title = f"spec_edit {spec_id}"
+    draft = Draft(TRY_KIND, item, title, title, fields=cast(JsonObject, edit.fields()))
+    return store.put(OPERATOR_READ, draft, on=MAIN, expected_head=None).object_id
 
 
 def enable_apps(home: Path, runtime: Supervisor) -> None:
@@ -960,6 +1087,7 @@ async def serve(
                 if not serving:
                     land_first_unit(store)
                 if role == "pc":
+                    store.lifecycle = lifecycle_writer(home, control, name)
                     land_ported_dictionary(store)
                     land_dictionary_wave(store)
                 control.attach_library(store)
@@ -1496,6 +1624,23 @@ class LanderLibrary:
     def holds(self, object_id: str) -> bool:
         return self.store.catalog.row(object_id) is not None
 
+    def family_of(self, unit: str) -> str:
+        """The root item of `unit`'s `variant-of` lineage (judge.md §2). Versions of an item
+        share it, and an edge from any version of a variant leads to its parent's item. A pin
+        the Library does not hold is its own root."""
+        if not self.holds(unit):
+            return unit
+        found = self.store.get(OPERATOR_READ, unit)
+        item, kind, seen = found.item, found.kind, {found.item}
+        while True:
+            placed = [object_id for object_id, _ in self.store.placed(item, kind, None)]
+            up = self.store.walk(OPERATOR_READ, placed, (LINEAGE,), "out", depth=1)
+            parent = None if not up else self.store.get(OPERATOR_READ, up[0].object_id)
+            if parent is None or parent.item in seen:
+                return item
+            item, kind = parent.item, parent.kind
+            seen.add(item)
+
     def unit(self, pin: str) -> RunUnit | str | None:
         """The unit document `pin` names, compiled with the blocks and records `gather` finds;
         why it does not compile; or None when the pin names an object of another kind. An object
@@ -1532,6 +1677,7 @@ class LanderLibrary:
 
 
 OPERATOR_READ: Final = Principal.parse("operator")
+LINEAGE: Final = "variant-of"
 BAR_SIDES: Final = ("bid", "ask")
 BARS_TEMPLATE: Final = "download-dukascopy"
 
@@ -1728,6 +1874,7 @@ def landers(
         provides_of=provides_of,
         clock=lambda: datetime.now(UTC),
         check_first=CheckFirst(run_job, library),
+        family_of=library.family_of,
     )
     return {QMB_RUN: QmbRun(lander, library, folder_of, settings, runtime.home / MARKET_STORE)}
 

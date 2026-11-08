@@ -1,0 +1,84 @@
+{
+  "kind": "forecast",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "market": {
+        "type": "string"
+      },
+      "call": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "range": {
+            "type": "object"
+          }
+        }
+      },
+      "horizon": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "string"
+      },
+      "written_at": {
+        "type": "string"
+      },
+      "written_by": {
+        "type": "string"
+      },
+      "scored_at": {
+        "type": "string"
+      },
+      "score": {
+        "type": "string"
+      },
+      "scorer_version": {
+        "type": "string"
+      }
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": [
+      "market",
+      "call",
+      "horizon",
+      "confidence",
+      "written_by"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}
