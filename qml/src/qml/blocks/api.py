@@ -34,7 +34,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Final, Literal, Protocol, cast, runtime_checkable
 
 from qml.unit.model import Measure, Scope, Side
 
@@ -46,12 +46,14 @@ if TYPE_CHECKING:
 __all__ = [
     "PASS_EVERY_ORDER",
     "PORT_QUANTUM_SIGNIFICANT_DIGITS",
+    "Amount",
     "Block",
     "CrossUnitHook",
     "EntryFace",
     "EntryOrder",
     "ExitInstance",
     "FaceProblem",
+    "Factor",
     "Halt",
     "HaltAction",
     "HaltInstance",
@@ -67,6 +69,7 @@ __all__ = [
     "Signal",
     "Size",
     "SizerInstance",
+    "Skip",
     "parse_entry",
     "quantise",
 ]
@@ -107,6 +110,36 @@ class Size:
 
     lots: Decimal | None
     skip_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Amount:
+    """A sizer's answer in the unit it chose: money at risk, notional, or quantity.
+
+    ``value`` is exact in that unit, and ``basis`` names what R is measured against (today
+    ``gross_at_stop``). The older :class:`Size` states a quantity, so it reads as
+    ``Amount(kind="quantity", ...)`` and skips the one converter.
+    """
+
+    kind: Literal["money_at_risk", "notional", "quantity"]
+    value: Decimal
+    basis: str
+
+
+@dataclass(frozen=True, slots=True)
+class Skip:
+    """A sizer's refusal of one entry, with the reason the unit records."""
+
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class Factor:
+    """A modifier's answer: a multiplier inside the range it declares, with its reason."""
+
+    value: Decimal
+    range: tuple[Decimal, Decimal]
+    reason: str
 
 
 class Instance(Protocol):

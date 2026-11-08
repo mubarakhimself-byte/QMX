@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from typing import Final, cast
@@ -19,7 +19,7 @@ from qmf.core.refusal import Ok, Result
 from qml._refuse import invalid
 from qml.unit.schema import DECIMAL_PATTERN
 
-__all__ = ["InstrumentClass", "InstrumentRecord", "Pip", "parse_record", "places"]
+__all__ = ["ConversionRef", "InstrumentClass", "InstrumentRecord", "Pip", "parse_record", "places"]
 
 
 class InstrumentClass(StrEnum):
@@ -40,6 +40,19 @@ class InstrumentClass(StrEnum):
 class Pip:
     size: Decimal
     source: str
+
+
+@dataclass(frozen=True)
+class ConversionRef:
+    """Where one account currency's rate against the record's quote comes from.
+
+    ``market_id`` names the market whose quote carries the rate. ``invert`` is true when that
+    market quotes the account currency against the record's quote (USDJPY for a JPY record), so
+    the rate is its reciprocal.
+    """
+
+    market_id: str
+    invert: bool
 
 
 @dataclass(frozen=True)
@@ -69,6 +82,7 @@ class InstrumentRecord:
     root: str | None = None
     rolls_to: str | None = None
     funding_interval: str | None = None
+    conversions: Mapping[str, ConversionRef] = field(default_factory=dict[str, ConversionRef])
 
     @property
     def name(self) -> str:
@@ -120,6 +134,27 @@ def _pip(value: object) -> object | None:
     return Pip(size, str(source))
 
 
+def _conversions(value: object) -> object | None:
+    if not isinstance(value, dict):
+        return None
+    found: dict[str, ConversionRef] = {}
+    for account, spec in cast(dict[object, object], value).items():
+        if not isinstance(account, str) or not account.strip() or not isinstance(spec, dict):
+            return None
+        given = cast(dict[str, object], spec)
+        market_id = given.get("market_id")
+        invert = given.get("invert")
+        if (
+            set(given) != {"market_id", "invert"}
+            or not isinstance(market_id, str)
+            or not market_id.strip()
+            or type(invert) is not bool
+        ):
+            return None
+        found[account] = ConversionRef(market_id, invert)
+    return found
+
+
 _WANTS: Final[Mapping[_Reader, str]] = {
     _text: "a non-empty string",
     _positive_decimal: 'a positive decimal string such as "0.01"',
@@ -127,6 +162,7 @@ _WANTS: Final[Mapping[_Reader, str]] = {
     _object: "an object",
     _class: f"one of {', '.join(member.value for member in InstrumentClass)}",
     _pip: '{"size": a positive decimal string, "source": where the pip is stated}',
+    _conversions: '{"<ACCOUNT>": {"market_id": a market id, "invert": true or false}}',
 }
 
 # (record key, model field, reader, required)
@@ -156,6 +192,7 @@ _KEYS: Final[tuple[tuple[str, str, _Reader, bool], ...]] = (
     ("root", "root", _text, False),
     ("rolls_to", "rolls_to", _text, False),
     ("funding_interval", "funding_interval", _text, False),
+    ("conversions", "conversions", _conversions, False),
 )
 
 
