@@ -22,7 +22,7 @@ the shape beside it.
 
 ## Refused fields
 
-`compiler format 4` refuses these fields by name. The code and the reason are the compiler's
+`compiler format 5` refuses these fields by name. The code and the reason are the compiler's
 own. A dash means the field has no `_shape_problems` refusal: the compiler reads it,
 or the census labels it.
 
@@ -33,23 +33,23 @@ or the census labels it.
 | `Unit.family_id` | - | - | - |
 | `Unit.claim_card` | - | - | - |
 | `Unit.markets` | - | - | - |
-| `Unit.streams` | `/streams` | `streams_not_built` | compiler format 4 runs one stream |
+| `Unit.streams` | `/streams` | `streams_not_built` | compiler format 5 runs one stream |
 | `Unit.direction` | - | - | - |
 | `Unit.logic` | - | - | - |
 | `Unit.exit_set` | - | - | - |
-| `Unit.halts` | `/halts` | `halts_not_built` | compiler format 4 runs no halt blocks |
-| `Unit.reads` | `/reads` | `reads_not_built` | compiler format 4 reads no readings |
+| `Unit.halts` | `/halts` | `halts_not_built` | compiler format 5 runs no halt blocks |
+| `Unit.reads` | `/reads` | `reads_not_built` | compiler format 5 reads no readings |
 | `Unit.numbers` | - | - | - |
 | `Unit.pins` | - | - | - |
 | `Unit.title` | - | - | - |
 | `Unit.lineage` | - | - | - |
-| `Unit.sessions` | `/sessions` | `sessions_not_built` | compiler format 4 runs no session window, so this unit would trade outside it |
+| `Unit.sessions` | `/sessions` | `sessions_not_built` | compiler format 5 runs no session window, so this unit would trade outside it |
 | `Unit.position_limit` | - | - | - |
 | `Unit.sizer` | - | - | - |
-| `Unit.context_needs` | `/context_needs` | `context_not_built` | compiler format 4 reads no context, so this unit would trade whatever the context is |
-| `Unit.routes` | `/routes` | `routes_not_built` | compiler format 4 takes no route from a unit, so this one would run on the host's own |
+| `Unit.context_needs` | `/context_needs` | `context_not_built` | compiler format 5 reads no context, so this unit would trade whatever the context is |
+| `Unit.routes` | `/routes` | `routes_not_built` | compiler format 5 takes no route from a unit, so this one would run on the host's own |
 | `Unit.baseline` | - | - | - |
-| `Unit.plain_python` | `/plain_python` | `plain_python_not_built` | compiler format 4 runs the unit's slots, so ema@1 would never run |
+| `Unit.plain_python` | `/plain_python` | `plain_python_not_built` | compiler format 5 runs the unit's slots, so ema@1 would never run |
 | `ClaimCard.idea` | - | - | - |
 | `ClaimCard.sources` | - | - | - |
 | `ClaimCard.written_at` | - | - | - |
@@ -60,9 +60,9 @@ or the census labels it.
 | `Source.quote` | - | - | - |
 | `Market.market_id` | - | - | - |
 | `Market.instrument_ref` | - | - | - |
-| `Market.roll` | `/markets/0/roll` | `roll_not_built` | compiler format 4 reads no roll rule, so fx.eurusd would not roll by it |
-| `Market.settings` | `/markets/0/settings` | `settings_not_built` | compiler format 4 runs no setting for one market, so fx.eurusd would read the unit's own numbers |
-| `Market.settings_record` | `/markets/0/settings_record` | `settings_not_built` | compiler format 4 reads no settings record, so fx.eurusd would read the unit's own numbers |
+| `Market.roll` | `/markets/0/roll` | `roll_not_built` | compiler format 5 reads no roll rule, so fx.eurusd would not roll by it |
+| `Market.settings` | `/markets/0/settings` | `settings_not_built` | compiler format 5 runs no setting for one market, so fx.eurusd would read the unit's own numbers |
+| `Market.settings_record` | `/markets/0/settings_record` | `settings_not_built` | compiler format 5 reads no settings record, so fx.eurusd would read the unit's own numbers |
 | `SymbolRef.venue` | - | - | - |
 | `SymbolRef.symbol` | - | - | - |
 | `RootRef.venue` | - | - | - |
@@ -70,12 +70,12 @@ or the census labels it.
 | `Roll.rule` | - | - | - |
 | `Roll.days_before_expiry` | - | - | - |
 | `Stream.name` | - | - | - |
-| `Stream.market` | `/streams/0/market` | `market_not_built` | compiler format 4 runs the one stream on every market in /markets, not on fx.eurusd alone |
+| `Stream.market` | `/streams/0/market` | `market_not_built` | compiler format 5 runs the one stream on every market in /markets, not on fx.eurusd alone |
 | `Stream.bar` | - | - | - |
-| `Stream.price` | `/streams/0/price` | `price_not_built` | compiler format 4 runs bid and ask bars, not mid |
-| `Stream.input` | `/streams/0/input` | `input_not_built` | compiler format 4 runs closed bars, not quotes |
+| `Stream.price` | `/streams/0/price` | `price_not_built` | compiler format 5 runs bid and ask bars, not mid |
+| `Stream.input` | `/streams/0/input` | `input_not_built` | compiler format 5 runs closed bars, not quotes |
 | `Stream.derived_from` | - | - | - |
-| `Bar.kind` | `/streams/0/bar` | `bar_not_built` | compiler format 4 runs time bars, not tick |
+| `Bar.kind` | `/streams/0/bar` | `bar_not_built` | compiler format 5 runs time bars, not tick |
 | `Bar.size` | `/streams/0/bar` | `bar_not_built` | m15 replays as 900 second bars, and this stream says 3600 |
 | `Logic.long` | - | - | - |
 | `Logic.short` | - | - | - |
@@ -86,7 +86,7 @@ or the census labels it.
 | `Binding.name` | - | - | - |
 | `Binding.block` | - | - | - |
 | `Binding.params` | - | - | - |
-| `Binding.inputs` | `/sizer/inputs/equity` | `inputs_not_built` | compiler format 4 hands a sizer its equity, prices and record, so it never reads m15.close |
+| `Binding.inputs` | `/sizer/inputs/equity` | `inputs_not_built` | compiler format 5 hands a sizer its equity, prices and record, so it never reads m15.close |
 | `NumberParam.number` | - | - | - |
 | `ValueParam.value` | - | - | - |
 | `Combiner.kind` | - | - | - |
@@ -102,9 +102,9 @@ or the census labels it.
 | `ScopedBinding.params` | - | - | - |
 | `ScopedBinding.inputs` | - | - | - |
 | `ScopedBinding.scope` | - | - | - |
-| `Halts.position` | `/halts` | `halts_not_built` | compiler format 4 runs no halt blocks |
-| `Halts.unit` | `/halts` | `halts_not_built` | compiler format 4 runs no halt blocks |
-| `Halts.account` | `/halts` | `halts_not_built` | compiler format 4 runs no halt blocks |
+| `Halts.position` | `/halts` | `halts_not_built` | compiler format 5 runs no halt blocks |
+| `Halts.unit` | `/halts` | `halts_not_built` | compiler format 5 runs no halt blocks |
+| `Halts.account` | `/halts` | `halts_not_built` | compiler format 5 runs no halt blocks |
 | `Read.reading` | - | - | - |
 | `Read.market` | - | - | - |
 | `Read.fallback` | - | - | - |
@@ -116,17 +116,17 @@ or the census labels it.
 | `NumberSpec.authority` | - | - | - |
 | `NumberSpec.origin` | - | - | - |
 | `NumberSpec.range` | - | - | - |
-| `NumberSpec.applies_to_open_positions` | `/numbers/stop_buffer/applies_to_open_positions` | `open_positions_not_built` | compiler format 4 moves no open position by a number, so stop_buffer would not reach one |
+| `NumberSpec.applies_to_open_positions` | `/numbers/stop_buffer/applies_to_open_positions` | `open_positions_not_built` | compiler format 5 moves no open position by a number, so stop_buffer would not reach one |
 | `Motion.mode` | - | - | - |
-| `Motion.source` | `/numbers/ema_period/motion/source` | `motion_not_built` | compiler format 4 reads no source on a fixed number |
-| `Motion.cadence` | `/numbers/ema_period/motion/cadence` | `motion_not_built` | compiler format 4 reads no cadence on a fixed number |
-| `Motion.min_count` | `/numbers/ema_period/motion/min_count` | `motion_not_built` | compiler format 4 reads no min_count on a fixed number |
-| `Motion.shrink_k` | `/numbers/ema_period/motion/shrink_k` | `motion_not_built` | compiler format 4 reads no shrink_k on a fixed number |
-| `Motion.step_limit` | `/numbers/ema_period/motion/step_limit` | `motion_not_built` | compiler format 4 reads no step_limit on a fixed number |
-| `Motion.rule` | `/numbers/ema_period/motion/rule` | `motion_not_built` | compiler format 4 reads no rule on a fixed number |
-| `Motion.rule_params` | `/numbers/ema_period/motion/rule_params` | `motion_not_built` | compiler format 4 reads no rule_params on a fixed number |
-| `Cadence.every_closed_trades` | `/numbers/rsi_low/motion/cadence` | `motion_not_built` | compiler format 4 reads no cadence on a derived number |
-| `Cadence.at` | `/numbers/min_trend_strength/motion/cadence` | `cadence_not_built` | compiler format 4 moves a number every so many closed trades, not at market_day_close |
+| `Motion.source` | `/numbers/ema_period/motion/source` | `motion_not_built` | compiler format 5 reads no source on a fixed number |
+| `Motion.cadence` | `/numbers/ema_period/motion/cadence` | `motion_not_built` | compiler format 5 reads no cadence on a fixed number |
+| `Motion.min_count` | `/numbers/ema_period/motion/min_count` | `motion_not_built` | compiler format 5 reads no min_count on a fixed number |
+| `Motion.shrink_k` | `/numbers/ema_period/motion/shrink_k` | `motion_not_built` | compiler format 5 reads no shrink_k on a fixed number |
+| `Motion.step_limit` | `/numbers/ema_period/motion/step_limit` | `motion_not_built` | compiler format 5 reads no step_limit on a fixed number |
+| `Motion.rule` | `/numbers/ema_period/motion/rule` | `motion_not_built` | compiler format 5 reads no rule on a fixed number |
+| `Motion.rule_params` | `/numbers/ema_period/motion/rule_params` | `motion_not_built` | compiler format 5 reads no rule_params on a fixed number |
+| `Cadence.every_closed_trades` | `/numbers/rsi_low/motion/cadence` | `motion_not_built` | compiler format 5 reads no cadence on a derived number |
+| `Cadence.at` | `/numbers/min_trend_strength/motion/cadence` | `cadence_not_built` | compiler format 5 moves a number every so many closed trades, not at market_day_close |
 | `Range.min` | - | - | - |
 | `Range.max` | - | - | - |
 | `Range.step` | - | - | - |
@@ -144,7 +144,7 @@ or the census labels it.
 | `Session.windows` | - | - | - |
 | `Window.from` | - | - | - |
 | `Window.to` | - | - | - |
-| `PositionLimit.per_instrument` | `/position_limit` | `limit_not_built` | compiler format 4 holds one position per market |
+| `PositionLimit.per_instrument` | `/position_limit` | `limit_not_built` | compiler format 5 holds one position per market |
 | `ContextNeeds.require` | - | - | - |
 | `ContextNeeds.warn` | - | - | - |
 | `ContextNeeds.block` | - | - | - |

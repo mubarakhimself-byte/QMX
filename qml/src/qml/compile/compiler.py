@@ -23,8 +23,9 @@ What the compiler decides, so the closure stays data plus blocks:
   side that binds the number. A number both sides bind runs one motion instance per side, so
   each side's window holds one value per bar. Its mode picks the motion block by the table below.
 
-The compiled fingerprint is fp1 over the document's fingerprint, the lock's, the compiler
-format version and the port quantum, so a recompile of the same bytes gives the same value.
+The compiled fingerprint is fp1 over the logic half's fingerprint, the risk half's, the lock's,
+the compiler format version and the port quantum, so a recompile of the same bytes gives the
+same value and a size edit moves only the risk half.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, fields, replace
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import is_refusal
@@ -76,6 +77,7 @@ from qml.unit.model import (
     ValueParam,
 )
 from qml.unit.parse import parse
+from qml.unit.sections import sections
 
 if TYPE_CHECKING:
     from qml.protocol.unit import UnitFactory
@@ -97,7 +99,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 4
+COMPILER_FORMAT_VERSION: Final[int] = 5
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -263,6 +265,8 @@ class CompiledUnit:
     document_fingerprint: Fingerprint
     lock_fingerprint: Fingerprint
     compiled_fingerprint: Fingerprint
+    logic_fingerprint: Fingerprint
+    risk_fingerprint: Fingerprint
     compiler_format_version: int
     options: Mapping[str, int]
     warm_up: Mapping[str, int]
@@ -1069,9 +1073,11 @@ def compile_unit(
     if problems.found:
         return tuple(problems.found)
     options = {"port_quantum_significant_digits": PORT_QUANTUM_SIGNIFICANT_DIGITS}
+    logic, risk = sections(cast("Mapping[str, object]", document), COMPILER_FORMAT_VERSION)
     compiled_fp = fingerprint(
         {
-            "document": document_fp.value.value,
+            "logic": logic.fingerprint.value,
+            "risk": risk.fingerprint.value,
             "lock": loaded.lock_fingerprint.value,
             "compiler_format_version": COMPILER_FORMAT_VERSION,
             "options": options,
@@ -1095,6 +1101,8 @@ def compile_unit(
         document_fingerprint=document_fp.value,
         lock_fingerprint=loaded.lock_fingerprint,
         compiled_fingerprint=compiled_fp.value,
+        logic_fingerprint=logic.fingerprint,
+        risk_fingerprint=risk.fingerprint,
         compiler_format_version=COMPILER_FORMAT_VERSION,
         options=options,
         warm_up={plan.stream: warm_up},
