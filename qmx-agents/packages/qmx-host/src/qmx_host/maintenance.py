@@ -1,10 +1,10 @@
 """QMX's own maintenance, listed apart from his workflows (design 06 section 6).
 
 `GET /api/maintenance` lists the host's jobs (sync to my storage, the monthly upkeep of each
-storage and the monthly restore drill) and the shipped workflows whose definition is marked
-`meta.kind = "maintenance"`, each with its own off switch: a host job's is one `[backup]` key,
-a workflow's are its triggers' enable and disable routes. Turning one off stops it and nothing
-else.
+storage, the monthly restore drill, and bringing records in) and the shipped workflows whose
+definition is marked `meta.kind = "maintenance"`, each with its own off switch: a backup job's is
+one `[backup]` key, the records job's is `[records] on`, and a workflow's are its triggers'
+enable and disable routes. Turning one off stops it and nothing else.
 
 Each host job ends by landing a Library `artifact` whose `fields.type` is `maintenance-result`
 (`landed`), written as the operator's, whom the host acts for. A workflow of his follows it with
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from qmx_library.store import Store
 
     from qmx_host.backups import Backups
+    from qmx_host.records import Records
 
 RESULT: Final = "maintenance-result"
 MARK: Final = "maintenance"
@@ -41,12 +42,18 @@ HOST_JOBS: Final[tuple[tuple[str, str, str], ...]] = (
     ("drill", "Monthly restore drill", "upkeep.drill"),
 )
 """Each host job: its id, its name and the `[backup]` key that switches it."""
+RECORDS_JOB: Final = "records"
+RECORDS_NAME: Final = "Bring records in: file every app's journals, bars and readings"
+"""The records job, switched by `[records] on` (Part B CONTRACTS section 6)."""
 
 
-def landed(store: Store, job: str, state: str, line: str) -> None:
-    """One `maintenance-result` artifact for a host job that ended. A landing that fails is a
-    line on stderr: it never fails the job."""
-    result: JsonObject = {"job": job, "state": state, "line": line}
+def landed(
+    store: Store, job: str, state: str, line: str, extra: Mapping[str, object] | None = None
+) -> None:
+    """One `maintenance-result` artifact for a host job that ended, with the job's own counts in
+    ``extra``. A landing that fails is a line on stderr: it never fails the job."""
+    result: JsonObject = {**cast("JsonObject", dict(extra or {})), "job": job, "state": state}
+    result["line"] = line
     draft = Draft(
         "artifact",
         None,
@@ -77,10 +84,13 @@ def marked(pack: Path = PACK) -> list[dict[str, object]]:
 
 
 def maintenance_router(
-    backups: Backups, triggers: Callable[[str], Sequence[Mapping[str, object]]] | None = None
+    backups: Backups,
+    triggers: Callable[[str], Sequence[Mapping[str, object]]] | None = None,
+    records: Records | None = None,
 ) -> APIRouter:
-    """`GET /api/maintenance` over the host's backup service and `triggers`, which lists one
-    installed workflow's triggers (none when it is not installed). Behind the bearer."""
+    """`GET /api/maintenance` over the host's backup service, its records job and `triggers`,
+    which lists one installed workflow's triggers (none when it is not installed). Behind the
+    bearer."""
     router = APIRouter()
 
     def listed() -> dict[str, object]:
@@ -104,6 +114,18 @@ def maintenance_router(
                     "on": switches[key],
                     "switch": {"section": "backup", "key": key},
                     "running": running,
+                    "output": RESULT,
+                }
+            )
+        if records is not None:
+            host.append(
+                {
+                    "id": RECORDS_JOB,
+                    "kind": "host",
+                    "name": RECORDS_NAME,
+                    "on": records.on(),
+                    "switch": {"section": "records", "key": "on"},
+                    "running": [],
                     "output": RESULT,
                 }
             )

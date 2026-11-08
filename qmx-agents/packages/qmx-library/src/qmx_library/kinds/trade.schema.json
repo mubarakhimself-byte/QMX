@@ -1,6 +1,6 @@
 {
   "kind": "trade",
-  "schema_version": 1,
+  "schema_version": 2,
   "class": "record",
   "retired": false,
   "identity": "manifest",
@@ -120,6 +120,65 @@
         "items": {
           "type": "string"
         }
+      },
+      "unit": {
+        "type": "string"
+      },
+      "market_id": {
+        "type": "string"
+      },
+      "machine": {
+        "type": "string"
+      },
+      "trace_id": {
+        "type": "string"
+      },
+      "mae_r": {
+        "type": "string"
+      },
+      "mfe_r": {
+        "type": "string"
+      },
+      "costs": {
+        "type": "object",
+        "properties": {
+          "spread": {
+            "type": "string"
+          },
+          "commission": {
+            "type": "string"
+          },
+          "swap": {
+            "type": "string"
+          },
+          "funding": {
+            "type": "string"
+          },
+          "slippage": {
+            "type": "string"
+          }
+        }
+      },
+      "equity_before": {
+        "type": "string"
+      },
+      "session": {
+        "type": "string"
+      },
+      "streak": {
+        "type": "integer"
+      },
+      "placeholders": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "r_missing": {
+        "type": "boolean"
+      },
+      "gap_through_stop": {
+        "type": "boolean"
       }
     }
   },

@@ -37,6 +37,7 @@ from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, drafts_ref
 
+from qmx_tools import journals
 from qmx_tools.gather import DUMMY, STDLIB, TEMPLATES, entry_face, gather
 from qmx_tools.gather import template as template_document
 from qmx_tools.service import (
@@ -417,6 +418,70 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         """Save named content as an immutable artifact and return its reference."""
         return ctx.output(ctx.save(Artifact.model_validate(artifact)), "saved", response_format)
 
+    def journal_query(
+        stream: Literal["unit", "market", "node", "readings"],
+        window: dict[str, str | int],
+        filters: dict[str, str] | None = None,
+        view: Literal["rows", "trades_with_context", "digest"] = "rows",
+        include_backfilled: bool = False,
+        limit: int = 50,
+        cursor: int = 0,
+        response_format: ResponseFormat = "concise",
+    ) -> dict[str, Any]:
+        """Read one journal stream (unit, market, node or readings) over a required time window:
+        {"start": "2025-01-02T07:00:00Z", "end": "2025-01-02T09:00:00Z"}, UTC. Filter by any
+        envelope field (unit_id, market_id, kind, world, account, machine, ...). View `rows`,
+        `trades_with_context` (each signal and trade with its market's minute, spread included),
+        or `digest` (counts per unit, market and day). Past the data it says where the data
+        stops; backfilled rows are left out unless include_backfilled."""
+        answer = journals.journal_query(
+            ctx.root,
+            stream=stream,
+            window=window,
+            filters=filters,
+            view=view,
+            include_backfilled=include_backfilled,
+            detailed=response_format == "detailed",
+        )
+        rows = cast("list[Any]", answer.pop("rows"))
+        paged = ctx.page(
+            rows, Page(limit=limit, cursor=cursor, response_format=response_format), "journal"
+        )
+        return {**answer, **paged}
+
+    def notes_write(
+        title: str,
+        text: str,
+        note_kind: Literal["analysis", "proposal", "lesson", "forecast_ref", "disagreement"],
+        receipts: list[str] | None = None,
+        about: list[dict[str, str]] | None = None,
+        window: dict[str, str] | None = None,
+        sources_marked: list[str] | None = None,
+        expires: str | None = None,
+        author: str = "agent",
+        response_format: ResponseFormat = "concise",
+    ) -> dict[str, Any]:
+        """Write an agent's analysis as a Library `note`, the only thing an agent writes from
+        journals. Cite every number by the tool call it came from in `receipts`; `about` links
+        what it is about ({"rel": "about", "ref": a Library id or a journal record id}); mark
+        outside sources in `sources_marked`. A note is never a journal row and moves nothing."""
+        draft = journals.note_draft(
+            title=title,
+            text=text,
+            note_kind=note_kind,
+            about=about or (),
+            receipts=receipts or (),
+            window=window,
+            sources_marked=sources_marked or (),
+            expires=expires,
+            author=author,
+        )
+        try:
+            landed = ctx.library.store.put(OPERATOR, draft, on=MAIN, expected_head=None)
+        except (LibraryRefused, KindRefused) as error:
+            raise ValueError(f"the note did not land: {error}") from error
+        return ctx.output({"note": landed.object_id, "item": landed.item}, "note", response_format)
+
     def node_read(
         operation: str, arguments: dict[str, Any], response_format: ResponseFormat
     ) -> dict[str, Any]:
@@ -496,6 +561,8 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "qml_run": qml_run,
             "library_search": library_search,
             "library_save": library_save,
+            "journal_query": journal_query,
+            "notes_write": notes_write,
         },
         "node": {
             "node_state": node_state,

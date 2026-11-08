@@ -4,15 +4,18 @@ import asyncio
 import json
 import runpy
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
 from fastmcp import Client
-from qmf.core import Ok, Result
+from qmf.core import Ok, Result, is_refusal
+from qmf.data.series import SeriesKey, SeriesStore
 from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
 from qmx_control.library import OPERATOR
+from qmx_control.service import ControlService
 from qmx_judge.judge import spec_problems
 from qmx_judge.tries import try_item
 from qmx_library.kinds import Problem
@@ -359,7 +362,7 @@ def test_order_proposal_cannot_carry_execution_authority() -> None:
 
 
 @pytest.mark.parametrize(
-    "server_name,count", [("data", 4), ("backtest", 5), ("research", 3), ("node", 6)]
+    "server_name,count", [("data", 4), ("backtest", 5), ("research", 5), ("node", 6)]
 )
 def test_mcp_lists_and_calls_all_tools(
     context: DomainContext, server_name: str, count: int, monkeypatch: pytest.MonkeyPatch
@@ -373,6 +376,8 @@ def test_mcp_lists_and_calls_all_tools(
         "qml_run": {"bot_ref": "recorded", "instants": [1_700_000_000_000_000_000]},
         "library_search": {},
         "library_save": {"artifact": {"name": "note", "kind": "note", "content": "saved"}},
+        "journal_query": {"stream": "unit", "window": WINDOW},
+        "notes_write": {"title": "A look", "text": "Nothing yet.", "note_kind": "analysis"},
         "node_state": {},
         "node_units": {},
         "node_positions": {},
@@ -408,3 +413,155 @@ def test_mcp_lists_and_calls_all_tools(
                 assert not result.is_error
 
     asyncio.run(check())
+
+
+DAY = datetime(2025, 1, 2, tzinfo=UTC)
+WINDOW = {"start": "2025-01-02T07:00:00Z", "end": "2025-01-02T09:00:00Z"}
+
+
+def _envelope(kind: str, minute: int, body: dict[str, object], **facts: object) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "record_id": f"node@this-pc/{kind}-{minute}",
+        "world": "paper",
+        "machine": "this-pc",
+        "market_id": "fx.eurusd",
+        "backfilled": False,
+        "body": body,
+        **facts,
+    }
+
+
+def _partition(root: Path, series: str, records: list[dict[str, Any]], minutes: list[int]) -> None:
+    source, subject, kind, variant = series.split("/")
+    key = SeriesKey.try_create(source, subject, kind, DAY.year, DAY.month, variant)
+    assert not is_refusal(key)
+    rows = [
+        (int((DAY + timedelta(minutes=m)).timestamp()) * 1_000, seq, json.dumps(record))
+        for seq, (record, m) in enumerate(zip(records, minutes, strict=True))
+    ]
+    assert not is_refusal(SeriesStore(root / "market" / "series").commit(key.value, rows))
+
+
+def _day_of_journals(root: Path) -> None:
+    """The practice node's morning on 2 January 2025, as the harvester files it."""
+    minutes = [7 * 60 + 59, 8 * 60, 8 * 60 + 1]
+    signals = [
+        _envelope("signal", m, {"outcome": "skipped", "reason": reason}, unit_id="dummy")
+        for m, reason in zip(minutes, ("no_signal", "spread_wide", "spread_wide"), strict=True)
+    ]
+    signals[2]["backfilled"] = True
+    _partition(root, "journal-unit/dummy/signal/paper.this-pc", signals, minutes)
+    spread = {"min": "0.8", "median": "2.9", "max": "3.4"}
+    _partition(
+        root,
+        "journal-market/fx.eurusd/minute/paper.this-pc",
+        [_envelope("minute", 8 * 60, {"spread": spread})],
+        [8 * 60],
+    )
+
+
+def test_a_journal_query_without_a_window_is_refused(context: DomainContext) -> None:
+    query = domain_functions(context)["research"]["journal_query"]
+
+    with pytest.raises(ValueError, match="journal_query needs a time window"):
+        query(stream="unit", window={"start": "2025-01-02T07:00:00Z"})
+
+    async def unwindowed() -> str:
+        async with Client(create_server("research", context)) as client:
+            try:
+                await client.call_tool("journal_query", {"stream": "unit"})
+            except Exception as refused:
+                return str(refused)
+        return "answered"
+
+    assert "window" in asyncio.run(unwindowed())
+
+
+def test_why_it_did_not_trade_reads_the_reason_and_the_spread_at_that_minute(
+    context: DomainContext,
+) -> None:
+    _day_of_journals(context.root)
+    query = domain_functions(context)["research"]["journal_query"]
+
+    answer = query(
+        stream="unit",
+        window={"start": "2025-01-02T08:00:00Z", "end": "2025-01-02T08:01:00Z"},
+        filters={"unit_id": "dummy"},
+        view="trades_with_context",
+    )
+
+    [row] = answer["result"]
+    assert (row["at"], row["body"]["reason"]) == ("2025-01-02T08:00:00.000Z", "spread_wide")
+    assert row["market_minute"]["body"]["spread"] == {"min": "0.8", "median": "2.9", "max": "3.4"}
+
+
+def test_past_the_data_it_says_where_the_data_stops_and_backfilled_rows_stay_out(
+    context: DomainContext,
+) -> None:
+    _day_of_journals(context.root)
+    query = domain_functions(context)["research"]["journal_query"]
+
+    answer = query(stream="unit", window=WINDOW, filters={"kind": "signal"})
+    asked = query(stream="unit", window=WINDOW, include_backfilled=True)
+
+    assert answer["data_stops_at"] == "2025-01-02T08:01:00.000Z"
+    assert (
+        answer["note"]
+        == "the data stops at 2025-01-02T08:01:00.000Z; nothing after it is recorded yet"
+    )
+    assert [row["body"]["reason"] for row in answer["result"]] == ["no_signal", "spread_wide"]
+    assert (answer["backfilled_left_out"], asked["total"]) == (1, 3)
+
+
+def test_notes_write_lands_a_note_and_nothing_else(context: DomainContext) -> None:
+    write = domain_functions(context)["research"]["notes_write"]
+
+    landed = write(
+        title="Why the dummy sat out at 08:00",
+        text="The spread was 2.9 at its median, above the unit's limit.",
+        note_kind="analysis",
+        receipts=["call-1"],
+        about=[{"rel": "about", "ref": "node@this-pc/signal-480"}],
+        window={"start": "2025-01-02T08:00:00Z", "end": "2025-01-02T08:01:00Z"},
+    )
+    store = context.library.store
+    view = store.get(OPERATOR, landed["result"]["note"])
+    kinds = store.catalog.db.execute("SELECT DISTINCT kind FROM objects").fetchall()
+
+    assert (view.kind, view.fields["note_kind"], view.fields["receipts"]) == (
+        "note",
+        "analysis",
+        ["call-1"],
+    )
+    assert kinds == [("note",)]
+    with pytest.raises(ValueError, match="note_kind is one of"):
+        write(title="t", text="x", note_kind="trade")
+
+
+def test_the_journal_rows_are_on_the_copilots_default_surface(tmp_path: Path) -> None:
+    from qma.harness.home import QmxHome
+    from qma.harness.launch import Home, Interactive
+    from qma.harness.surface import Declaration, HomeSlots, Supply, build
+    from qma.harness.tools import tool_defs
+    from qmx_broker.service import BrokerService
+
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    try:
+        defs = asyncio.run(
+            tool_defs(
+                control=control, broker=BrokerService(home.root), domain=domain, delegate=None
+            )
+        )
+        spill = home.root / "chats" / "c" / "qmx-slots" / "skills"
+        supply = Supply(tuple(defs), HomeSlots(home), {}, (home.plugin_dir,), spill)
+        found = build(Interactive(), Home(), (), Declaration(), supply, workspace=home.root / "ws")
+    finally:
+        control.close()
+
+    assert {"mcp__qmx_research__journal_query", "mcp__qmx_research__notes_write"} <= set(
+        found.tools
+    )
