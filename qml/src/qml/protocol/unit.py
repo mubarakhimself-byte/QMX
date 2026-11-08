@@ -21,10 +21,11 @@ side; an entry's reference price is the ask close for a long and the bid close f
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
+from itertools import pairwise
 from types import MappingProxyType
 from typing import Final, Protocol, cast
 
@@ -48,12 +49,14 @@ from qml.compile.compiler import (
     SidePlan,
     SlotPlan,
 )
+from qml.environment import current_environment
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
 __all__ = [
     "OHLC",
+    "SEAM_JUMP_SCALE",
     "STATE_SCHEMA_VERSION",
     "Account",
     "CalibrationRow",
@@ -62,6 +65,7 @@ __all__ = [
     "MotionSwitch",
     "OwnPosition",
     "QuoteBar",
+    "SeamCheck",
     "SlotOutput",
     "StateEvent",
     "TraceLevel",
@@ -71,9 +75,13 @@ __all__ = [
     "accept_unit_intents",
     "construct_unit",
     "restore_unit",
+    "seam_check",
 ]
 
-STATE_SCHEMA_VERSION: Final[int] = 1
+STATE_SCHEMA_VERSION: Final[int] = 2
+"""2 records the interpreter the snapshot was taken under (UT-09, QML-25)."""
+SEAM_JUMP_SCALE: Final[Decimal] = Decimal(3)
+"""The setting ``seam_jump_scale``: a seam flags past this many typical warm-up bar moves."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -344,9 +352,47 @@ class _Core:
         return {
             "state_schema_version": STATE_SCHEMA_VERSION,
             "compiled_fingerprint": self.compiled.compiled_fingerprint.value,
+            "environment": {"python": current_environment().python},
             "markets": markets,
             "slow": slow,
         }
+
+    def shape_gap(self, snapshot: Mapping[str, object]) -> str | None:
+        """Where ``snapshot`` departs from this unit's state shape, or ``None`` when it holds
+        every market, block, slow number and field this unit's own snapshot would."""
+        fresh = self.snapshot_state()
+        for key in ("markets", "slow"):
+            if key not in snapshot:
+                return f"it lacks {key}"
+            if gap := _gap(fresh[key], snapshot[key], (key,)):
+                return gap
+        derived = {
+            side.side.value: {d.number for d in self.plan.derived if d.side is side.side}
+            for side in self.plan.sides
+        }
+        per_bar = any(e.use is ExitUse.PER_BAR for e in self.plan.exits)
+        timer = self.timer().export_state() if per_bar else None
+        markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
+        for m in self.markets:
+            saved = markets[m.market_id]
+            where = ("markets", m.market_id)
+            sides = saved["derived"]
+            if not isinstance(sides, Mapping):
+                return f"{_where((*where, 'derived'))} is not a table"
+            for side, numbers in cast("Mapping[str, object]", sides).items():
+                if side not in derived:
+                    return f"{_where((*where, 'derived'))} has unknown {side}"
+                if gap := _keys(derived[side], numbers, (*where, "derived", side), exact=False):
+                    return gap
+            timers = saved["timers"]
+            if not isinstance(timers, Mapping):
+                return f"{_where((*where, 'timers'))} is not a table"
+            for pid, state in cast("Mapping[str, object]", timers).items():
+                if timer is None:
+                    return f"{_where((*where, 'timers'))} has unknown {pid}"
+                if gap := _gap(timer, state, (*where, "timers", pid)):
+                    return gap
+        return None
 
     def load(self, snapshot: Mapping[str, object]) -> None:
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
@@ -885,24 +931,112 @@ def restore_unit(
     trace_level: TraceLevel = TraceLevel.EVENTS,
     motion: MotionSwitch = MotionSwitch.ON,
 ) -> Result[HostedUnit]:
-    """Resume from ``snapshot``. A snapshot of another compiled fingerprint or state schema
-    starts the unit cold, and its first step carries a ``cold_start`` event with the reason."""
+    """Resume from ``snapshot``. A snapshot of another state schema, compiled fingerprint or
+    interpreter, or one whose markets, blocks, slow numbers or fields differ in shape from
+    this unit's own snapshot, starts the unit cold, and its first step carries a
+    ``cold_start`` event with the reason, so a restart never silently changes what the unit
+    does. A block's ``export_state`` keeps the same keys for the whole run."""
     built = _core(
         compiled, read_surfaces, scope_id, execution_target, assignment, trace_level, motion
     )
     if is_refusal(built):
         return built
     core = built.value
+    reason = _cold_reason(snapshot, core)
+    if reason is None:
+        core.load(snapshot)
+    else:
+        core.pending.extend(StateEvent("cold_start", m.market_id, reason) for m in core.markets)
+    return Ok(HostedUnit(core))
+
+
+def _cold_reason(snapshot: Mapping[str, object], core: _Core) -> str | None:
+    """Why ``snapshot`` cannot resume the fresh ``core`` here, or ``None`` when it can."""
     found = snapshot.get("state_schema_version")
     if found != STATE_SCHEMA_VERSION:
-        reason = f"state schema {found!r}, this door reads {STATE_SCHEMA_VERSION}"
-    elif snapshot.get("compiled_fingerprint") != compiled.compiled_fingerprint.value:
-        reason = "the snapshot belongs to another compiled fingerprint"
-    else:
-        core.load(snapshot)
-        return Ok(HostedUnit(core))
-    core.pending.extend(StateEvent("cold_start", m.market_id, reason) for m in core.markets)
-    return Ok(HostedUnit(core))
+        return f"state schema {found!r}, this door reads {STATE_SCHEMA_VERSION}"
+    if snapshot.get("compiled_fingerprint") != core.compiled.compiled_fingerprint.value:
+        return "the snapshot belongs to another compiled fingerprint"
+    env = snapshot.get("environment")
+    saved = cast("Mapping[str, object]", env).get("python") if isinstance(env, Mapping) else None
+    running = current_environment().python
+    if saved is None:
+        return f"the snapshot does not record its interpreter, this is Python {running}"
+    if saved != running:
+        return f"the snapshot was taken under Python {saved}, this is Python {running}"
+    if gap := core.shape_gap(snapshot):
+        return f"the snapshot does not hold this unit's state ({gap})"
+    return None
+
+
+_OPEN = frozenset({"derived", "timers"})
+"""A market's tables whose keys grow as it runs; ``_Core.shape_gap`` checks them itself."""
+
+
+def _where(path: tuple[str, ...]) -> str:
+    return ".".join(path)
+
+
+def _keys(
+    want: Iterable[str], got: object, path: tuple[str, ...], *, exact: bool = True
+) -> str | None:
+    if not isinstance(got, Mapping):
+        return f"{_where(path)} is not a table"
+    found = set(cast("Mapping[str, object]", got))
+    missing = sorted(set(want) - found) if exact else []
+    if missing:
+        return f"{_where(path)} lacks {', '.join(missing)}"
+    extra = sorted(found - set(want))
+    if extra:
+        return f"{_where(path)} has unknown {', '.join(extra)}"
+    return None
+
+
+def _gap(want: object, got: object, path: tuple[str, ...]) -> str | None:
+    """The first table or list in ``want`` that ``got`` lacks, misses a key of, or adds to."""
+    if isinstance(want, Mapping):
+        table = cast("Mapping[str, object]", want)
+        if gap := _keys(table, got, path):
+            return gap
+        found = cast("Mapping[str, object]", got)
+        for key, value in table.items():
+            if path[0] == "markets" and len(path) == 2 and key in _OPEN:
+                continue
+            if gap := _gap(value, found[key], (*path, key)):
+                return gap
+        return None
+    if isinstance(want, list) and not isinstance(got, list):
+        return f"{_where(path)} is not a list"
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class SeamCheck:
+    """``jump`` is the seam's gap in typical warm-up bar moves; ``flag`` is ``jump > scale``."""
+
+    flag: bool
+    jump: Decimal
+
+
+def seam_check(
+    warmup_tail: Sequence[QuoteBar], live_head: QuoteBar, scale: Decimal = SEAM_JUMP_SCALE
+) -> Result[SeamCheck]:
+    """Compare where the warm-up ended with where live data starts (UT-11).
+
+    The gap is the live head's bid open less the tail's last bid close, measured in the
+    median absolute close-to-close move of the tail. The host journals a flag as
+    ``seam_flag {stream, jump}``.
+    """
+    closes = [bar.bid.close for bar in warmup_tail]
+    moves = sorted(abs(b - a) for a, b in pairwise(closes))
+    if not moves:
+        return invalid("warmup_tail", "a seam is measured against at least two warm-up bars")
+    middle = len(moves) // 2
+    typical = moves[middle] if len(moves) % 2 else (moves[middle - 1] + moves[middle]) / 2
+    if typical == 0:
+        return invalid("warmup_tail", "the warm-up tail never moved, so it cannot scale a gap")
+    jump = abs(live_head.bid.open - closes[-1]) / typical
+    return Ok(SeamCheck(flag=jump > scale, jump=jump))
 
 
 @dataclass(frozen=True, slots=True)
