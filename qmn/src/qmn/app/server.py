@@ -28,6 +28,7 @@ from qmf.core import is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import JournalWriter, WriterScope
 
+from qmn.app.alarms import Senders, attach, no_calendar
 from qmn.app.identity import INSTALL_ID_BYTES, establish, install_id_of, machine_fingerprint
 from qmn.app.operations import (
     CHANGES,
@@ -62,15 +63,19 @@ class Node:
         self.context = context
         self.journal = journal
         self.runtime = runtime
+        self.alarms = Senders()
 
     def start(self) -> None:
-        """Start the runtime thread; the operations answer whether it runs or not."""
+        """Start the alarm senders, then the runtime thread; the operations answer whether it
+        runs or not."""
+        self.alarms.start()
         if self.runtime is not None:
             self.runtime.start()
 
     def stop(self) -> None:
         if self.runtime is not None:
             self.runtime.stop()
+        self.alarms.stop()
 
     def call(self, name: str, arguments: object) -> Answer:
         try:
@@ -182,7 +187,9 @@ def open_node(
 
 def from_environment() -> Node:
     """The node the supervisor started: its ``data/`` from ``QMX_DATA_DIR``, its machine from
-    the host facts the host wrote into the volume (C-05c), and this machine's fingerprint."""
+    the host facts the host wrote into the volume (C-05c), and this machine's fingerprint. Its
+    alarm senders follow the keys document in ``NODE_KEYS`` (C-18); with no calendar reader yet,
+    every market reads shut to them."""
     data = Path(os.environ["QMX_DATA_DIR"])
     machine = "local"
     try:
@@ -195,5 +202,13 @@ def from_environment() -> Node:
     except (KeyError, OSError, ValueError):
         pass
     node = open_node(data, here=machine_fingerprint(), machine=machine)
+    node.alarms = attach(
+        node.context.store,
+        node.context.standing().tag,
+        os.environ.get("NODE_KEYS"),
+        open_at=no_calendar,
+        clock_ns=time.time_ns,
+        steady_ns=time.monotonic_ns,
+    )
     node.start()
     return node

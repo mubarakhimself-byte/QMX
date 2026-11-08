@@ -12,6 +12,10 @@ started and in his machines while cTrader still has his request.
 
 Every step checks what is in place before it acts, so a rerun after a kill at any step ends with
 the same node and one place row, This PC's `[engine.placement.pc]`, listing the apps homed here.
+
+The phone alarms are their own kind, so he can name or change a destination at any time: one
+card for his ntfy topic and one for his Healthchecks.io check. Each proves what he wrote with one
+test send before it lands in the keys document's `alarms`, which the node reads at its start.
 """
 
 from __future__ import annotations
@@ -21,12 +25,15 @@ import os
 import socket
 import statistics
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
+from urllib.parse import urlsplit
 
 from qmx_apps.errors import AppError
 from qmx_apps.road.models import STAGES
@@ -564,5 +571,148 @@ def on_this_pc(ports: Ports | None = None) -> Kind:
     return Kind("trading-node-pc", "Trading node on This PC", (), False, steps)
 
 
-TRADING_NODE: Final = (on_this_pc(),)
+# The phone alarms' setup cards (Part C AD-318, lead's call LC-X0-10).
+
+Send = Callable[[str, str, Mapping[str, str], bytes | None, float], int]
+"""One HTTPS request: method, URL, headers, body and timeout; answers the status, raises when it
+does not land."""
+ALARM_SEND_TIMEOUT_S: Final = 10.0
+"""`[engine] node_setup.alarm_send_timeout_s`: how long a setup card's test send may take."""
+LOOPBACK: Final = frozenset({"127.0.0.1", "::1", "localhost"})
+"""The only hosts a destination may reach without TLS: this machine."""
+
+
+def https_send(
+    method: str, url: str, headers: Mapping[str, str], body: bytes | None, timeout_s: float
+) -> int:
+    """A destination is an https address or this machine's (`_address`), never a file."""
+    request = urllib.request.Request(url, body, dict(headers), method=method)  # noqa: S310
+    with urllib.request.urlopen(request, timeout=timeout_s) as answer:  # noqa: S310
+        return int(answer.status)
+
+
+@dataclass(frozen=True, slots=True)
+class AlarmPorts:
+    """What the alarm cards reach beyond the key store. Tests and lanes pass a local fake."""
+
+    send: Send = https_send
+
+
+@dataclass(frozen=True, slots=True)
+class Alarm:
+    """One destination the node's alarms go to: its card, the `qmx/` key he writes it to, its
+    place in the keys document's `alarms`, and the one test send that proves it."""
+
+    step: str
+    field: str
+    staged: str
+    line: str
+    link: str
+    method: str
+    headers: Mapping[str, str]
+    body: bytes | None
+    done: str
+
+
+ALARMS: Final = (
+    Alarm(
+        "push",
+        "ntfy_topic_url",
+        "qmx/node-ntfy-topic",
+        "Name an ntfy topic so the node can wake you on your phone while This PC is off. Install "
+        "the ntfy app, subscribe to a topic name only you know, then write the topic's address "
+        "(https://ntfy.sh/ and your topic) to the key qmx/node-ntfy-topic. A test notification "
+        "reaches your phone as soon as it is there. Until the node reads market calendars it "
+        "pushes only protection escalations and a long clock hold; risk stops, a broker link "
+        "down and failing healing stay quiet",
+        "https://docs.ntfy.sh/subscribe/phone/",
+        "POST",
+        {"Title": "QMX test", "Priority": "3"},
+        b"A test from the trading node's setup. Alarms that need you will arrive here.",
+        "push: a test notification went to your ntfy topic; from its next start the node pushes "
+        "protection escalations and a long clock hold there, and the alarms that follow market "
+        "hours once it reads market calendars",
+    ),
+    Alarm(
+        "liveness",
+        "healthchecks_ping_url",
+        "qmx/node-healthchecks-ping",
+        "Name a Healthchecks.io check so you hear when the node goes quiet. Make a check with a "
+        "3 minute period and 2 minutes grace, send its alerts to your ntfy topic, then write its "
+        "ping URL to the key qmx/node-healthchecks-ping. The setup pings it once to test it",
+        "https://healthchecks.io/",
+        "GET",
+        {},
+        None,
+        "liveness: the check took a test ping; the node pings it every minute from its next start",
+    ),
+)
+
+
+def _address(value: str) -> bool:
+    parts = urlsplit(value)
+    return (parts.scheme == "https" and bool(parts.hostname)) or (
+        parts.scheme == "http" and parts.hostname in LOOPBACK
+    )
+
+
+def _why(error: BaseException) -> str:
+    """A failed send in words that never carry the destination, which is a secret."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP {error.code}"
+    return type(error).__name__
+
+
+def _named(alarm: Alarm, run: Run) -> bool:
+    alarms = cast("dict[str, Any]", (_keys(run) or {}).get("alarms") or {})
+    return alarm.field in alarms and run.world.keys.read(alarm.staged) is None
+
+
+def _alarm_card(alarm: Alarm, again: str = "") -> Card:
+    return Card(alarm.step, alarm.line + again, key=alarm.staged, link=alarm.link)
+
+
+def _name_alarm(ports: AlarmPorts, alarm: Alarm, run: Run) -> Card | None:
+    """Prove what he wrote with one test send, then fold it into the keys document and delete
+    the staged key. A rerun after a kill between the two writes only deletes it."""
+    staged = run.world.keys.read(alarm.staged)
+    if staged is None:
+        return _alarm_card(alarm)
+    document = _keys(run) or {"schema_version": KEYS_SCHEMA}
+    alarms = dict(cast("dict[str, Any]", document.get("alarms") or {}))
+    if alarms.get(alarm.field) != staged:
+        if not _address(staged):
+            return _alarm_card(alarm, ". That is not an https address; write it again")
+        timeout = setting(_engine(run), "node_setup.alarm_send_timeout_s", ALARM_SEND_TIMEOUT_S)
+        try:
+            ports.send(alarm.method, staged, alarm.headers, alarm.body, timeout)
+        except Exception as error:  # any failure is his to fix on the card, in plain words
+            return _alarm_card(
+                alarm, f". The test send did not land ({_why(error)}); check it and write it again"
+            )
+        alarms[alarm.field] = staged
+        run.world.keys.replace(
+            NODE_KEYS, json.dumps({**document, "alarms": alarms}, sort_keys=True)
+        )
+        run.say(alarm.done)
+    run.world.keys.delete(alarm.staged)
+    return None
+
+
+def alarms_on_this_pc(ports: AlarmPorts | None = None) -> Kind:
+    """The phone alarms' kind: one waiting card per destination, each on once he names it."""
+    used = ports or AlarmPorts()
+    steps = on_runner(
+        tuple(
+            Setup(
+                Step(alarm.step, "his", partial(_named, alarm), partial(_name_alarm, used, alarm)),
+                waiting=True,
+            )
+            for alarm in ALARMS
+        )
+    )
+    return Kind("trading-node-alarms", "Phone alarms for the trading node", (), False, steps)
+
+
+TRADING_NODE: Final = (alarms_on_this_pc(), on_this_pc())
 """The trading-node kinds, in the order the dialog offers them; a server's comes with C-17."""
