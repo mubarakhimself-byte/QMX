@@ -27,9 +27,8 @@ from qmf.core import (
     WriterId,
     is_refusal,
 )
-
-from qmn.mis._refuse import clean_token, invalid, policy
-from qmn.mis.catalog import (
+from qmf.readings._refuse import clean_token, invalid, policy
+from qmf.readings.catalog import (
     DEGRADED_SENSORS_PRODUCER_ID,
     FEED_STATE_PRODUCER_ID,
     ConfiguredMisProducer,
@@ -39,8 +38,8 @@ from qmn.mis.catalog import (
     refuse_trained_regime_classifier,
     refuse_unauthoritative_candidate,
 )
-from qmn.mis.labelers import evaluate_mis_producer
-from qmn.mis.signal_snapshot import (
+from qmf.readings.labelers import evaluate_mis_producer
+from qmf.readings.signal_snapshot import (
     SQS_PRODUCER_ID,
     CanonicalFeedState,
     GovernedConsumer,
@@ -85,7 +84,7 @@ __all__ = [
     "shadow_writer_stream_pair",
 ]
 
-SHADOW_SURFACE: Final[str] = "qmn.mis.shadow"
+SHADOW_SURFACE: Final[str] = "qmf.readings.shadow"
 SHADOW_WRITER_ROLE: Final[str] = "mis-shadow"
 SHADOW_WRITER_STREAM: Final[str] = "shadow-snapshot"
 SHADOW_MANIFEST_PREFIX: Final[str] = "mis/shadow/"

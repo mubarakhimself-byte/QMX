@@ -40,7 +40,7 @@ from qmn.host.sqs_baseline_producer import (
     produce_sqs_baseline,
     read_sqs_baseline_derivation,
 )
-from qmn.mis.signal_snapshot import SqsBaselineKey, sqs_baseline_key
+from qmf.readings.signal_snapshot import SqsBaselineKey, sqs_baseline_key
 
 T = TypeVar("T")
 

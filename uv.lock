@@ -12,6 +12,7 @@ members = [
     "qmf-core",
     "qmf-data",
     "qmf-indicators",
+    "qmf-readings",
     "qmf-registry",
     "qmf-risk",
     "qmf-structure",
@@ -1433,6 +1434,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "qmf-readings"
+version = "0.1.0"
+source = { editable = "packages/qmf-readings" }
+dependencies = [
+    { name = "qmf-core" },
+    { name = "qmf-data" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "qmf-core", editable = "packages/qmf-core" },
+    { name = "qmf-data", editable = "packages/qmf-data" },
+]
+
+[[package]]
 name = "qmf-registry"
 version = "0.1.0"
 source = { editable = "packages/qmf-registry" }
@@ -1511,6 +1527,7 @@ dependencies = [
     { name = "qmb" },
     { name = "qmf-core" },
     { name = "qmf-data" },
+    { name = "qmf-readings" },
     { name = "qmf-registry" },
     { name = "qmf-risk" },
     { name = "qmf-venue" },
@@ -1524,6 +1541,7 @@ requires-dist = [
     { name = "qmb", editable = "qmb" },
     { name = "qmf-core", editable = "packages/qmf-core" },
     { name = "qmf-data", editable = "packages/qmf-data" },
+    { name = "qmf-readings", editable = "packages/qmf-readings" },
     { name = "qmf-registry", editable = "packages/qmf-registry" },
     { name = "qmf-risk", editable = "packages/qmf-risk" },
     { name = "qmf-venue", editable = "packages/qmf-venue" },

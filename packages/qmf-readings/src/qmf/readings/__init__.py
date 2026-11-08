@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from qmn.mis.catalog import (
+from qmf.readings.catalog import (
     DEGRADED_SENSORS_PRODUCER_ID,
     FEED_STATE_PRODUCER_ID,
     FITTED_PRODUCER_IDS,
@@ -60,7 +60,7 @@ from qmn.mis.catalog import (
     v1_formula_catalog,
     v1_mis_inventory,
 )
-from qmn.mis.labelers import (
+from qmf.readings.labelers import (
     assemble_governed_snapshot,
     evaluate_degraded_sensors,
     evaluate_feed_state,
@@ -70,13 +70,13 @@ from qmn.mis.labelers import (
     evaluate_spread_state,
     evaluate_sqs,
 )
-from qmn.mis.liquidity import (
+from qmf.readings.liquidity import (
     LiquidityFitArtifact,
     evaluate_liquidity_stress,
     exact_nearest_rank_quantile,
     fit_liquidity_quantiles,
 )
-from qmn.mis.regime_corpus import (
+from qmf.readings.regime_corpus import (
     ACQUISITION_CONTEXT,
     BAR_INTERVAL_M5_NS,
     CORPUS_FORMAT_VERSION,
@@ -104,13 +104,13 @@ from qmn.mis.regime_corpus import (
     refuse_provider_fetch_in_training,
     refuse_silent_repair,
 )
-from qmn.mis.regime_design import (
+from qmf.readings.regime_design import (
     CHOSEN_MODEL_FAMILY,
     DECLARED_TRADING_SESSIONS,
-    REGIME_CLASS_VOCABULARY,
     REGIME_DESIGN_ARTIFACT_ID,
     REGIME_DESIGN_FORMAT_VERSION,
     REGIME_DESIGN_SURFACE,
+    VOLATILITY_STATE_VOCABULARY,
     CandidateFamilyEvaluation,
     DataWindowContract,
     EvaluationContract,
@@ -121,10 +121,10 @@ from qmn.mis.regime_design import (
     LabelContract,
     LeakageControls,
     ModelFamilyId,
-    RegimeClass,
     RegimeClassifierDesign,
     SplitStrategy,
     TradingSession,
+    VolatilityState,
     accepted_regime_classifier_design,
     assert_design_unchanged,
     evaluate_candidate_families,
@@ -132,7 +132,7 @@ from qmn.mis.regime_design import (
     refuse_design_authority_claim,
     validate_regime_design_leakage,
 )
-from qmn.mis.regime_eval import (
+from qmf.readings.regime_eval import (
     EVALUATION_BACKEND_DETERMINISTIC,
     EVALUATION_BACKEND_LIGHTGBM,
     REGIME_EVAL_ARTIFACT_ID,
@@ -157,7 +157,7 @@ from qmn.mis.regime_eval import (
     refuse_profit_inference,
     run_offline_evaluation,
 )
-from qmn.mis.regime_labels import (
+from qmf.readings.regime_labels import (
     EXCLUSION_CLASS,
     LABEL_GENERATOR_ID,
     LABELS_FORMAT_VERSION,
@@ -176,7 +176,7 @@ from qmn.mis.regime_labels import (
     refuse_label_training,
     refuse_sealed_holdout_outcome_peek,
 )
-from qmn.mis.regime_register import (
+from qmf.readings.regime_register import (
     FORBIDDEN_AUTHORITY_STATUSES,
     REGIME_MODEL_KIND,
     REGIME_MODEL_KIND_FORMAT_VERSION,
@@ -188,11 +188,9 @@ from qmn.mis.regime_register import (
     RegimeModelRegistration,
     RegistrationAuthorityStatus,
     RegistrationLineageBundle,
-    SandboxHubPublication,
     assert_registration_preserves_composition_fp,
     build_accepted_registration,
     build_non_authoritative_registration,
-    enter_passive_hub_as_sandbox,
     install_regime_model_kind,
     mint_registration_version,
     refuse_composition_fp_mutation,
@@ -202,7 +200,7 @@ from qmn.mis.regime_register import (
     regime_model_kind_contract,
     register_model_lineage,
 )
-from qmn.mis.regime_train import (
+from qmf.readings.regime_train import (
     DEFAULT_TRAINING_SEED,
     REGIME_TRAIN_ARTIFACT_ID,
     REGIME_TRAIN_FORMAT_VERSION,
@@ -235,7 +233,7 @@ from qmn.mis.regime_train import (
     resume_offline_training,
     run_offline_training,
 )
-from qmn.mis.shadow import (
+from qmf.readings.shadow import (
     MONEY_PATH_CONSUMERS,
     SHADOW_COMPARISON_PROJECTION_KEY,
     SHADOW_COUNTED_TOWARD_MAX_SLICE_LATENCY,
@@ -266,7 +264,7 @@ from qmn.mis.shadow import (
     shadow_comparison_projection,
     shadow_writer_stream_pair,
 )
-from qmn.mis.signal_snapshot import (
+from qmf.readings.signal_snapshot import (
     DECISION_FRESHNESS_BOUND_VARIABLE,
     GOVERNED_CONSUMERS,
     SIGNAL_SNAPSHOT_FORMAT_VERSION,
@@ -312,7 +310,6 @@ __all__ = [
     "MIS_SURFACE",
     "MONEY_PATH_CONSUMERS",
     "REGIME_CLASSIFIER_PRODUCER_ID",
-    "REGIME_CLASS_VOCABULARY",
     "REGIME_CORPUS_ARTIFACT_ID",
     "REGIME_CORPUS_SURFACE",
     "REGIME_DESIGN_ARTIFACT_ID",
@@ -353,6 +350,7 @@ __all__ = [
     "TRAINING_RUN_CONTEXT",
     "UNAUTHORITATIVE_CANDIDATES",
     "V1_GOVERNED_PRODUCER_IDS",
+    "VOLATILITY_STATE_VOCABULARY",
     "AlignmentPolicy",
     "BaselineComparisonResult",
     "CandidateFamilyEvaluation",
@@ -401,13 +399,11 @@ __all__ = [
     "ProducerSlot",
     "QualityIssueCode",
     "RawCorpusRow",
-    "RegimeClass",
     "RegimeClassifierDesign",
     "RegimeModelRegistration",
     "RegimeTrainingCorpus",
     "RegistrationAuthorityStatus",
     "RegistrationLineageBundle",
-    "SandboxHubPublication",
     "SessionMetricBundle",
     "ShadowCandidateCatalog",
     "ShadowComparisonRecord",
@@ -431,6 +427,7 @@ __all__ = [
     "TrainingTerminalStatus",
     "TrialHyperparameters",
     "TrialRecord",
+    "VolatilityState",
     "accepted_regime_classifier_design",
     "acquire_offline_corpus",
     "allocate_shadow_writer",
@@ -458,7 +455,6 @@ __all__ = [
     "declared_governed_sources",
     "empty_mis_catalog",
     "empty_shadow_catalog",
-    "enter_passive_hub_as_sandbox",
     "evaluate_candidate_families",
     "evaluate_degraded_sensors",
     "evaluate_feed_state",
@@ -527,4 +523,4 @@ __all__ = [
     "validate_regime_design_leakage",
 ]
 
-MIS_SURFACE: Final[str] = "qmn.mis"
+MIS_SURFACE: Final[str] = "qmf.readings"

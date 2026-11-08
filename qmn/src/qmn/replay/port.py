@@ -24,9 +24,9 @@ from qmf.core import (
     World,
     is_refusal,
 )
+from qmf.readings.signal_snapshot import ProducerReadiness
 
 from qmn.data.sealed_archive import SEALED_ARCHIVE_ROLE, SealedArchive
-from qmn.mis.signal_snapshot import ProducerReadiness
 from qmn.replay._refuse import clean_token, invalid, policy, unavailable
 
 __all__ = [

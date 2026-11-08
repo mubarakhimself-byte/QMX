@@ -12,7 +12,6 @@ trained artifact or the sealed holdout (FR-079; NFR-03/19; GAP-0051).
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import json
 import os
@@ -23,15 +22,22 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
 
-from qmb.orchestrator.paths import write_bytes_exclusive_no_follow
-from qmf.core import Fingerprint, Ok, Result, TypedRefusal, fingerprint, is_refusal
+from qmf.core import (
+    Fingerprint,
+    Ok,
+    Result,
+    TypedRefusal,
+    fingerprint,
+    fingerprint_bytes,
+    is_refusal,
+)
 from qmf.data import SegmentRole
-
-from qmn.mis._refuse import clean_token, invalid, policy
-from qmn.mis.regime_corpus import CleanedCorpus
-from qmn.mis.regime_design import (
+from qmf.readings._files import write_bytes_exclusive_no_follow
+from qmf.readings._refuse import clean_token, invalid, policy
+from qmf.readings.regime_corpus import CleanedCorpus
+from qmf.readings.regime_design import (
     DECLARED_TRADING_SESSIONS,
-    REGIME_CLASS_VOCABULARY,
+    VOLATILITY_STATE_VOCABULARY,
     EvaluationContract,
     ExecutableRegimeContract,
     RegimeClassifierDesign,
@@ -39,8 +45,8 @@ from qmn.mis.regime_design import (
     assert_design_unchanged,
     executable_regime_contract,
 )
-from qmn.mis.regime_labels import EXCLUSION_CLASS, LabeledCorpus
-from qmn.mis.regime_train import (
+from qmf.readings.regime_labels import EXCLUSION_CLASS, LabeledCorpus
+from qmf.readings.regime_train import (
     TRAINING_BACKEND_DETERMINISTIC,
     TRAINING_BACKEND_LIGHTGBM,
     TrainingArtifact,
@@ -78,7 +84,7 @@ __all__ = [
     "run_offline_evaluation",
 ]
 
-REGIME_EVAL_SURFACE: Final[str] = "qmn.mis.regime_eval"
+REGIME_EVAL_SURFACE: Final[str] = "qmf.readings.regime_eval"
 REGIME_EVAL_ARTIFACT_ID: Final[str] = "regime_classifier_v1_evaluation_report"
 REGIME_EVAL_FORMAT_VERSION: Final[int] = 1
 EVALUATION_BACKEND_DETERMINISTIC: Final[str] = TRAINING_BACKEND_DETERMINISTIC
@@ -757,7 +763,7 @@ def build_evaluation_config(
 
     cmd: tuple[str, ...]
     if command is None:
-        cmd = ("python", "-m", "qmn.mis.regime_eval", "--output-dir", out)
+        cmd = ("python", "-m", "qmf.readings.regime_eval", "--output-dir", out)
     elif isinstance(command, Sequence) and not isinstance(command, (str, bytes)):
         tokens = tuple(str(item) for item in cast("Sequence[object]", command))
         if not tokens:
@@ -1065,9 +1071,9 @@ def assert_evaluation_reproducible(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Operator entry: ``python -m qmn.mis.regime_eval`` (never a node CLI)."""
+    """Operator entry: ``python -m qmf.readings.regime_eval`` (never a node CLI)."""
     parser = argparse.ArgumentParser(
-        prog="qmn.mis.regime_eval",
+        prog="qmf.readings.regime_eval",
         description=(
             "Offline operator-machine regime_classifier_v1 evaluation script. "
             "Separated from training; no profit/live authority; no post-hoc "
@@ -1193,8 +1199,7 @@ def _matrix_payload_fp(
         for row_id, features, label, session in rows:
             quantized = ",".join(f"{value:.12g}" for value in features)
             parts.append(f"{role}:{row_id}:{label}:{session}:{quantized}")
-    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
-    return f"fp1:sha256:{digest}"
+    return fingerprint_bytes("\n".join(parts).encode("utf-8")).value
 
 
 def _output_dir_refusal(
@@ -1426,10 +1431,10 @@ def _lightgbm_predict(
 
 
 def _vocab_from_context(context: Mapping[str, object]) -> tuple[str, ...]:
-    vocab_obj = context.get("class_vocabulary", list(REGIME_CLASS_VOCABULARY))
+    vocab_obj = context.get("class_vocabulary", list(VOLATILITY_STATE_VOCABULARY))
     if isinstance(vocab_obj, Sequence) and not isinstance(vocab_obj, (str, bytes)):
         return tuple(str(item) for item in cast("Sequence[object]", vocab_obj))
-    return REGIME_CLASS_VOCABULARY
+    return VOLATILITY_STATE_VOCABULARY
 
 
 def _majority_label(labels: Sequence[str], vocabulary: Sequence[str]) -> str:
@@ -1489,10 +1494,9 @@ def _predictions_agree(
 
 def _predictions_fp(rows: Sequence[PredictionRow]) -> str:
     payload = [row.fp1_identity() for row in rows]
-    digest = hashlib.sha256(
+    return fingerprint_bytes(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    return f"fp1:sha256:{digest}"
+    ).value
 
 
 def _score_split(

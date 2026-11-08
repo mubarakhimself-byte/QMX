@@ -27,7 +27,7 @@ from qmf.core import (
 )
 from qmn.config import compile_node_config
 from qmn.data import CommittedHotPrefix, SealedArchive
-from qmn.mis.signal_snapshot import ProducerReadiness
+from qmf.readings.signal_snapshot import ProducerReadiness
 from qmn.replay import (
     NEVER_REWRITE,
     ONE_TERMINAL_PER_JOB,

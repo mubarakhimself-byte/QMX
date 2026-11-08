@@ -9,7 +9,7 @@ from qmf.core import CalendarIdentity, RefusalCategory, fingerprint, is_ok, is_r
 from qmf.core.refusal import Result
 from qmf.data import SegmentRole
 from qmf.data.dukascopy import DUKASCOPY_SOURCE, PERSONAL_USE_LICENSE
-from qmn.mis import (
+from qmf.readings import (
     ACQUISITION_CONTEXT,
     BAR_INTERVAL_M5_NS,
     DECLARED_TRADING_SESSIONS,
@@ -36,7 +36,7 @@ from qmn.mis import (
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 _T0 = 1_700_000_000_000_000_000
 _HOLDOUT_MONTHS = 12
 
@@ -145,7 +145,7 @@ def test_acquisition_plan_cites_design_and_governed_sources() -> None:
     }
     fp = _ok(plan.fingerprint())
     assert fp.value.startswith("fp1:sha256:")
-    assert REGIME_CORPUS_SURFACE == "qmn.mis.regime_corpus"
+    assert REGIME_CORPUS_SURFACE == "qmf.readings.regime_corpus"
 
 
 def test_provider_fetch_in_training_and_live_network_refuse() -> None:

@@ -29,9 +29,8 @@ from qmf.core import (
     fingerprint,
     is_refusal,
 )
-
-from qmn.mis._refuse import clean_token, invalid, policy
-from qmn.mis.signal_snapshot import SQS_PRODUCER_ID, SqsBaselineKey, SqsReading
+from qmf.readings._refuse import clean_token, invalid, policy
+from qmf.readings.signal_snapshot import SQS_PRODUCER_ID, SqsBaselineKey, SqsReading
 
 __all__ = [
     "ALIGNMENT_POLICY_AS_OF",
@@ -72,7 +71,7 @@ __all__ = [
     "v1_mis_inventory",
 ]
 
-MIS_PRODUCER_SURFACE: Final[str] = "qmn.mis.catalog"
+MIS_PRODUCER_SURFACE: Final[str] = "qmf.readings.catalog"
 MIS_PRODUCER_CONTRACT_FORMAT_VERSION: Final[int] = 1
 ARITHMETIC_REFERENCE_QMX: Final[str] = "qmx-owned"
 ALIGNMENT_POLICY_AS_OF: Final[str] = "as-of"

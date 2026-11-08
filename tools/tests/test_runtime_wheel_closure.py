@@ -24,7 +24,7 @@ _RUNTIME_SPEC.loader.exec_module(runtime_wheels)
 
 _PRODUCT_DISTRIBUTIONS = (
     "qmf_core", "qmf_data", "qmf_registry", "qmf_indicators", "qmf_structure",
-    "qmf_risk", "qmf_venue", "qmf_calendar_forex", "qml", "qmb", "qmn",
+    "qmf_risk", "qmf_venue", "qmf_readings", "qmf_calendar_forex", "qml", "qmb", "qmn",
 )
 
 

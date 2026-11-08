@@ -16,7 +16,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.refusal import Result
-from qmn.mis import (
+from qmf.readings import (
     DECISION_FRESHNESS_BOUND_VARIABLE,
     GOVERNED_CONSUMERS,
     MIS_SURFACE,
@@ -33,7 +33,7 @@ from qmn.mis import (
     refuse_bot_consumer,
     sqs_baseline_key,
 )
-from qmn.mis.signal_snapshot import SqsReading
+from qmf.readings.signal_snapshot import SqsReading
 
 T = TypeVar("T")
 
@@ -120,8 +120,8 @@ def _snapshot(
 
 
 def test_mis_surface_and_governed_consumers() -> None:
-    assert MIS_SURFACE == "qmn.mis"
-    assert SIGNAL_SNAPSHOT_SURFACE == "qmn.mis.signal_snapshot"
+    assert MIS_SURFACE == "qmf.readings"
+    assert SIGNAL_SNAPSHOT_SURFACE == "qmf.readings.signal_snapshot"
     assert frozenset(
         {GovernedConsumer.BOOK_DOOR, GovernedConsumer.KSA}
     ) == GOVERNED_CONSUMERS

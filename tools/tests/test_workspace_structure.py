@@ -6,8 +6,8 @@ against the live workspace tree via :mod:`workspace_meta`:
 * **(a) No ``qmf/__init__.py`` anywhere.** Every distribution is a PEP 420 namespace
   submodule; a package init would collide two wheels on the ``qmf`` namespace.
 * **(b) Dependency direction is default-deny and roster-scoped.** ``qmf-core``
-  depends on nothing; the sole roster inter-library edge beyond ``-> qmf-core`` is
-  ``qmf-registry -> qmf-data``; the edge modules ``qmf-venue`` / ``qmf-risk`` are
+  depends on nothing; the only roster inter-library edges beyond ``-> qmf-core`` are
+  ``qmf-registry -> qmf-data`` and ``qmf-readings -> qmf-data``; the edge modules ``qmf-venue`` / ``qmf-risk`` are
   depended on by no roster package. Application-layer products may import
   ``qmf.risk`` (never ``qmf.venue``).
 
@@ -79,14 +79,13 @@ def test_qmf_core_depends_on_nothing() -> None:
     assert MEMBERS_BY_NAME["qmf-core"].dependencies == ()
 
 
-def test_sole_second_inter_library_edge_is_registry_to_data() -> None:
-    # Every roster edge beyond "-> qmf-core" must be exactly qmf-registry -> qmf-data.
+def test_the_only_second_inter_library_edges_reach_qmf_data() -> None:
     extra_edges = {
         m.name: sorted(m.roster_dependencies - {"qmf-core"})
         for m in MEMBERS
         if m.is_roster and (m.roster_dependencies - {"qmf-core"})
     }
-    assert extra_edges == {"qmf-registry": ["qmf-data"]}
+    assert extra_edges == {"qmf-readings": ["qmf-data"], "qmf-registry": ["qmf-data"]}
 
 
 def test_roster_and_extensions_do_not_depend_on_edge_modules() -> None:

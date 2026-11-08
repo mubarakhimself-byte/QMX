@@ -27,7 +27,7 @@ from qmf.core import (
 from qmn.config import compile_node_config
 from qmn.data import CommittedHotPrefix, SealedArchive
 from qmn.loop import CommandStreamLoop, clear_first_writer_registry
-from qmn.mis.signal_snapshot import ProducerReadiness
+from qmf.readings.signal_snapshot import ProducerReadiness
 from qmn.replay import (
     FILL_SIMULATION_IN_REPLAY,
     GAP_0056_DEFERRED,
@@ -489,7 +489,7 @@ def test_deploy_recipe_plans_spawn_without_qmn_import(tmp_path: Path) -> None:
 
 
 def test_replay_sources_stay_credential_free_and_do_not_recompute_sqs() -> None:
-    banned_mods = ("urllib", "socket", "http.client", "qmf.venue", "qmn.mis.labelers")
+    banned_mods = ("urllib", "socket", "http.client", "qmf.venue", "qmf.readings.labelers")
     banned_names = ("evaluate_sqs", "mint_signal_snapshot")
     hits: list[str] = []
     for path in sorted((_SRC / "replay").rglob("*.py")):

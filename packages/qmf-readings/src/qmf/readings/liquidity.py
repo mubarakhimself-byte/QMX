@@ -14,16 +14,15 @@ from fractions import Fraction
 from typing import Final, cast
 
 from qmf.core import ExactRational, Fingerprint, Ok, Result, UnitKind, fingerprint, is_refusal
-
-from qmn.mis._refuse import invalid, unavailable
-from qmn.mis.catalog import (
+from qmf.readings._refuse import invalid, unavailable
+from qmf.readings.catalog import (
     LIQUIDITY_STRESS_PRODUCER_ID,
     ConfiguredMisProducer,
     FormulaNature,
     FrontierFrame,
     ProducerEmission,
 )
-from qmn.mis.signal_snapshot import ProducerReadiness
+from qmf.readings.signal_snapshot import ProducerReadiness
 
 __all__ = [
     "LIQUIDITY_FIT_SURFACE",
@@ -33,7 +32,7 @@ __all__ = [
     "fit_liquidity_quantiles",
 ]
 
-LIQUIDITY_FIT_SURFACE: Final[str] = "qmn.mis.liquidity"
+LIQUIDITY_FIT_SURFACE: Final[str] = "qmf.readings.liquidity"
 
 
 @dataclass(frozen=True, slots=True)

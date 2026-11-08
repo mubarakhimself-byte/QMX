@@ -11,7 +11,7 @@ from qmf.core import Instant, World, is_ok
 from qmf.data.journal_producer import JournalReader
 from qmf.data.store import JournalStore
 from qmn.host.decision_root import HostedDecisionRoot
-from qmn.mis import SignalSnapshot
+from qmf.readings import SignalSnapshot
 from test_qmn_seat_tunnel import fixture_exercise_configured_decision_root
 
 

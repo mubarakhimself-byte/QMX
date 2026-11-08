@@ -34,6 +34,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.exact import ExactRational
+from qmf.readings.signal_snapshot import SignalSnapshot
 from qml.declaration.bot import BotDefinition
 from qml.protocol import (
     FORBIDDEN_EVIDENCE_KEYS,
@@ -43,7 +44,6 @@ from qml.protocol import (
 )
 from qml.protocol.intents import BotIntent
 
-from qmn.mis.signal_snapshot import SignalSnapshot
 from qmn.seats._refuse import clean_token, invalid, policy
 from qmn.seats.state import (
     OPERATOR_PRINCIPAL,

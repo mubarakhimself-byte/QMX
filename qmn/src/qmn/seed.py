@@ -27,7 +27,6 @@ SRC_SEED_PACKAGES: Final[tuple[str, ...]] = (
     "reconcile",
     "seats",
     "promotion",
-    "mis",
     "data",
     "time",
     "secrets",

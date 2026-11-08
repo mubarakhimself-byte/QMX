@@ -42,6 +42,7 @@ from qmf.core import (
     is_refusal,
     unpersistable,
 )
+from qmf.readings.signal_snapshot import sqs_baseline_key
 from qmf.risk.control_action import (
     AuthorityKind,
     CommandStreamKey,
@@ -79,7 +80,6 @@ from qmn.capital import (
     refuse_invented_kill_line_floor,
 )
 from qmn.host._refuse import invalid, policy
-from qmn.mis.signal_snapshot import sqs_baseline_key
 from qmn.order import (
     CommandIdentityBinder,
     CommandStreamUnknownBoundary,

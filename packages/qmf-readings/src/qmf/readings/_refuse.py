@@ -1,10 +1,10 @@
-"""Private CT-04 refusal builders for ``qmn.mis``."""
+"""Private CT-04 refusal builders for ``qmf.readings``."""
 
 from __future__ import annotations
 
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 
-__all__ = ["clean_token", "invalid", "policy", "stale", "unavailable", "unsupported"]
+__all__ = ["clean_token", "invalid", "policy", "stale", "storage", "unavailable", "unsupported"]
 
 
 def clean_token(value: object) -> str | None:
@@ -33,6 +33,11 @@ def policy(field: str, reason: str, **extra: object) -> TypedRefusal:
 def stale(field: str, reason: str, **extra: object) -> TypedRefusal:
     """A ``stale evidence`` refusal."""
     return _build(RefusalCategory.STALE_EVIDENCE, field, reason, **extra)
+
+
+def storage(field: str, reason: str, **extra: object) -> TypedRefusal:
+    """A ``storage failure`` refusal."""
+    return _build(RefusalCategory.STORAGE_FAILURE, field, reason, **extra)
 
 
 def unavailable(field: str, reason: str, **extra: object) -> TypedRefusal:

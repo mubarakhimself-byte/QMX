@@ -8,10 +8,10 @@ from typing import TypeVar
 
 from qmf.core import RefusalCategory, fingerprint, is_ok, is_refusal
 from qmf.core.refusal import Result
-from qmn.mis import (
+from qmf.readings import (
     CHOSEN_MODEL_FAMILY,
     DECLARED_TRADING_SESSIONS,
-    REGIME_CLASS_VOCABULARY,
+    VOLATILITY_STATE_VOCABULARY,
     REGIME_CLASSIFIER_PRODUCER_ID,
     REGIME_DESIGN_ARTIFACT_ID,
     REGIME_DESIGN_SURFACE,
@@ -29,7 +29,7 @@ from qmn.mis import (
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 
 
 def _ok(result: Result[T]) -> T:
@@ -44,7 +44,7 @@ def test_design_records_chosen_family_and_required_dimensions() -> None:
     assert design.chosen_family == CHOSEN_MODEL_FAMILY == "lightgbm-multiclass"
     assert design.feature_contract.feature_ids
     assert design.feature_contract.input_timing == "sealed-bar-close-as-of"
-    assert design.label_contract.class_vocabulary == REGIME_CLASS_VOCABULARY
+    assert design.label_contract.class_vocabulary == VOLATILITY_STATE_VOCABULARY
     assert design.label_contract.exclusion_class == "insufficient_evidence"
     assert design.data_windows.sessions == DECLARED_TRADING_SESSIONS
     assert set(DECLARED_TRADING_SESSIONS) == {"asia", "london", "new_york"}
@@ -60,7 +60,7 @@ def test_design_records_chosen_family_and_required_dimensions() -> None:
     assert design.training_location == "operator-machine-offline-script"
     assert design.grants_money_path_authority is False
     assert design.grants_governed_binding is False
-    assert REGIME_DESIGN_SURFACE == "qmn.mis.regime_design"
+    assert REGIME_DESIGN_SURFACE == "qmf.readings.regime_design"
 
 
 def test_candidate_evaluation_grants_no_authority_to_recovered_names() -> None:

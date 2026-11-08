@@ -295,7 +295,6 @@ def test_only_host_persists_composition_lineage() -> None:
         "reconcile",
         "seats",
         "promotion",
-        "mis",
         "data",
         "time",
         "secrets",

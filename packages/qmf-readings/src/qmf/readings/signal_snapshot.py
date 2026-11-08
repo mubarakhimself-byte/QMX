@@ -29,8 +29,7 @@ from qmf.core import (
     fingerprint,
     is_refusal,
 )
-
-from qmn.mis._refuse import clean_token, invalid, policy, stale
+from qmf.readings._refuse import clean_token, invalid, policy, stale
 
 __all__ = [
     "DECISION_FRESHNESS_BOUND_VARIABLE",
@@ -53,7 +52,7 @@ __all__ = [
     "sqs_baseline_key",
 ]
 
-SIGNAL_SNAPSHOT_SURFACE: Final[str] = "qmn.mis.signal_snapshot"
+SIGNAL_SNAPSHOT_SURFACE: Final[str] = "qmf.readings.signal_snapshot"
 SIGNAL_SNAPSHOT_FORMAT_VERSION: Final[int] = 1
 DECISION_FRESHNESS_BOUND_VARIABLE: Final[str] = "decision_freshness_bound"
 SQS_PRODUCER_ID: Final[str] = "sqs"

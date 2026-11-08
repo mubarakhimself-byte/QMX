@@ -9,7 +9,7 @@ import pytest
 from qmf.core import CalendarIdentity, RefusalCategory, fingerprint, is_ok, is_refusal
 from qmf.core.refusal import Result
 from qmf.data.dukascopy import DUKASCOPY_SOURCE, PERSONAL_USE_LICENSE
-from qmn.mis import (
+from qmf.readings import (
     BAR_INTERVAL_M5_NS,
     DECLARED_TRADING_SESSIONS,
     DEFAULT_TRAINING_SEED,
@@ -45,7 +45,7 @@ from qmn.mis import (
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 _T0 = 1_700_000_000_000_000_000
 _HOLDOUT_MONTHS = 12
 _CLOSE = 100_000
@@ -163,7 +163,7 @@ def test_training_config_records_provenance_dimensions(tmp_path: Path) -> None:
     assert machine.python_version
     lock = _ok(resolve_dependency_lock())
     assert lock.lock_fp
-    assert REGIME_TRAIN_SURFACE == "qmn.mis.regime_train"
+    assert REGIME_TRAIN_SURFACE == "qmf.readings.regime_train"
     assert TRAINING_LOCATION == "operator-machine-offline-script"
 
 
@@ -356,7 +356,7 @@ def test_training_module_stays_offline_without_eager_lightgbm() -> None:
     assert text.find("import lightgbm") > text.find("def _select_fitter")
     assert "mis.regime_train.partial_register" in text
     assert "mis.regime_train.vps_or_cloud" in text
-    assert "python -m qmn.mis.regime_train" in text
+    assert "python -m qmf.readings.regime_train" in text
     assert "write_bytes_exclusive_no_follow" in text
     assert "read_contained_bytes" in text
     assert "read_contained_text" in text
@@ -506,7 +506,7 @@ def test_resume_does_not_follow_planted_trial_model_symlink(tmp_path: Path) -> N
 def test_dependency_lock_refuses_symlink_leaf(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from qmn.mis import regime_train as train_mod
+    from qmf.readings import regime_train as train_mod
 
     lock_file: Path | None = None
     here = Path(train_mod.__file__).resolve()
@@ -541,7 +541,7 @@ def test_dependency_lock_does_not_follow_planted_symlink(tmp_path: Path) -> None
 
 
 def test_cli_json_loader_still_refuses(tmp_path: Path) -> None:
-    from qmn.mis.regime_train import main as train_main
+    from qmf.readings.regime_train import main as train_main
 
     labeled = tmp_path / "labeled.json"
     cleaned = tmp_path / "cleaned.json"

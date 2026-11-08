@@ -44,7 +44,7 @@ from qmn.host.shakedown import (
     assemble_shakedown_signature_page,
     run_demo_shakedown,
 )
-from qmn.mis.signal_snapshot import sqs_baseline_key
+from qmf.readings.signal_snapshot import sqs_baseline_key
 from qmn.protection.windows import AnchorSide, require_resolved_window_settings
 from qmn.venue import Command
 from test_qmn_configured_runtime import fixture_deployment

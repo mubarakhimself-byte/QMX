@@ -39,6 +39,7 @@ qml = { workspace = ".." }
 qmf-indicators = { workspace = ".." }
 qmf-structure = { workspace = ".." }
 qmf-venue = { workspace = ".." }
+qmf-readings = { workspace = ".." }
 
 [dependency-groups]
 dev = [
@@ -67,6 +68,7 @@ pythonpath = [
     "../packages/qmf-risk/src",
     "../qmn/src",
     "../packages/qmf-venue/src",
+    "../packages/qmf-readings/src",
     "../qmb/src",
     "../qml/src",
 ]
@@ -104,6 +106,7 @@ extraPaths = [
     "../packages/qmf-risk/src",
     "../qmn/src",
     "../packages/qmf-venue/src",
+    "../packages/qmf-readings/src",
     "../qmb/src",
     "../qml/src",
 ]

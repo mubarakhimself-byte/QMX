@@ -34,15 +34,14 @@ from qmf.core import (
     fingerprint_bytes,
     is_refusal,
 )
-
-from qmn.mis._refuse import clean_token, invalid, policy
-from qmn.mis.catalog import (
+from qmf.readings._refuse import clean_token, invalid, policy
+from qmf.readings.catalog import (
     REGIME_CLASSIFIER_PRODUCER_ID,
     UNAUTHORITATIVE_CANDIDATES,
     refuse_trained_regime_classifier,
     refuse_unauthoritative_candidate,
 )
-from qmn.mis.regime_design import (
+from qmf.readings.regime_design import (
     ExecutableRegimeContract,
     FeatureContract,
     LabelContract,
@@ -51,14 +50,12 @@ from qmn.mis.regime_design import (
     assert_design_unchanged,
     executable_regime_contract,
 )
-from qmn.mis.regime_eval import EvaluationReport, EvaluationVerdict
-from qmn.mis.regime_train import (
+from qmf.readings.regime_eval import EvaluationReport, EvaluationVerdict
+from qmf.readings.regime_train import (
     TrainingArtifact,
     TrainingTerminalStatus,
     assert_registerable_training_artifact,
 )
-from qmn.promotion.hub import SANDBOX_PROVENANCE, HubArtifact, refuse_sandbox_provenance
-from qmn.promotion.passive_hub import HubFragment, PassiveHubTree, accept_inbox_fragment
 
 __all__ = [
     "FORBIDDEN_AUTHORITY_STATUSES",
@@ -68,15 +65,14 @@ __all__ = [
     "REGIME_REGISTER_FORMAT_VERSION",
     "REGIME_REGISTER_SURFACE",
     "REGISTRATION_LINEAGE_EDGE_TYPE",
+    "SANDBOX_PROVENANCE",
     "CandidateKind",
     "RegimeModelRegistration",
     "RegistrationAuthorityStatus",
     "RegistrationLineageBundle",
-    "SandboxHubPublication",
     "assert_registration_preserves_composition_fp",
     "build_accepted_registration",
     "build_non_authoritative_registration",
-    "enter_passive_hub_as_sandbox",
     "install_regime_model_kind",
     "main",
     "mint_registration_version",
@@ -88,7 +84,7 @@ __all__ = [
     "register_model_lineage",
 ]
 
-REGIME_REGISTER_SURFACE: Final[str] = "qmn.mis.regime_register"
+REGIME_REGISTER_SURFACE: Final[str] = "qmf.readings.regime_register"
 REGIME_REGISTER_ARTIFACT_ID: Final[str] = "regime_classifier_v1_registration"
 REGIME_REGISTER_FORMAT_VERSION: Final[int] = 1
 REGIME_MODEL_KIND: Final[str] = "regime-model-candidate"
@@ -97,6 +93,9 @@ REGIME_MODEL_KIND_FORMAT_VERSION: Final[int] = 1
 REGISTRATION_LINEAGE_EDGE_TYPE: Final[str] = "occurrence-of"
 _BRANCHES_FROM_EDGE_TYPE: Final[str] = "branches-from"
 FORBIDDEN_AUTHORITY_STATUSES: Final[frozenset[str]] = frozenset({"governed", "ratified", "active"})
+# The node's passive-hub provenance token (qmn.promotion.hub), named here so the readings
+# package never imports qmn; a qmn test holds the two equal.
+SANDBOX_PROVENANCE: Final[str] = "sandbox"
 
 _BODY_FIELD: Final[str] = "content"
 _REGISTRATION_FILENAME: Final[str] = "registration_record.json"
@@ -378,33 +377,6 @@ class RegistrationLineageBundle:
                     None if self.composition_fp_after is None else self.composition_fp_after.value
                 ),
                 "changes_composition_fp": self.registration.changes_composition_fp,
-            }
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class SandboxHubPublication:
-    """Passive-hub inbox accept that keeps sandbox provenance visible."""
-
-    registration_fp: Fingerprint
-    hub_artifact: HubArtifact
-    provenance: str
-    write_only_inbox: bool
-    promotion_refused: bool
-    publish_refused: bool
-    composition_fp_unchanged: bool
-
-    def as_mapping(self) -> Mapping[str, object]:
-        return MappingProxyType(
-            {
-                "registration_fp": self.registration_fp.value,
-                "artifact_key": self.hub_artifact.artifact_key,
-                "fp1": self.hub_artifact.fp1.value,
-                "provenance": self.provenance,
-                "write_only_inbox": self.write_only_inbox,
-                "promotion_refused": self.promotion_refused,
-                "publish_refused": self.publish_refused,
-                "composition_fp_unchanged": self.composition_fp_unchanged,
             }
         )
 
@@ -1141,84 +1113,6 @@ def assert_registration_preserves_composition_fp(
     return Ok(None)
 
 
-def enter_passive_hub_as_sandbox(
-    bundle: object,
-    *,
-    tree: object,
-    writer: object,
-    artifact_key: object | None = None,
-) -> Result[SandboxHubPublication]:
-    """Accept the registration into the passive-hub inbox with sandbox provenance.
-
-    Promotion publish/pull still refuse sandbox provenance until the separate
-    human/recertification path (Story 30.8). Inbox write never changes
-    ``composition_fp``.
-    """
-    if not isinstance(bundle, RegistrationLineageBundle):
-        return invalid(
-            "bundle",
-            "passive-hub entry takes a RegistrationLineageBundle",
-            given=type(bundle).__name__,
-        )
-    if not isinstance(tree, PassiveHubTree):
-        return invalid(
-            "tree",
-            "passive-hub entry takes a PassiveHubTree",
-            given=type(tree).__name__,
-        )
-    if not isinstance(writer, WriterId):
-        return invalid("writer", "hub fragments are WriterId-scoped", given=type(writer).__name__)
-
-    key_token = clean_token(artifact_key) or REGIME_REGISTER_ARTIFACT_ID
-    payload = json.dumps(
-        bundle.registration.as_jsonable(),
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    payload_fp = fingerprint_bytes(payload)
-    hub_artifact = HubArtifact.try_create(
-        artifact_key=key_token,
-        fp1=payload_fp,
-        provenance=SANDBOX_PROVENANCE,
-    )
-    if is_refusal(hub_artifact):
-        return hub_artifact
-    fragment = HubFragment.try_create(
-        artifact_key=hub_artifact.value.artifact_key,
-        fp1=hub_artifact.value.fp1,
-        provenance=hub_artifact.value.provenance,
-        writer=writer,
-        payload=payload,
-    )
-    if is_refusal(fragment):
-        return fragment
-    accepted = accept_inbox_fragment(tree, fragment.value)
-    if is_refusal(accepted):
-        return accepted
-
-    # Promotion rules still refuse sandbox provenance at publish and pull.
-    publish_gate = refuse_sandbox_provenance(SANDBOX_PROVENANCE, crossing="publish")
-    pull_gate = refuse_sandbox_provenance(SANDBOX_PROVENANCE, crossing="pull")
-    if not is_refusal(publish_gate) or not is_refusal(pull_gate):
-        return policy(
-            "provenance",
-            "sandbox provenance must remain refused at publish and pull after hub entry",
-            failure_id="mis.regime_register.sandbox_gate_leak",
-        )
-
-    return Ok(
-        SandboxHubPublication(
-            registration_fp=bundle.registration_fp,
-            hub_artifact=hub_artifact.value,
-            provenance=SANDBOX_PROVENANCE,
-            write_only_inbox=True,
-            promotion_refused=True,
-            publish_refused=True,
-            composition_fp_unchanged=True,
-        )
-    )
-
-
 def _write_registration_outputs(
     bundle: RegistrationLineageBundle,
     *,
@@ -1260,7 +1154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Operator entry placeholder — registration is an in-library API over prepared artifacts."""
     _ = argv
     print(
-        "qmn.mis.regime_register is an in-library API: build_accepted_registration / "
+        "qmf.readings.regime_register is an in-library API: build_accepted_registration / "
         "register_model_lineage over prepared Story 30.4/30.5 artifacts; it never "
         "trains, never binds a live consumer, and never mutates composition_fp",
         flush=True,

@@ -9,12 +9,12 @@ from qmf.core import CalendarIdentity, fingerprint, is_ok, is_refusal
 from qmf.core.refusal import Result
 from qmf.data import SegmentRole
 from qmf.data.dukascopy import DUKASCOPY_SOURCE, PERSONAL_USE_LICENSE
-from qmn.mis import (
+from qmf.readings import (
     BAR_INTERVAL_M5_NS,
     DECLARED_TRADING_SESSIONS,
     EXCLUSION_CLASS,
     LABEL_GENERATOR_ID,
-    REGIME_CLASS_VOCABULARY,
+    VOLATILITY_STATE_VOCABULARY,
     REGIME_LABELS_ARTIFACT_ID,
     REGIME_LABELS_SURFACE,
     ExclusionReason,
@@ -36,7 +36,7 @@ from qmn.mis import (
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 _T0 = 1_700_000_000_000_000_000
 _HOLDOUT_MONTHS = 12
 _CLOSE = 100_000
@@ -139,7 +139,7 @@ def test_generate_labels_map_vocabulary_and_exclusion() -> None:
     rows = _ok(generate_regime_labels(cleaned, splits))
     assert len(rows) == len(cleaned.rows)
     labels = {row.class_label for row in rows}
-    assert labels <= set(REGIME_CLASS_VOCABULARY) | {EXCLUSION_CLASS}
+    assert labels <= set(VOLATILITY_STATE_VOCABULARY) | {EXCLUSION_CLASS}
     assert EXCLUSION_CLASS in labels
     excluded = [row for row in rows if row.class_label == EXCLUSION_CLASS]
     assert excluded
@@ -184,8 +184,8 @@ def test_audit_reports_balance_transitions_and_leakage_without_sealed_peek() -> 
     audit = _ok(audit_regime_labels(rows, edges=edges))
     assert audit.total_rows == len(rows)
     assert audit.exclusion_count >= 1
-    assert set(audit.class_counts) == set(REGIME_CLASS_VOCABULARY)
-    assert set(audit.labeled_counts) >= set(REGIME_CLASS_VOCABULARY) | {EXCLUSION_CLASS}
+    assert set(audit.class_counts) == set(VOLATILITY_STATE_VOCABULARY)
+    assert set(audit.labeled_counts) >= set(VOLATILITY_STATE_VOCABULARY) | {EXCLUSION_CLASS}
     assert audit.transition_frequencies
     assert set(audit.session_distribution) == set(DECLARED_TRADING_SESSIONS)
     assert "EURUSD" in audit.instrument_distribution
@@ -213,13 +213,13 @@ def test_materialize_labeled_corpus_with_lineage_no_training() -> None:
     assert labeled.audit.materially_unsupported is False
     assert labeled.audit.unsupported_classes == ()
     train_counts = labeled.audit.split_distribution[SegmentRole.TRAIN.value]
-    for name in REGIME_CLASS_VOCABULARY:
+    for name in VOLATILITY_STATE_VOCABULARY:
         assert train_counts[name] > 0
     fp = _ok(labeled.fingerprint())
     assert fp.value.startswith("fp1:sha256:")
     again = _ok(materialize_labeled_corpus(cleaned, splits))
     assert _ok(again.fingerprint()) == fp
-    assert REGIME_LABELS_SURFACE == "qmn.mis.regime_labels"
+    assert REGIME_LABELS_SURFACE == "qmf.readings.regime_labels"
     assert is_refusal(refuse_label_training())
     assert is_refusal(materialize_labeled_corpus(cleaned, splits, train_model=True))
     assert is_refusal(

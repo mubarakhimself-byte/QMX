@@ -11,7 +11,6 @@ import tomllib
 from qmn.bench import BENCH_SURFACE
 from qmn.data import DATA_SURFACE
 from qmn.ledger import LEDGER_SURFACE
-from qmn.mis import MIS_SURFACE
 from qmn.observability import OBSERVABILITY_SURFACE
 from qmn.paper import PAPER_SURFACE
 from qmn.promotion import PROMOTION_SURFACE
@@ -151,7 +150,6 @@ def test_remaining_seed_surface_markers() -> None:
     assert RECONCILE_SURFACE == "qmn.reconcile"
     assert SEATS_SURFACE == "qmn.seats"
     assert PROMOTION_SURFACE == "qmn.promotion"
-    assert MIS_SURFACE == "qmn.mis"
     assert DATA_SURFACE == "qmn.data"
     assert SECRETS_SURFACE == "qmn.secrets"
     assert OBSERVABILITY_SURFACE == "qmn.observability"

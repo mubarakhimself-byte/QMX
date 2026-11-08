@@ -32,8 +32,8 @@ from qmn.host.admission_artifacts import (
     read_sqs_baseline,
 )
 from qmn.host.shakedown import ShakedownEvidence, ShakedownSignaturePage
-from qmn.mis.catalog import SqsBaselineArtifact
-from qmn.mis.signal_snapshot import sqs_baseline_key
+from qmf.readings.catalog import SqsBaselineArtifact
+from qmf.readings.signal_snapshot import sqs_baseline_key
 
 T = TypeVar("T")
 

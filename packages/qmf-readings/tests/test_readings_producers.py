@@ -21,14 +21,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.core.refusal import Result
-from qmn.host.light_heavy import (
-    CompositionClass,
-    FourBoundDeclaration,
-    WorkloadClaim,
-    WorkloadKind,
-    evaluate_workload_claim,
-)
-from qmn.mis import (
+from qmf.readings import (
     DEGRADED_SENSORS_PRODUCER_ID,
     FEED_STATE_PRODUCER_ID,
     FITTED_PRODUCER_IDS,
@@ -67,7 +60,7 @@ from qmn.mis import (
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 
 
 def _ok(result: Result[T]) -> T:
@@ -211,7 +204,7 @@ def test_v1_inventory_is_six_rule_based_plus_fitted_liquidity() -> None:
     assert [row.producer_id for row in formulas] == list(V1_GOVERNED_PRODUCER_IDS)
     assert all(row.nature is FormulaNature.RULE_BASED for row in formulas[:6])
     assert formulas[-1].nature is FormulaNature.FITTED
-    assert MIS_PRODUCER_SURFACE == "qmn.mis.catalog"
+    assert MIS_PRODUCER_SURFACE == "qmf.readings.catalog"
     assert REGIME_CLASSIFIER_PRODUCER_ID not in {row.producer_id for row in formulas}
 
 
@@ -725,41 +718,6 @@ def test_quantile_fit_refuses_floats_and_empty() -> None:
     assert is_refusal(floated)
     q = _ok(exact_nearest_rank_quantile((1, 2, 3, 4), _ratio(1, 2)))
     assert q == 2
-
-
-def test_ad24_heavy_by_default_light_claim_refused_without_baseline() -> None:
-    configured = _ok(configure_mis_producer(IDENTITY_PRODUCER_ID))
-    assert configured.declared_budget is None
-    claim = _ok(
-        WorkloadClaim.try_create(
-            kind=WorkloadKind.LABELER,
-            definition_fp=_ok(configured.fingerprint()),
-            live_path_baseline_present=False,
-        )
-    )
-    assignment = _ok(evaluate_workload_claim(claim))
-    assert assignment.effective_class is CompositionClass.HEAVY
-
-    bounds = _ok(
-        FourBoundDeclaration.try_create(
-            per_update_cost_rung="live-path",
-            bounded_state=True,
-            window_or_anchor_rule="frontier-as-of",
-            synchronous_availability=True,
-        )
-    )
-    light_claim = _ok(
-        WorkloadClaim.try_create(
-            kind=WorkloadKind.PRODUCER,
-            definition_fp=_ok(configured.fingerprint()),
-            declared_bounds=bounds,
-            live_path_baseline_present=False,
-            benchmark_proven=True,
-        )
-    )
-    refused = evaluate_workload_claim(light_claim)
-    assert is_refusal(refused)
-    assert refused.category is RefusalCategory.POLICY_REJECTION
 
 
 def test_liquidity_and_labeler_modules_stay_cpu_stdlib() -> None:
