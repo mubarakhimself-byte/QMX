@@ -56,6 +56,9 @@
   "blobs": {
     "code": {
       "media_type": "text/x-python"
+    },
+    "golden": {
+      "media_type": "application/json"
     }
   },
   "card": {

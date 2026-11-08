@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
+from functools import cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
+import qml
 from qmf.core import Instant
+from qml.catalogue.entry import ENTRY_SCHEMA, Computed, compute_status, corpus_problems
+from qml.catalogue.index import find as find_rows
+from qml.catalogue.index import match as match_text
+from qml.catalogue.index import row as index_row
+from qml.catalogue.loader import block_fingerprint
+from qml.catalogue.roles import NEAREST_SUGGESTIONS
 from qml.door import explain, new
 from qmn.doors.api import read_status
-from qmx_control.catalog import BLOCKS_LATER
 from qmx_control.library import OPERATOR
 from qmx_judge.landing import REPORT_SLOT, RESULT_KIND
 from qmx_judge.tries import try_item
@@ -18,7 +28,7 @@ from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, drafts_ref
 
-from qmx_tools.gather import DUMMY, TEMPLATES, gather
+from qmx_tools.gather import DUMMY, STDLIB, TEMPLATES, entry_face, gather
 from qmx_tools.gather import template as template_document
 from qmx_tools.service import (
     Artifact,
@@ -34,8 +44,10 @@ from qmx_tools.unit_check import checked
 
 if TYPE_CHECKING:
     from qmx_library.port import JsonObject, ObjectId, ObjectView
+    from qmx_library.store import Store
 
 UNIT_KIND: Final = "unit"
+REPO: Final = Path(qml.__file__).resolve().parents[3]
 
 
 def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., dict[str, Any]]]]:
@@ -329,12 +341,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         },
         "node": {"node_state": node_state, "propose_order": propose_order},
         "unit": unit_functions(ctx),
-        "blocks": {
-            "blocks_find": blocks_find,
-            "blocks_get": blocks_get,
-            "blocks_check": blocks_check,
-            "blocks_match": blocks_match,
-        },
+        "blocks": block_functions(ctx),
     }
 
 
@@ -427,25 +434,176 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
     return {"unit_new": unit_new, "unit_check": unit_check, "unit_explain": unit_explain}
 
 
-def _not_built(row: str) -> ValueError:
-    return ValueError(f"{row}: {BLOCKS_LATER}")
+@dataclass(frozen=True, slots=True)
+class _Held:
+    """One entry the doors see: its face, its code, its computed status and where it lives."""
+
+    entry: dict[str, object]
+    source: bytes | None
+    status: str | None
+    held_in: str
+
+    @property
+    def pin(self) -> str:
+        return f"{self.entry.get('entry_id')}@{self.entry.get('version')}"
 
 
-def blocks_find(words: str, limit: int = 50) -> dict[str, Any]:
-    """Find dictionary blocks by words. Arrives with the dictionary's new form (A11)."""
-    raise _not_built("blocks_find")
+def _golden(entry: dict[str, object]) -> object:
+    """The golden cases an entry of QML's own names, read from a checkout; None elsewhere."""
+    declared = entry.get("golden")
+    cases = cast("dict[str, object]", declared).get("cases") if isinstance(declared, dict) else None
+    path = REPO / cases if isinstance(cases, str) else None
+    return json.loads(path.read_text("utf-8")) if path is not None and path.is_file() else None
 
 
-def blocks_get(entry_id: str, version: str | None = None) -> dict[str, Any]:
-    """Read one dictionary entry in full. Arrives with the dictionary's new form (A11)."""
-    raise _not_built("blocks_get")
+@cache
+def _qml_entries() -> tuple[_Held, ...]:
+    """QML's own blocks, each with the status its evidence earns, computed once per process."""
+    held: list[_Held] = []
+    for folder in sorted(STDLIB.iterdir(), key=lambda f: f.name):
+        for version in sorted(folder.iterdir(), key=lambda f: f.name):
+            face, code = version / "entry.json", version / "block.py"
+            if not (face.is_file() and code.is_file()):
+                continue
+            entry = cast("dict[str, object]", json.loads(face.read_text("utf-8")))
+            source = code.read_bytes()
+            status = compute_status(entry, source, _golden(entry)).status
+            held.append(_Held(entry, source, None if status is None else status.value, "qml"))
+    return tuple(held)
 
 
-def blocks_check(entry: dict[str, Any], source: str) -> dict[str, Any]:
-    """Check a block draft and its source. Arrives with the dictionary's new form (A11)."""
-    raise _not_built("blocks_check")
+def _entry_items(store: Store) -> list[str]:
+    """Every Library item that ever held an entry marked `qmx.entry/1`."""
+    return sorted(
+        {
+            store.get(store.engine, object_id).item
+            for object_id in store.with_field("component", "entry.schema", ENTRY_SCHEMA)
+        }
+    )
 
 
-def blocks_match(text: str) -> dict[str, Any]:
-    """Match each sentence to an entry. Arrives with the dictionary's new form (A11)."""
-    raise _not_built("blocks_match")
+def _library_entries(store: Store) -> list[_Held]:
+    """The Library's entries on `main`, each with the status its last status run wrote."""
+    held: list[_Held] = []
+    for item in _entry_items(store):
+        head = store.head(item, MAIN)
+        if head is None:
+            continue
+        view = store.get(store.engine, head[0])
+        code = view.blobs.get("code")
+        mark = view.annotations.get("status")
+        value = cast("dict[str, object]", mark).get("value") if isinstance(mark, dict) else None
+        held.append(
+            _Held(
+                entry_face(view.fields),
+                None if code is None else store.read_blob(code.blob_id),
+                value if isinstance(value, str) else None,
+                item,
+            )
+        )
+    return held
+
+
+def write_entry_statuses(store: Store) -> list[tuple[str, str, Computed]]:
+    """Compute the status of each Library entry at its `main` and draft heads from its code
+    and its `golden` blob, and write it on that object as its `status` annotation. Returns
+    `(item, ref, computed)` per object, `main` first. Rerunning writes the same values."""
+    written: list[tuple[str, str, Computed]] = []
+    for item in _entry_items(store):
+        seen: set[str] = set()
+        for ref in (MAIN, drafts_ref(item)):
+            head = store.head(item, ref)
+            if head is None or head[0] in seen:
+                continue
+            seen.add(head[0])
+            view = store.get(store.engine, head[0])
+            if view.kind != "component":
+                continue
+            code, golden = view.blobs.get("code"), view.blobs.get("golden")
+            computed = compute_status(
+                entry_face(view.fields),
+                None if code is None else store.read_blob(code.blob_id),
+                None if golden is None else json.loads(store.read_blob(golden.blob_id)),
+            )
+            store.annotate(store.engine, head[0], {"status": json_value(computed.annotation())})
+            written.append((item, ref, computed))
+    return written
+
+
+def block_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]]]:
+    """The `blocks` rows (Part A AD-113, AD-117): the dictionary's doors. They read and check,
+    and write nothing; an entry is saved as a `component` item, where the Library's put check
+    runs the same entry checker."""
+
+    def catalogue() -> list[_Held]:
+        """QML's own entries, then the Library's whose pin QML does not hold, the order in which
+        `gather` resolves a pin."""
+        own = _qml_entries()
+        pins = {h.pin for h in own}
+        return [*own, *(h for h in _library_entries(ctx.library.store) if h.pin not in pins)]
+
+    def blocks_find(
+        words: str,
+        role: str | None = None,
+        data_level: int | None = None,
+        market_class: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Find dictionary blocks by words before writing one: one line per entry, best match
+        first. Narrow by the slot role it plays, the data level the market offers or the
+        market class it must carry to."""
+        rows = [index_row(h.entry, h.status) for h in catalogue()]
+        found = find_rows(
+            rows, words, role=role, data_level=data_level, market_class=market_class, limit=limit
+        )
+        return {"rows": [r.as_json() for r in found], "count": len(found)}
+
+    def blocks_get(entry_id: str, version: int | None = None) -> dict[str, Any]:
+        """Read one dictionary entry in full, with its code and status; the newest version
+        unless one is named."""
+        everything = catalogue()
+        held = [h for h in everything if h.entry.get("entry_id") == entry_id]
+        if version is not None:
+            held = [h for h in held if h.entry.get("version") == version]
+        if not held:
+            ids = sorted({str(h.entry.get("entry_id")) for h in everything})
+            near = difflib.get_close_matches(entry_id, ids, n=NEAREST_SUGGESTIONS, cutoff=0.0)
+            raise ValueError(f"no entry {entry_id!r}; the nearest are {', '.join(near)}")
+        newest = max(held, key=lambda h: cast("int", h.entry.get("version")))
+        return {
+            "entry": newest.entry,
+            "status": newest.status,
+            "code": None if newest.source is None else newest.source.decode("utf-8"),
+            "held_in": newest.held_in,
+        }
+
+    def blocks_check(entry: dict[str, Any], source: str | None = None) -> dict[str, Any]:
+        """Check an entry draft and its block source: every problem at once, the status it
+        would earn, what its next status lacks, and the fingerprint its source has."""
+        code = None if source is None else source.encode("utf-8")
+        computed = compute_status(entry, code)
+        mine = entry.get("entry_id")
+        others = [h.entry for h in catalogue()]
+        clashes = [p for p in corpus_problems([*others, entry]) if p.where.startswith(f"{mine}@")]
+        problems = [*computed.problems, *clashes]
+        return {
+            "verdict": "fail" if problems else "pass",
+            "status": None if computed.status is None or clashes else computed.status.value,
+            "counts": {"errors": len(problems)},
+            "errors": [p.as_json() for p in problems],
+            "missing": list(computed.missing),
+            "fingerprint": None if code is None else block_fingerprint(code).value,
+        }
+
+    def blocks_match(text: str) -> dict[str, Any]:
+        """Match each sentence of a source to the entry it states; a sentence no entry covers
+        comes back as an append request, never as a guess."""
+        rows = [index_row(h.entry, h.status) for h in catalogue()]
+        return match_text(text, rows).as_json()
+
+    return {
+        "blocks_find": blocks_find,
+        "blocks_get": blocks_get,
+        "blocks_check": blocks_check,
+        "blocks_match": blocks_match,
+    }

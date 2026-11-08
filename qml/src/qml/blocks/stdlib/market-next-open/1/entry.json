@@ -3,10 +3,23 @@
   "entry_id": "market-next-open",
   "version": 1,
   "family": "entry-order",
+  "aliases": [
+    "next bar open entry"
+  ],
+  "origin": "qml",
   "component_type": "entry_order",
   "definition": "Enter with a market order at the next bar's open.",
+  "boundaries": "Says how the entry is placed, never whether to enter.",
+  "recognition": "The order goes in as a market order when the next bar opens.",
   "eligible_roles": [
     "entry_order"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-118",
+      "quote": "a trend pullback on EURUSD and XAUUSD, M15, built only from blocks that wrap code QMX already runs (EMA, ROC, RSI, swing points)",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [],
   "output": {
@@ -18,11 +31,22 @@
     "rule": "none",
     "bars": 0
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "not_applicable",
   "state_bound": {
     "rule": "constant",
     "observations": 0
   },
-  "origin": "qml",
   "fingerprint": "fp1:sha256:f95d99d7c9081c78186bb04ef36ba6bfac263067cc5e66a716672b2bfb366637"
 }

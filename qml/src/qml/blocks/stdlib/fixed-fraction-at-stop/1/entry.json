@@ -3,10 +3,24 @@
   "entry_id": "fixed-fraction-at-stop",
   "version": 1,
   "family": "fixed-fractional",
+  "aliases": [
+    "fixed fractional sizing"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
   "component_type": "sizer",
   "definition": "Risk a fraction of equity at the stop, rounded down to the lot step; skip with a reason below the minimum lot.",
+  "boundaries": "A stand-in sizer until the risk session writes the real one.",
+  "recognition": "Each trade risks the same fraction of equity between entry and stop.",
   "eligible_roles": [
     "sizer"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -40,19 +54,36 @@
   },
   "parameters": {
     "fraction": {
-      "measure": "percent"
+      "measure": "percent",
+      "default": "0.005",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.0001",
+        "max": "0.05",
+        "step": "0.0001"
+      }
     }
   },
   "warm_up": {
     "rule": "none",
     "bars": 0
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "not_applicable",
   "state_bound": {
     "rule": "constant",
     "observations": 0
   },
-  "origin": "placeholder",
-  "owner": "risk-session",
   "fingerprint": "fp1:sha256:e965437208a8db07e44c579d463d8c8c789d826451089097a8290fdd63cd90bf"
 }

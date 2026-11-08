@@ -3,10 +3,21 @@
   "entry_id": "percentile-of-own-history",
   "version": 1,
   "family": "motion",
+  "aliases": [
+    "rolling percentile"
+  ],
+  "origin": "qml",
   "component_type": "motion",
   "definition": "A derived number set to a percentile of a series over its last window of bars.",
-  "eligible_roles": [
-    "motion"
+  "boundaries": "A number that follows the market's own recent record; it is not a signal.",
+  "recognition": "A level set where the series spent its lowest or highest part of the window.",
+  "eligible_roles": [],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-118",
+      "quote": "one derived number (`rsi_low`, the 20th percentile of RSI's last 500 bars)",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -22,25 +33,45 @@
   },
   "parameters": {
     "percentile": {
-      "measure": "ratio"
+      "measure": "ratio",
+      "default": "20",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "0.01"
+      }
     },
     "window_bars": {
-      "measure": "bars"
+      "measure": "bars",
+      "default": "500",
+      "origin": "builder_chosen"
     }
   },
   "warm_up": {
     "rule": "window_bars",
     "bars": null
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "not_applicable",
   "state_bound": {
     "rule": "window_bars",
     "observations": null
   },
+  "fingerprint": "fp1:sha256:3bf3b12e4f579135da6bc1e362376a1de7097db214195f91d61fbbaec23be717",
   "golden": {
     "reference": "numpy.percentile linear, numpy shipped with the TA-Lib 0.7.1 run",
     "cases": "qml/tests/golden/talib-0.7.1.json"
-  },
-  "origin": "qml",
-  "fingerprint": "fp1:sha256:3bf3b12e4f579135da6bc1e362376a1de7097db214195f91d61fbbaec23be717"
+  }
 }

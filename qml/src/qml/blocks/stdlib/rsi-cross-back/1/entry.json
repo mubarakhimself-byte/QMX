@@ -3,11 +3,24 @@
   "entry_id": "rsi-cross-back",
   "version": 1,
   "family": "oscillator",
+  "aliases": [
+    "RSI crosses back over a level"
+  ],
+  "origin": "qml",
   "component_type": "trigger",
   "definition": "Wilder's RSI crossing back above a level (long) or below it (short).",
+  "boundaries": "An event at the bar RSI crosses back; it says nothing about how far price will go.",
+  "recognition": "A pullback ends when RSI, oversold, crosses back above its low level.",
   "eligible_roles": [
     "trigger",
     "confirmation"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-118",
+      "quote": "a trend pullback on EURUSD and XAUUSD, M15, built only from blocks that wrap code QMX already runs (EMA, ROC, RSI, swing points)",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -23,21 +36,48 @@
   },
   "parameters": {
     "period": {
-      "measure": "bars"
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "50",
+        "step": "1"
+      }
     },
     "level": {
-      "measure": "ratio"
+      "measure": "ratio",
+      "default": "30",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "0.01"
+      }
     }
   },
   "warm_up": {
     "rule": "period + 1",
     "bars": null
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
     "observations": 4
   },
+  "fingerprint": "fp1:sha256:dd94e7693df3f3c0e9020be6784d3fb23682ea1fbb033f44a2aaa1975593a4c2",
   "golden": {
     "reference": "talib.RSI 0.7.1",
     "cases": "qml/tests/golden/talib-0.7.1.json"
@@ -48,7 +88,5 @@
     },
     "bars": 285,
     "tolerance": "1e-9"
-  },
-  "origin": "qml",
-  "fingerprint": "fp1:sha256:dd94e7693df3f3c0e9020be6784d3fb23682ea1fbb033f44a2aaa1975593a4c2"
+  }
 }

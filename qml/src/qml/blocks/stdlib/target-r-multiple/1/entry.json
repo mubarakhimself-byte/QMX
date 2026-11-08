@@ -3,10 +3,24 @@
   "entry_id": "target-r-multiple",
   "version": 1,
   "family": "profit-target",
+  "aliases": [
+    "R multiple target"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
   "component_type": "exit",
   "definition": "Profit target a multiple of R from the entry, R being the entry-to-stop distance.",
+  "boundaries": "A stand-in target until the risk session writes the real exits.",
+  "recognition": "The target sits a set number of R beyond the entry.",
   "eligible_roles": [
     "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -28,19 +42,36 @@
   },
   "parameters": {
     "multiple": {
-      "measure": "r"
+      "measure": "r",
+      "default": "2",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.5",
+        "max": "10",
+        "step": "0.1"
+      }
     }
   },
   "warm_up": {
     "rule": "none",
     "bars": 0
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
     "observations": 0
   },
-  "origin": "placeholder",
-  "owner": "risk-session",
   "fingerprint": "fp1:sha256:24236124fd2b0d83a6d41db124d9a1de1cbdf5c029c138338605be2e5356ca5e"
 }
