@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bisect
+import copy
 import csv
 import json
 import os
@@ -270,12 +271,13 @@ def _windows(unit: HostedUnit, market: str) -> dict[str, int]:
 
 
 def test_a_number_both_sides_bind_keeps_one_window_per_side() -> None:
-    mirrored = _document()
-    cast("dict[str, object]", mirrored["logic"])["short"] = {"mirror_of": "long"}
-    del cast("dict[str, object]", mirrored["numbers"])["rsi_high"]
+    same_slots = _document()
+    logic = cast("dict[str, object]", same_slots["logic"])
+    logic["short"] = copy.deepcopy(logic["long"])
+    del cast("dict[str, object]", same_slots["numbers"])["rsi_high"]
     bars = _slice()
     instants = _instants(bars)[:300]
-    plain, both = _host(_compiled(), _surfaces(bars)), _host(_compiled(mirrored), _surfaces(bars))
+    plain, both = _host(_compiled(), _surfaces(bars)), _host(_compiled(same_slots), _surfaces(bars))
     _drive(plain, instants)
     _drive(both, instants)
 

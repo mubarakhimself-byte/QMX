@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -29,6 +30,7 @@ from typing import Any, cast
 
 import pytest
 from qmx_apps.errors import Document
+from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import RUNS, Supervisor
 from qmx_apps.volume import Volume
 from qmx_control.models import LibraryInput
@@ -56,6 +58,9 @@ HERE = Path(__file__).resolve().parent
 VARIANT = HERE / "fixtures" / "variant-tester"
 REPO = HERE.parents[3]
 QMB = REPO / "qmx-agents" / "apps" / "qmb"
+QMB_VERSION = Definition.load(QMB).manifest.version
+"""A PR that changes QMB bumps its `app.toml`, so these lines follow by themselves."""
+VARIANT_VERSION = "1.0.0"
 SLICES = REPO / "qml" / "tests" / "fixtures" / "slices"
 PACK_DIR = REPO / "qmx-agents" / "packages" / "qmx-judge" / "src" / "qmx_judge" / "conformance_pack"
 OPERATOR = Principal("operator")
@@ -94,7 +99,7 @@ class World:
     dummy: str
     backtest: Mapping[str, Any]
 
-    def conformance(self, app_id: str, version: str = "1.0.0") -> ConformanceRun:
+    def conformance(self, app_id: str, version: str = QMB_VERSION) -> ConformanceRun:
         def run_job(
             app: str, job: str, inputs: Mapping[str, object], principal: str
         ) -> Mapping[str, object]:
@@ -170,7 +175,7 @@ def test_the_shipped_tester_passes_its_pack(world: World) -> None:
     report = world.fields(ran.report_id)
     assert (report["check"], report["tester_pin"], report["verdict"]) == (
         CHECK,
-        "qmb@1.0.0",
+        f"qmb@{QMB_VERSION}",
         "pass",
     )
     assert report["says"] == "passed all 2 cases"
@@ -182,7 +187,7 @@ def test_the_shipped_tester_passes_its_pack(world: World) -> None:
     assert (result["kind"], result["status"], result["tester"]) == (
         "conformance",
         "finished",
-        {"app": "qmb", "version": "1.0.0"},
+        {"app": "qmb", "version": QMB_VERSION},
     )
     assert "measures" not in result
 
@@ -190,7 +195,7 @@ def test_the_shipped_tester_passes_its_pack(world: World) -> None:
 def test_a_variant_that_rounds_differently_fails_with_its_first_differing_trade(
     world: World,
 ) -> None:
-    ran = world.conformance("qmb-cents-down")
+    ran = world.conformance("qmb-cents-down", VARIANT_VERSION)
 
     report = world.fields(ran.report_id)
     first = report["cases"][0]
@@ -213,7 +218,7 @@ def test_a_variant_that_rounds_differently_fails_with_its_first_differing_trade(
 
 
 def test_the_default_tester_moves_only_to_a_tester_that_passed(world: World) -> None:
-    world.conformance("qmb-cents-down")
+    world.conformance("qmb-cents-down", VARIANT_VERSION)
 
     with pytest.raises(ControlError) as refused:
         world.control.settings_put("qmb", {"default_tester": "qmb-cents-down@1.0.0"})
@@ -249,7 +254,7 @@ def test_two_results_of_one_request_compare_trade_by_trade(world: World) -> None
     )
 
     assert compared["testers"] == [
-        {"app": "qmb", "version": "1.0.0"},
+        {"app": "qmb", "version": QMB_VERSION},
         {"app": "qmb-cents-down", "version": "1.0.0"},
     ]
     assert (compared["statuses"], compared["same_request"]) == (["finished", "finished"], True)
@@ -298,13 +303,15 @@ def test_trades_at_one_market_and_instant_pair_in_order_and_a_malformed_time_is_
 def test_a_run_of_another_version_than_asked_lands_no_report_and_moves_no_default(
     world: World,
 ) -> None:
-    with pytest.raises(ValueError, match=r"ran qmb@1\.0\.0") as refused:
+    with pytest.raises(ValueError, match=rf"ran qmb@{re.escape(QMB_VERSION)}") as refused:
         world.conformance("qmb", "9.9.9")
     with pytest.raises(ControlError) as stays:
         world.control.settings_put("qmb", {"default_tester": "qmb@9.9.9"})
 
     run_id = str(refused.value).split()[3]
-    assert str(refused.value) == f"the conformance run {run_id} ran qmb@1.0.0, not qmb@9.9.9"
+    assert str(refused.value) == (
+        f"the conformance run {run_id} ran qmb@{QMB_VERSION}, not qmb@9.9.9"
+    )
     assert world.library.find(f"conformance/{run_id}") is None
     assert world.store.with_field("test-report", "tester_pin", "qmb@9.9.9") == []
     assert str(stays.value) == (
@@ -418,8 +425,8 @@ def regenerate() -> None:
             json.loads(report),
             {
                 "made_by": (
-                    "the shipped tester qmb@1.0.0 (qmx-agents/apps/qmb), through the core's "
-                    "conformance job path, by tests/test_conformance.py's regenerate()"
+                    f"the shipped tester qmb@{QMB_VERSION} (qmx-agents/apps/qmb), through the "
+                    "core's conformance job path, by tests/test_conformance.py's regenerate()"
                 ),
                 "made_at_head": head,
                 "versions": {

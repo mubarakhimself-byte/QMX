@@ -370,8 +370,8 @@ class _Core:
             side.side.value: {d.number for d in self.plan.derived if d.side is side.side}
             for side in self.plan.sides
         }
-        per_bar = any(e.use is ExitUse.PER_BAR for e in self.plan.exits)
-        timer = self.timer().export_state() if per_bar else None
+        made = self.timer()
+        timer = made.export_state() if made is not None else None
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
             saved = markets[m.market_id]
@@ -410,8 +410,10 @@ class _Core:
             for key, state in cast("Mapping[str, Mapping[str, object]]", saved["blocks"]).items():
                 m.instances[key].import_state(state)
             for pid, state in cast("Mapping[str, Mapping[str, object]]", saved["timers"]).items():
-                m.timers[pid] = self.timer()
-                m.timers[pid].import_state(state)
+                timer = self.timer()
+                if timer is not None:  # shape_gap sent a snapshot with timers and no exit cold
+                    timer.import_state(state)
+                    m.timers[pid] = timer
             m.exited = set(cast("list[str]", saved["exited"]))
         for name, raw in cast("Mapping[str, Mapping[str, object]]", snapshot["slow"]).items():
             mark = raw["watermark"]
@@ -429,8 +431,12 @@ class _Core:
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
             )
 
-    def timer(self) -> Instance:
-        per_bar = next(e for e in self.plan.exits if e.use is ExitUse.PER_BAR)
+    def timer(self) -> Instance | None:
+        """The per-bar exit for one position, or ``None`` for a unit with no time exit, which
+        layer E warns of (UT-18)."""
+        per_bar = next((e for e in self.plan.exits if e.use is ExitUse.PER_BAR), None)
+        if per_bar is None:
+            return None
         return per_bar.binding.block.make(
             self.params(per_bar.binding, self.plan.defaults), per_bar.binding.inputs
         )
@@ -654,6 +660,8 @@ class _Run:
         timer = m.timers.get(position.position_id)
         if timer is None:
             timer = self.unit.timer()
+            if timer is None:
+                return
             m.timers[position.position_id] = timer
         out = timer.update({})
         if not (isinstance(out, Signal) and out.state):
