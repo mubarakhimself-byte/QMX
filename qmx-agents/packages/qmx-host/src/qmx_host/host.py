@@ -62,7 +62,7 @@ from qmx_apps.artifacts import Ending, Lander
 from qmx_apps.artifacts import Landing as AppLanding
 from qmx_apps.artifacts import Ticket as AppTicket
 from qmx_apps.errors import AppError
-from qmx_apps.manifest import Definition
+from qmx_apps.manifest import HOST_SECRETS, Definition
 from qmx_apps.supervisor import MARKET_STORE, RUNS, Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.credentials import CredentialManager, KeyStore
@@ -220,10 +220,11 @@ SYNC_INTERVAL_S: Final = 30.0
 PAIRING_KEY: Final = "vault/pairing-key"
 APP_SECRET: Final = re.compile(r"qmx/[a-zA-Z0-9_-]+")
 """The secret names a manifest may declare (`qmx_apps.manifest`), checked again before a path."""
-HOST_VAULT: Final = frozenset({"pairing-key", "control-token", "run-pass-key"})
-"""The host's own files in `<home>/vault/`, which no app may read: the home's pairing key, which
-signs every run pass, the control token a flat home kept there, and an unpaired home's run pass
-key. Names are case-folded, because NTFS opens `PAIRING-KEY` as `pairing-key`."""
+HOST_VAULT: Final = frozenset(service.removeprefix("qmx/") for service in HOST_SECRETS)
+"""The host's own files in `<home>/vault/`, which no app may read: every name in
+`qmx_apps.manifest.HOST_SECRETS`, among them the home's pairing key, which signs every run pass,
+the control token a flat home kept there, and an unpaired home's run pass key. Names are
+case-folded, because NTFS opens `PAIRING-KEY` as `pairing-key`."""
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 DID_NOT_OPEN: Final = 2
 """`serve`'s exit when a store, the engine or the Library refused to open (loose strings Appendix
