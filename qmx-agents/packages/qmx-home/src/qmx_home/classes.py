@@ -251,6 +251,18 @@ def secret_paths() -> tuple[str, ...]:
     )
 
 
+def secret_globs() -> tuple[str, ...]:
+    """The `secret` rules `secret_paths` leaves out because a wildcard stands for a name,
+    relative to the QMX folder, a folder for each `**` rule: `data/apps/*/data/grants` is every
+    mini app's grants. The harness guard refuses whatever they match. A restore keeps only
+    literal paths, so it reads `secret_paths` alone."""
+    return tuple(
+        rule.glob.removesuffix("/**")
+        for rule in RULES
+        if rule.answer == "secret" and "*" in rule.glob.removesuffix("/**")
+    )
+
+
 def secret_values(settings: Mapping[str, object]) -> dict[str, str]:
     """Each value of `settings` (as `settings.toml` reads) under a key named like a secret, or
     shaped like a key, by its key path: `providers.kimi.api_key`, an array's entry by index

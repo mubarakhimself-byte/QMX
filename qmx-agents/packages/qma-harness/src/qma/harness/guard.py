@@ -224,6 +224,9 @@ class GuardRules:
     """`settings.toml [claude] external_tools_unattended`: `server/tool` and `server/*`."""
     never: tuple[Rule, ...] = ()
     always: tuple[Rule, ...] = ()
+    secret_globs: tuple[str, ...] = ()
+    """No reads and no writes in whatever these match, as `secret_paths` but with `*` for one
+    name: every mini app's `data/grants`. Glob-escaped up to the QMX folder."""
     dropped_servers: set[str] = field(default_factory=set[str])
     """External MCP servers the chat left out after launch. Changes while the chat runs."""
     qmx_servers: frozenset[str] = frozenset()
@@ -396,6 +399,8 @@ class _Folded:
     zones: tuple[str, ...]
     home: str
     fold: Callable[[str], str]
+    secret_globs: tuple[tuple[str, ...], ...]
+    """Each of `secret_globs` split into its names."""
 
     @classmethod
     def of(cls, rules: GuardRules) -> _Folded:
@@ -410,6 +415,7 @@ class _Folded:
             tuple(map(fold, rules.delete_zones)),
             fold(rules.variables.get("HOME", "/")),
             fold,
+            tuple(tuple(fold(glob).split("/")) for glob in rules.secret_globs),
         )
 
     def protects(self, path: str) -> bool:
@@ -443,14 +449,53 @@ def _secret(path: str, folded: _Folded) -> bool:
     )
 
 
+def _in_glob(path: str, glob: tuple[str, ...]) -> bool:
+    """`path` is a match of `glob` or inside one. `*` stands for one name, `**` for the rest."""
+    names = path.split("/")
+    for at, part in enumerate(glob):
+        if part == "**":
+            return True
+        if at >= len(names) or not fnmatch.fnmatchcase(names[at], part):
+            return False
+    return True
+
+
+def _holds_glob(folder: str, glob: tuple[str, ...]) -> bool:
+    """A match of `glob` may sit inside `folder`, or `folder` is inside one."""
+    for at, name in enumerate(folder.rstrip("/").split("/")):
+        if at >= len(glob) or glob[at] == "**":
+            return True
+        if not fnmatch.fnmatchcase(name, glob[at]):
+            return False
+    return True
+
+
 def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:
     if _secret(path, folded):
         return _deny(f"agents cannot read or write a login file or a key file ({path})")
+    if any(_in_glob(path, glob) for glob in folded.secret_globs):
+        return _deny(f"agents cannot read or write a mini app's grant or another secret ({path})")
     if any(within(path, home) for home in folded.personal):
         return _deny(f"agents cannot read or write the operator's own Claude home ({path})")
     if folder and any(within(target, path) for target in (*folded.secrets, *folded.personal)):
         return _deny(f"{path} holds a login file or the operator's own Claude home")
+    if folder and any(_holds_glob(path, glob) for glob in folded.secret_globs):
+        return _deny(f"{path} holds a mini app's grant or another secret")
     return None
+
+
+_CLIMB = re.compile(r"(?:^|[/{,])\.\.(?:[/},]|$)")
+"""A `..` name in a glob, braces included."""
+
+
+def _glob_folder(folder: str, *, given: object) -> str:
+    """The folder a Glob pattern's fixed part names: under the call's `path` when it has one
+    and the part is relative, since the CLI globs from `path`, not from the chat's folder."""
+    if not isinstance(given, str) or not given:
+        return folder
+    if posixpath.isabs(folder) or _DRIVE.match(folder) or folder.startswith(("~", "$", "%")):
+        return folder
+    return posixpath.join(given.replace("\\", "/"), folder)
 
 
 def _file_tool(
@@ -468,9 +513,11 @@ def _file_tool(
             return _deny("agents cannot search for login files")
         pattern = tool_input.get("pattern")
         if tool_name == "Glob" and isinstance(pattern, str):
-            fixed = re.split(r"[*?\[{]", pattern, maxsplit=1)[0]
+            fixed, *wild = re.split(r"(?=[*?\[{])", pattern.replace("\\", "/"), maxsplit=1)
+            if wild and _CLIMB.search(wild[0]):
+                return _deny(f"agents cannot climb out of a folder after a wildcard ({pattern})")
             if fixed:
-                paths.append(posixpath.dirname(fixed.replace("\\", "/")) or ".")
+                paths.append(_glob_folder(posixpath.dirname(fixed) or ".", given=raw[0]))
     for raw_path in paths:
         odd = odd_form(expand(raw_path, rules.variables))
         if odd is not None:
@@ -932,6 +979,7 @@ def deny_rules(rules: GuardRules) -> list[str]:
     """Claude Code rule strings for `disallowed_tools`: the login and secret files only, in the
     `//c/Users/...` form Windows matching needs. The guard holds everything else."""
     found: list[str] = []
-    for secret in (*rules.secret_paths, f"/**/{LOGIN_NAME}"):
+    globs = (form for glob in rules.secret_globs for form in (glob, f"{glob}/**"))
+    for secret in (*rules.secret_paths, *globs, f"/**/{LOGIN_NAME}"):
         found += [f"{tool}(/{secret})" for tool in ("Read", "Edit", "Write")]
     return found
