@@ -1,0 +1,24 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "death-certificate",
+  "name": "Death certificate: a failed unit's cause, classified by script, then explained",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "classify", "name": "Classify the cause", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/classify.py"}},
+    {"id": "explain", "name": "Explain the death", "type": "llm", "typeVersion": 1,
+     "position": [440, 0], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/explain.md", "schema_ref": "schemas/explanation.json"}},
+    {"id": "land", "name": "Land the certificate", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/land.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Classify the cause", "port": "in", "map": "one"}]]},
+    "Classify the cause": {"main": [[{"node": "Explain the death", "port": "in", "map": "one"},
+                                     {"node": "Land the certificate", "port": "in", "map": "one"}]]},
+    "Explain the death": {"main": [[{"node": "Land the certificate", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

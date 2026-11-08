@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "unit-check",
+  "name": "Unit check: Part A's check on a unit, every problem looped back until it passes or stalls",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "check", "name": "Check the unit", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/check.py"}},
+    {"id": "clean", "name": "Done checking?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "parameters": {"expr": "items.stop"}},
+    {"id": "rounds", "name": "Fix rounds", "type": "loop", "typeVersion": 1,
+     "position": [660, 0], "parameters": {"max_iterations": 5, "predicate": "items.stop"}},
+    {"id": "fix", "name": "Fix every problem", "type": "llm", "typeVersion": 1,
+     "position": [880, 0], "role": "builder", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/fix.md", "schema_ref": "schemas/unit.json"}},
+    {"id": "recheck", "name": "Check the fixed unit", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/check.py"}},
+    {"id": "report", "name": "Report the check", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/report.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Check the unit", "port": "in", "map": "one"}]]},
+    "Check the unit": {"main": [[{"node": "Done checking?", "port": "in", "map": "one"}]]},
+    "Done checking?": {
+      "true": [[{"node": "Report the check", "port": "in", "map": "one"}]],
+      "false": [[{"node": "Fix rounds", "port": "in", "map": "one"}]]
+    },
+    "Fix rounds": {
+      "body": [[{"node": "Fix every problem", "port": "in", "map": "one"},
+                {"node": "Check the fixed unit", "port": "in", "map": "one"}]],
+      "done": [[{"node": "Report the check", "port": "in", "map": "one"}]]
+    },
+    "Fix every problem": {"main": [[{"node": "Check the fixed unit", "port": "in", "map": "one"}]]},
+    "Check the fixed unit": {"main": [[{"node": "Fix rounds", "port": "next", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}
