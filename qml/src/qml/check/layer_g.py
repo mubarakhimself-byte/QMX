@@ -23,11 +23,13 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Final, Protocol, cast
 
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint, fingerprint_bytes
 from qmf.core.refusal import is_refusal
+from qmf.risk.facts import Fact
 from qmf.risk.paper import ExecutionTarget
 
 from qml.blocks.api import Instance
@@ -42,6 +44,7 @@ from qml.protocol.unit import (
     HostedUnit,
     OwnPosition,
     QuoteBar,
+    RatePort,
     TraceLevel,
     UnitStep,
     construct_unit,
@@ -88,6 +91,7 @@ class _Sim:
     compiled: CompiledUnit
     bars: Mapping[str, Sequence[QuoteBar]]
     equity: Decimal
+    rates: RatePort | None = None
     positions: dict[str, OwnPosition | None] = field(default_factory=dict[str, OwnPosition | None])
     protection: dict[str, tuple[Decimal, Decimal | None]] = field(
         default_factory=dict[str, tuple[Decimal, Decimal | None]]
@@ -116,10 +120,24 @@ class _Sim:
 
         return _At(answer)
 
+    def account(self, instant: Instant) -> Account:
+        """The account facts at ``instant``: the check's equity and one rate per quote.
+
+        A quote the host cannot price is left out of ``rates``, which the converter names
+        ``rate_absent``; the check still runs and reports the skip.
+        """
+        if self.rates is None:
+            return Account(self.equity)
+        rates: dict[str, Fact] = {}
+        for _, record in self.compiled.plan.markets:
+            fact = self.rates.rate(record, instant)
+            if fact is not None:
+                rates[record.currency] = fact
+        return Account(self.equity, self.rates.currency, MappingProxyType(rates))
+
     def surfaces(self) -> dict[str, _At]:
         stream = self.compiled.plan.stream
-        account = Account(self.equity)
-        out = {"account": _At(lambda _i: account), "own_journal": _At(lambda _i: ())}
+        out = {"account": _At(self.account), "own_journal": _At(lambda _i: ())}
         for market, _ in self.compiled.plan.markets:
             out[f"bars:{stream}:{market.market_id}"] = self.latest(market.market_id)
             out[f"own_position:{market.market_id}"] = self.held(market.market_id)
@@ -242,7 +260,7 @@ def _run(
         drive.steps.append(step.value)
         wires = [intent.to_wire() for intent in step.value.intents]
         for proposal in step.value.proposals:
-            priced = unit.price(proposal, Account(sim.equity))
+            priced = unit.price(proposal, sim.account(step.value.instant))
             drive.rows.append(priced.row)
             if priced.intent is not None:
                 wires.append(priced.intent.to_wire())
@@ -333,16 +351,26 @@ def layer_g(
     loaded_in_isolation: bool,
     may_not_trade_on_slice: bool = False,
     data_card_ref: str = "",
+    rates: RatePort | None = None,
 ) -> LayerG:
-    """Both halves of layer G for ``compiled`` on ``bars`` (closed bars by market id)."""
+    """Both halves of layer G for ``compiled`` on ``bars`` (closed bars by market id).
+
+    ``rates`` is the host's ``market.rate:<quote>`` port over the same slice, so a unit quoting
+    another currency is sized instead of skipping every entry ``rate_absent`` (AD-10).
+    """
     instants = _instants(bars)
     first, second, split, control = _Drive(), _Drive(), _Drive(), _Drive()
-    sim = _Sim(compiled, bars, equity)
+    sim = _Sim(compiled, bars, equity, rates)
     unit = _host(sim, execution_target)
     _run(sim, unit, instants, first)
     bound_holds = _bound_holds(unit)
-    _run(other := _Sim(compiled, bars, equity), _host(other, execution_target), instants, second)
-    resumed = _Sim(compiled, bars, equity)
+    _run(
+        other := _Sim(compiled, bars, equity, rates),
+        _host(other, execution_target),
+        instants,
+        second,
+    )
+    resumed = _Sim(compiled, bars, equity, rates)
     half = len(instants) // 2
     head = _host(resumed, execution_target)
     _run(resumed, head, instants[:half], split)
@@ -389,7 +417,7 @@ def layer_g(
     verdict = evaluate_layer2(observations)
 
     shuffled = _shuffled(bars, slice_fp.value)
-    shuffled_sim = _Sim(compiled, shuffled, equity)
+    shuffled_sim = _Sim(compiled, shuffled, equity, rates)
     _run(shuffled_sim, _host(shuffled_sim, execution_target), instants, control)
 
     long_entries = sum(1 for _, _, side in sim.entries if side is Side.LONG)

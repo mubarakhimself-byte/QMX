@@ -84,6 +84,7 @@ __all__ = [
     "PricedEntry",
     "Proposal",
     "QuoteBar",
+    "RatePort",
     "SeamCheck",
     "SizeBand",
     "SlotOutput",
@@ -94,6 +95,7 @@ __all__ = [
     "UnitStep",
     "accept_unit_intents",
     "construct_unit",
+    "rate_used",
     "restore_unit",
     "seam_check",
 ]
@@ -139,6 +141,19 @@ class Surface(Protocol):
     def at(self, instant: Instant, /) -> object: ...
 
 
+class RatePort(Protocol):
+    """Where a host supplies ``market.rate:<quote>`` for the instant it prices at (AD-10, AD-15).
+
+    ``currency`` is the account currency every rate converts into. QMB reads the fact from the
+    conversion market's replay bars and the node from its feed's last closed bar; this seam is
+    what lets either host put the fact in front of the one converter.
+    """
+
+    currency: str
+
+    def rate(self, record: InstrumentRecord, instant: Instant) -> Fact | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class OHLC:
     open: Decimal
@@ -175,6 +190,10 @@ class OwnPosition:
 class Account:
     equity: Decimal
     currency: str = ACCOUNT_CURRENCY
+    rates: Mapping[str, Fact] = MappingProxyType({})
+    """``market.rate:<quote>`` by the quote currency each converts from, its value the exact
+    rational (AD-10 "Currency"). A host supplies one per quote its unit reads; the account's own
+    currency takes the ``Fact(1)`` fast path and never looks here."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,11 +362,16 @@ def _priced_skip(proposal: Proposal, code: str, detail: str) -> Priced:
 
 def _rate(record: InstrumentRecord, facts: Account, now: Instant) -> Fact | None:
     """The rate into the account's currency: one when the record quotes that currency, and
-    nothing when it does not, which the converter names ``rate_absent``. RC-07 supplies
-    ``market.rate:<quote>`` for the rest."""
+    otherwise the fact the host supplied for that quote. A quote with no fact is what the
+    converter names ``rate_absent``, and one past its age is ``rate_stale``."""
     if record.currency == facts.currency:
         return Fact(Decimal(1), now, "open", "the account is in the record's quote currency")
-    return None
+    return facts.rates.get(record.currency)
+
+
+def rate_used(record: InstrumentRecord, facts: Account, now: Instant) -> Fact | None:
+    """The rate ``HostedUnit.price`` sizes an entry at, for the host that stamps its row."""
+    return _rate(record, facts, now)
 
 
 def _residue_text(residue: Decimal) -> str:
