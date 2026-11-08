@@ -310,6 +310,19 @@ class FeedKeeper:
         """``listener`` sees every closed bar, before the runtime drives its units on it."""
         self._listeners.append(listener)
 
+    def widen(self, markets: Iterable[str]) -> bool:
+        """Hold each of ``markets`` beside the ones this session opened with, and say whether one
+        was new. A deployment that added a market comes through here with it, and so does a
+        conversion market whose rate a unit reads: its book starts rebuilding until a fresh
+        snapshot arrives, and the next open subscribes it. The caller drops the session."""
+        held = tuple(dict.fromkeys((*self.markets, *markets)))
+        if held == self.markets:
+            return False
+        self.markets = held
+        for market in held:
+            self._books.setdefault(market, (BookState.REBUILDING, ()))
+        return True
+
     def book(self, market: str) -> BookView:
         state, levels = self._books.get(market, (BookState.REBUILDING, ()))
         return BookView(market, state, levels if state is BookState.READY else ())

@@ -102,9 +102,11 @@ from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import (
+    ACCOUNT_CURRENCY,
     HostedUnit,
     OwnPosition,
     QuoteBar,
+    RatePort,
     Surface,
     construct_unit,
     restore_unit,
@@ -113,6 +115,7 @@ from qml.unit.model import Side
 
 from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
+from qmn.app.facts import FeedRates, refs as rate_refs
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, cleared_by, refused, same_market
@@ -1584,6 +1587,7 @@ class NodeUnit:
         journal: RunJournal,
         guard: Callable[[str], str | None],
         assignment: Mapping[str, Decimal] | None = None,
+        rates: RatePort | None = None,
     ) -> None:
         self.deployment = deployment
         self.assignment = assignment
@@ -1595,6 +1599,7 @@ class NodeUnit:
         self.lane = deployment.lane
         self.journal_world = JournalWorld.PAPER
         self.guard = guard
+        self.rates = rates
         self.windows = {market: BarWindow(window_size(compiled)) for market in records}
         self.warm_needed = window_size(compiled)
         self.warm_seen = 0
@@ -1667,6 +1672,7 @@ class NodeUnit:
             equity=equity,
             execution=self._execution,
             journal=self._port,
+            rates=self.rates,
         )
         if is_refusal(started):
             return started
@@ -2903,7 +2909,14 @@ class Runtime:
             return
         hosted.venue = venue
         unit = NodeUnit(
-            deployment, compiled, records, path, journal.value, self.guard(hosted), assignment
+            deployment,
+            compiled,
+            records,
+            path,
+            journal.value,
+            self.guard(hosted),
+            assignment,
+            FeedRates(venue.feed.recording, rate_refs(records, ACCOUNT_CURRENCY), ACCOUNT_CURRENCY),
         )
         unit.journal_world = world
         account = venue.client.account
@@ -2941,18 +2954,26 @@ class Runtime:
         self._settle_warm(hosted)
 
     def _widen(self, venue: Venue, deployment: Deployment) -> bool:
-        """Add each market the deployment chose that the binding does not hold, then drop the
-        session once so it reconnects and subscribes them. True when it must come back first.
+        """Add each market the deployment chose, and each conversion market its records name,
+        that the binding does not hold; then drop the session once so it reconnects and
+        subscribes them. True when it must come back first.
 
-        The reconnect is the path R20 and R21 already reset: books rebuild, quotes go with the
-        old session, and the reconcile runs once on the new one. A running unit on that account
-        misses one bar's record, which the plan accepts.
+        A conversion market is subscribed so its bars reach this node's recording, which is where
+        a unit's rate fact is read from; the unit is never driven on it, because ``_drive_one``
+        keeps to its own traded markets. The reconnect is the path R20 and R21 already reset:
+        books rebuild, quotes go with the old session, and the reconcile runs once on the new
+        one. A running unit on that account misses one bar's record, which the plan accepts.
         """
         symbols = unit_symbols(deployment)
         wanted = {market: symbols[market] for market in deployment.markets if market in symbols}
+        records = deployment_records(deployment)
+        if not isinstance(records, str):
+            for ref in rate_refs(records, ACCOUNT_CURRENCY).values():
+                if ref.market_id in symbols:
+                    wanted.setdefault(ref.market_id, symbols[ref.market_id])
         if not venue.client.add_markets(wanted):
             return False
-        venue.feed.markets = tuple(dict.fromkeys((*venue.feed.markets, *wanted)))
+        venue.feed.widen(wanted)
         venue.feed.drop("a deployment added a market")
         return True
 
