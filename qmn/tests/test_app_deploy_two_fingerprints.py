@@ -85,7 +85,7 @@ def test_a_risk_only_recompile_is_taken_on_the_same_g_record(tmp_path: Path) -> 
     assert compiled.logic_fingerprint.value == old.logic_fingerprint.value
     assert compiled.risk_fingerprint.value != old.risk_fingerprint.value
     raised["g_record"] = _g_record(raised, compiled.logic_fingerprint.value)
-    assert cast("dict[str, Json]", raised["g_record"])["compiled_fingerprint"] == month().fingerprint
+    assert raised["g_record"]["compiled_fingerprint"] == month().fingerprint
 
     accepted = deploy(node, raised, "op-deploy-2")
 

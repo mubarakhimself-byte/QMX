@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from decimal import Decimal
+from typing import cast
 
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint
@@ -35,11 +36,8 @@ _BARS = 60
 def _raised() -> dict[str, object]:
     """The dummy with its one sizer number raised, which moves the risk half alone."""
     document = _document()
-    numbers = document["numbers"]
-    assert isinstance(numbers, dict)
-    spec = numbers["risk_fraction"]
-    assert isinstance(spec, dict)
-    spec["default"] = "0.01"
+    numbers = cast("dict[str, dict[str, object]]", document["numbers"])
+    numbers["risk_fraction"]["default"] = "0.01"
     return document
 
 
