@@ -66,8 +66,12 @@ ROW_READS: Final = frozenset({"units", "deployments"})
 SCHEMA: Final = "qmx.host.forward/1"
 ROUTE_PATH: Final = "/api/host/forward"
 OUTBOX: Final = "node-link.db"
-WAITING_CODES: Final = frozenset({"not_running", "files_missing", "budget_exceeded"})
-"""Answers after which a change keeps waiting: the node app is down or not ready yet."""
+WAITING_CODES: Final = frozenset(
+    {"not_running", "files_missing", "budget_exceeded", "tool_timeout", "tool_failed"}
+)
+"""Answers after which a change keeps waiting: the node app is down or not ready yet, or the
+supervisor could not get an answer from it. A tool that outlives its ask, or a supervisor loop
+that does not answer, is no answer, so the node may have kept the change."""
 INTERVAL_S: Final = 60.0
 """`[engine] node_link.interval_s`: seconds between reads of each node's heartbeats."""
 UNREACHABLE_AFTER: Final = 3.0
@@ -230,6 +234,15 @@ class Outbox:
                 f"{_SELECT} WHERE place = ? AND operation = 'deploy' AND state = 'refused'"
                 " ORDER BY seq",
                 (place,),
+            ).fetchall()
+        return [_change(row) for row in rows]
+
+    def deploys(self, place: str) -> list[Change]:
+        """Every deploy this host asked of the place, whatever the node answered, in the order
+        he clicked them."""
+        with self._db() as db:
+            rows = db.execute(
+                f"{_SELECT} WHERE place = ? AND operation = 'deploy' ORDER BY seq", (place,)
             ).fetchall()
         return [_change(row) for row in rows]
 
@@ -653,8 +666,8 @@ def _with_refused(
     operation: str, answer: JsonValue, refused: Sequence[Change], wanted: JsonValue
 ) -> JsonValue:
     """The node's rows, then a row for each deploy it refused. A deployment the node holds reads
-    as the node has it, since an ask that timed out files as refused and may have reached it. A
-    node here answers its envelope and a node elsewhere its value, and each keeps its shape."""
+    as the node has it, so a refused row is added only for a deployment the node does not show.
+    A node here answers its envelope and a node elsewhere its value, and each keeps its shape."""
     enveloped = isinstance(answer, dict)
     if enveloped and cast(Document, answer).get("ok") is not True:
         return answer

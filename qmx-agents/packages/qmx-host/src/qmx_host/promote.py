@@ -35,6 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from qmf.core import fingerprint, is_refusal
 from qml.compile import CompiledUnit, compile_unit
 from qml.lifecycle import Actor, ActorKind, Event, MarketKey, State, fold
+from qmx_apps.errors import AppError
 from qmx_control.models import Document
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.service.context import OPERATOR
@@ -66,6 +67,8 @@ SHOWN: Final[Mapping[str, str]] = {"applied": "accepted", "waiting": "queued"}
 """A node change's outbox state as his answer says it; a refused change is a refusal."""
 GONE: Final = "unknown_deployment"
 """The node's answer to a withdraw of a deployment it does not hold: nothing is left to stop."""
+NOT_LIVE: Final = frozenset({"refused", "withdrawing", "stopped"})
+"""The node's words for a deployment that is not running or will not run."""
 
 type Lane = Literal["paper", "live"]
 type Calibrations = Callable[[str, str], Sequence[Mapping[str, object]]]
@@ -164,6 +167,22 @@ def deployment_of(event: Event) -> str | None:
     if event.to_state not in TRADING or not event.event_id.startswith("click-"):
         return None
     return deployment_id(event.event_id.removeprefix("click-"))
+
+
+def _on_market(change: Change, click: Click) -> bool | None:
+    """Whether the deployment a change carried names this market, or None when its document does
+    not read. The node's own row names no market, and the deployment document is where his
+    click's market is kept."""
+    document = change.arguments.get("deployment")
+    if not isinstance(document, dict):
+        return None
+    markets = document.get("markets")
+    if not isinstance(markets, list):
+        return None
+    return any(
+        isinstance(market, dict) and market.get("market_id") == click.market_id
+        for market in markets
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,16 +356,22 @@ class Promoter:
                 "Name the node's tag and the account id.",
                 status=400,
             )
-        current = fold(known).state(click.key)
+        folded = fold(known)
+        current = folded.state(click.key)
         if current is State.STOPPED:
             raise Refused(
                 "illegal_move",
                 f"{click.market_id} is stopped by a risk rule; his resume on the node clears it",
                 "Resume the unit on the node's card.",
             )
+        moves = [applied for applied in folded.applied if applied.key == click.key]
+        again = moves[-1] if current is click.target and moves else None
+        if again is not None and self._no_live_deployment(click) is not True:
+            again = None
         document, compiled = self._unit(click)
-        probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
-        self._allowed(probe, known)
+        if again is None:
+            probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
+            self._allowed(probe, known)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
         report = self._g_record(compiled.compiled_fingerprint.value, click.market_id)
         account = _one(
@@ -368,18 +393,16 @@ class Promoter:
                     f"the unit still uses placeholder blocks: {', '.join(compiled.placeholders)}",
                     "Tick that you accept the placeholders, then click again.",
                 )
+        if again is not None:
+            deployment = self._deployment(
+                click, click.node, ask, document, compiled, lane, report, account, again.event_id
+            )
+            return _done(again.event_id, _shown(self._deployed(deployment)), ask)
         event = self._event(click, digest, current, compiled.compiled_fingerprint.value, report)
         deployment = self._deployment(
             click, click.node, ask, document, compiled, lane, report, account, event.event_id
         )
-        change = self.nodes.change(
-            NODE_APP,
-            "deploy",
-            {"deployment": deployment},
-            principal=OPERATOR.principal,
-            op_id=ask,
-        )
-        answer = _shown(change)
+        answer = _shown(self._deployed(deployment))
         try:
             self.lifecycle.record_move(event)
         except MoveRefused as refused:
@@ -387,6 +410,59 @@ class Promoter:
         except OSError as error:
             raise self._undo(digest, ask, f"storage: {error}") from None
         return _done(made, answer, ask)
+
+    def _deployed(self, deployment: Document) -> Change:
+        """Ask the node to take `deployment`, and answer the outbox row it settled."""
+        return self.nodes.change(
+            NODE_APP,
+            "deploy",
+            {"deployment": deployment},
+            principal=OPERATOR.principal,
+            op_id=str(deployment["deployment_id"]),
+        )
+
+    def _no_live_deployment(self, click: Click) -> bool | None:
+        """Whether the node holds no live deployment of this unit version on this market, so a
+        click on a market that already reads the target may deploy again. None when it cannot
+        answer. A live row the outbox does not know counts as live, because the node's row names
+        no market and a guess must not start a second deployment."""
+        try:
+            answer = self.nodes.read("deployments", {}, principal=OPERATOR.principal)
+        except AppError:
+            return None
+        rows = answer.get("value") if isinstance(answer, dict) else answer
+        if not isinstance(rows, list):
+            return None
+        for row in rows:
+            if not isinstance(row, dict) or row.get("state") in NOT_LIVE:
+                continue
+            unit = row.get("unit")
+            if not isinstance(unit, dict):
+                continue
+            if (unit.get("id"), unit.get("version")) != (click.unit.id, click.unit.version):
+                continue
+            change = self.nodes.outbox.get(str(row.get("deployment_id")))
+            if change is None or _on_market(change, click) is not False:
+                return False
+        return True
+
+    def _asked_deployments(self, click: Click) -> list[str]:
+        """The deployment ids his clicks asked of the node for this unit version and market,
+        whether the node took one, refused it or never answered. Nothing deletes an outbox row,
+        so a deploy that recorded no move is still named here."""
+        found: list[str] = []
+        for change in self.nodes.outbox.deploys(self.nodes.home_of(NODE_APP)):
+            document = change.arguments.get("deployment")
+            if not isinstance(document, dict):
+                continue
+            unit = document.get("unit")
+            if not isinstance(unit, dict):
+                continue
+            if (unit.get("id"), unit.get("version")) != (click.unit.id, click.unit.version):
+                continue
+            if _on_market(change, click) is True:
+                found.append(change.op_id)
+        return found
 
     def _undo(self, digest: str, ask: str, why: str) -> Refused:
         """The node took deployment `ask` and its move is not recorded, so no park can reach it:
@@ -410,8 +486,9 @@ class Promoter:
 
     def _leave(self, click: Click, digest: str, known: Sequence[Event]) -> Document:
         """Park or retire: record the move, then ask the node to withdraw each deployment his
-        clicks put on this market. A market already parked or retired records nothing and asks
-        the withdraw again, so a second click finishes a withdraw the node did not answer."""
+        clicks asked of the node on this market, whether the node took it or refused it. A market
+        already parked or retired records nothing and asks the withdraw again, so a second click
+        finishes a withdraw the node did not answer."""
         folded = fold(known)
         current = folded.state(click.key)
         moves = [applied for applied in folded.applied if applied.key == click.key]
@@ -431,7 +508,8 @@ class Promoter:
                     "Only the moves the lifecycle table allows go through.",
                 ) from None
         placed = [found for move in moves if (found := deployment_of(move)) is not None]
-        answer = self._withdraw(digest, list(dict.fromkeys(placed)))
+        asked = self._asked_deployments(click)
+        answer = self._withdraw(digest, list(dict.fromkeys([*placed, *asked])))
         if answer.code is not None:
             refused = Refused(
                 "node_not_ready",

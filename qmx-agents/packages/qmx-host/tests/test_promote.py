@@ -17,6 +17,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import JsonValue
 from qmf.core import is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
@@ -64,9 +65,10 @@ HIM = Caller("user")
 
 @dataclass
 class ConformanceNode:
-    """The trading node's `deploy` and `withdraw` as the node link reaches it on this machine:
-    it refuses another node's tag, a compiled fingerprint its G record did not test, and a
-    staged file missing or not matching its fingerprint, as the node's preflight does."""
+    """The trading node's `deploy`, `withdraw` and `deployments` read as the node link reaches
+    them on this machine: it refuses another node's tag, a compiled fingerprint its G record did
+    not test, and a staged file missing or not matching its fingerprint, as the node's preflight
+    does."""
 
     home: Path
     calls: list[tuple[str, Document]] = field(default_factory=list[tuple[str, Document]])
@@ -84,6 +86,8 @@ class ConformanceNode:
         self.calls.append((operation, arguments))
         if operation == "deploy":
             return {"result": self._deploy(cast(Document, arguments["deployment"]))}
+        if operation == "deployments":
+            return {"result": {"ok": True, "value": self.rows()}}
         if self.withdraw_times_out:
             raise AppError("tool_timeout", "The tool did not complete within its timeout.", 504)
         if str(arguments["deployment_id"]) not in self.held:
@@ -109,6 +113,22 @@ class ConformanceNode:
                 return {"ok": False, "code": "file_mismatch", "message": str(item["path"])}
         self.held[str(document["deployment_id"])] = document
         return {"ok": True, "value": {"deployment_id": document["deployment_id"]}}
+
+    def rows(self) -> list[JsonValue]:
+        """The node's own rows for the deployments it holds, one each. The row names no market,
+        as the real node's does not, so the host reads the market from its outbox."""
+        found: list[JsonValue] = []
+        for deployment_id, document in self.held.items():
+            found.append(
+                {
+                    "deployment_id": deployment_id,
+                    "unit": cast(Document, document["unit"]),
+                    "state": "trading",
+                    "detail": "",
+                    "accepted_at": None,
+                }
+            )
+        return found
 
     def deploys(self) -> list[Document]:
         return [cast(Document, a["deployment"]) for op, a in self.calls if op == "deploy"]
@@ -507,10 +527,11 @@ def test_a_withdraw_that_times_out_keeps_the_park_and_a_second_click_finishes_it
     rig.node.withdraw_times_out = False
     again = rig.click(op_id="click-park-2", to="parked", node=None, account=None)
 
-    assert (timed_out[0], timed_out[1]["code"]) == (409, "node_not_ready")
+    assert (timed_out[0], timed_out[1].get("code")) == (200, None), timed_out
+    assert timed_out[1]["value"]["node_answer"] == "queued"
     assert timed_out[1]["value"]["lifecycle_event_id"] == again[1]["value"]["lifecycle_event_id"]
     assert (again[0], again[1]["value"]["node_answer"]) == (200, "accepted")
-    assert rig.node.withdraws() == [deployment, deployment]
+    assert rig.node.withdraws() == [deployment, deployment, deployment]
     assert [move[1:3] for move in rig.moves()] == [
         ("draft", "tested"),
         ("tested", "paper"),
@@ -579,7 +600,7 @@ def test_a_record_that_fails_after_the_deploy_names_what_a_timed_out_withdraw_le
     )
     assert answer["message"] == (
         "storage: the lifecycle row was not written: disk full, and the node did not withdraw"
-        f" deployment {held}: tool_timeout"
+        f" deployment {held}: the withdraw is queued"
     )
     assert answer["next_step"] == f"Kill deployment {held} on the node's card."
     assert (len(rig.moves()), rig.node.withdraws()) == (1, [held])
