@@ -21,7 +21,8 @@ from typing import ClassVar, cast
 
 import pytest
 import test_app_runtime as base
-from qmf.core import Ok, PriceDelta, Quantity, Result, TypedRefusal
+from qmb.runloop import RestingIntent
+from qmf.core import Instant, Ok, PriceDelta, Quantity, Result, TypedRefusal
 from qmf.venue.commands import (
     CloseScope,
     Command,
@@ -35,7 +36,7 @@ from qmn.app import grants as grants_module
 from qmn.app import server
 from qmn.app.attribution import Claim, OrderState, VenueOrder, VenuePosition, attribute
 from qmn.app.grants import Grants, TokenEndpoint
-from qmn.app.runtime import Phase, Runtime, Ticket
+from qmn.app.runtime import Blocked, Phase, Placed, Runtime, Ticket
 from qmn.app.server import DEFINITIONS, CTraderDoor, Node, open_node
 from qmn.app.store import Json, Store
 from qmn.venue import order_tags
@@ -93,6 +94,7 @@ class Held:
     stop: Decimal | None
     label: str
     client_order_id: str
+    target: Decimal | None = None
 
 
 @dataclass
@@ -116,6 +118,8 @@ class FakeCTrader:
         default_factory=dict[int, list[dict[str, object]]]
     )
     """The orders on each position, opening order first."""
+    amended: list[dict[str, Decimal]] = field(default_factory=list[dict[str, Decimal]])
+    """Each accepted amendment's levels, as the broker read them."""
     quotes: dict[int, tuple[Decimal, Decimal]] = field(
         default_factory=dict[int, tuple[Decimal, Decimal]]
     )
@@ -320,6 +324,50 @@ class FakeCTrader:
             "ORDER_FILLED", held, "POSITION_STATUS_CLOSED", price, "MARKET", msg_id, closing=True
         )
 
+    def _on_ProtoOAAmendPositionSLTPReq(self, msg_id: str, body: dict[str, object]) -> None:
+        """Move a held position's stop or target to the absolute price sent as a double. Like
+        cTrader it refuses a price with more decimals than the symbol has, and a stop or target
+        on the wrong side of the quote; it answers on the execution-event surface."""
+        held = self.held.get(int(str(body["positionId"])))
+        if held is None:
+            self._order_error(msg_id, "POSITION_NOT_FOUND")
+            return
+        digits = next(d for ident, d, *_ in self.SYMBOLS.values() if ident == held.symbol_id)
+        bid, ask = self.quotes[held.symbol_id]
+        long = held.side == "BUY"
+        levels: dict[str, Decimal] = {}
+        for name in ("stopLoss", "takeProfit"):
+            raw = body.get(name)
+            if raw is None:
+                continue
+            assert isinstance(raw, float), f"{name} is a double on the wire, got {raw!r}"
+            level = Decimal(repr(raw))
+            if -cast(int, level.as_tuple().exponent) > digits:
+                self._order_error(msg_id, "INVALID_REQUEST")
+                return
+            wants_below = (name == "stopLoss") == long
+            if (level < (bid if long else ask)) != wants_below:
+                self._order_error(msg_id, "TRADING_BAD_STOPS")
+                return
+            levels[name] = level
+        held.stop = levels.get("stopLoss", held.stop)
+        held.target = levels.get("takeProfit", held.target)
+        self.amended.append(levels)
+        self._say(
+            "ProtoOAExecutionEvent",
+            {
+                "ctidTraderAccountId": CTID,
+                "executionType": "ORDER_REPLACED",
+                "position": self._position(held, "POSITION_STATUS_OPEN"),
+            },
+            msg_id,
+        )
+
+    def _order_error(self, msg_id: str, code: str) -> None:
+        self._say(
+            "ProtoOAOrderErrorEvent", {"ctidTraderAccountId": CTID, "errorCode": code}, msg_id
+        )
+
     # --- what the broker says on its own ---
 
     def quote(self, symbol: str, bid: Decimal, ask: Decimal, at_ms: int) -> None:
@@ -369,6 +417,8 @@ class FakeCTrader:
         }
         if held.stop is not None:
             position["stopLoss"] = float(held.stop)
+        if held.target is not None:
+            position["takeProfit"] = float(held.target)
         return position
 
     def _execution(
@@ -714,7 +764,9 @@ def node_rows(rig: Bound, kind: str) -> list[dict[str, Json]]:
 
 
 def sent_entries(rig: Bound) -> list[str]:
-    return [str(body["clientOrderId"]) for n, body in rig.fake.received if n == "ProtoOANewOrderReq"]
+    return [
+        str(body["clientOrderId"]) for n, body in rig.fake.received if n == "ProtoOANewOrderReq"
+    ]
 
 
 def closes(rig: Bound) -> list[dict[str, object]]:
@@ -850,9 +902,7 @@ def test_an_entry_answered_after_its_wait_is_the_node_own_and_closes(tmp_path: P
     read = venue.read_back()
     assert not isinstance(read, TypedRefusal)
     claimed = attribute(read.value, tag="a4dqobyh", sent=["e" * 36])
-    closed = venue.send(
-        Ticket(close.value, "fx.eurusd", Side.LONG, Decimal(0), position="e" * 36)
-    )
+    closed = venue.send(Ticket(close.value, "fx.eurusd", Side.LONG, Decimal(0), position="e" * 36))
 
     assert not isinstance(entered, TypedRefusal) and not isinstance(closed, TypedRefusal)
     assert entered.value.outcome is SubmissionOutcome.UNKNOWN
@@ -923,6 +973,60 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
     ]
     assert runtime.alarms == []
     assert venue.held() == {}
+    runtime.stop()
+
+
+def test_a_unit_trailing_its_stop_moves_the_ctrader_stop_on_the_first_try(
+    tmp_path: Path,
+) -> None:
+    rig = bound_rig(tmp_path)
+    signed_in(rig)
+    bind(rig)
+    runtime = deploy_dummy(rig)
+    at = play_until_sent(rig)
+    play_spots(rig, at, at + BAR)
+    unit = runtime.hosted["dep-1"].unit
+    assert unit is not None and unit.handler is not None
+    held = unit.handler.open_positions["fx.eurusd"]
+    named = unit.venue_name(held.position_id)
+    venue = cast(CTraderVenue, runtime.venues[ACCOUNT].client)
+    first = venue.stop_of(named)
+
+    def tighten(level: Decimal, row: str) -> Placed | Blocked:
+        wire: dict[str, object] = {
+            "contract_format_version": 3,
+            "intent_family": "exit",
+            "kind": "amend_protection",
+            "position_ref": {
+                "position_id": held.position_id,
+                "instrument": {"venue": "icmarkets-ctrader", "symbol": "EURUSD"},
+                "opened_by": held.opened_by.value,
+            },
+            "reason_code": {"code": "trail", "book_family": "unit"},
+            "decision_row_id": row,
+            "stop": str(level),
+            "targets": [],
+        }
+        intent = RestingIntent.try_create(f"exit:{row}", "fx.eurusd", order=wire)
+        assert not isinstance(intent, TypedRefusal), intent
+        return unit.place(intent.value, Instant(base.LIVE_FROM))
+
+    trail = [Decimal("1.08012"), Decimal("1.08002"), Decimal("1.07992")]
+    placed = [tighten(level, f"row-trail-{n}") for n, level in enumerate(trail)]
+    amends = [body for name, body in rig.fake.received if name == "ProtoOAAmendPositionSLTPReq"]
+
+    assert (held.side, held.entry_price, first) == (
+        Side.SHORT,
+        Decimal("1.06858"),
+        Decimal("1.08022"),
+    )
+    assert placed == [Placed(level) for level in trail]
+    assert [body["stopLoss"] for body in amends] == [1.08012, 1.08002, 1.07992]
+    assert rig.fake.amended == [{"stopLoss": level} for level in trail]
+    assert [h.stop for h in rig.fake.held.values()] == [Decimal("1.07992")]
+    assert venue.stop_of(named) == Decimal("1.07992")
+    assert "ProtoOAClosePositionReq" not in rig.fake.requests()
+    assert runtime.alarms == []
     runtime.stop()
 
 

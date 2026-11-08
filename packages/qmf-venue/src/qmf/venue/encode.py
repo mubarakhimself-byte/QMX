@@ -10,8 +10,11 @@ Spotware SDK, CCXT, Hummingbot, or Twisted code runs.
 Money, price, and volume cross only declared exact-integer scale boundaries
 (AD-7): volumes as cents (scale 2), prices as the market-data wire scale
 (scale 5). A binary float without a declared rounding rule is refused. A
-compiled field typed ``double``/``float`` is the same refusal — this encoder
-never writes a wire float.
+compiled field typed ``double``/``float`` is the same refusal, with one
+exception: release 91 declares an amend's ``stopLoss`` and ``takeProfit`` as
+doubles holding the absolute price. That level is computed exactly, rounded
+once at the symbol's digits toward the position, and becomes a double only at
+the field write; a double that does not read back as the same digits is refused.
 
 An undeclared CT-18 capability (command kind, order type, close scope, close-all
 primitive) is an ``unsupported capability`` refusal naming that capability.
@@ -21,8 +24,10 @@ block (GAP-0059).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Final, cast
 
 from google.protobuf.descriptor import FieldDescriptor
@@ -40,7 +45,14 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.venue.capabilities import CapabilityDeclaration, CapabilityFieldName
-from qmf.venue.commands import Command, CommandKind, OrderType, ProtectionSide, TimeInForce
+from qmf.venue.commands import (
+    Command,
+    CommandKind,
+    OrderType,
+    ProtectionAmendment,
+    ProtectionSide,
+    TimeInForce,
+)
 from qmf.venue.connection import encode_framed_payload
 from qmf.venue.ctrader import MARKET_DATA_WIRE_SCALE_EXPONENT
 from qmf.venue.proto import CompiledProto
@@ -99,6 +111,17 @@ _TIF_WIRE: Final[Mapping[TimeInForce, int]] = {
     TimeInForce.FILL_OR_KILL: 4,
 }
 _TRADE_SIDE_WIRE: Final[Mapping[str, int]] = {"buy": 1, "sell": 2}
+
+_LEVEL_RULES: Final[Mapping[tuple[ProtectionSide, str], tuple[int, bool]]] = {
+    (ProtectionSide.STOP, "buy"): (-1, True),
+    (ProtectionSide.STOP, "sell"): (1, False),
+    (ProtectionSide.TARGET, "buy"): (1, False),
+    (ProtectionSide.TARGET, "sell"): (-1, True),
+}
+"""Per protection side and position side: the sign the amendment's distance takes from its
+reference price, and whether the level rounds up at the symbol's digits. A stop's distance runs
+in the loss direction and a target's in the profit direction, as every node venue reads them.
+Rounding goes toward the position, so a stop never adds risk and a target never asks for more."""
 
 _PLACE_ORDER_NAMES: Final[tuple[str, ...]] = (
     "protooa.ProtoOANewOrderReq",
@@ -266,6 +289,38 @@ def _price_wire(price: Price, field_name: str) -> Result[int]:
     return _to_wire_scale(price.value, price.scale, PRICE_WIRE_SCALE_EXPONENT, field_name)
 
 
+def _absolute_level(
+    amendment: ProtectionAmendment, trade_side: object, digits: object
+) -> Result[tuple[int, int]]:
+    """The amended level as an exact integer at the symbol's digits, rounded once toward the
+    position (``_LEVEL_RULES``)."""
+    side = trade_side.strip().lower() if isinstance(trade_side, str) else ""
+    rule = _LEVEL_RULES.get((amendment.protection_side, side))
+    if rule is None:
+        return _invalid(
+            "trade_side",
+            "an absolute protection level needs the position's trade side, buy | sell",
+            given=repr(trade_side),
+        )
+    places = _as_plain_int(digits)
+    if places is None or places < 0:
+        return _invalid(
+            "digits",
+            "an absolute protection level is written at the symbol's digits, a non-negative "
+            "integer",
+            given=repr(digits),
+        )
+    sign, round_up = rule
+    level = amendment.reference_price.as_fraction() + sign * amendment.new_distance.as_fraction()
+    scaled = level * 10**places
+    units = math.ceil(scaled) if round_up else math.floor(scaled)
+    if units <= 0:
+        return _invalid(
+            "protection_level", "a protection level is a positive price", level=str(level)
+        )
+    return Ok((units, places))
+
+
 def _delta_wire(delta: PriceDelta, field_name: str) -> Result[int]:
     scaled = _to_wire_scale(delta.value, delta.scale, PRICE_WIRE_SCALE_EXPONENT, field_name)
     if is_refusal(scaled):
@@ -352,6 +407,30 @@ def _set_int(
             capability="venue_protocol_artifact",
         )
     return Ok(False)
+
+
+def _set_double(message: Message, name: str, units: int, digits: int) -> Result[bool]:
+    """Write the exact price ``units`` at ``digits`` into a double field. The double is made
+    here and nowhere earlier, and one that does not read back as the same digits is refused."""
+    field = _field_of(message, name)
+    if field is None or _field_wire_type(field) not in _FLOAT_WIRE_TYPES:
+        return _unsupported(
+            "field",
+            "the compiled ProtoOA message has no matching double field",
+            requested=[name],
+            capability="venue_protocol_artifact",
+        )
+    exact = Decimal(units).scaleb(-digits)
+    wire = units / 10**digits
+    if Decimal(repr(wire)) != exact:
+        return _invalid(
+            name,
+            "the price does not survive as a double at the symbol's digits",
+            level=str(exact),
+            given=repr(wire),
+        )
+    setattr(message, name, wire)
+    return Ok(True)
 
 
 def _set_str(
@@ -894,8 +973,16 @@ def encode_amend_protection(
     declaration: object,
     ctid_trader_account_id: object,
     client_msg_id: object = None,
+    trade_side: object = None,
+    digits: object = None,
 ) -> Result[EncodedCommand]:
-    """Encode ``amend_protection`` as ProtoOAAmendPositionSLTPReq (payloadType 2110)."""
+    """Encode ``amend_protection`` as ProtoOAAmendPositionSLTPReq (payloadType 2110).
+
+    Where the compiled field is a double, as release 91 declares it, the field holds the
+    absolute level: ``trade_side`` is the position's side and ``digits`` the symbol's, and both
+    are required. A compiled integer field keeps the reference-plus-distance image at the
+    market-data wire scale.
+    """
     resolved = _require_command(command, CommandKind.AMEND_PROTECTION)
     if is_refusal(resolved):
         return resolved
@@ -925,12 +1012,6 @@ def encode_amend_protection(
             "amend_protection encodes a venue-native integer positionId",
             given=repr(resolved.value.subject_reference),
         )
-    level = amendment.reference_price.add(amendment.new_distance)
-    if is_refusal(level):
-        return level
-    wire_level = _price_wire(level.value, "protection_level")
-    if is_refusal(wire_level):
-        return wire_level
     msg_id = _client_msg_id(resolved.value, client_msg_id)
     if is_refusal(msg_id):
         return msg_id
@@ -946,7 +1027,20 @@ def encode_amend_protection(
         if is_refusal(write):
             return write
     field = "stopLoss" if amendment.protection_side is ProtectionSide.STOP else "takeProfit"
-    written = _set_int(message, (field,), wire_level.value)
+    declared = _field_of(message, field)
+    if declared is not None and _field_wire_type(declared) in _FLOAT_WIRE_TYPES:
+        absolute = _absolute_level(amendment, trade_side, digits)
+        if is_refusal(absolute):
+            return absolute
+        written = _set_double(message, field, *absolute.value)
+    else:
+        level = amendment.reference_price.add(amendment.new_distance)
+        if is_refusal(level):
+            return level
+        wire_level = _price_wire(level.value, "protection_level")
+        if is_refusal(wire_level):
+            return wire_level
+        written = _set_int(message, (field,), wire_level.value)
     if is_refusal(written):
         return written
     return _finish(
@@ -970,9 +1064,10 @@ def encode_command(
     volume: object = None,
     client_msg_id: object = None,
     tags: object = None,
+    digits: object = None,
 ) -> Result[EncodedCommand]:
     """Dispatch a CT-19 Command onto the matching ProtoOA encode symbol; ``tags`` ride a
-    ``place_order`` only."""
+    ``place_order`` only, and ``digits`` an ``amend_protection`` only."""
     if not isinstance(command, Command):
         return _invalid("command", "encode requires a CT-19 Command", given=type(command).__name__)
     if command.kind is CommandKind.PLACE_ORDER:
@@ -1018,4 +1113,6 @@ def encode_command(
         declaration=declaration,
         ctid_trader_account_id=ctid_trader_account_id,
         client_msg_id=client_msg_id,
+        trade_side=trade_side,
+        digits=digits,
     )
