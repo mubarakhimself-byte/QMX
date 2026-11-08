@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
@@ -14,12 +16,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from qmf.core import Result, is_refusal
 from qml.protocol import HostedBot
 from qmn.doors.api import DoorRuntime
-from qmx_control.library import Library
+from qmx_control.library import OPERATOR, Library
 from qmx_control.models import ControlError, LibraryInput
 from qmx_control.service import ControlService
-from qmx_judge.landing import BacktestResult, LandingPort, land
+from qmx_judge.tries import TRY_KIND, try_item
+from qmx_library.principal import MAIN
 
 ResponseFormat = Literal["concise", "detailed"]
+type Document = dict[str, Any]
+
+QMB_APP: Final = "qmb"
+QMB_BACKTEST: Final = "jobs/backtest.py"
+"""The tester and its `backtest` job every door starts: the default tester (`qmb.md` section 5)."""
 
 
 class SeriesRow(Protocol):
@@ -111,11 +119,6 @@ FAMILIES: Final[dict[str, str]] = {
 """The agent's word for a series family, and the door kind it names."""
 
 
-class BacktestSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    config_ref: str = Field(min_length=1)
-
-
 class Artifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1)
@@ -166,37 +169,10 @@ def unwrap(result: Result[Any]) -> Any:
     return result.value
 
 
-@dataclass(frozen=True, slots=True)
-class BacktestRun:
-    """One finished backtest: the result to land and the three edges to land it with."""
-
-    result: BacktestResult
-    consumed: str
-    """The dataset card version the backtest read (Library AD-25)."""
-    uses: str
-    """The bot version it ran (Library AD-29)."""
-    tests: str | None = None
-    """The hypothesis it was built to test, when one is named (AD-23)."""
-
-
-class BacktestDoor(Protocol):
-    """The engine's `qmb_backtest` operation on the QMB placement (engine AD-31).
-
-    Backtests run on one dedicated QMB machine that agents call, so this tool holds a door and
-    not a runner: the door owns the queue, the memo key and the data read, and answers with one
-    result to land.
-    """
-
-    def run(self, *, spec: Mapping[str, Any]) -> Result[BacktestRun]: ...
-
-
 @dataclass
 class DomainContext:
     root: Path
     market: MarketPort | None = None
-    backtests: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
-    backtest_door: BacktestDoor | None = None
-    landing: LandingPort | None = None
     bots: dict[str, HostedBot] = field(default_factory=dict[str, HostedBot])
     node: DoorRuntime | None = None
     inline_bytes: int = 16_000
@@ -292,40 +268,68 @@ class DomainContext:
         )
         raise ValueError(absent)
 
-    def run_backtest(self, spec: BacktestSpec, response_format: ResponseFormat) -> dict[str, Any]:
-        """Ask the QMB placement for one backtest, then land its one result shape.
+    def backtest(self, request: Document, response_format: ResponseFormat) -> dict[str, Any]:
+        """Start one QMB `backtest` job as this chat and wait up to `[qmb] agent_wait_s` for it.
 
-        The tool no longer runs QMB in this process and no longer writes the old Library's
-        `backtest` items: backtests go through the `qmb_backtest` door (engine AD-31) and land as
-        one `backtest-result` through the Library's landing step (Library AD-29).
-        """
-        arguments = self.backtests.get(spec.config_ref)
-        if arguments is None:
-            raise ValueError(
-                "Unknown config_ref; ask the host to register a recorded QMB run configuration"
-            )
-        door = self.backtest_door
-        landing = self.landing
-        if door is None or landing is None:
-            raise ValueError(
-                "This host binds no qmb_backtest door: backtests run on the QMB placement and "
-                "land through the Library (engine AD-31, Library AD-29)"
-            )
-        run = unwrap(door.run(spec=arguments))
-        landed = land(
-            run.result,
-            landing,
-            consumed=run.consumed,
-            uses=run.uses,
-            tests=run.tests,
-        )
+        The job crosses the supervisor's one run path, where the core's lander opens the run,
+        counts its try and lands its result (Part B AD-202). A run still going when the wait
+        ends answers its run id, read from the `opened` try this chat's run landed."""
+        principal = self.control._caller()  # pyright: ignore[reportPrivateUsage]
+        wait = float(cast("int | float", self.control.settings_get("qmb")["agent_wait_s"]))
+        asked_at = datetime.now(UTC).isoformat()
+        outcome: dict[str, Any] = {}
+
+        def start() -> None:
+            try:
+                outcome["ran"] = self.control.app_job(
+                    QMB_APP, QMB_BACKTEST, inputs=request, principal=principal
+                )
+            except ControlError as error:
+                outcome["refused"] = error
+
+        worker = threading.Thread(target=start, name="qmx-backtest", daemon=True)
+        worker.start()
+        worker.join(wait)
+        if "refused" in outcome:
+            raise ValueError(str(outcome["refused"]))
+        if "ran" in outcome:
+            run_id = str(outcome["ran"]["run_id"])
+            result_id = self.library.store.head(run_id, MAIN)
+            fields = {} if result_id is None else self._fields(result_id[0])
+            found = {
+                "run_id": run_id,
+                "status": fields.get("status"),
+                "result_id": result_id[0] if result_id else None,
+            }
+            if fields.get("reason"):
+                found["reason"] = fields["reason"]
+            return self.output(found, "backtest", response_format)
+        opened = self._opened(principal, str(request["unit"]), asked_at)
         return self.output(
-            {
-                "run_id": landed.object_id,
-                "status": "completed",
-                "edges": [list(edge) for edge in landed.edges],
-                "memo_key": run.result.memo_key,
-            },
+            {"run_id": opened, "status": "running", "result_id": None, "waited_s": wait},
             "backtest",
             response_format,
         )
+
+    def _fields(self, object_id: str) -> dict[str, Any]:
+        return dict(self.library.store.get(OPERATOR, object_id).fields)
+
+    def _opened(self, principal: str, unit: str, since: str) -> str | None:
+        """The newest run (not a check) this principal opened on `unit` since `since` that has
+        not closed."""
+        store = self.library.store
+        newest: tuple[str, str] | None = None
+        for object_id in store.with_field(TRY_KIND, "principal", principal):
+            fields = self._fields(object_id)
+            run_id, at = str(fields.get("run_id")), str(fields.get("at", ""))
+            if (fields.get("kind"), fields.get("state"), fields.get("unit")) != (
+                "run",
+                "opened",
+                unit,
+            ) or at < since:
+                continue
+            if store.head(try_item(run_id, "landed"), MAIN) is None and (
+                newest is None or at > newest[1]
+            ):
+                newest = (run_id, at)
+        return None if newest is None else newest[0]

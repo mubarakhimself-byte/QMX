@@ -50,6 +50,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool
 from qmf.core import is_refusal
 from qmf.core.fingerprint import fingerprint
+from qmx_apps.supervisor import Supervisor
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.library import UNFINISHED, old_library
 from qmx_control.service import ControlService, kept_word_for_word
@@ -584,7 +585,35 @@ def make_new(folder: Path, places: Places) -> Layout:
         except NoQmxFolder as refused:
             raise Refused(str(refused)) from None
         write_pointer(layout.root)
+        (layout.home / FIRST_PARTY).write_text(json.dumps({"enable": list(FIRST_APPS)}), "utf-8")
     return layout
+
+
+FIRST_APPS: Final[Mapping[str, Path]] = {
+    "qmb": Path(__file__).resolve().parents[4] / "apps" / "qmb"
+}
+"""The first-party apps a new folder starts with, as this program ships them: QMB first (Part B
+AD-201). The node and the MIS join this table when their apps land."""
+FIRST_PARTY: Final = "first-party.json"
+"""The card's choice, in a new folder's `data/`: the first-party apps enabled in this folder,
+which the host starts at every start."""
+
+
+def enable_first_party(home: Path, runtime: Supervisor) -> list[str]:
+    """Install and start each enabled first-party app, at every host start. An app already
+    installed is only started and one already running is left as it is, so the one click keeps
+    the app up however often the host starts. Installing builds the app's locked environment,
+    which can take minutes the first time."""
+    enabled = home / FIRST_PARTY
+    if not enabled.is_file():
+        return []
+    wanted = cast(list[str], json.loads(enabled.read_text("utf-8")).get("enable", []))
+    installed = {str(cast(dict[str, object], row["definition"])["id"]) for row in runtime.list()}
+    for app_id in wanted:
+        if app_id not in installed:
+            runtime.install(FIRST_APPS[app_id], trust="first_party")
+        runtime.start(app_id)
+    return wanted
 
 
 def _fingerprint(value: object) -> str | None:

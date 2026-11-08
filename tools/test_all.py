@@ -183,6 +183,14 @@ def main() -> int:
             ["tests"],
         )
     )
+    suites.append(
+        (
+            "qmb app",
+            ROOT / "qmx-agents",
+            ["python", "-m", "pytest", "apps/qmb/tests", "-q"],
+            ["apps/qmb/tests"],
+        )
+    )
     top_level = sorted(qa.glob("test_*.py"))
     if top_level:
         paths = [str(path.relative_to(ROOT)) for path in top_level]

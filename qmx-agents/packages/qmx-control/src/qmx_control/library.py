@@ -457,8 +457,18 @@ class Library:
         except LibraryRefused as error:
             raise refused(error) from error
         slot = slot_of(view)
-        blob = view.blobs[slot]
-        digest = blob.blob_id.removeprefix("sha256:")
+        blob = view.blobs.get(slot)
+        if blob is None:
+            fields = cast(JsonValue, dict(view.fields))
+            held: Document = {"sha256": None, "size": 0, "ref": None, "content": fields}
+        else:
+            digest = blob.blob_id.removeprefix("sha256:")
+            held = {
+                "sha256": digest,
+                "size": blob.size,
+                "ref": f"artifacts/{digest}",
+                "content": cast(JsonValue, json.loads(view.data[slot])),
+            }
         document: Document = {
             "id": view.object_id,
             "kind": str(view.fields.get("legacy_kind", view.kind)),
@@ -469,11 +479,8 @@ class Library:
             "root_id": self._root(view),
             "version": len(self.store.ancestry_of(view.object_id)),
             "previous_id": view.parents[0] if view.parents else None,
-            "sha256": digest,
-            "size": blob.size,
-            "ref": f"artifacts/{digest}",
             "fetched_date": view.fields.get("fetched_date"),
-            "content": cast(JsonValue, json.loads(view.data[slot])),
+            **held,
         }
         if "memo_key" in view.fields:
             document["memo_key"] = view.fields["memo_key"]

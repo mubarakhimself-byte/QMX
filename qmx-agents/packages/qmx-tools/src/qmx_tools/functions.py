@@ -2,25 +2,26 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
-from qmb.results.interpret import compare_runs
 from qmf.core import Instant
 from qml.door import explain, new
 from qmn.doors.api import read_status
 from qmx_control.catalog import BLOCKS_LATER
 from qmx_control.library import OPERATOR
+from qmx_judge.landing import REPORT_SLOT, RESULT_KIND
+from qmx_judge.tries import try_item
 from qmx_library.kinds import KindRefused
-from qmx_library.port import Draft
+from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, drafts_ref
 
 from qmx_tools.gather import DUMMY, TEMPLATES, gather
 from qmx_tools.gather import template as template_document
 from qmx_tools.service import (
     Artifact,
-    BacktestSpec,
     DomainContext,
     OrderProposal,
     Page,
@@ -123,73 +124,113 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             ),
         )
 
-    def run_backtest(
-        spec: BacktestSpec, response_format: ResponseFormat = "concise"
+    def backtest_run(
+        unit: str,
+        window: dict[str, str],
+        markets: list[str] | None = None,
+        study: str | None = None,
+        compiled_fp: str | None = None,
+        seed: int | None = None,
+        motion: Literal["on", "off"] = "on",
+        response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
-        """Run a host-registered strategy on recorded slices and return a durable result ref."""
-        return ctx.run_backtest(BacktestSpec.model_validate(spec), response_format)
+        """Backtest a unit on QMB over `window` (`{"start": "2025-03-01", "end": "2025-04-01"}`)
+        and land its result in the Library. Answers the run id, and the result id when it
+        finished within the wait; otherwise read it later with backtest_status."""
+        asked = {
+            "unit": unit,
+            "window": window,
+            "markets": markets,
+            "study": study,
+            "compiled_fp": compiled_fp,
+            "seed": seed,
+            "motion": motion,
+        }
+        request = {name: value for name, value in asked.items() if value is not None}
+        return ctx.backtest(request, response_format)
 
     def backtest_status(run_id: str, response_format: ResponseFormat = "concise") -> dict[str, Any]:
-        """Read a persisted run's status. This synchronous door returns completed runs."""
-        artifact = ctx.artifact(run_id)
-        if artifact.kind != "backtest":
-            raise ValueError("Use the run_id returned by run_backtest; this ref is not a backtest")
-        content: Any = artifact.content
-        if not isinstance(content, dict) or not {
-            "data_points_processed",
-            "filled",
-            "stream_order",
-            "slices",
-        }.issubset(cast("dict[str, Any]", content)):
-            raise ValueError("Invalid backtest content; use the run_id returned by run_backtest")
+        """Read a run's state from its try rows: running, landed or failed, and its result id."""
+        store = ctx.library.store
+        opened = store.head(try_item(run_id, "opened"), MAIN)
+        if opened is None:
+            raise ValueError(f"no run {run_id}; pass the run_id backtest_run answered")
+        first = store.get(OPERATOR, opened[0]).fields
+        closed = store.head(try_item(run_id, "landed"), MAIN)
+        last = None if closed is None else store.get(OPERATOR, closed[0]).fields
+        links = cast("list[str]", (last or {}).get("links") or [])
         return ctx.output(
-            {"run_id": run_id, "name": artifact.name, "status": "completed"},
+            {
+                "run_id": run_id,
+                "state": "running" if last is None else last["state"],
+                "kind": first.get("kind"),
+                "tester": first.get("tester"),
+                "principal": first.get("principal"),
+                "place": first.get("place"),
+                "result_id": links[1] if len(links) > 1 else None,
+            },
             "status",
             response_format,
         )
 
-    def backtest_results(
-        run_id: str, response_format: ResponseFormat = "concise", limit: int = 50, cursor: int = 0
-    ) -> dict[str, Any]:
-        """Read a backtest summary or paginate slices; large pages become artifacts."""
-        backtest_status(run_id)
-        content = ctx.artifact(run_id).content
-        if response_format == "concise":
-            return ctx.output(
-                {key: content[key] for key in ("data_points_processed", "filled", "stream_order")},
-                "results",
-                response_format,
-            )
-        return ctx.page(
-            content["slices"],
-            Page(limit=limit, cursor=cursor, response_format=response_format),
-            "results",
+    def _result(result_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        store = ctx.library.store
+        try:
+            view = store.get(OPERATOR, result_id)
+        except LibraryRefused as error:
+            raise ValueError(f"{result_id}: {error}") from error
+        if view.kind != RESULT_KIND:
+            raise ValueError(f"{result_id} is a {view.kind}; pass the result_id of a backtest")
+        report = view.blobs.get(REPORT_SLOT)
+        body = cast(
+            "dict[str, Any]", {} if report is None else json.loads(store.read_blob(report.blob_id))
         )
+        return dict(view.fields), cast("list[dict[str, Any]]", body.get("trades", []))
 
-    def compare_runs_tool(
+    def backtest_results(
+        result_id: str,
+        response_format: ResponseFormat = "concise",
+        limit: int = 50,
+        cursor: int = 0,
+    ) -> dict[str, Any]:
+        """Read a landed result: status, measures in money and R, labels, and a page of trades."""
+        fields, trades = _result(result_id)
+        summary = {
+            name: fields.get(name)
+            for name in ("run_id", "status", "reason", "measures", "labels", "principal", "tester")
+        }
+        page = ctx.page(
+            trades, Page(limit=limit, cursor=cursor, response_format=response_format), "trades"
+        )
+        return {**page, "summary": summary}
+
+    def backtest_compare(
         left: str,
         right: str,
         limit: int = 50,
         cursor: int = 0,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
-        """Compare stored CT-32 artifacts field by field using QMB, without interpreting HTML."""
-        first = ctx.artifact(left).content
-        second = ctx.artifact(right).content
-        if not isinstance(first, dict) or not isinstance(second, dict):
-            raise ValueError("Select backtest or CT-32 object artifacts with library_search")
-        first = cast("dict[str, Any]", first)
-        second = cast("dict[str, Any]", second)
-        comparison = unwrap(
-            compare_runs(
-                first.get("performance_result", first), second.get("performance_result", second)
-            )
+        """Compare two landed results: differing measures, and trades in one only or differing."""
+        (first, mine), (second, theirs) = _result(left), _result(right)
+        ours = {str(t["trade_id"]): t for t in mine}
+        other = {str(t["trade_id"]): t for t in theirs}
+        rows = [
+            {"trade_id": key, "left": ours.get(key), "right": other.get(key)}
+            for key in sorted(ours.keys() | other.keys())
+            if ours.get(key) != other.get(key)
+        ]
+        a = cast("dict[str, Any]", first.get("measures") or {})
+        b = cast("dict[str, Any]", second.get("measures") or {})
+        measures = {
+            key: [a.get(key), b.get(key)]
+            for key in sorted(a.keys() | b.keys())
+            if a.get(key) != b.get(key)
+        }
+        page = ctx.page(
+            rows, Page(limit=limit, cursor=cursor, response_format=response_format), "comparison"
         )
-        return ctx.page(
-            json_value(comparison.differing),
-            Page(limit=limit, cursor=cursor, response_format=response_format),
-            "comparison",
-        )
+        return {**page, "same_trades": not rows, "measures": measures}
 
     def qml_run(
         bot_ref: str,
@@ -276,10 +317,10 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "calendar": calendar,
         },
         "backtest": {
-            "run_backtest": run_backtest,
+            "backtest_run": backtest_run,
             "backtest_status": backtest_status,
             "backtest_results": backtest_results,
-            "compare_runs": compare_runs_tool,
+            "backtest_compare": backtest_compare,
         },
         "research": {
             "qml_run": qml_run,

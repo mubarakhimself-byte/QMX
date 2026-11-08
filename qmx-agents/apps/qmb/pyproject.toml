@@ -1,0 +1,46 @@
+[project]
+name = "qmb-app"
+version = "1.0.0"
+description = "QMB as a mini app: its run kinds as jobs over QMX's own qmb library"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "fastmcp==4.0.11",
+    "qmb",
+    "qml",
+    "qmf-core",
+    "qmf-data",
+    "qmf-indicators",
+    "qmf-registry",
+    "qmf-risk",
+    "qmf-structure",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+qmb = { path = "../../../qmb", editable = true }
+qml = { path = "../../../qml", editable = true }
+qmf-core = { path = "../../../packages/qmf-core", editable = true }
+qmf-data = { path = "../../../packages/qmf-data", editable = true }
+qmf-indicators = { path = "../../../packages/qmf-indicators", editable = true }
+qmf-registry = { path = "../../../packages/qmf-registry", editable = true }
+qmf-risk = { path = "../../../packages/qmf-risk", editable = true }
+qmf-structure = { path = "../../../packages/qmf-structure", editable = true }
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLC0415"]
+
+[tool.pyright]
+include = [".", "tests"]
+extraPaths = ["."]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+venvPath = "../.."
+venv = ".venv"

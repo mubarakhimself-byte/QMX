@@ -2,93 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import runpy
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 import pytest
 from fastmcp import Client
-from qmb.results.ct32 import as_ct32_artifact
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
-from qmx_judge.landing import BacktestResult, Stored
+from qmx_control.library import OPERATOR
+from qmx_judge.tries import try_item
+from qmx_library.port import Draft
+from qmx_library.principal import MAIN
 
 from qmx_tools import DomainContext
 from qmx_tools.functions import domain_functions
 from qmx_tools.servers import create_server
-from qmx_tools.service import Artifact, BacktestRun, OrderProposal, unwrap
+from qmx_tools.service import Artifact, OrderProposal, unwrap
 
 ROOT = Path(__file__).resolve().parents[4]
 FIRST = 1_700_000_000_000_000_000
-
-
-class FakeQmbBacktest:
-    """The engine's `qmb_backtest` door: one finished result and the edges it lands with."""
-
-    def __init__(self) -> None:
-        self.specs: list[dict[str, Any]] = []
-
-    def run(self, *, spec: Mapping[str, Any]) -> Result[BacktestRun]:
-        self.specs.append(dict(spec))
-        return Ok(
-            BacktestRun(
-                result=BacktestResult(
-                    run_id="fp1:sha256:recorded-run",
-                    title="recorded",
-                    summary="one recorded backtest",
-                    world="backtest",
-                    claim_class="retrospective",
-                    role="confirmation",
-                    fidelity="bar-m1",
-                    provenance={"config_ref": "recorded"},
-                    report=b'{"data_points_processed": 4}',
-                    outcome="supports",
-                    memo_key="recorded-memo",
-                ),
-                consumed="dataset-card-v3",
-                uses="bot-version-7",
-                tests="hypothesis-2",
-            )
-        )
-
-
-class RecordingLanding:
-    """The new Library, recording the one put and the edges the landing step writes."""
-
-    def __init__(self) -> None:
-        self.puts: list[dict[str, Any]] = []
-        self.links: list[tuple[str, str, str]] = []
-
-    def put(
-        self,
-        kind: str,
-        fields: Any,
-        blobs: Any,
-        *,
-        item: Any,
-        title: str,
-        summary: str,
-        principal: str,
-    ) -> Stored:
-        self.puts.append(
-            {
-                "kind": kind,
-                "fields": dict(fields),
-                "blobs": dict(blobs),
-                "item": item,
-                "title": title,
-                "summary": summary,
-                "principal": principal,
-            }
-        )
-        return Stored("landed-1")
-
-    def link(self, from_id: str, relation: str, to_id: str, *, principal: str) -> str:
-        self.links.append((from_id, relation, to_id))
-        return f"{from_id}-{relation}-{to_id}"
 
 
 @dataclass(frozen=True)
@@ -159,13 +94,7 @@ class SealedDoor(FakeDoor):
 
 @pytest.fixture
 def context(tmp_path: Path) -> DomainContext:
-    ctx = DomainContext(
-        root=tmp_path,
-        market=FakeDoor(),
-        backtest_door=FakeQmbBacktest(),
-        landing=RecordingLanding(),
-    )
-    ctx.backtests["recorded"] = {"config_ref": "recorded"}
+    ctx = DomainContext(root=tmp_path, market=FakeDoor())
     qml = runpy.run_path(str(ROOT / "qml/tests/test_protocol.py"))
     ctx.bots["recorded"] = unwrap(
         construct_bot(
@@ -194,27 +123,61 @@ def test_a_sealed_month_is_refused_with_its_reason(tmp_path: Path) -> None:
         domain_functions(context)["data"]["read_bars"](symbol="EURUSD", timeframe="1m")
 
 
-def _legacy_backtest(context: DomainContext) -> str:
-    """An old-shape `backtest` artifact already in the Library, for the read tools to read."""
-    qmb = runpy.run_path(str(ROOT / "qmb/tests/test_ct32_artifact.py"))
-    outcome = qmb["_run"]()
-    artifact = unwrap(as_ct32_artifact(outcome.performance_result))
-    return context.save(
-        Artifact(
-            name="legacy-recorded",
-            kind="backtest",
-            content={
-                "data_points_processed": 4,
-                "filled": 1,
-                "stream_order": ["eurusd"],
-                "slices": [{"i": 1}, {"i": 2}],
-                "performance_result": artifact,
+RUN = "qmbr-pc-RECORDED"
+
+
+def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
+    """One run as the lander leaves it: its two try rows and its result. QMB itself is never
+    started here; the app's own tests start it (`qmx-agents/apps/qmb/tests`)."""
+    store = context.library.store
+    report = b'{"trades": [{"trade_id": "t1", "money": "12.50", "r": "1.25"}]}'
+    result = store.put(
+        OPERATOR,
+        Draft(
+            "backtest-result",
+            RUN,
+            "backtest",
+            fields={
+                "run_id": RUN,
+                "status": "finished",
+                "principal": "agent:unnamed",
+                "measures": {"trades": 1, "net_money": "12.50", "total_r": "1.25"},
             },
-        )
-    )["ref"]
+            blobs={"report": report},
+        ),
+        on=MAIN,
+        expected_head=None,
+    ).object_id
+    opened = {"kind": "run", "run_id": RUN, "unit": "u", "principal": "agent:unnamed"}
+    store.put(
+        OPERATOR,
+        Draft("try", try_item(RUN, "opened"), "opened", fields={**opened, "state": "opened"}),
+        on=MAIN,
+        expected_head=None,
+    )
+    store.put(
+        OPERATOR,
+        Draft(
+            "try",
+            try_item(RUN, "landed"),
+            "landed",
+            fields={**opened, "state": "landed", "links": ["opened", result]},
+        ),
+        on=MAIN,
+        expected_head=None,
+    )
+
+    def app_job(app_id: str, job: str, **asked: Any) -> dict[str, Any]:
+        assert (app_id, job, asked["principal"]) == ("qmb", "jobs/backtest.py", "agent:unnamed")
+        return {"run_id": RUN}
+
+    monkeypatch.setattr(context.control, "app_job", app_job)
+    return result
 
 
-def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
+def test_all_thirteen_tools_use_engines(
+    context: DomainContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
     functions = domain_functions(context)
     data = functions["data"]
     assert data["list_instruments"]()["result"] == [
@@ -243,22 +206,18 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
         assert last["result"][0]["value"] == 2
         assert last["next_cursor"] is None
     backtest = functions["backtest"]
-    started = backtest["run_backtest"](spec={"config_ref": "recorded"})["result"]
-    assert started["status"] == "completed"
-    assert started["run_id"] == "landed-1"
-    assert started["edges"] == [
-        ["consumed", "dataset-card-v3"],
-        ["uses", "bot-version-7"],
-        ["tests", "hypothesis-2"],
-    ]
-    assert started["memo_key"] == "recorded-memo"
-    legacy = _legacy_backtest(context)
-    assert backtest["backtest_status"](run_id=legacy)["result"]["status"] == "completed"
-    assert backtest["backtest_results"](run_id=legacy)["result"]["data_points_processed"] == 4
-    assert (
-        len(backtest["backtest_results"](run_id=legacy, response_format="detailed")["result"]) == 2
+    landed = _landed_run(context, monkeypatch)
+    started = backtest["backtest_run"](
+        unit="u", window={"start": "2025-03-01", "end": "2025-04-01"}
     )
-    assert backtest["compare_runs"](left=legacy, right=legacy)["result"] == []
+    assert started["result"] == {"run_id": RUN, "status": "finished", "result_id": landed}
+    status = backtest["backtest_status"](run_id=RUN)["result"]
+    assert (status["state"], status["result_id"]) == ("landed", landed)
+    read = backtest["backtest_results"](result_id=landed)
+    assert read["summary"]["measures"]["total_r"] == "1.25"
+    assert read["result"] == [{"trade_id": "t1", "money": "12.50", "r": "1.25"}]
+    compared = backtest["backtest_compare"](left=landed, right=landed)
+    assert (compared["same_trades"], compared["measures"]) == (True, {})
     research = functions["research"]
     assert (
         research["qml_run"](bot_ref="recorded", instants=[1_700_000_000_000_000_000])["result"][0][
@@ -287,44 +246,6 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
     assert context.artifact(proposal["proposal"]["ref"]).content["quantity"] == "0.10"
 
 
-def test_a_backtest_lands_one_result_and_writes_no_old_backtest_item(
-    context: DomainContext,
-) -> None:
-    door = cast("FakeQmbBacktest", context.backtest_door)
-    landing = cast("RecordingLanding", context.landing)
-
-    result = domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})[
-        "result"
-    ]
-
-    assert door.specs == [{"config_ref": "recorded"}]
-    [put] = landing.puts
-    assert put["kind"] == "backtest-result"
-    assert put["item"] == "fp1:sha256:recorded-run"
-    assert put["fields"]["outcome"] == "supports"
-    assert put["fields"]["world"] == "backtest"
-    assert put["blobs"] == {"report": b'{"data_points_processed": 4}'}
-    assert landing.links == [
-        ("landed-1", "consumed", "dataset-card-v3"),
-        ("landed-1", "uses", "bot-version-7"),
-        ("landed-1", "tests", "hypothesis-2"),
-    ]
-    assert result["edges"] == [
-        ["consumed", "dataset-card-v3"],
-        ["uses", "bot-version-7"],
-        ["tests", "hypothesis-2"],
-    ]
-    assert context.control.library_search() == []
-
-
-def test_a_host_without_the_qmb_door_refuses_a_backtest(tmp_path: Path) -> None:
-    context = DomainContext(root=tmp_path, market=FakeDoor())
-    context.backtests["recorded"] = {"config_ref": "recorded"}
-
-    with pytest.raises(ValueError, match="binds no qmb_backtest door"):
-        domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
-
-
 def test_domain_refs_preserve_type_when_payloads_match(context: DomainContext) -> None:
     note = context.save(Artifact(name="note", kind="note", content={"value": 1}))
     report = context.save(Artifact(name="report", kind="report", content={"value": 1}))
@@ -345,16 +266,17 @@ def test_artifact_spill_restart_and_ref_confinement(context: DomainContext) -> N
     assert saved == context.save(Artifact(name="immutable", kind="note", content="content"))
 
 
-def test_malformed_library_artifacts_have_actionable_backtest_errors(
-    context: DomainContext,
-) -> None:
-    ref = context.save(Artifact(name="malformed", kind="backtest", content=None))["ref"]
+def test_the_backtest_reads_name_the_next_step_for_a_wrong_id(context: DomainContext) -> None:
+    note = context.library.store.put(
+        OPERATOR, Draft("note", "n", "n", fields={}), on=MAIN, expected_head=None
+    ).object_id
     functions = domain_functions(context)["backtest"]
-    for name in ("backtest_status", "backtest_results"):
-        with pytest.raises(ValueError, match="run_id returned by run_backtest"):
-            functions[name](run_id=ref)
-    with pytest.raises(ValueError, match="library_search"):
-        functions["compare_runs"](left=ref, right=ref)
+    with pytest.raises(ValueError, match="pass the run_id backtest_run answered"):
+        functions["backtest_status"](run_id="qmbr-pc-none")
+    with pytest.raises(ValueError, match="is a note; pass the result_id of a backtest"):
+        functions["backtest_results"](result_id=note)
+    with pytest.raises(ValueError, match="is a note; pass the result_id of a backtest"):
+        functions["backtest_compare"](left=note, right=note)
 
 
 def test_order_proposal_cannot_carry_execution_authority() -> None:
@@ -375,14 +297,14 @@ def test_order_proposal_cannot_carry_execution_authority() -> None:
     "server_name,count", [("data", 4), ("backtest", 4), ("research", 3), ("node", 2)]
 )
 def test_mcp_lists_and_calls_all_tools(
-    context: DomainContext, server_name: str, count: int
+    context: DomainContext, server_name: str, count: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: dict[str, dict[str, Any]] = {
         "list_instruments": {},
         "read_bars": {"symbol": "EURUSD", "timeframe": "1m"},
         "read_features": {"symbol": "EURUSD", "timeframe": "1m"},
         "calendar": {"symbol": "EURUSD", "timeframe": "1m"},
-        "run_backtest": {"spec": {"config_ref": "recorded"}},
+        "backtest_run": {"unit": "u", "window": {"start": "2025-03-01", "end": "2025-04-01"}},
         "qml_run": {"bot_ref": "recorded", "instants": [1_700_000_000_000_000_000]},
         "library_search": {},
         "library_save": {"artifact": {"name": "note", "kind": "note", "content": "saved"}},
@@ -397,13 +319,12 @@ def test_mcp_lists_and_calls_all_tools(
             }
         },
     }
-    domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
-    legacy = _legacy_backtest(context)
+    landed = _landed_run(context, monkeypatch) if server_name == "backtest" else ""
     calls.update(
         {
-            "backtest_status": {"run_id": legacy},
-            "backtest_results": {"run_id": legacy},
-            "compare_runs": {"left": legacy, "right": legacy},
+            "backtest_status": {"run_id": RUN},
+            "backtest_results": {"result_id": landed},
+            "backtest_compare": {"left": landed, "right": landed},
         }
     )
 

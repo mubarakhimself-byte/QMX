@@ -292,10 +292,12 @@ DOMAIN_ROWS: Final = (
         "backtest",
         "run",
         "domain_fn",
-        "run_backtest",
+        "backtest_run",
         "domain_write",
-        "Run one backtest through the QMB placement's `qmb_backtest` door and land its one "
-        "`backtest-result`: backtests run on the QMB machine, never in the chat's process.",
+        "Backtest a unit on QMB, the first tester app, over a window, and land its one "
+        "`backtest-result` in his Library: trades in money and R, with who ran it. The core "
+        "counts the try and runs the unit's behaviour check first when it has none. Answers the "
+        "run id, and the result id when the run finished within `[qmb] agent_wait_s`.",
     ),
     _row(
         "backtest",
@@ -303,8 +305,8 @@ DOMAIN_ROWS: Final = (
         "domain_fn",
         "backtest_status",
         "read",
-        "Read the status of an old-shape `backtest` object; a landed result is read through its "
-        "`backtest-result` card.",
+        "Read a run's state from its try rows (running, landed, failed), its tester and its "
+        "result id.",
     ),
     _row(
         "backtest",
@@ -312,15 +314,17 @@ DOMAIN_ROWS: Final = (
         "domain_fn",
         "backtest_results",
         "read",
-        "Read an old-shape `backtest` object's summary or paginate its slices.",
+        "Read a landed `backtest-result` by its result id: status, measures in money and R, "
+        "labels, and a page of trades.",
     ),
     _row(
         "backtest",
         "compare",
         "domain_fn",
-        "compare_runs",
+        "backtest_compare",
         "read",
-        "Compare two stored CT-32 artifacts field by field.",
+        "Compare two landed `backtest-result`s by result id: measures that differ, and trades "
+        "found in one only or differing.",
     ),
     _row("research", "qml_run", "domain_fn", "qml_run", "read"),
     _row("node", "state", "domain_fn", "node_state", "read"),
