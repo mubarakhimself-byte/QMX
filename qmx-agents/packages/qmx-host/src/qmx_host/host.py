@@ -1210,7 +1210,10 @@ async def serve(
     attach_node(control, nodes)
     try:
         door = market_door(home, control, role)
-        control.app_runtime().attach_facts(lambda: host_facts(control, role, name, door))
+        clock_read = ClockRead()
+        control.app_runtime().attach_facts(
+            lambda: host_facts(control, role, name, door, clock=clock_read.facts)
+        )
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
@@ -1378,6 +1381,7 @@ async def serve(
                                 engine,
                                 link,
                                 heeding=lambda: backups.after is None,
+                                clock_read=clock_read,
                             )
                         )
                         exporting = asyncio.create_task(harness.idle_exports())
@@ -1604,6 +1608,7 @@ async def heartbeats(
     link: HubLink | None = None,
     *,
     heeding: Callable[[], bool] = lambda: True,
+    clock_read: ClockRead | None = None,
 ) -> None:
     """Write this host's rows every `heartbeat.interval` until cancelled. A failed beat is
     skipped, never fatal: the next one carries the same facts.
@@ -1615,6 +1620,8 @@ async def heartbeats(
     flag is not written, so a Hub cannot end the pause.
 
     Every `clock.probe_s` the host probes its clock first, and each row carries the newest facts.
+    With a `clock_read`, the probe also reaches the facts written into every app's volume, which
+    is where the trading node reads the offset, so a drifted clock can stop its entries.
     """
     core = engine.svc.ctx.engine
     me = psutil.Process()
@@ -1631,6 +1638,16 @@ async def heartbeats(
             if probed is None or time.monotonic() - probed >= every:
                 probed = time.monotonic()
                 clock = await asyncio.to_thread(probe_from, core.settings)
+                if clock_read is not None:
+                    clock_read.facts = clock
+                    try:
+                        # Off the loop, as `keep_facts` does: an install holds the lock.
+                        await asyncio.to_thread(control.app_runtime().refresh_facts)
+                    except OSError as error:
+                        print(
+                            f"host facts not rewritten until the next probe: {error}",
+                            file=sys.stderr,
+                        )
             rows = [
                 beat(home, host_id, me, core, harness, pause, floor=floor, clock=clock),
                 # Off the loop: an install holds the supervisor's lock and hops onto this loop.
@@ -1830,15 +1847,30 @@ def records_job(
     )
 
 
+@dataclasses.dataclass
+class ClockRead:
+    """The newest clock probe this host took, so the facts it writes into every app volume hold
+    the offset and its time without reading the heartbeat log back."""
+
+    facts: ClockFacts | None = None
+
+
 def host_facts(
-    control: ControlService, role: Role, name: str, door: MarketDoor | TypedRefusal
+    control: ControlService,
+    role: Role,
+    name: str,
+    door: MarketDoor | TypedRefusal,
+    clock: ClockFacts | None = None,
 ) -> Document:
     """This host's facts as every app volume holds them (AD-307, Part C `CONTRACTS.md` section
     5), read live from Settings. This PC never reports the trading profile on, whatever `[host]
     trading_profile` says. This host mounts its chat routes and may place agent steps on every
-    role today, so `chats` and `agent_steps` say so until the bind-live step turns them off."""
+    role today, so `chats` and `agent_steps` say so until the bind-live step turns them off.
+
+    ``clock`` is the newest clock probe, when one has answered. Its offset and the time it was
+    taken travel to the node, which reads an old one as unproven."""
     trading = role != "pc" and section(control, "host").get("trading_profile") is True
-    return {
+    facts: Document = {
         "schema_version": FACTS_SCHEMA,
         "placement": name,
         "role": role,
@@ -1847,6 +1879,9 @@ def host_facts(
         "agent_steps": True,
         "holdout": holdout_fact(door),
     }
+    if clock is not None:
+        facts["clock"] = {"offset_ms": clock.offset_ms, "probed_at": clock.probed_at}
+    return facts
 
 
 def holdout_fact(door: MarketDoor | TypedRefusal) -> Document:

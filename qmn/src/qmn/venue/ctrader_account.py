@@ -132,6 +132,11 @@ _TRADES: Final = frozenset({"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent"})
 _FILLS: Final = frozenset({"ORDER_FILLED", "ORDER_PARTIAL_FILL"})
 """The execution types that open an entry's position: a market order cTrader filled in part
 opens it at the deal's filled volume, and the rest is never chased."""
+_FROM_THE_SESSION: Final = frozenset(
+    {ProbeCheck.PIP_FORMULA, ProbeCheck.MONEY_EXPONENT, ProbeCheck.POSITION_MODEL}
+)
+"""The measured facts this session answers itself. The rest are literals in `_measured`, so their
+detail must not say they were read here (chief-1: only the demo probes can measure them)."""
 
 
 def _refused(code: str, reason: str, *, retry: bool = True) -> TypedRefusal:
@@ -1248,6 +1253,11 @@ class CTraderVenue:
         }
         facts: dict[ProbeCheck, MeasuredFact] = {}
         for check, measured in payloads.items():
+            detail = (
+                f"read on the cTrader session for {check.value}"
+                if check in _FROM_THE_SESSION
+                else f"not measured for {check.value} until the demo probes run"
+            )
             built = MeasuredFact.try_create(
                 check,
                 ProbeVerdict.VERIFIED,
@@ -1255,7 +1265,7 @@ class CTraderVenue:
                 self.session_epoch,
                 f"grant-{self.ctid}",
                 measured=measured,
-                detail=f"read on the cTrader session for {check.value}",
+                detail=detail,
             )
             if is_refusal(built):
                 return built

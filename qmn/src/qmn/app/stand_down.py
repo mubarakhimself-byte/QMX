@@ -416,8 +416,9 @@ def _event_id(*parts: str) -> str:
 class StandDowns:
     """The stand-downs this node holds, journalled as they start and clear.
 
-    ``free_bytes`` and ``clock_offset_ns`` are the node's probes: the volume's free space and
-    the clock's offset from its time source, None while no probe has read one. ``on_alarm``
+    ``free_bytes``, ``clock_offset_ns`` and ``market_open`` are the node's probes: the volume's
+    free space, the clock's offset from its time source, and whether a market is open on its own
+    calendar. Each answers None (or raises ``LookupError``) while it cannot read one. ``on_alarm``
     takes the alarm a risk stop raises when its ``lifecycle`` row cannot be written.
     """
 
@@ -433,6 +434,7 @@ class StandDowns:
         free_bytes: Callable[[], int],
         on_alarm: Callable[[Mapping[str, object]], None],
         clock_offset_ns: Callable[[], int | None] = lambda: None,
+        market_open: Callable[[str, int], bool] | None = None,
     ) -> None:
         self.journal = journal
         self.journal_root = journal_root
@@ -443,6 +445,7 @@ class StandDowns:
         self.free_bytes = free_bytes
         self.on_alarm = on_alarm
         self.clock_offset_ns = clock_offset_ns
+        self.market_open = market_open
         self.held: dict[tuple[Kind, str], Held] = {}
         self._lifecycle: dict[tuple[str, JournalWorld], JournalWriter] = {}
         self._unrecorded: set[tuple[Kind, str]] = set()
@@ -486,7 +489,10 @@ class StandDowns:
         self._observe(Kind.DISK, "all", low, now, f"{free} bytes free")
 
     def watch_feed(self, account_id: str, feed: FeedKeeper) -> None:
-        """The binding's session and each of its markets' feed age."""
+        """The binding's session and each of its markets' feed age.
+
+        A market's last quote only counts as stale while the market is open on its calendar, so a
+        weekend's silence is not a health stop (TN-20)."""
         now = self.clock_ns()
         self._observe(
             Kind.VENUE_NOT_READY, f"account:{account_id}", not feed.ready, now, feed.reason
@@ -496,13 +502,24 @@ class StandDowns:
             if quote is None:
                 continue
             age = now - quote.receive_time
+            stale = age > FEED_STALE_AFTER_NS
             self._observe(
                 Kind.STALE_FEED,
                 f"instrument:{market}",
-                age > FEED_STALE_AFTER_NS,
+                stale and self._open(market, now),
                 now,
                 f"last quote {age // 1_000_000_000} s ago",
             )
+
+    def _open(self, market: str, now: int) -> bool:
+        """Whether the market's calendar says it is open now. A market no deployment names, or one
+        whose calendar cannot answer, reads open, as the push sender reads it."""
+        if self.market_open is None:
+            return True
+        try:
+            return self.market_open(market, now)
+        except LookupError:
+            return True
 
     def _observe(self, kind: Kind, scope: str, bad: bool | None, now: int, cause: str) -> None:
         """One reading of a row that clears itself: True is its cause, False is healthy and
