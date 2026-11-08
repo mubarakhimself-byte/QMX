@@ -14,9 +14,9 @@ Each day's file is stamp-checked before it lands (LD-03): its unit is read from 
 its first and last stamps and converted to UTC milliseconds, so the spot files Binance writes in
 microseconds from 1 January 2025 land on the same clock as the months before. A change of unit
 from the previous file, or from the month the series last landed (kept beside the claims), is a
-seam on the card, and so is a change of a book dataset's cadence (LD-04). With a `calendar` in
-the source definition the month is counted against open time, and an empty open hour holds it
-open until the source definition lists it in `confirmed_empty` (LD-01).
+seam on the card, and so is a change of a book dataset's cadence (LD-04). The month is counted
+against open time, on the source definition's `calendar` or else `crypto-24x7@1`, and an empty
+open hour holds it open until the source definition lists it in `confirmed_empty` (LD-01).
 """
 
 import json
@@ -53,6 +53,7 @@ FAILURE = "[QMX_FAILURE]"
 USER_AGENT = "qmx-feed/1.0"
 TIMEOUT_SECONDS = 60
 DEFAULT_FLOOR_GB = 3.0
+DEFAULT_CALENDAR = "crypto-24x7@1"
 
 
 def fail(why: str) -> None:
@@ -157,10 +158,13 @@ symbol = str(source.get("symbol") or "").strip().upper()
 if symbol == "":
     fail("the source definition names no symbol")
 year, month = month_of(str(source.get("month") or ""))
-calendar_ref = str(source.get("calendar") or "").strip() or None
-calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
-if calendar_ref and calendar is None:
-    fail(f"no shipped calendar is named {calendar_ref!r}")
+named_calendar = str(source.get("calendar") or "").strip()
+calendar_ref = named_calendar or DEFAULT_CALENDAR
+calendar = shipped_calendars().get(calendar_ref)
+if named_calendar and calendar is None:
+    fail(f"no shipped calendar is named {named_calendar!r}")
+if calendar is None:
+    calendar_ref = None
 confirmed = confirmed_hours(source.get("confirmed_empty") or [])
 if isinstance(confirmed, str):
     fail(f"confirmed_empty: {confirmed}")

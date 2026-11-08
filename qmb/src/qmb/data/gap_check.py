@@ -12,7 +12,9 @@ holds, inside the open time of the market's calendar (``calendar_ref`` on its in
 record). A hole longer than ``[qmb] gap_bars_refuse`` bars fails the run unless the study
 allows gaps. The open time is the ``qmx.calendar/1`` file a ``qmf-calendar-*`` extension ships
 for that ref (C-03), or the 17:00 New York forex week for ``fx-24x5@1``. A ref with no shipped
-calendar is not counted, and the run says ``holes_unchecked`` rather than guess a session.
+calendar is not counted, and the run says ``holes_unchecked`` rather than guess a session. The
+open bars between the window's edges and the stream's first and last bars are counted apart
+(``short_ends``), because a file that stops early has no hole.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ from qmb._refuse import clean_token, invalid, policy, unavailable
 from qmb.data.ports import DOWNLOAD_SIDES, DownloadSide
 
 __all__ = [
+    "DATA_SHORT",
     "GAP_BARS_REFUSE",
     "GAP_CHECK_KIND",
     "HOLES_UNCHECKED",
@@ -49,16 +52,19 @@ __all__ = [
     "Hole",
     "OpenTime",
     "ReportedGap",
+    "ShortEnds",
     "find_holes",
     "gap_check",
     "gap_check_identity",
     "open_time",
     "parse_gap_check_request",
+    "short_ends",
 ]
 
 GAP_BARS_REFUSE: Final[int] = 3
 """``[qmb] gap_bars_refuse``: the most bars of the unit's stream a hole in open time may miss."""
 HOLES_UNCHECKED: Final[str] = "holes_unchecked"
+DATA_SHORT: Final[str] = "data_short"
 
 GAP_CHECK_KIND: Final[str] = "qmb-data-gap-check"
 _RAW_ARCHIVE: Final[str] = "immutable-raw-archive"
@@ -800,6 +806,15 @@ class Hole:
     bars_missing: int
 
 
+@dataclass(frozen=True, slots=True)
+class ShortEnds:
+    """Bars of open time a market's stream misses at the ends of its window."""
+
+    market_id: str
+    before_first: int
+    after_last: int
+
+
 _EPOCH_UTC: Final = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _WEEK_DAYS: Final = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _DAY_MINUTES: Final = 24 * 60
@@ -845,6 +860,11 @@ class OpenTime:
             opens <= minute < closes if opens < closes else minute >= opens or minute < closes
             for opens, closes in self.sessions
         )
+
+    def closures_before(self, at_ns: int) -> bool:
+        """Whether this calendar's closures reach back past ``at_ns``, so a shut day there is on
+        file and a missing one is really missing."""
+        return any(start < at_ns for start, _ in self.closures)
 
 
 def _week_minute(text: str) -> int:
@@ -922,3 +942,26 @@ def find_holes(
                 holes.append(Hole(market_id, last, at, missing))
         last = at
     return tuple(holes)
+
+
+def short_ends(
+    market_id: str,
+    opens: Sequence[int],
+    *,
+    bar_ns: int,
+    hours: OpenTime,
+    start_ns: int,
+    end_ns: int,
+) -> ShortEnds:
+    """The open bars between ``[start_ns, end_ns)`` and the first and last of these bar opens.
+
+    Counted outward from the bars the stream holds, so a stream whose bars tile a venue day stays
+    on its own grid. A stream with no bars misses its whole window, before its first bar.
+    """
+    first = opens[0] if opens else end_ns
+    last = opens[-1] if opens else end_ns
+    return ShortEnds(
+        market_id,
+        sum(hours.open_at(t) for t in range(first - bar_ns, start_ns - 1, -bar_ns)),
+        sum(hours.open_at(t) for t in range(last + bar_ns, end_ns, bar_ns)),
+    )
