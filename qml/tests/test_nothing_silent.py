@@ -13,7 +13,7 @@ from qmf.risk.unit_intent import UnitExitIntent
 from qml.check import check
 from qml.compile import CompiledUnit, compile_unit
 from qml.compile.compiler import BLOCKS_NOT_BUILT
-from qml.protocol.unit import OwnPosition, TraceLevel, construct_unit
+from qml.protocol.unit import Account, OwnPosition, TraceLevel, construct_unit
 from qml.unit.model import Side
 from test_compile_dummy import (
     _context,
@@ -210,7 +210,19 @@ def _as_exit(face: Document) -> str:
         )
     )
     for instant in _INSTANTS:
-        for intent in _ok(unit.on_instant(instant)).intents:
+        step = _ok(unit.on_instant(instant))
+        intents = [
+            *step.intents,
+            *(
+                one.intent
+                for one in (
+                    unit.price(proposal, Account(Decimal("10000.00")))
+                    for proposal in step.proposals
+                )
+                if one.intent is not None
+            ),
+        ]
+        for intent in intents:
             if isinstance(intent, UnitExitIntent):
                 return _FIRED
             if index == 0 or intent.protection.targets:
@@ -233,7 +245,7 @@ def test_every_stdlib_block_acts_or_refuses() -> None:
         "target-r-multiple@1",
         "time-exit-bars@1",
     ]
-    assert len(faces) == 124
+    assert len(faces) == 125
     assert {pin: triggers[pin] for pin in _HOLDS_ON_ITS_CLOCK} == dict.fromkeys(
         _HOLDS_ON_ITS_CLOCK, _FIRED
     )

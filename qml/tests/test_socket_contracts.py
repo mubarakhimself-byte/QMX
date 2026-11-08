@@ -23,6 +23,7 @@ from qmf.core.refusal import is_refusal
 from qmf.risk.unit_intent import UnitExitIntent, UnitIntent, parse_unit_intent
 from qml.blocks.api import (
     PASS_EVERY_ORDER,
+    Amount,
     Block,
     CrossUnitHook,
     EntryFace,
@@ -33,6 +34,7 @@ from qml.blocks.api import (
     Side,
     Signal,
     Size,
+    Skip,
     parse_entry,
 )
 from qml.catalogue import Loaded, LockEntry, load
@@ -150,18 +152,42 @@ _COMPONENT_CONTROL = "library-sizer-answers-a-float@1"
 """The Library fixture that answers a float: the contract must bite it, which proves enrolment."""
 
 _FLOAT_BREAKS = [
-    f"sizer contract, {trade.name}: answered 0.25, not a Size" for trade in _TRADES
+    f"sizer contract, {trade.name}: answered 0.25, not a sizer answer" for trade in _TRADES
 ]
 
 _SHIPPED = _shipped()
 
 
+def _amount_breaks(answer: Amount, trade: _Trade, fraction: Decimal | None) -> list[str]:
+    """An amount's shape, and the risk it states at the fraction the block's evidence declares."""
+    if answer.kind not in ("money_at_risk", "notional", "quantity"):
+        return [f"answered the amount kind {answer.kind!r}, which no slot reads"]
+    value = cast("object", answer.value)
+    if not isinstance(value, Decimal) or value <= 0:
+        return [f"answered the amount {value!r}, which is not a positive Decimal"]
+    if not answer.basis:
+        return ["answered an amount with no basis for R"]
+    if answer.kind != "money_at_risk":
+        return []
+    if fraction is None:
+        return ["declares no fraction, so the contract cannot bound its risk"]
+    most = trade.equity * fraction
+    if answer.value > most:
+        return [f"risks {answer.value}, above {most} at the declared fraction {fraction}"]
+    return []
+
+
 def _sized(answer: object, trade: _Trade, fraction: Decimal | None) -> list[str]:
     """What breaks the sizer contract: the answer's shape, and any size above the lot rule's
     output at the fraction the block's own evidence declares. A block that declares no fraction
-    states no risk to bound, so its answer is checked against the lot rule alone."""
+    states no risk to bound, so its answer is checked against the lot rule alone. An ``Amount``
+    states money or quantity for the one converter, so its shape and its risk are checked."""
+    if isinstance(answer, Amount):
+        return _amount_breaks(answer, trade, fraction)
+    if isinstance(answer, Skip):
+        return [] if answer.reason else ["skipped with no reason"]
     if not isinstance(answer, Size):
-        return [f"answered {answer!r}, not a Size"]
+        return [f"answered {answer!r}, not a sizer answer"]
     size = cast("object", answer.lots)
     if size is None:
         return [] if answer.skip_reason else ["skipped with no reason"]
@@ -466,9 +492,7 @@ def _rounds_up(evidence: Mapping[str, object]) -> Size:
     ("pin", "breaks"),
     [(pin, _FLOAT_BREAKS if pin == _COMPONENT_CONTROL else []) for pin in sorted(_SHIPPED)],
 )
-def test_every_enrolled_socket_block_answers_its_slot_contract(
-    pin: str, breaks: list[str]
-) -> None:
+def test_every_enrolled_socket_block_answers_its_slot_contract(pin: str, breaks: list[str]) -> None:
     """Every enrolled block answers the contract; the Library fixture is the known-bad control
     that proves a block saved beside the tests is judged with the same messages."""
     assert _breaks(_SHIPPED[pin]) == breaks
@@ -511,9 +535,7 @@ def test_the_dummys_sizer_answers_the_lot_rule_at_half_a_percent() -> None:
 
 
 def test_a_sizer_answering_a_float_breaks_the_sizer_contract() -> None:
-    assert _sizer_breaks(_Fake(0.25), {}) == [
-        f"sizer contract, {t.name}: answered 0.25, not a Size" for t in _TRADES
-    ]
+    assert _sizer_breaks(_Fake(0.25), {}) == _FLOAT_BREAKS
     assert _sizer_breaks(_Fake(Size(lots=0.25)), {})[:2] == [  # pyright: ignore[reportArgumentType]
         "sizer contract, eurusd 20 pips: the size 0.25 is a float, not an exact Decimal",
         "sizer contract, xauusd 14.50: the size 0.25 is a float, not an exact Decimal",
@@ -596,6 +618,23 @@ def test_an_exit_must_answer_what_its_entry_declares() -> None:
     ]
     assert _declares(OutputType.QUANTITY) == [
         "exit contract: its entry declares quantity, not level or exit_action"
+    ]
+
+
+def test_a_sizer_must_answer_an_amount_or_a_quantity() -> None:
+    document = _document()
+    document["sizer"] = {
+        "name": "probe",
+        "block": "time-exit-bars@1",
+        "params": {"bars": {"value": "48"}},
+        "inputs": {},
+    }
+
+    problems = compile_unit(document, _context())
+
+    assert isinstance(problems, tuple)
+    assert [(p.kind, p.where) for p in problems if p.where == "/sizer/block"] == [
+        ("sizer_not_built", "/sizer/block")
     ]
 
 

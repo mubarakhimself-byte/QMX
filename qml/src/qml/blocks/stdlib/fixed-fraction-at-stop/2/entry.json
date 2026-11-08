@@ -1,0 +1,94 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "fixed-fraction-at-stop",
+  "version": 2,
+  "family": "fixed-fractional",
+  "aliases": [
+    "fixed fractional sizing"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "component_type": "sizer",
+  "definition": "Risk a fraction of equity at the stop, answered as money at risk so the one converter spells the venue's lots.",
+  "boundaries": "The fraction, and whether fixed fractional is the method at all, are the risk session's until the numbers talk.",
+  "recognition": "Each trade risks the same fraction of equity between entry and stop.",
+  "eligible_roles": [
+    "sizer"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    },
+    {
+      "source_ref": "risk-core:round-2/arch/final/SPINE.md#AD-10",
+      "quote": "every shipped template binds `fixed-fraction-at-stop@2`, which answers `Amount(money_at_risk)`",
+      "dated": "2026-11-08"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "equity",
+      "stream_kind": "account",
+      "measure": "money",
+      "data_level": null
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "stop_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null,
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "amount",
+    "measure": "money"
+  },
+  "parameters": {
+    "fraction": {
+      "measure": "percent",
+      "default": "0.005",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.0001",
+        "max": "0.05",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:cd5860cf91f9b1fa70ecc23035b70015502d93f2c8276524c4fa01c472a2534b"
+}

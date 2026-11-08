@@ -184,10 +184,15 @@ class Block(Protocol):
 class SizerInstance(Instance, Protocol):
     """The sizer slot. The host passes ``equity``, ``entry_price`` and ``stop_price`` as exact
     ``Decimal`` values, ``record`` as the market's ``InstrumentRecord``, and the sizer's own
-    parameters. The answer is a ``Size``: exact lots on the record's lot step, never more than
-    the lot rule (``qml.numbers.lots``) gives at his risk ceiling, or a skip with its reason."""
+    parameters, each under its parameter name, so a number that moves reaches the answer.
 
-    def update(self, evidence: Mapping[str, object]) -> Size | None: ...
+    The answer is an ``Amount`` in the unit the sizer chose: the one converter spells the venue's
+    quantity, rounding down to the lot step with the residue kept. ``Size`` still states a
+    quantity in lots, and skips the converter exactly as it always did. ``Skip`` refuses one entry
+    with the reason the unit records, and ``None`` means the evidence was not there yet.
+    """
+
+    def update(self, evidence: Mapping[str, object]) -> Amount | Skip | Size | None: ...
 
 
 class ExitInstance(Instance, Protocol):
@@ -259,6 +264,7 @@ class OutputType(StrEnum):
     STATE = "state"
     PROBABILITY = "probability"
     QUANTITY = "quantity"
+    AMOUNT = "amount"
     EXIT_ACTION = "exit_action"
     CALENDAR_STATE = "calendar_state"
     ENTRY_ORDER = "entry_order"

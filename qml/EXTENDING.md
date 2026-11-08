@@ -15,7 +15,7 @@ the shape beside it.
 
 | Slot | Protocol | Answers | For |
 |---|---|---|---|
-| sizer | `SizerInstance` | `Size` or `None` | The sizer slot. |
+| sizer | `SizerInstance` | `Amount`, `Skip`, `Size` or `None` | The sizer slot. |
 | exit | `ExitInstance` | `Decimal`, `Signal` or `None` | An exit slot. |
 | halt | `HaltInstance` | `Halt` or `None` | A halt slot, read from unit and account statistics and his limits. |
 | cross-unit hook | `CrossUnitHook` | `Refuse` or `None` | What the host calls before every order, across every unit on the account. |
@@ -188,7 +188,7 @@ A block answers with one of these shapes. A block's face declares one output typ
 | `Refuse` | `reason: str` | the cross-unit hook |
 | `EntryOrder` | `kind: str`; `at: str` | an entry-order slot |
 
-The output types are `event`, `level`, `series`, `state`, `probability`, `quantity`, `exit_action`, `calendar_state`, `entry_order`.
+The output types are `event`, `level`, `series`, `state`, `probability`, `quantity`, `amount`, `exit_action`, `calendar_state`, `entry_order`.
 
 ## Journal kinds
 

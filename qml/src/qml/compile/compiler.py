@@ -142,6 +142,9 @@ BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
 _HOLDING_OUTPUTS: Final[frozenset[OutputType]] = frozenset(
     {OutputType.EVENT, OutputType.STATE, OutputType.ENTRY_ORDER}
 )
+_SIZER_ANSWERS: Final[frozenset[OutputType]] = frozenset({OutputType.AMOUNT, OutputType.QUANTITY})
+"""What a sizer's face may answer: a typed amount, or the legacy lots a ``Size`` states. Any
+other face in that slot would have nothing the one converter can spell (AD-10)."""
 _SLOT_PORT_KINDS: Final[frozenset[str]] = frozenset({"series", "bars"})
 """The input kinds a slot binding is fed, as layer B wires them. Account, position, record and
 trades facts reach a sizer, an exit or a rule through their own doors, and never a slot."""
@@ -1099,6 +1102,13 @@ def compile_unit(
     )
     exits = wiring.exits()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
+    if sizer is not None and sizer.face.output.type not in _SIZER_ANSWERS:
+        problems.add(
+            "sizer_not_built",
+            "/sizer/block",
+            f"{sizer.face.pin} answers {sizer.face.output.type.value}, and a sizer answers an "
+            "amount or a quantity, which one converter spells as the venue's lots",
+        )
     derived, slow = _motion(unit, sides, loaded, faces, problems)
     streams = frozenset(s.name for s in unit.streams)
     sides = tuple(_with_feeders(s, derived, streams, problems) for s in sides)
