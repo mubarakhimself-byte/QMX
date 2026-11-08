@@ -445,4 +445,5 @@ def test_the_first_start_click_keeps_qmb_running_at_every_host_start(
         finally:
             next_start.close()
 
-    assert (first, again, started, status) == (["qmb"], ["qmb"], ["qmb"], "running")
+    enabled = ["qmb", "mis"]
+    assert (first, again, started, status) == (enabled, enabled, enabled, "running")

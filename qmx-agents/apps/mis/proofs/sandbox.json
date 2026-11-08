@@ -1,0 +1,50 @@
+{
+  "source": "recorded",
+  "cases": [
+    {
+      "tool": "status",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "status: unknown argument surprise"
+      }
+    },
+    {
+      "tool": "board",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "board: unknown argument surprise"
+      }
+    },
+    {
+      "tool": "configure",
+      "arguments": {"markets": "eurusd"},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "configure: markets is a list of objects"
+      }
+    },
+    {
+      "tool": "configure",
+      "arguments": {"markets": [], "packs": [{"id": "fx", "version": 9}]},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "configure: no pack fx@9"
+      }
+    },
+    {
+      "tool": "round",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "round: unknown argument surprise"
+      }
+    }
+  ]
+}

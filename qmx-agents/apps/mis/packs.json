@@ -1,0 +1,241 @@
+{
+  "schema": "qmx.mis.packs/1",
+  "labelers": {
+    "spread_state@v1": {
+      "tier": "tick",
+      "time_base": "ticks",
+      "data_level": 2,
+      "stale_after_s": 2,
+      "warm_up": 1,
+      "valid_classes": [
+        "fx",
+        "metal",
+        "index_cfd",
+        "commodity_cfd",
+        "stock_cfd",
+        "future",
+        "perp",
+        "spot_crypto",
+        "stock"
+      ]
+    }
+  },
+  "packs": {
+    "fx-1": {
+      "class": "fx",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "metal-1": {
+      "class": "metal",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "index_cfd-1": {
+      "class": "index_cfd",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "commodity_cfd-1": {
+      "class": "commodity_cfd",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "stock_cfd-1": {
+      "class": "stock_cfd",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "future-1": {
+      "class": "future",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "perp-1": {
+      "class": "perp",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "spot_crypto-1": {
+      "class": "spot_crypto",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    },
+    "stock-1": {
+      "class": "stock",
+      "readings": [
+        {
+          "pin": "cusum-change-point@1"
+        },
+        {
+          "pin": "efficiency-ratio@1"
+        },
+        {
+          "pin": "variance-ratio@1"
+        },
+        {
+          "pin": "hurst-exponent@1"
+        },
+        {
+          "pin": "spread_state@v1",
+          "parameters": {
+            "normal_max": "2",
+            "elevated_max": "5"
+          }
+        }
+      ]
+    }
+  }
+}
