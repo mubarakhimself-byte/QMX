@@ -305,6 +305,30 @@ class UnitSliceHandler:
         handler._unit = unit.value
         return Ok(handler)
 
+    def adopt(
+        self,
+        market: str,
+        position: OwnPosition,
+        *,
+        stop: Decimal,
+        entry_stop: Decimal,
+        target: Decimal | None,
+        decision_row_id: str,
+    ) -> Result[None]:
+        """Hold a position the unit opened before this handler started, as the node finds it
+        at its venue after a process restart: its stop, target and exits are managed as the
+        unit's own. A ``seeded`` position is another's, which the unit never closes."""
+        record = self._records.get(market)
+        if record is None:
+            return invalid("market", "a unit adopts a position on its own markets", market=market)
+        if self._position(market) is not None:
+            return policy("market", "a unit holds one position per market", market=market)
+        risk = _money(position.side, position.entry_price, entry_stop, position.quantity, record)
+        self._held[market] = HeldPosition(
+            position, stop, target, decision_row_id, {}, entry_stop, risk.copy_abs()
+        )
+        return Ok(None)
+
     def read_surfaces(self) -> dict[str, _At]:
         surfaces = {
             "account": _At(lambda _i: self._account()),

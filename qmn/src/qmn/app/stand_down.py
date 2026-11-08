@@ -23,11 +23,13 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
-from qmf.core import is_refusal
+from qmf.core import Ok, Result, is_refusal
+from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_kinds.unit import LIFECYCLE_SCHEMA
+from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter, WriterScope
 
 from qmn.app.feed_keeper import FeedKeeper
@@ -51,6 +53,9 @@ __all__ = [
     "StandDowns",
     "Subject",
     "Word",
+    "held_from_start",
+    "held_from_stop",
+    "restored",
 ]
 
 FEED_STALE_AFTER_NS: Final = 120_000_000_000
@@ -206,6 +211,17 @@ class Subject:
     lane: str
     world: JournalWorld
 
+    def document(self) -> dict[str, Json]:
+        return {
+            "deployment_id": self.deployment_id,
+            "unit_id": self.unit_id,
+            "version_ref": self.version_ref,
+            "compiled_fingerprint": self.compiled_fingerprint,
+            "market_id": self.market_id,
+            "lane": self.lane,
+            "world": self.world.value,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class Held:
@@ -213,7 +229,8 @@ class Held:
 
     ``covers`` are the scopes his resume clears it from; ``healthy_since_ns`` is when a row
     that clears itself last saw its cause gone. A risk stop carries its subject and the
-    ``event_id`` of its ``lifecycle`` row."""
+    ``event_id`` of its ``lifecycle`` row once that row landed; until then ``pending`` holds
+    the row still to land."""
 
     kind: Kind
     scope: str
@@ -223,10 +240,16 @@ class Held:
     healthy_since_ns: int | None = None
     subject: Subject | None = None
     event_id: str | None = None
+    pending: Mapping[str, object] | None = None
 
     @property
     def row(self) -> Row:
         return TABLE[self.kind]
+
+    @property
+    def waits(self) -> bool:
+        """Whether only he clears it: a restart must never let it go."""
+        return self.row.clears is not Clears.ITSELF
 
     def document(self) -> dict[str, Json]:
         shown: dict[str, Json] = {
@@ -240,6 +263,151 @@ class Held:
         if self.event_id is not None:
             shown["lifecycle_event"] = self.event_id
         return shown
+
+    def record(self) -> dict[str, object]:
+        """What its ``stand_down`` start row carries, so a restart rebuilds it from the node
+        journal alone: its scopes, its subject, and a risk stop's ``lifecycle`` row still to
+        land."""
+        kept: dict[str, object] = {**self.document(), "covers": sorted(self.covers)}
+        if self.subject is not None:
+            kept["subject"] = self.subject.document()
+        if self.pending is not None:
+            kept["pending"] = dict(self.pending)
+        return kept
+
+
+def _subject(found: Mapping[str, object], lane: str, world: str) -> Subject:
+    return Subject(
+        str(found["deployment_id"]),
+        str(found["unit_id"]),
+        str(found["version_ref"]),
+        str(found["compiled_fingerprint"]),
+        str(found["market_id"]),
+        lane,
+        JournalWorld(world),
+    )
+
+
+def held_from_start(body: Mapping[str, object], written_ns: int) -> Held:
+    """The stand-down a ``stand_down`` start row records (:meth:`Held.record`). A row written
+    before C-13 names no scopes, and is cleared from ``all`` and its own scope, as
+    :meth:`StandDowns.hold` holds it."""
+    found = body.get("subject")
+    subject = None
+    if isinstance(found, Mapping):
+        named = cast("Mapping[str, object]", found)
+        subject = _subject(named, str(named["lane"]), str(named["world"]))
+    pending = body.get("pending")
+    scope = str(body["scope"])
+    since = body.get("since_ns")
+    covers = body.get("covers")
+    return Held(
+        Kind(str(body["stand_down"])),
+        scope,
+        since if isinstance(since, int) else written_ns,
+        str(body["cause"]),
+        frozenset(str(s) for s in cast("list[object]", covers))
+        if isinstance(covers, list)
+        else frozenset({"all", scope}),
+        subject=subject,
+        event_id=None if body.get("lifecycle_event") is None else str(body["lifecycle_event"]),
+        pending=cast("Mapping[str, object]", pending) if isinstance(pending, Mapping) else None,
+    )
+
+
+def held_from_stop(body: Mapping[str, object], world: str, written_ns: int) -> Held:
+    """The risk stop a ``lifecycle`` row by ``risk_rule`` records, as :meth:`StandDowns.risk_stop`
+    wrote it. A row that does not name its deployment holds every entry on the node until his
+    resume at ``all``, the safe side of not knowing its scope."""
+    rule = str(cast("Mapping[str, object]", body["by"])["principal"])
+    cause = f"{rule}: {body.get('reason')}"
+    if "deployment_id" not in body:
+        return Held(Kind.RISK_STOP, "all", written_ns, cause, event_id=str(body["event_id"]))
+    subject = _subject(body, str(body["from"]), world)
+    return Held(
+        Kind.RISK_STOP,
+        f"unit:{subject.deployment_id}:{subject.market_id}",
+        cast("int", body["since_ns"]),
+        cause,
+        frozenset(str(scope) for scope in cast("list[object]", body["covers"])),
+        subject=subject,
+        event_id=str(body["event_id"]),
+    )
+
+
+def _rows(root: Path, stream: JournalStream, kind: str) -> Result[list[JournalLine]]:
+    """Every committed row of one kind in the writer root, folder by folder."""
+    found: list[JournalLine] = []
+    for folder in stream_folders(root):
+        if not folder.name.startswith(f"{stream.source}.{kind}."):
+            continue
+        lines = read_committed(folder)
+        if is_refusal(lines):
+            return lines
+        found.extend(line for line in lines.value if isinstance(line, JournalLine))
+    return Ok(found)
+
+
+def restored(root: Path) -> Result[list[Held]]:
+    """The stand-downs waiting for him when the node last stopped, rebuilt from its journals.
+
+    A risk stop whose ``lifecycle`` row landed is held until a later row ``clears`` it, which
+    his resume lands; that row is what the PC reads too. A stop whose row names no deployment
+    (written before C-13) gets no such row, so the node journal's ``clear`` row of the same
+    stop clears it. Every other stand-down that waits for him, and a risk stop whose
+    ``lifecycle`` row never landed, is held from its node-journal ``stand_down`` start row until
+    a ``clear`` row for its scope follows. A read the volume refuses, or a row it cannot
+    parse, is answered as a refusal, never as "nothing held"."""
+    stops = _rows(root, JournalStream.UNIT, "lifecycle")
+    if is_refusal(stops):
+        return stops
+    rows = _rows(root, JournalStream.NODE, "stand_down")
+    if is_refusal(rows):
+        return rows
+    try:
+        return Ok(_waiting(stops.value, rows.value))
+    except (KeyError, TypeError, ValueError) as error:
+        return TypedRefusal(
+            category=RefusalCategory.INVALID_INPUT,
+            retryability=Retryability.NO,
+            context={"field": "stand_down", "reason": f"a stop row does not parse: {error!r}"},
+        )
+
+
+def _waiting(stops: Sequence[JournalLine], rows: Sequence[JournalLine]) -> list[Held]:
+    landed: dict[str, Held] = {}
+    cleared: set[str] = set()
+    for line in stops:
+        body = cast("Mapping[str, object]", line.record.get("body", {}))
+        by = body.get("by")
+        if isinstance(body.get("clears"), str):
+            cleared.add(str(body["clears"]))
+        elif (
+            isinstance(by, Mapping) and cast("Mapping[str, object]", by).get("kind") == "risk_rule"
+        ):
+            world = str(line.record["world"])
+            landed[str(body["event_id"])] = held_from_stop(body, world, line.t)
+    waiting: dict[tuple[Kind, str], Held] = {}
+    ended: set[tuple[Kind, str, object]] = set()
+    for line in rows:
+        body = cast("Mapping[str, object]", line.record.get("body", {}))
+        key = (Kind(str(body["stand_down"])), str(body["scope"]))
+        if body.get("event") == "clear":
+            waiting.pop(key, None)
+            ended.add((*key, body.get("since_ns")))
+        elif body.get("event") == "start" and TABLE[key[0]].clears is not Clears.ITSELF:
+            waiting[key] = held_from_start(body, line.t)
+    held = {key: found for key, found in waiting.items() if _unlanded(found, landed)}
+    for event_id, stop in landed.items():
+        if event_id not in cleared and (stop.kind, stop.scope, stop.since_ns) not in ended:
+            held[(stop.kind, stop.scope)] = stop
+    return list(held.values())
+
+
+def _unlanded(held: Held, landed: Mapping[str, Held]) -> bool:
+    """A start row decides only for a stop whose ``lifecycle`` row never landed."""
+    pending = held.pending
+    return pending is None or str(pending.get("event_id")) not in landed
 
 
 def _iso(at_ns: int) -> str:
@@ -288,6 +456,8 @@ class StandDowns:
         self.clock_offset_ns = clock_offset_ns
         self.held: dict[tuple[Kind, str], Held] = {}
         self._lifecycle: dict[tuple[str, JournalWorld], JournalWriter] = {}
+        self._unrecorded: set[tuple[Kind, str]] = set()
+        """Stand-downs whose start row did not land in the node journal."""
 
     # --- what stops entries ---
 
@@ -298,6 +468,20 @@ class StandDowns:
 
     def document(self) -> list[dict[str, Json]]:
         return [held.document() for held in self.held.values()]
+
+    def in_memory_only(self) -> list[Held]:
+        """The stand-downs waiting for him that no journal holds yet, so a process restart
+        would lose them: neither their start row nor a risk stop's ``lifecycle`` row landed."""
+        return [
+            held
+            for key, held in self.held.items()
+            if held.waits and key in self._unrecorded and held.event_id is None
+        ]
+
+    def adopt(self, restored: Iterable[Held]) -> None:
+        """Hold what a restart rebuilt from the journals, writing no row: each started before."""
+        for held in restored:
+            self.held.setdefault((held.kind, held.scope), held)
 
     # --- the rows that clear by themselves ---
 
@@ -369,29 +553,33 @@ class StandDowns:
         """A risk rule stops ``subject``: one ``lifecycle`` row, ``by: risk_rule``, and the
         unit's entries on that market held until his resume. A rule firing again while the
         stop holds lands nothing. The hold starts even when the row cannot be written, with
-        the ``risk_stop_unrecorded`` alarm. Answers the stop's event id, or None when its row
-        did not land."""
+        the ``risk_stop_unrecorded`` alarm, and :meth:`settle` lands the row on a later tick.
+        Answers the stop's event id, or None when its row did not land."""
         scope = f"unit:{subject.deployment_id}:{subject.market_id}"
         held = self.held.get((Kind.RISK_STOP, scope))
         if held is not None:
             return held.event_id
         now = self.clock_ns()
         event_id = _event_id("risk_stop", subject.deployment_id, subject.market_id, rule, str(now))
+        scopes = frozenset({"all", *covers})
         body = self._move(subject, event_id, subject.lane, "stopped", now, reason=reason)
-        body["by"] = {"kind": "risk_rule", "principal": rule}
-        landed = self._land(subject, body)
+        body.update(
+            by={"kind": "risk_rule", "principal": rule}, covers=sorted(scopes), since_ns=now
+        )
+        # The hold and its node-journal row come before the lifecycle row, so a crash while
+        # that row is written leaves the stop on the volume for the restart to rebuild.
         self._start(
             Held(
                 Kind.RISK_STOP,
                 scope,
                 now,
                 f"{rule}: {reason}",
-                frozenset({"all", *covers}),
+                scopes,
                 subject=subject,
-                event_id=event_id if landed else None,
+                pending=body,
             )
         )
-        if not landed:
+        if not self._settle((Kind.RISK_STOP, scope)):
             self.on_alarm(
                 {
                     "alarm": "risk_stop_unrecorded",
@@ -405,6 +593,21 @@ class StandDowns:
             )
             return None
         return event_id
+
+    def settle(self) -> None:
+        """Land each held risk stop's ``lifecycle`` row that has not landed yet."""
+        for key, held in list(self.held.items()):
+            if held.pending is not None:
+                self._settle(key)
+
+    def _settle(self, key: tuple[Kind, str]) -> bool:
+        held = self.held[key]
+        if held.pending is None or held.subject is None:
+            return True
+        if not self._land(held.subject, held.pending):
+            return False
+        self.held[key] = replace(held, event_id=str(held.pending["event_id"]), pending=None)
+        return True
 
     def resumes(self, changes: Sequence[Change]) -> None:
         """His ``resume`` clears each stand-down waiting for him that it covers and that
@@ -443,6 +646,7 @@ class StandDowns:
         return {
             "schema": LIFECYCLE_SCHEMA,
             "event_id": event_id,
+            "deployment_id": subject.deployment_id,
             "unit_id": subject.unit_id,
             "version_ref": subject.version_ref,
             "compiled_fingerprint": subject.compiled_fingerprint,
@@ -486,18 +690,20 @@ class StandDowns:
         return found
 
     def _start(self, held: Held) -> None:
-        self.held[(held.kind, held.scope)] = held
-        self._row("start", held, None)
+        key = (held.kind, held.scope)
+        self.held[key] = held
+        if not self._row({"event": "start", **held.record()}):
+            self._unrecorded.add(key)
 
     def _clear(self, held: Held, by: str) -> None:
-        del self.held[(held.kind, held.scope)]
-        self._row("clear", held, by)
+        key = (held.kind, held.scope)
+        del self.held[key]
+        self._unrecorded.discard(key)
+        self._row({"event": "clear", **held.document(), "cleared_by": by})
 
-    def _row(self, event: str, held: Held, by: str | None) -> None:
-        body: dict[str, object] = {"event": event, **held.document()}
-        if by is not None:
-            body["cleared_by"] = by
-        self.journal.append("stand_down", body, RowFacts(ts_recv=self.clock_ns(), clock_ok=False))
+    def _row(self, body: Mapping[str, object]) -> bool:
+        facts = RowFacts(ts_recv=self.clock_ns(), clock_ok=False)
+        return not is_refusal(self.journal.append("stand_down", body, facts))
 
     def close(self) -> None:
         for writer in self._lifecycle.values():

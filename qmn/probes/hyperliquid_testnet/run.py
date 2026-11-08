@@ -57,6 +57,7 @@ from qmn.venue.ccxt_client import (
 NODE_KEYS = "qmx/trading-node-keys"
 TAG = "probe7zz"
 """The probe's own node tag, so its orders never read as the practice node's."""
+DEPLOYMENT = "testnet-probe"
 COIN = "ETH"
 SYMBOL = f"{COIN}/USDC:USDC"
 MARKET = "crypto.eth"
@@ -166,6 +167,7 @@ class Probe:
         if isinstance(quantity, TypedRefusal):
             return quantity
         return self.path.entry(
+            deployment_id=DEPLOYMENT,
             client_order_id=name,
             label=f"qmx:{TAG}:testnet-probe",
             wire={

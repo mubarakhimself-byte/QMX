@@ -98,15 +98,30 @@ from qmf.risk.unit_intent import (
 from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots, parse_record
-from qml.protocol.unit import HostedUnit, OwnPosition, QuoteBar, Surface, construct_unit
+from qml.protocol.unit import (
+    HostedUnit,
+    OwnPosition,
+    QuoteBar,
+    Surface,
+    construct_unit,
+    restore_unit,
+)
 from qml.unit.model import Side
 
 from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
+from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, refused
-from qmn.app.reconciler import Reconciler
-from qmn.app.stand_down import Kind, StandDowns, Subject
+from qmn.app.reconciler import Ours, Reconciler
+from qmn.app.stand_down import (
+    REPEATED_FAULT_RESTARTS,
+    REPEATED_FAULT_WINDOW_NS,
+    Kind,
+    StandDowns,
+    Subject,
+    restored,
+)
 from qmn.app.store import Json
 from qmn.journal_dispatch import enact_command
 from qmn.loop.accumulator import RecordingAccumulator
@@ -873,6 +888,7 @@ class OrderPath:
     def entry(
         self,
         *,
+        deployment_id: str,
         client_order_id: str,
         label: str,
         wire: Mapping[str, object],
@@ -884,12 +900,15 @@ class OrderPath:
         done = self._sent.get(client_order_id)
         if done is not None:
             return done
-        outcome = self._entry(client_order_id, label, wire, record, quantity, blocked_by)
+        outcome = self._entry(
+            deployment_id, client_order_id, label, wire, record, quantity, blocked_by
+        )
         self._sent[client_order_id] = outcome
         return outcome
 
     def _entry(
         self,
+        deployment_id: str,
         client_order_id: str,
         label: str,
         wire: Mapping[str, object],
@@ -908,7 +927,8 @@ class OrderPath:
             return Blocked(
                 "venue answer unknown for an earlier order, so no entry until it resolves"
             )
-        stop = Decimal(str(cast("Mapping[str, object]", wire["protection"])["stop"]))
+        protection = cast("Mapping[str, object]", wire["protection"])
+        stop = Decimal(str(protection["stop"]))
         quote = self.venue.feed.quote(market)
         reference = (
             (quote.ask if side is Side.LONG else quote.bid) if quote is not None else None
@@ -962,6 +982,8 @@ class OrderPath:
         body: dict[str, object] = {
             "event_id": f"{client_order_id}/send",
             "client_order_id": client_order_id,
+            "deployment_id": deployment_id,
+            "sent_at_ns": self.clock_ns(),
             "label": label,
             "step": "send",
             "kind": "entry",
@@ -974,6 +996,9 @@ class OrderPath:
             "stop_distance": str(distance),
             "stop_form": gate.value,
         }
+        targets = cast("Sequence[Mapping[str, object]]", protection.get("targets") or ())
+        if targets:
+            body["target"] = str(targets[0]["price"])
         sent = self._journalled(body, ticket)
         if is_refusal(sent):
             if sent.context.get("blocks_entries") is True:
@@ -1280,16 +1305,40 @@ class NodeUnit:
         self._execution = _Execution(self)
         self._port = _Journal(self, journal)
         self.handler: UnitSliceHandler | None = None
+        self.hosted_unit: HostedUnit | None = None
+        self.target: ExecutionTarget | None = None
 
-    def start(self, equity: Decimal, target: ExecutionTarget) -> Result[None]:
+    def start(
+        self,
+        equity: Decimal,
+        target: ExecutionTarget,
+        snapshot: Mapping[str, object] | None = None,
+    ) -> Result[None]:
+        """Host the unit: fresh through ``construct_unit``, or from ``snapshot`` through
+        ``restore_unit``, which resumes it warm or starts it cold with the reason (A10)."""
+
         def host(surfaces: Mapping[str, Surface]) -> Result[HostedUnit]:
             own = _OwnJournal(self, surfaces["own_journal"])
-            return construct_unit(
-                self.compiled,
-                read_surfaces={**surfaces, "own_journal": own},
-                scope_id=self.deployment.deployment_id,
-                execution_target=target,
+            read = {**surfaces, "own_journal": own}
+            scope = self.deployment.deployment_id
+            built = (
+                construct_unit(
+                    self.compiled, read_surfaces=read, scope_id=scope, execution_target=target
+                )
+                if snapshot is None
+                else restore_unit(
+                    snapshot,
+                    self.compiled,
+                    read_surfaces=read,
+                    scope_id=scope,
+                    execution_target=target,
+                )
             )
+            if not is_refusal(built):
+                self.hosted_unit = built.value
+            return built
+
+        self.target = target
 
         started = UnitSliceHandler.start(
             host,
@@ -1305,6 +1354,58 @@ class NodeUnit:
             return started
         self.handler = started.value
         return Ok(None)
+
+    @property
+    def settled(self) -> bool:
+        """Whether nothing of this unit is open or in flight at the venue, so it can be hosted
+        again from its snapshot without losing a position the handler holds."""
+        held = self.handler is not None and bool(self.handler.open_positions)
+        return not (held or self._unknown or self.venue_open())
+
+    def restore(self) -> Result[None]:
+        """Host the unit again from its own snapshot (a heal of the runtime)."""
+        if self.hosted_unit is None or self.target is None:
+            return Ok(None)
+        snapshot = self.hosted_unit.snapshot()
+        return self.start(self.orders.venue.client.equity(), self.target, snapshot)
+
+    def adopt(self, found: Iterable[Ours]) -> None:
+        """Hold each position this deployment sent that the reconcile read open at the venue
+        and this unit does not hold, as a process restart finds them: the unit manages its
+        stop, its target and its exits as its own. A position is adopted once."""
+        handler = self.handler
+        client = self.orders.venue.client
+        for ours in found:
+            venue, send = ours.position, ours.send
+            name, market = venue.position, venue.market_id
+            if (
+                handler is None
+                or send.get("deployment_id") != self.deployment.deployment_id
+                or market not in self.records
+                or name in self.placed
+                or client.closed(name) is not None
+            ):
+                continue
+            side = Side(venue.side)
+            entry_stop = Decimal(str(send["stop"]))
+            position = OwnPosition(
+                name,
+                side,
+                venue.quantity,
+                venue.entry_price,
+                self.compiled.compiled_fingerprint,
+                Instant(cast("int", send["sent_at_ns"])),
+            )
+            adopted = handler.adopt(
+                market,
+                position,
+                stop=entry_stop if venue.stop is None else venue.stop,
+                entry_stop=entry_stop,
+                target=Decimal(str(send["target"])) if "target" in send else None,
+                decision_row_id=str(send["decision_row_id"]),
+            )
+            if not is_refusal(adopted):
+                self.placed[name] = (market, side, venue.entry_price)
 
     # --- names ---
 
@@ -1401,6 +1502,7 @@ class NodeUnit:
             row = str(wire["decision_row_id"])
             named = self.client_order_id(row, at)
             placed = self.orders.entry(
+                deployment_id=self.deployment.deployment_id,
                 client_order_id=named,
                 label=self.label,
                 wire=wire,
@@ -1687,12 +1789,48 @@ class Runtime:
             on_alarm=self.alarms.append,
         )
         self._paper_journal: JournalWriter | None = None
+        waiting = restored(context.journal_root)
+        if is_refusal(waiting):
+            self.stand_down(
+                Kind.REPEATED_FAULT,
+                "all",
+                "the node could not read its journals at start, so it cannot prove which"
+                " stand-downs it held",
+            )
+        else:
+            self.stand_downs.adopt(waiting.value)
+        self.healer = Healer(
+            context.store,
+            journal,
+            clock_ns=clock_ns,
+            boot_epoch_id=boot_epoch_id,
+            max_restarts=REPEATED_FAULT_RESTARTS,
+            window_ns=REPEATED_FAULT_WINDOW_NS,
+        )
+        counted = self.healer.fold.evaluate(now_ns=clock_ns())
+        if counted.threshold_breached:
+            last = self.healer.fold.stamps[-1].reason
+            self._repeated_fault_down(counted.counted_boots, str(last))
+        self.watch = StuckWatch(
+            steady_ns=steady_ns,
+            alive=self._alive,
+            before_exit=self.healer.exit_record,
+        )
+        self._recovering = False
 
-    # --- the thread ---
+    # --- the thread, under the inner supervisor ---
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="node-runtime", daemon=True)
         self._thread.start()
+        watching = threading.Thread(
+            target=self.watch.run, args=(self._stop,), name="node-watchdog", daemon=True
+        )
+        watching.start()
+
+    def _alive(self) -> bool:
+        thread = self._thread
+        return self._stop.is_set() or thread is None or thread.is_alive()
 
     def wake(self) -> None:
         self._wake.set()
@@ -1709,13 +1847,127 @@ class Runtime:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            try:
-                self.tick()
-            except Exception as error:  # the runtime keeps going; the error is observed
-                print(json.dumps({"event": "runtime_error", "error": repr(error)}), file=sys.stderr)
-                self.context.store.observe("runtime.error", repr(error), self.clock_ns())
+            self.step()
             self._wake.wait(self.tick_s)
             self._wake.clear()
+
+    def step(self) -> None:
+        """One pass of the runtime thread under the inner supervisor: a tick, or, after the
+        tick raised, a heal. A heal waits its back-off and starts the runtime again over the
+        same hosted units, which hold the node's record of what is open at the venue."""
+        self._wake.clear()
+        self.watch.began = self.steady_ns()
+        try:
+            if self._recovering:
+                self._recover()
+            self.tick()
+        except Exception as error:
+            self.watch.began = None
+            self._heal(repr(error))
+            return
+        self.watch.began = None
+        if self.healer.healing is not None and self._back():
+            self.healer.healed()
+            self._observe()
+
+    def _heal(self, why: str) -> None:
+        print(json.dumps({"event": "runtime_error", "error": why}), file=sys.stderr)
+        fault = self.healer.fault(why)
+        if fault.breached:
+            self._repeated_fault_down(fault.restarts, why)
+        try:
+            self._observe()
+        except Exception as error:  # the store may be what failed; the heal goes on
+            print(json.dumps({"event": "observe_failed", "error": repr(error)}), file=sys.stderr)
+        self._wait(fault.wait_s)
+        self._recovering = True
+
+    def _repeated_fault_down(self, restarts: int, why: str) -> None:
+        """Past the crash-loop threshold the node stands down alive until his resume."""
+        minutes = REPEATED_FAULT_WINDOW_NS // 60_000_000_000
+        cause = f"{restarts} restarts in {minutes} minutes"
+        if self.stand_down(Kind.REPEATED_FAULT, "all", cause):
+            self.alarms.append(
+                {
+                    "alarm": "repeated_fault",
+                    "restarts": restarts,
+                    "action": "no_new_entries",
+                    "why": f"{cause}, the last: {why}",
+                }
+            )
+
+    def _wait(self, seconds: float) -> None:
+        """The back-off before a heal, slept a tick at a time so his kill, any other wake and
+        a stop end it early."""
+        left = round(seconds * 1000)
+        tick = max(1, round(self.tick_s * 1000))
+        while left > 0 and not (self._wake.is_set() or self._stop.is_set()):
+            step = min(tick, left)
+            self.sleep(step / 1000)
+            left -= step
+
+    def _recover(self) -> None:
+        """Start the runtime again: every account reconciles before its next entry, and each
+        unit with nothing open or in flight is hosted again from its own snapshot. The kill
+        level, the pauses and every stand-down are carried as they were."""
+        self._recovering = False
+        self.healer.restarted()
+        self.reconciler = Reconciler(
+            self.journal,
+            self.context.journal_root,
+            self.context.standing().tag,
+            self.clock_ns,
+            self.alarms.append,
+        )
+        for hosted in self.hosted.values():
+            unit = hosted.unit
+            if unit is not None and unit.settled:
+                restarted = unit.restore()
+                if is_refusal(restarted):
+                    hosted.phase = Phase.STOPPED
+                    hosted.detail = f"the unit would not start again ({restarted.category.value})"
+
+    def _back(self) -> bool:
+        """Trading again after a heal: every ready account reconciled, every unit compiled
+        and warmed up."""
+        for account, venue in self.venues.items():
+            if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, {}):
+                return False
+        return all(h.phase not in (Phase.COMPILING, Phase.WARMING) for h in self.hosted.values())
+
+    def safe_to_restart(self) -> dict[str, Json]:
+        """Whether a restart now loses nothing (Part C AD-315), with each reason it would."""
+        reasons: list[Json] = []
+        if self.healer.healing is not None:
+            reasons.append("the node is healing")
+        units = [hosted.unit for hosted in self.hosted.values() if hosted.unit is not None]
+        paths = {id(path): path for path in self._paths.values()}
+        paths.update((id(unit.orders), unit.orders) for unit in units)
+        for path in paths.values():
+            reasons.extend(
+                f"order {name} is in flight: the venue's answer is unknown"
+                for name in sorted(path.unknown)
+            )
+        for unit in units:
+            client = unit.orders.venue.client
+            reasons.extend(
+                f"position {name} has no stop at the venue"
+                if client.stop_of(name) is None
+                else f"position {name} is open at the venue"
+                for name in sorted(unit.venue_open())
+            )
+        for account, venue in self.venues.items():
+            if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, {}):
+                reasons.append(f"account {account} is not reconciled")
+            reasons.extend(
+                f"position {orphan.position} of ours is open and no unit holds it"
+                for orphan in self._orphans(account, venue)
+            )
+        reasons.extend(
+            f"{held.row.word.value} at {held.scope} is held in memory only: no journal took it"
+            for held in self.stand_downs.in_memory_only()
+        )
+        return {"ok": not reasons, "reasons": reasons}
 
     # --- one reconcile pass ---
 
@@ -1731,7 +1983,11 @@ class Runtime:
             return
         self._protect(self._kill(target))
         self._deployments(target)
+        faulted = self._repeated_fault()
         self.stand_downs.resumes(accepted)
+        if faulted and not self._repeated_fault():
+            self.healer.reset()
+        self.stand_downs.settle()
         self.stand_downs.watch_node()
         for account, venue in self.venues.items():
             bars = venue.feed.pump()
@@ -1745,13 +2001,31 @@ class Runtime:
         """Reconcile once per venue session and after an UNKNOWN, before any bar is driven."""
         path = self._paths.get(account)
         unknown = {} if path is None else path.unknown
+        units = [
+            hosted.unit
+            for hosted in self.hosted.values()
+            if hosted.unit is not None and hosted.deployment.account_id == account
+        ]
         if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, unknown):
-            units = [
-                hosted.unit
-                for hosted in self.hosted.values()
-                if hosted.unit is not None and hosted.deployment.account_id == account
-            ]
             self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units)
+        for unit in units:
+            unit.adopt(self.reconciler.mine(account))
+
+    def _orphans(self, account: str, venue: Venue) -> list[VenuePosition]:
+        """The node's own positions the reconcile read open on ``account`` that no hosted unit
+        holds and the venue has not closed since."""
+        held = {
+            name for hosted in self.hosted.values() if hosted.unit for name in hosted.unit.placed
+        }
+        return sorted(
+            (
+                ours.position
+                for ours in self.reconciler.mine(account)
+                if ours.position.position not in held
+                and venue.client.closed(ours.position.position) is None
+            ),
+            key=lambda position: position.position,
+        )
 
     def _path(self, account: str) -> OrderPath | None:
         venue = self.venues.get(account)
@@ -1889,6 +2163,12 @@ class Runtime:
             )
             if held_by_reconcile is not None:
                 return held_by_reconcile
+            for orphan in self._orphans(hosted.deployment.account_id, venue):
+                if orphan.market_id == market:
+                    return (
+                        f"a position of ours that no unit holds is open on {market}:"
+                        f" {orphan.position}"
+                    )
             held = self.stand_downs.blocking(
                 (
                     "all",
@@ -1910,6 +2190,9 @@ class Runtime:
         return self.board.read(placement, hosted.unit.records)
 
     # --- stand-downs that wait for him ---
+
+    def _repeated_fault(self) -> bool:
+        return any(held.kind is Kind.REPEATED_FAULT for held in self.stand_downs.held.values())
 
     def stand_down(self, kind: Kind, scope: str, cause: str) -> bool:
         """Hold a stand-down that waits for him (a repeated fault, a spec change) at ``scope``;
@@ -2204,6 +2487,7 @@ class Runtime:
             ("runtime.venues", venues),
             ("runtime.alarms", list(self.alarms)),
             ("runtime.stand_downs", self.stand_downs.document()),
+            ("runtime.safe_to_restart", self.safe_to_restart()),
         ):
             text = json.dumps(value, sort_keys=True, default=str)
             if self._shown.get(key) != text:

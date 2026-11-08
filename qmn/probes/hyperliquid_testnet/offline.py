@@ -53,6 +53,7 @@ from qmn.venue.ccxt_client import (
 TESTNET = "https://api.hyperliquid-testnet.xyz"
 TESTNET_WS = "wss://api.hyperliquid-testnet.xyz/ws"
 TAG = "a4dqobyh"
+DEPLOYMENT = "dep-1"
 ETH = "ETH/USDC:USDC"
 ACCOUNT_ADDRESS = "0x" + "ab" * 20
 SUBACCOUNT = "0x" + "cd" * 20
@@ -320,6 +321,7 @@ def enter(node: Rig, order_name: str) -> object:
     if isinstance(quantity, TypedRefusal):
         raise SystemExit("FAIL setup: the quantity is refused")
     return node.path.entry(
+        deployment_id=DEPLOYMENT,
         client_order_id=order_name,
         label=f"qmx:{TAG}:dummy-trend-pullback",
         wire={

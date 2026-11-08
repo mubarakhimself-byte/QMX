@@ -21,13 +21,14 @@ from enum import StrEnum
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, Literal, Protocol, cast
+from typing import Final, Literal, Protocol
 from uuid import uuid4
 
 from qmf.core import Ok, Result, World, WriterId, is_refusal
 from qmf.data import JournalWriter
 from qmf.data.store import EvidenceStore, JournalStore
 
+from qmn.app.healing import BootAttemptStamp, CrashLoopFold, CrashLoopVerdict
 from qmn.host._refuse import clean_token, invalid, policy, unavailable
 from qmn.host.configured_hosted import (
     ConfiguredHostedResources,
@@ -47,15 +48,11 @@ __all__ = [
     "NODE_RESURRECT_SUBTYPE",
     "OPERATOR_PRINCIPAL",
     "REQUESTED_RESTART_EXIT_CODE",
-    "REQUESTED_RESTART_REASON",
     "SILENT_DEGRADATION_ALARM_CLASS",
     "SUPERVISION_SURFACE",
     "SUSPEND_NEW_AUTHORITY",
     "UNKNOWN_SHUTDOWN_TRIGGER",
-    "BootAttemptStamp",
     "CommandFate",
-    "CrashLoopFold",
-    "CrashLoopVerdict",
     "DrainOutcome",
     "LifecycleState",
     "LifecycleSupervisor",
@@ -91,7 +88,6 @@ DOMAIN_BACKGROUND_THREADS_ALLOWED: Final[bool] = False
 REQUESTED_RESTART_EXIT_CODE: Final[int] = 75
 CLEAN_STOP_EXIT_CODE: Final[int] = 0
 DRAIN_WINDOW_BREACH_EXIT_CODE: Final[int] = 76
-REQUESTED_RESTART_REASON: Final[str] = "requested-restart"
 
 OPERATOR_PRINCIPAL: Final[str] = "operator"
 NODE_RESURRECT_SUBTYPE: Final[str] = "node_resurrect"
@@ -621,116 +617,6 @@ def _positive_int(field: str, value: object) -> Result[int]:
             given=repr(value),
         )
     return Ok(value)
-
-
-@dataclass(frozen=True, slots=True)
-class BootAttemptStamp:
-    """Minimal boot-attempt projection the crash-loop fold reads."""
-
-    boot_epoch_id: str
-    at_ns: int
-    reason: str | None
-    exited: bool
-
-
-@dataclass(frozen=True, slots=True)
-class CrashLoopVerdict:
-    """Outcome of folding unrequested exiting boots within the window."""
-
-    counted_boots: int
-    threshold_breached: bool
-    counted_epoch_ids: tuple[str, ...]
-
-
-@dataclass
-class CrashLoopFold:
-    """Counts unrequested exiting boots within ``(K, T)`` (DEC-0189 / DEC-0226).
-
-    Requested-restart stamps never advance the fold. Detected preflight refusals
-    that stay alive (no exit) also never advance it. Counters are durable: a
-    process restart reloads stamps via :meth:`load` and never clears the fold by
-    itself. Only an operator ``resurrect`` (or an explicit :meth:`reset_for_operator_cycle`)
-    resets the fold so an unrequested crash cannot masquerade as a clean operator
-    cycle (TN-4; QMX-F064 / Story 25.13).
-    """
-
-    max_boots: int
-    window_ns: int
-    _stamps: MutableSequence[BootAttemptStamp] = field(default_factory=list[BootAttemptStamp])
-
-    @classmethod
-    def load(
-        cls,
-        *,
-        max_boots: object,
-        window_ns: object,
-        stamps: object,
-    ) -> Result[CrashLoopFold]:
-        """Rebuild the fold from durable boot-attempt stamps (process-restart safe)."""
-        k = _positive_int("node_crash_loop_max_boots", max_boots)
-        if is_refusal(k):
-            return k
-        t = _positive_int("node_crash_loop_window", window_ns)
-        if is_refusal(t):
-            return t
-        if not isinstance(stamps, Sequence) or isinstance(stamps, (str, bytes)):
-            return invalid(
-                "stamps",
-                "crash-loop fold loads a sequence of BootAttemptStamp projections",
-                given=type(stamps).__name__,
-            )
-        loaded: list[BootAttemptStamp] = []
-        for index, raw in enumerate(cast("Sequence[object]", stamps)):
-            if not isinstance(raw, BootAttemptStamp):
-                return invalid(
-                    "stamps",
-                    "each durable stamp is a BootAttemptStamp",
-                    index=index,
-                    given=type(raw).__name__,
-                )
-            loaded.append(raw)
-        return Ok(cls(max_boots=k.value, window_ns=t.value, _stamps=loaded))
-
-    def record(self, stamp: object) -> Result[CrashLoopVerdict]:
-        if not isinstance(stamp, BootAttemptStamp):
-            return invalid(
-                "stamp",
-                "crash-loop fold reads BootAttemptStamp projections",
-                given=type(stamp).__name__,
-            )
-        self._stamps.append(stamp)
-        return Ok(self.evaluate(now_ns=stamp.at_ns))
-
-    def reset_for_operator_cycle(self) -> None:
-        """Clear counted stamps after an operator resurrect / new clean boot epoch.
-
-        A mere process restart must call :meth:`load` instead — it never resets.
-        """
-        self._stamps.clear()
-
-    @property
-    def stamps(self) -> tuple[BootAttemptStamp, ...]:
-        """Durable stamp projection — process restart reloads these, never drops them."""
-        return tuple(self._stamps)
-
-    def evaluate(self, *, now_ns: object) -> CrashLoopVerdict:
-        if not isinstance(now_ns, int) or isinstance(now_ns, bool):
-            return CrashLoopVerdict(counted_boots=0, threshold_breached=False, counted_epoch_ids=())
-        window_start = now_ns - self.window_ns
-        counted: list[str] = []
-        for stamp in self._stamps:
-            if stamp.at_ns < window_start:
-                continue
-            if not stamp.exited:
-                continue
-            if stamp.reason == REQUESTED_RESTART_REASON:
-                continue
-            counted.append(stamp.boot_epoch_id)
-        return CrashLoopVerdict(
-            counted_boots=len(counted),
-            threshold_breached=len(counted) >= self.max_boots,
-            counted_epoch_ids=tuple(counted),
-        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from qmf.core.refusal import Result, is_ok, is_refusal
+from qmn.app.healing import REQUESTED_RESTART_REASON, BootAttemptStamp, CrashLoopFold
 from qmn.host import (
     ASYNC_ALLOWED_SURFACES,
     CLEAN_STOP_EXIT_CODE,
@@ -16,10 +17,8 @@ from qmn.host import (
     NODE_RESURRECT_SUBTYPE,
     OPERATOR_PRINCIPAL,
     REQUESTED_RESTART_EXIT_CODE,
-    REQUESTED_RESTART_REASON,
     SUPERVISION_SURFACE,
     CommandFate,
-    CrashLoopFold,
     LifecycleState,
     LifecycleSupervisor,
     RecordingNotifyTransport,
@@ -35,7 +34,7 @@ from qmn.host import (
     sd_notify,
     supervision_process_model,
 )
-from qmn.host.supervise import BootAttemptStamp, StdlibSdNotifyTransport
+from qmn.host.supervise import StdlibSdNotifyTransport
 
 T = TypeVar("T")
 

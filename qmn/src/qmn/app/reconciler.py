@@ -44,7 +44,7 @@ from qmn.app.attribution import (
     attribute,
 )
 
-__all__ = ["ReadsBack", "Reconciler", "Resolves", "journal_sends"]
+__all__ = ["Ours", "ReadsBack", "Reconciler", "Resolves", "journal_sends"]
 
 _STAND_DOWN = {
     Claim.TWIN: "the node cannot prove the account is its own: a twin with its tag trades it",
@@ -87,6 +87,14 @@ def journal_sends(root: Path) -> Result[dict[str, Mapping[str, object]]]:
     return Ok(sends)
 
 
+@dataclass(frozen=True, slots=True)
+class Ours:
+    """A position the venue holds that this node sent, with the node journal's send row."""
+
+    position: VenuePosition
+    send: Mapping[str, object]
+
+
 @dataclass
 class _Account:
     session: int | None = None
@@ -95,6 +103,8 @@ class _Account:
     """The UNKNOWN orders the last run saw."""
     stand_down: Claim | None = None
     not_ours: tuple[dict[str, object], ...] = ()
+    mine: tuple[Ours, ...] = ()
+    """The node's own positions the last run read at the venue."""
 
 
 @dataclass
@@ -121,6 +131,10 @@ class Reconciler:
         if held.session != session:
             return "the node cannot prove what the venue holds until it reconciles"
         return None if held.stand_down is None else _STAND_DOWN[held.stand_down]
+
+    def mine(self, account: str) -> tuple[Ours, ...]:
+        """The node's own positions the last run of ``account`` read, open at that time."""
+        return self._of(account).mine
 
     def shown(self) -> list[dict[str, object]]:
         """Every position on the node's accounts that is not the node's."""
@@ -156,6 +170,11 @@ class Reconciler:
             _shown(account, position, claimed)
             for position, claimed in found.positions
             if claimed.claim is not Claim.MINE
+        )
+        held.mine = tuple(
+            Ours(position, sends.value[claimed.client_order_id])
+            for position, claimed in found.positions
+            if claimed.claim is Claim.MINE and claimed.client_order_id in sends.value
         )
         self._alarms(account, found)
         body: dict[str, object] = {
