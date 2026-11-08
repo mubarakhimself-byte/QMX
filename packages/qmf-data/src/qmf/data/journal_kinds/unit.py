@@ -62,6 +62,11 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
         "risk_stop",
         "health_stop",
         "placeholder_refusal_never",  # mock-data-scan: allow (refusal kind, domain word)
+        # A hosted unit's own skips, which QML words as text (B9).
+        "no_entry_order",
+        "stop_wrong_side",
+        "above_max_lot",
+        "sizer_skip",
     }
 )
 """Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
