@@ -97,7 +97,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 3
+COMPILER_FORMAT_VERSION: Final[int] = 4
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -116,7 +116,7 @@ ROLES_BUILT: Final[frozenset[Role]] = frozenset(
     }
 )
 _VOLUME: Final[str] = "volume, which no bar carries yet"
-_CLOCK: Final[str] = "the market's clock, which no bar carries yet"
+_CLOCK: Final[str] = "a clock it does not have: use version 2 and name its clock"
 BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
     "accumulation-distribution@1": _VOLUME,
     "chaikin-oscillator@1": _VOLUME,
@@ -134,6 +134,7 @@ BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
     "tpo-value-area-high@1": _CLOCK,
     "tpo-value-area-low@1": _CLOCK,
     "vwap-session-anchored@1": _CLOCK,
+    "vwap-session-anchored@2": _VOLUME,
 }
 """A binding on one of these refuses, with what it needs. A pin alone does not."""
 _HOLDING_OUTPUTS: Final[frozenset[OutputType]] = frozenset(
@@ -776,8 +777,9 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
     """The bars a market needs before entries, and the unit's summed state bound. It builds every
     instance once, so a value no block can run is named at compile.
 
-    A binding is warm at the later of its recorded settle length and the bars its upstream
-    needs plus its own warm-up; a derived number at its source's plus its block's.
+    A binding is warm at the later of its recorded settle length, at this binding's parameters, and
+    the bars its upstream needs plus its own warm-up; a derived number at its source's plus its
+    block's.
     """
     warm: dict[str, int] = {}
     bound_total = 0
@@ -795,7 +797,8 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
                     (warm.get(f"{side.side.value}.{ref}", 0) for ref in b.inputs.values()),
                     default=0,
                 )
-                settle = b.face.settle.bars if b.face.settle is not None else 0
+                recorded = b.face.settle
+                settle = recorded.bars_at(_values(b, plan.defaults)) if recorded is not None else 0
                 warm[b.key] = max(settle, upstream + instance.warm_up_bars)
                 bound_total += instance.state_bound
     for d in plan.derived:

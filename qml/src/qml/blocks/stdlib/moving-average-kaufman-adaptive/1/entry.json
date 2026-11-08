@@ -99,5 +99,15 @@
   "golden": {
     "reference": "talib.KAMA 0.7.1 (its fast 2 and slow 30)",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "10",
+      "fast": "2",
+      "slow": "30"
+    },
+    "bars": 209,
+    "tolerance": "1e-9",
+    "scales_by": "slow"
   }
 }

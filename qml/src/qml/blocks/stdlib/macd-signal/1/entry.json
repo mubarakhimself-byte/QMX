@@ -98,5 +98,15 @@
   "golden": {
     "reference": "talib.EMA 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "fast": "12",
+      "slow": "52",
+      "signal": "9"
+    },
+    "bars": 720,
+    "tolerance": "1e-9",
+    "scales_by": "slow"
   }
 }

@@ -86,5 +86,14 @@
   "golden": {
     "reference": "MetaQuotes SMMA formula over talib.MEDPRICE 0.7.1, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "26",
+      "shift": "8"
+    },
+    "bars": 442,
+    "tolerance": "1e-9",
+    "scales_by": "period"
   }
 }

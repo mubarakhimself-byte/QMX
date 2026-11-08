@@ -48,7 +48,7 @@ _DUMMYS_OWN = frozenset(
 )
 """The test helper pins every stdlib block, and layer F scans each pin, so a sweep pins these."""
 
-READ_NEVER_FIRED: Final[list[str]] = ["value-above"]
+READ_NEVER_FIRED: Final[list[str]] = ["value-above@1"]
 """Read as a condition on the shipped month and never held. A change here is on purpose. The sweep
 feeds `value-above` the close, and a EURUSD close is never above its default level of 25."""
 
@@ -58,9 +58,12 @@ _INSTANTS = _instants(_BARS)
 
 
 def _faces() -> dict[str, Document]:
+    """Every version of every block, by its pin, so a new version cannot slip past the sweep."""
     return {
-        path.parent.parent.name: cast("Document", json.loads(path.read_text("utf-8")))
-        for path in sorted(_STDLIB.glob("*/1/entry.json"))
+        f"{path.parent.parent.name}@{path.parent.name}": cast(
+            "Document", json.loads(path.read_text("utf-8"))
+        )
+        for path in sorted(_STDLIB.glob("*/*/entry.json"))
     }
 
 
@@ -68,7 +71,7 @@ def _probe(face: Document, fed: dict[str, str] = _RIGHT_SHAPE) -> Document:
     """A binding of `face` at its default parameters, its ports fed as `fed` says."""
     return {
         "name": "probe",
-        "block": f"{face['entry_id']}@1",
+        "block": f"{face['entry_id']}@{face['version']}",
         "params": {
             name: {"value": str(spec["default"])} for name, spec in face["parameters"].items()
         },
@@ -140,7 +143,27 @@ def _surfaces_for(position: OwnPosition | None = None) -> dict[str, Any]:
 
 
 def _as_trigger(face: Document) -> str:
-    compiled = _compiled(_trigger_document(face))
+    return _driven(_trigger_document(face))
+
+
+def _through_a_comparator(face: Document) -> str:
+    """A block whose value is no price holds a slot only through `value-above`, as an agent binds it."""
+    document = _trigger_document(face)
+    pins = cast("Document", _document())["pins"]
+    document["pins"] += [p for p in pins if p["entry_id"] == "value-above"]
+    comparator = {
+        "name": "above",
+        "block": "value-above@1",
+        "params": {"level": {"value": "0"}, "below": {"value": "0"}},
+        "inputs": {"series": "probe"},
+    }
+    for side in ("long", "short"):
+        document["logic"][side]["slots"]["trigger"]["bindings"].append(comparator)
+    return _driven(document)
+
+
+def _driven(document: Document) -> str:
+    compiled = _compiled(document)
     if compiled is None:
         return _REFUSED
     unit = _ok(
@@ -206,11 +229,18 @@ def test_every_stdlib_block_acts_or_refuses() -> None:
     assert silent == []
     assert [name for name, found in triggers.items() if found == _READ] == READ_NEVER_FIRED
     assert sorted(name for name, found in exits.items() if found != _REFUSED) == [
-        "swing-stop-buffer",
-        "target-r-multiple",
-        "time-exit-bars",
+        "swing-stop-buffer@1",
+        "target-r-multiple@1",
+        "time-exit-bars@1",
     ]
-    assert len(faces) == 113
+    assert len(faces) == 124
+    assert {pin: triggers[pin] for pin in _HOLDS_ON_ITS_CLOCK} == dict.fromkeys(
+        _HOLDS_ON_ITS_CLOCK, _FIRED
+    )
+    assert {pin: _through_a_comparator(faces[pin]) for pin in _MEASURES_ON_ITS_CLOCK} == {
+        pin: _FIRED for pin in _MEASURES_ON_ITS_CLOCK
+    }
+    assert triggers["vwap-session-anchored@2"] == _REFUSED
 
 
 def _refuses_the_feed(document: Document) -> bool:
@@ -228,7 +258,7 @@ def test_every_block_fed_the_other_shape_refuses_and_none_fed_the_right_shape_do
         for name, face in _faces().items()
         if {port["stream_kind"] for port in face["inputs"]} in ({"series"}, {"bars"})
         and face["output"]["type"] != "exit_action"
-        and f"{name}@1" not in BLOCKS_NOT_BUILT
+        and name not in BLOCKS_NOT_BUILT
     ]
 
     wrong = [f["entry_id"] for f in fed if _refuses_the_feed(_trigger_document(f, _OTHER_SHAPE))]
@@ -236,7 +266,8 @@ def test_every_block_fed_the_other_shape_refuses_and_none_fed_the_right_shape_do
 
     assert wrong == [f["entry_id"] for f in fed]
     assert right == []
-    assert len(wrong) == 81
+    assert len(wrong) == 90
+    assert set(_SESSION_BLOCKS) - {"vwap-session-anchored"} <= set(wrong)
 
 
 _SESSION_BLOCKS: Final[tuple[str, ...]] = (
@@ -251,26 +282,40 @@ _SESSION_BLOCKS: Final[tuple[str, ...]] = (
     "tpo-value-area-low",
     "vwap-session-anchored",
 )
+_MEASURES_ON_ITS_CLOCK: Final[tuple[str, ...]] = (
+    "initial-balance-range-extension@2",
+    "session-running-range@2",
+)
+_HOLDS_ON_ITS_CLOCK: Final[tuple[str, ...]] = tuple(
+    pin
+    for pin in (f"{name}@2" for name in _SESSION_BLOCKS)
+    if pin not in (*_MEASURES_ON_ITS_CLOCK, "vwap-session-anchored@2")
+)
 _VOLUME_BLOCKS: Final[tuple[str, ...]] = (
-    "accumulation-distribution",
-    "chaikin-oscillator",
-    "force-index",
-    "market-facilitation-index",
-    "money-flow-index",
-    "on-balance-volume",
-    "vwap-session-anchored",
+    "accumulation-distribution@1",
+    "chaikin-oscillator@1",
+    "force-index@1",
+    "market-facilitation-index@1",
+    "money-flow-index@1",
+    "on-balance-volume@1",
+    "vwap-session-anchored@2",
 )
 
 
-def test_session_and_volume_blocks_still_refuse_now_bars_carry_time() -> None:
-    """A session block on a fixed UTC second is an hour wrong most of the year, so `time` reaches
-    blocks only with this refusal in place (call 4). Volume waits for its own repair (call 5)."""
+def test_a_session_block_with_no_clock_and_a_volume_block_still_refuse() -> None:
+    """A session block on a fixed UTC second is an hour wrong most of the year, so every `@1` stays
+    refused with the way forward in its words (call 4). Volume waits for its own repair (call 5)."""
     faces = _faces()
 
-    for name in (*_SESSION_BLOCKS, *_VOLUME_BLOCKS):
-        problems = compile_unit(_trigger_document(faces[name]), _CONTEXT)
+    for pin in (*(f"{name}@1" for name in _SESSION_BLOCKS), *_VOLUME_BLOCKS):
+        problems = compile_unit(_trigger_document(faces[pin]), _CONTEXT)
 
-        assert isinstance(problems, tuple), name
+        assert isinstance(problems, tuple), pin
         assert ("block_not_built", "/logic/long/slots/trigger/bindings/0/block") in {
             (p.kind, p.where) for p in problems
-        }, name
+        }, pin
+    told = compile_unit(_trigger_document(faces["session-running-high@1"]), _CONTEXT)
+    assert isinstance(told, tuple)
+    assert [p.message for p in told if p.kind == "block_not_built"] == [
+        "session-running-high@1 needs a clock it does not have: use version 2 and name its clock"
+    ] * 2

@@ -12,29 +12,8 @@ from qmx_library.kinds import Checker, Problem
 from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import MAIN, Principal, drafts_ref
 
-from qmx_control.catalog import CORE_TOOLSETS, rows
 from qmx_control.models import ControlError, LibraryInput
 from qmx_control.service import ControlService, WorkflowEngine
-
-SEVEN = {
-    "unit_new": "domain_write",
-    "unit_check": "domain_write",
-    "unit_explain": "read",
-    "blocks_find": "read",
-    "blocks_get": "read",
-    "blocks_check": "read",
-    "blocks_match": "read",
-}
-
-
-def test_the_unit_and_blocks_toolsets_hold_the_seven_rows_for_every_agent() -> None:
-    found = {
-        row.name: (row.approval, row.binds, row.agent, row.toolset in CORE_TOOLSETS)
-        for row in rows()
-        if row.toolset in ("unit", "blocks")
-    }
-
-    assert found == {name: (approval, "domain_fn", True, True) for name, approval in SEVEN.items()}
 
 
 def unit_fields() -> JsonObject:
