@@ -3,8 +3,8 @@
   "calendar_ref": "uk-index-cfd@1",
   "name": "UK index CFDs (UK100), which follow ICE's FTSE 100 futures",
   "zone": "Europe/London",
-  "issued": "2026-11-02",
-  "max_age_days": 31,
+  "issued": "2026-11-03",
+  "max_age_days": 423,
   "source": "ICE Futures Europe FTSE 100 futures: 01:00 to 21:00 London time on weekdays; early closes before holidays are not modelled in version 1",
   "sessions": [
     {
@@ -63,6 +63,16 @@
       "from": "2027-03-29T00:00",
       "to": "2027-03-30T00:00",
       "why": "Easter Monday"
+    },
+    {
+      "from": "2027-12-27T00:00",
+      "to": "2027-12-28T00:00",
+      "why": "Christmas Day, substitute"
+    },
+    {
+      "from": "2027-12-28T00:00",
+      "to": "2027-12-29T00:00",
+      "why": "Boxing Day, substitute"
     }
   ]
 }

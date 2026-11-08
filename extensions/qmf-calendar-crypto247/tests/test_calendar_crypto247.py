@@ -26,7 +26,7 @@ def test_crypto_trades_around_the_clock_with_no_closure_in_utc() -> None:
         "sessions": "always",
         "closures": [],
     }
-    assert (doc["issued"], doc["max_age_days"]) == ("2026-11-02", 31)
+    assert (doc["issued"], doc["max_age_days"]) == ("2026-11-03", 423)
 
 
 def test_hyperliquid_funds_hourly_and_the_big_venues_every_eight_hours_from_midnight() -> None:

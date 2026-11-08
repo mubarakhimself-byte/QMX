@@ -171,6 +171,11 @@ class Context:
     """``deploy``'s staged-file checks (the runtime's ``deploy_preflight``); None lets it go."""
     venues: VenueDoor = field(default_factory=NoVenues)
     """The venue sign-in, binding and self-test (``server.py``); none set up by default."""
+    rekey: Callable[[], None] = lambda: None
+    """Builds the alarm senders again from the keys document (``server.py``)."""
+    calendar_notes: Callable[[], list[str]] = lambda: []
+    """A ``status`` reason for each market calendar the node cannot find, or near or past its
+    last day (``alarms.py``)."""
 
     def standing(self) -> Standing:
         row = self.store.identity()
@@ -597,9 +602,15 @@ CHANGES: Final[Mapping[str, ChangeSpec]] = {
         frozenset(),
         _bare("keys"),
         _acted,
-        act=lambda context, _request, _arguments, _op: context.venues.rotate_keys(),
+        act=lambda context, _request, _arguments, _op: _rotate_keys(context),
     ),
 }
+
+
+def _rotate_keys(context: Context) -> Answer:
+    """Read the keys document again: the alarm senders, then the venue door."""
+    context.rekey()
+    return context.venues.rotate_keys()
 
 
 def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) -> Answer:
@@ -733,6 +744,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     if level is not KsaLevel.GREEN:
         reasons.append(f"The kill switch is at {level.value} for all.")
     reasons.extend(f"Paused at {scope}." for scope in target.pauses())
+    reasons.extend(context.calendar_notes())
     if word == "Trading":
         headline = f"Trading, {trading} unit{'' if trading == 1 else 's'}"
     elif word == "Ready" and all(state in {"refused", "stopped"} for state in states):

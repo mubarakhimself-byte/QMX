@@ -17,7 +17,9 @@ document names its destination (``alarms {ntfy_topic_url?, healthchecks_ping_url
 the setup cards write (``qmx_host.connect_node``).
 
 Pushes fire only while a market they concern is open on its calendar, except protection
-escalation and the clock halt. Node down is the watcher's.
+escalation and the clock halt. Node down is the watcher's. A market's calendar is the one its
+deployment's instrument snapshot names, read from the shipped ``qmx.calendar/1`` files
+(:func:`qmn.time.calendars.market_calendars`), or QMB's copy when the node has no readable file.
 """
 
 from __future__ import annotations
@@ -33,12 +35,13 @@ from enum import StrEnum
 from typing import Final, cast
 from urllib.parse import urlsplit
 
+from qmb.data.gap_check import OpenTime, open_time
 from qmf.core import Ok, Result, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 
 from qmn.app.operations import Target
-from qmn.app.runtime import parse_deployment
-from qmn.app.store import Store
+from qmn.app.runtime import deployment_records, parse_deployment
+from qmn.app.store import Json, Store
 from qmn.observability.alerts import (
     AlertAllowList,
     AlertPayload,
@@ -46,14 +49,17 @@ from qmn.observability.alerts import (
     load_alert_allow_list,
 )
 from qmn.observability.liveness import LivenessHeartbeat
+from qmn.time.calendars import MarketCalendar, market_calendars
 
 __all__ = [
     "HALT_BAND_ALARM_AFTER_NS",
     "LIVENESS_INTERVAL_NS",
     "OPEN_SETTLE_NS",
+    "PUSHED",
     "PUSH_PASS_S",
     "SEND_TIMEOUT_S",
     "SHORT_LIST",
+    "WAITING",
     "WAITING_MAX",
     "Destinations",
     "HealthchecksSink",
@@ -66,7 +72,9 @@ __all__ = [
     "View",
     "Wake",
     "attach",
-    "no_calendar",
+    "calendar_notes",
+    "calendar_refs",
+    "market_hours",
     "raised",
 ]
 
@@ -92,6 +100,12 @@ PING_REFERENCE: Final = "qmx/trading-node-keys#alarms.healthchecks_ping_url"
 """Where the ping URL is kept, by name; the heartbeat never holds the URL itself."""
 LOOPBACK: Final = frozenset({"127.0.0.1", "::1", "localhost"})
 """The only hosts a destination may reach without TLS: this machine."""
+PUSHED: Final = "alarms.pushed"
+"""The store row holding the keys of the occurrences already pushed that the node still shows,
+so a restart pushes what it had not pushed yet and nothing twice."""
+WAITING: Final = "alarms.waiting"
+"""The store row holding the occurrences taken to push and not pushed yet, in the order they
+arose. A new runtime writes over the rows they came from, so a restart pushes them from here."""
 
 
 class Wake(StrEnum):
@@ -142,6 +156,31 @@ class Raised:
     key: str
     summary: str
     markets: frozenset[str]
+
+    def row(self) -> Json:
+        return {
+            "key": self.key,
+            "wake": self.wake.value,
+            "summary": self.summary,
+            "markets": [*sorted(self.markets)],
+        }
+
+
+def _kept_waiting(value: Json) -> list[Raised]:
+    """The :data:`WAITING` row an earlier run wrote; a row this build cannot read is skipped."""
+    found: list[Raised] = []
+    for row in _rows(value):
+        key, wake, summary = row.get("key"), row.get("wake"), row.get("summary")
+        markets = row.get("markets")
+        if not (isinstance(key, str) and isinstance(summary, str) and isinstance(markets, list)):
+            continue
+        try:
+            woken = Wake(wake)
+        except ValueError:
+            continue
+        named = frozenset(m for m in cast("list[object]", markets) if isinstance(m, str))
+        found.append(Raised(woken, key, summary, named))
+    return found
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,9 +385,12 @@ class PushSender:
 
     ``open_at(market_id, utc_ns)`` answers whether that market is open on its calendar; a push
     that follows the calendar waits until a market it concerns has been open ``settle_ns``. A
-    market whose calendar raises reads shut and is named once on stderr. A push that fails stays
-    waiting and is tried again on every pass, in the order it arose; past ``waiting_max`` the
-    oldest is dropped and counted in ``dropped``."""
+    market whose calendar raises reads open, so the push goes rather than wait on a calendar
+    that cannot answer, and is named once on stderr. A push that fails stays waiting and is
+    tried again on every pass, in the order it arose; past ``waiting_max`` the oldest is dropped
+    and counted in ``dropped``. With a ``store``, what waits is kept in its :data:`WAITING` row
+    and the keys pushed in its :data:`PUSHED` row, so a restart pushes what was still waiting
+    and nothing twice."""
 
     def __init__(
         self,
@@ -357,6 +399,7 @@ class PushSender:
         open_at: Callable[[str, int], bool],
         clock_ns: Callable[[], int],
         *,
+        store: Store | None = None,
         pass_s: float = PUSH_PASS_S,
         halt_after_ns: int = HALT_BAND_ALARM_AFTER_NS,
         settle_ns: int = OPEN_SETTLE_NS,
@@ -366,6 +409,7 @@ class PushSender:
         self.publisher = publisher
         self.open_at = open_at
         self.clock_ns = clock_ns
+        self.store = store
         self.pass_s = pass_s
         self.halt_after_ns = halt_after_ns
         self.settle_ns = settle_ns
@@ -375,15 +419,26 @@ class PushSender:
         self.dropped = 0
         self.waiting: list[Raised] = []
         self._seen: set[str] = set()
+        self._pushed: set[str] = set()
         self._uncalendared: set[str] = set()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """Take what the store already shows as known, then pass on a thread. Called before the
-        runtime starts, so a restart does not push the last run's alarms again."""
-        known = raised(self.read(), self.clock_ns(), halt_after_ns=self.halt_after_ns)
-        self._seen.update(item.key for item in known)
+        """Take what an earlier run pushed and left waiting, and what the node's rows show now,
+        then pass on a thread. ``Node.start`` calls this before the runtime starts, so the rows
+        an earlier runtime wrote are read before a new one writes over them."""
+        if self.store is not None:
+            kept = self.store.observed(PUSHED)
+            found = cast("list[object]", kept) if isinstance(kept, list) else []
+            self._pushed.update(key for key in found if isinstance(key, str))
+            waiting = _kept_waiting(self.store.observed(WAITING))
+            self.waiting = [item for item in waiting if item.key not in self._pushed]
+        self._seen.update(self._pushed, (item.key for item in self.waiting))
+        try:
+            self._take(self.clock_ns())
+        except Exception as error:  # the thread's passes read again; the node still starts
+            self._pass_failed(error)
         self._thread = threading.Thread(target=self._run, name="node-alarms-push", daemon=True)
         self._thread.start()
 
@@ -395,16 +450,19 @@ class PushSender:
     def _settled(self, market: str, now: int) -> bool:
         try:
             return self.open_at(market, now) and self.open_at(market, now - self.settle_ns)
-        except Exception as error:  # one market's calendar never holds the other pushes
+        except Exception as error:  # a calendar that cannot answer never silences a push
             if market not in self._uncalendared:
                 self._uncalendared.add(market)
                 note = {"event": "alarm_calendar_failed", "market_id": market}
                 print(json.dumps({**note, "error": type(error).__name__}), file=sys.stderr)
-            return False
+            return True
 
-    def pass_once(self) -> None:
-        now = self.clock_ns()
-        for item in raised(self.read(), now, halt_after_ns=self.halt_after_ns):
+    def _take(self, now: int) -> set[str]:
+        """Add each new occurrence the node shows that may push now to ``waiting``, and answer
+        the keys of every occurrence it shows."""
+        found = raised(self.read(), now, halt_after_ns=self.halt_after_ns)
+        taken = False
+        for item in found:
             if item.key in self._seen:
                 continue
             if not SHORT_LIST[item.wake].any_hours and not any(
@@ -413,11 +471,25 @@ class PushSender:
                 continue
             self._seen.add(item.key)
             self.waiting.append(item)
+            taken = True
         while len(self.waiting) > self.waiting_max:
             oldest = self.waiting.pop(0)
             self.dropped += 1
+            taken = True
             note = {"event": "alarm_dropped", "wake": oldest.wake.value, "dropped": self.dropped}
             print(json.dumps(note), file=sys.stderr)
+        if taken:
+            self._keep_waiting(now)
+        return {item.key for item in found}
+
+    def _keep_waiting(self, now: int) -> None:
+        if self.store is not None:
+            self.store.observe(WAITING, [item.row() for item in self.waiting], now)
+
+    def pass_once(self) -> None:
+        now = self.clock_ns()
+        shown = self._take(now)
+        landed: set[str] = set()
         for item in list(self.waiting):
             published = self.publisher.publish(
                 failure_id=SHORT_LIST[item.wake].failure_id, summary=item.summary
@@ -427,17 +499,26 @@ class PushSender:
                 continue
             self.waiting.remove(item)
             self.sent += 1
+            landed.add(item.key)
+        if landed:
+            # PUSHED is written before WAITING, and a key pushed this pass is kept even when no
+            # row shows it any more, so a crash between the two writes never pushes it twice.
+            self._pushed = (self._pushed & shown) | landed
+            if self.store is not None:
+                kept: list[Json] = [*sorted(self._pushed)]
+                self.store.observe(PUSHED, kept, now)
+                self._keep_waiting(now)
+
+    def _pass_failed(self, error: Exception) -> None:
+        self.failed += 1
+        print(json.dumps({"event": "alarm_pass_failed", "error": repr(error)}), file=sys.stderr)
 
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
                 self.pass_once()
             except Exception as error:  # the sender keeps going; trading never sees it
-                self.failed += 1
-                print(
-                    json.dumps({"event": "alarm_pass_failed", "error": repr(error)}),
-                    file=sys.stderr,
-                )
+                self._pass_failed(error)
             self._stop.wait(self.pass_s)
 
 
@@ -474,11 +555,74 @@ class LivenessSender:
 # --- the destinations and the composition -----------------------------------------------------
 
 
-def no_calendar(market_id: str, at_ns: int) -> bool:
-    """Every market reads shut: the node has no calendar reader yet. Pushes that follow the
-    calendar stay quiet; protection escalation and the clock halt still go."""
-    del market_id, at_ns
-    return False
+def calendar_refs(store: Store) -> dict[str, str]:
+    """The calendar each market a kept deployment trades names, through its instrument
+    snapshot, by market id."""
+    found: dict[str, str] = {}
+    for change in Target.fold(store.accepted()).deployments.values():
+        document = change.args.get("document")
+        if not isinstance(document, dict):
+            continue
+        try:
+            records = deployment_records(parse_deployment(document))
+        except ValueError:
+            continue
+        if not isinstance(records, str):
+            found.update((market, record.calendar_ref) for market, record in records.items())
+    return found
+
+
+def market_hours(
+    store: Store,
+    calendars: Mapping[str, MarketCalendar] | None = None,
+    fallback: Callable[[str], OpenTime | None] = open_time,
+) -> Callable[[str, int], bool]:
+    """``open_at`` over the shipped calendars (``market_calendars()`` by default). A calendar
+    with no readable file reads QMB's copy (``fallback``), which in an installed node env is
+    only its built-in forex week. A market with neither raises ``LookupError``, which the push
+    sender reads as open."""
+    shipped = market_calendars() if calendars is None else calendars
+
+    def open_at(market_id: str, at_ns: int) -> bool:
+        ref = calendar_refs(store).get(market_id)
+        if ref is None:
+            raise LookupError(f"no deployment names a calendar for {market_id}")
+        calendar = shipped.get(ref)
+        hours = fallback(ref) if calendar is None else calendar.hours
+        if hours is None:
+            raise LookupError(f"no market calendar {ref} for {market_id}")
+        return hours.open_at(at_ns)
+
+    return open_at
+
+
+def calendar_notes(
+    store: Store,
+    now_ns: int,
+    calendars: Mapping[str, MarketCalendar] | None = None,
+    fallback: Callable[[str], OpenTime | None] = open_time,
+) -> list[str]:
+    """A status line for each calendar the node's markets read that has no readable file, or
+    that is within ``CALENDAR_WARN_DAYS`` of the last day its data covers, or past it."""
+    shipped = market_calendars() if calendars is None else calendars
+    notes: list[str] = []
+    for ref in sorted(set(calendar_refs(store).values())):
+        calendar = shipped.get(ref)
+        if calendar is not None:
+            note = calendar.note(now_ns)
+        elif fallback(ref) is not None:
+            note = (
+                f"The market calendar {ref} has no readable file on this node, so the alarms "
+                "that follow it read QMB's copy of its week."
+            )
+        else:
+            note = (
+                f"The market calendar {ref} has no readable file on this node, so the alarms "
+                "that follow it push at any hour."
+            )
+        if note is not None:
+            notes.append(note)
+    return notes
 
 
 @dataclass(frozen=True, slots=True)
@@ -566,7 +710,7 @@ def attach(
             return _off(f"the failure register did not load ({loaded.category.value})")
         publisher = AlertPublisher(loaded.value, NtfyChannel(named.ntfy_topic_url, node_tag, send))
         senders.push = PushSender(
-            lambda: View.read(store), publisher, open_at, clock_ns, pass_s=pass_s
+            lambda: View.read(store), publisher, open_at, clock_ns, store=store, pass_s=pass_s
         )
     if named.healthchecks_ping_url is not None:
         heartbeat = LivenessHeartbeat.try_create(

@@ -26,7 +26,7 @@ def test_every_file_is_a_dated_calendar_named_by_its_ref_in_its_exchange_zone() 
         "us-index-cfd@1": "America/Chicago",
     }
     assert {(doc["schema"], doc["issued"], doc["max_age_days"]) for doc in found.values()} == {
-        ("qmx.calendar/1", "2026-11-02", 31)
+        ("qmx.calendar/1", "2026-11-03", 423)
     }
     assert all(doc["calendar_ref"] == ref for ref, doc in found.items())
 
@@ -51,6 +51,12 @@ def test_the_nyse_day_runs_0930_to_1600_and_shuts_on_each_listed_holiday() -> No
         "2027-01-18",
         "2027-02-15",
         "2027-03-26",
+        "2027-05-31",
+        "2027-06-18",
+        "2027-07-05",
+        "2027-09-06",
+        "2027-11-25",
+        "2027-12-24",
     ]
     assert closures[8] == {
         "from": "2026-11-26T00:00",
@@ -84,4 +90,6 @@ def test_us_index_cfds_halt_at_noon_chicago_on_the_us_monday_holidays() -> None:
         early("2026-02-16", "Presidents' Day"),
         {"from": "2026-12-24T16:00", "to": "2026-12-27T17:00", "why": "Christmas Day"},
         {"from": "2026-12-31T16:00", "to": "2027-01-03T17:00", "why": "New Year's Day"},
+        early("2027-01-18", "Martin Luther King Jr. Day"),
+        early("2027-02-15", "Presidents' Day"),
     ]

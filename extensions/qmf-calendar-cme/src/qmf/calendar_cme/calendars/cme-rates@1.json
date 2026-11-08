@@ -3,9 +3,9 @@
   "calendar_ref": "cme-rates@1",
   "name": "CBOT and CME interest rate futures (ZN, ZB, ZF, SR3)",
   "zone": "America/Chicago",
-  "issued": "2026-11-02",
-  "max_age_days": 31,
-  "source": "CME Group Globex hours: Sunday to Friday 17:00 to 16:00 Central Time with a daily break from 16:00 to 17:00; Globex is shut on Christmas Day and New Year's Day; early closes before holidays are not modelled in version 1",
+  "issued": "2026-11-03",
+  "max_age_days": 423,
+  "source": "CME Group Globex hours: Sunday to Friday 17:00 to 16:00 Central Time with a daily break from 16:00 to 17:00; Globex is shut on Christmas Day and New Year's Day; early closes before holidays are not modelled in version 1; in 2027 Christmas Day and New Year's Day both fall on a Saturday, and the observed-day hours are left out until CME publishes them",
   "sessions": [
     {
       "open": "sun 17:00",

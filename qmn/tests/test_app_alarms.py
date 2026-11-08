@@ -27,7 +27,6 @@ from qmn.app.alarms import (
     View,
     attach,
     https_send,
-    no_calendar,
 )
 from qmn.app.alarms import Position as Held
 from qmn.app.server import from_environment
@@ -332,7 +331,7 @@ def test_a_clock_hold_wakes_him_once_it_passes_five_minutes_while_every_market_i
 ) -> None:
     now = [at("2026-11-07T12:04:59")]
     held = View(stand_downs=(clock_hold("2026-11-07T12:00:00"),), traded=frozenset({"fx.eurusd"}))
-    sender = PushSender(lambda: held, publisher_to(fake, tmp_path), no_calendar, lambda: now[0])
+    sender = PushSender(lambda: held, publisher_to(fake, tmp_path), never_open, lambda: now[0])
 
     sender.pass_once()
     assert fake.tried == []
@@ -434,7 +433,7 @@ def test_a_failed_send_is_counted_and_retried_and_trading_and_the_kill_switch_ca
         node.runtime.stop()
 
 
-def test_a_calendar_that_raises_skips_and_names_its_market_and_the_other_pushes_still_go(
+def test_a_calendar_that_raises_pushes_anyway_and_names_its_market_once(
     tmp_path: Path, fake: Fake, capsys: pytest.CaptureFixture[str]
 ) -> None:
     def calendar(market: str, at_ns: int) -> bool:
@@ -466,6 +465,7 @@ def test_a_calendar_that_raises_skips_and_names_its_market_and_the_other_pushes_
             "Protection escalation on metal.xauusd: the venue held no stop on qa4dqobyh-EARLY, "
             "so the node closed it reduce-only.",
         ),
+        ("4", "Risk stop with open trades on metal.xauusd: the daily loss limit is reached."),
         (
             "4",
             "The feed is stale with open trades on fx.eurusd (instrument:fx.eurusd): "
@@ -475,7 +475,7 @@ def test_a_calendar_that_raises_skips_and_names_its_market_and_the_other_pushes_
     assert [json.loads(line) for line in capsys.readouterr().err.splitlines()] == [
         {"event": "alarm_calendar_failed", "market_id": "metal.xauusd", "error": "LookupError"}
     ]
-    assert (sender.sent, sender.waiting) == (2, [])
+    assert (sender.sent, sender.waiting) == (3, [])
 
 
 def test_past_the_waiting_bound_the_oldest_failed_push_is_dropped_and_counted(
@@ -486,7 +486,7 @@ def test_past_the_waiting_bound_the_oldest_failed_push_is_dropped_and_counted(
     sender = PushSender(
         lambda: View(alarms=escalations),
         publisher_to(fake, tmp_path),
-        no_calendar,
+        never_open,
         lambda: 0,
         waiting_max=2,
     )

@@ -3,8 +3,8 @@
   "calendar_ref": "jp-index-cfd@1",
   "name": "Japanese index CFDs (JP225), which follow Osaka's Nikkei 225 futures",
   "zone": "Asia/Tokyo",
-  "issued": "2026-11-02",
-  "max_age_days": 31,
+  "issued": "2026-11-03",
+  "max_age_days": 423,
   "source": "Osaka Exchange Nikkei 225 futures: a day session 08:45 to 15:45 and a night session 17:00 to 06:00 the next morning, Monday to Friday; shut over the year-end break; holiday trading days are open",
   "sessions": [
     {
@@ -52,6 +52,11 @@
     {
       "from": "2026-12-31T06:00",
       "to": "2027-01-04T08:45",
+      "why": "year-end break"
+    },
+    {
+      "from": "2027-12-31T06:00",
+      "to": "2028-01-04T08:45",
       "why": "year-end break"
     }
   ]

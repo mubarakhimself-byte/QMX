@@ -33,7 +33,7 @@ def test_every_file_is_a_dated_calendar_named_by_its_ref_in_a_real_zone() -> Non
         "metals-24x5@1": "America/New_York",
     }
     assert {(doc["schema"], doc["issued"], doc["max_age_days"]) for doc in found.values()} == {
-        ("qmx.calendar/1", "2026-11-02", 31)
+        ("qmx.calendar/1", "2026-11-03", 423)
     }
     assert all(doc["calendar_ref"] == ref for ref, doc in found.items())
 
@@ -74,6 +74,8 @@ def test_gold_cfds_halt_at_14_30_new_york_on_the_us_monday_holidays() -> None:
         early("2026-02-16", "Presidents' Day"),
         {"from": "2026-12-24T17:00", "to": "2026-12-27T18:00", "why": "Christmas Day"},
         {"from": "2026-12-31T17:00", "to": "2027-01-03T18:00", "why": "New Year's Day"},
+        early("2027-01-18", "Martin Luther King Jr. Day"),
+        early("2027-02-15", "Presidents' Day"),
     ]
 
 

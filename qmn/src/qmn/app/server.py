@@ -20,6 +20,7 @@ import os
 import re
 import secrets
 import sys
+import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ from qmf.core import Account, AccountRole, Result, VenueId, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import JournalWriter, WriterScope
 
-from qmn.app.alarms import Senders, attach, no_calendar
+from qmn.app.alarms import Senders, attach, calendar_notes, market_hours
 from qmn.app.feed_keeper import FeedKeeper, Recording
 from qmn.app.grants import (
     CONSENT_EXPIRES_S,
@@ -118,19 +119,41 @@ class Node:
     """One running node: every operation answers here."""
 
     def __init__(
-        self, context: Context, journal: JournalWriter | None, runtime: Runtime | None
+        self,
+        context: Context,
+        journal: JournalWriter | None,
+        runtime: Runtime | None,
+        alarms: Callable[[], Senders] = Senders,
     ) -> None:
         self.context = context
         self.journal = journal
         self.runtime = runtime
-        self.alarms = Senders()
+        self.make_alarms = alarms
+        self.alarms = alarms()
+        self._started = False
 
     def start(self) -> None:
         """Start the alarm senders, then the runtime thread; the operations answer whether it
         runs or not."""
+        self._started = True
         self.alarms.start()
         if self.runtime is not None:
             self.runtime.start()
+
+    def rekey(self) -> None:
+        """Build the alarm senders again from the keys document and hand over to them. The old
+        senders stop before the new ones start, on a thread of their own, so the operation
+        answers at once and no push goes out twice."""
+        fresh = self.make_alarms()
+        old, self.alarms = self.alarms, fresh
+        if not self._started:
+            return
+
+        def hand_over() -> None:
+            old.stop()
+            fresh.start()
+
+        threading.Thread(target=hand_over, name="node-alarms-rekey", daemon=True).start()
 
     def stop(self) -> None:
         """Stop the runtime, then close every venue session it held."""
@@ -180,6 +203,7 @@ def open_node(
     random_bytes: Callable[[int], bytes] = _os_random,
     venues: Mapping[str, Venue] | Callable[[JournalWriter, str], Mapping[str, Venue]] | None = None,
     door: DoorFactory | None = None,
+    keys: Callable[[], str | None] = lambda: None,
 ) -> Node:
     """Compose the node in ``data`` (the volume's ``data/``) on the machine ``here`` names.
 
@@ -188,7 +212,10 @@ def open_node(
     the account bindings the runtime trades on, keyed by account id, or a factory given the
     node journal and the boot epoch. ``door`` makes the cTrader door the venue operations ask;
     without one they answer ``not_set_up``. The accounts the door kept bound are bound again
-    before the runtime starts. The runtime is built but not started; ``Node.start`` starts it.
+    before the runtime starts. ``keys`` reads the keys document whose ``alarms`` turn the
+    senders on, at start and on every ``rotate_keys``; their pushes follow the market calendars
+    the deployments' instrument snapshots name. The runtime is built but not started;
+    ``Node.start`` starts it.
     """
     store = Store(data / "node.sqlite")
     started = clock_ns()
@@ -215,10 +242,15 @@ def open_node(
     store.observe("journal_problem", problem, started)
     store.observe("journal_write", None if problem else started, started)
     waker: list[Runtime] = []
+    nodes: list[Node] = []
 
     def wake() -> None:
         for runtime in waker:
             runtime.wake()
+
+    def rekey() -> None:
+        for node in nodes:
+            node.rekey()
 
     made = None if door is None else door(store, data)
     context = Context(
@@ -233,6 +265,8 @@ def open_node(
         wake=wake,
         deploy_preflight=lambda document: deploy_preflight(data, document),
         venues=NoVenues() if made is None else made,
+        rekey=rekey,
+        calendar_notes=lambda: calendar_notes(store, clock_ns()),
     )
     runtime: Runtime | None = None
     if journal is not None:
@@ -251,7 +285,20 @@ def open_node(
         waker.append(runtime)
         if made is not None:
             made.attach(runtime, journal, tag=standing.tag, machine=machine, boot_epoch=boot_epoch)
-    return Node(context, journal, runtime)
+
+    def alarms() -> Senders:
+        return attach(
+            store,
+            standing.tag,
+            keys(),
+            open_at=market_hours(store),
+            clock_ns=clock_ns,
+            steady_ns=monotonic_ns,
+        )
+
+    node = Node(context, journal, runtime, alarms)
+    nodes.append(node)
+    return node
 
 
 LIVE_STAGE: Final = "live"
@@ -563,9 +610,9 @@ class CTraderDoor:
         return ok({"state": "accepted"})
 
     def rotate_keys(self) -> Answer:
-        """Read the keys document again. The supervisor hands the node its keys when it starts
-        it, so a document changed since reaches the node at its next start, which the connect
-        dialog makes once the node is safe to restart."""
+        """Read the keys document again, as the alarm senders do. The supervisor hands the node
+        its keys when it starts it, so a document changed since reaches the node at its next
+        start, which the connect dialog makes once the node is safe to restart."""
         self._app = registration(self.keys())
         return ok({"state": "accepted"})
 
@@ -779,8 +826,8 @@ def _not_set_up() -> Answer:
 def from_environment() -> Node:
     """The node the supervisor started: its ``data/`` from ``QMX_DATA_DIR``, its machine from
     the host facts the host wrote into the volume (C-05c), and this machine's fingerprint. Its
-    alarm senders follow the keys document in ``NODE_KEYS`` (C-18); with no calendar reader yet,
-    every market reads shut to them.
+    alarm senders and its cTrader door read the one keys document in ``NODE_KEYS`` (C-18), and
+    the senders follow the shipped market calendars (C-30).
 
     Only a node whose ``QMX_STAGE`` is the road's ``live`` stage gets its cTrader door: its
     trading app from ``NODE_KEYS``, its grant from this machine's store, and each account he
@@ -799,25 +846,21 @@ def from_environment() -> Node:
             machine = placement
     except (OSError, ValueError):
         pass
+    initial = os.environ.get("NODE_KEYS")
+
+    def keys() -> str | None:
+        return initial
+
     door: DoorFactory | None = None
     if os.environ.get("QMX_STAGE") == LIVE_STAGE:
-        initial = os.environ.get("NODE_KEYS")
         door = partial(
             CTraderDoor.compose,
-            keys=lambda: initial,
+            keys=keys,
             facts=volume / HOST_FACTS,
             clock_ns=time.time_ns,
             steady_ns=time.monotonic_ns,
             endpoints=endpoints(data),
         )
-    node = open_node(data, here=machine_fingerprint(), machine=machine, door=door)
-    node.alarms = attach(
-        node.context.store,
-        node.context.standing().tag,
-        os.environ.get("NODE_KEYS"),
-        open_at=no_calendar,
-        clock_ns=time.time_ns,
-        steady_ns=time.monotonic_ns,
-    )
+    node = open_node(data, here=machine_fingerprint(), machine=machine, door=door, keys=keys)
     node.start()
     return node

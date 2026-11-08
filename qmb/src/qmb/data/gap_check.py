@@ -814,8 +814,9 @@ _FOREX_WEEK: Final[Mapping[str, object]] = MappingProxyType(
     }
 )
 """``fx-24x5@1`` as the workflow runner's market precheck carries it
-(``qmx_engine.triggers.preflight``), because ``qmf-calendar-forex`` holds its rule as code and
-ships no file. QMB cannot import that package."""
+(``qmx_engine.triggers.preflight``). ``qmf-calendar-forex`` ships it as a file too, which wins
+when QMB can see the checkout's ``extensions/``; this copy serves where it cannot, such as an
+installed env. QMB cannot import that package."""
 
 
 @dataclass(frozen=True, slots=True)

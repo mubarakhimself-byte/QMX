@@ -9,12 +9,18 @@ full period runner is Epic 26 / TN-25; this module owns the named seam.
 
 from __future__ import annotations
 
+import json
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
+from functools import cache
+from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Protocol, cast
 
+from qmb.data.gap_check import OpenTime, open_time
 from qmf.core import CalendarIdentity, Instant, Ok, Result, TradingDate
 from qmf.core.refusal import is_refusal
 
@@ -25,17 +31,30 @@ __all__ = [
     "BANNED_TIME_SUBSTITUTES",
     "CALENDAR_IDENTITIES",
     "CALENDAR_TIMER_KINDS",
+    "CALENDAR_WARN_DAYS",
     "NAMED_TIME_RULES",
     "ActivationSchedule",
     "CalendarKind",
     "DayBoundaryCalendarPort",
+    "MarketCalendar",
     "activation_effective_trading_date",
     "calendar_identities",
     "calendar_kind_from_token",
+    "market_calendars",
     "named_time_rules",
     "refuse_bare_calendar_token",
     "refuse_time_substitute",
 ]
+
+EXTENSIONS: Final = Path(__file__).resolve().parents[4] / "extensions"
+"""The checkout's ``extensions/``, where each ``qmf-calendar-*`` package ships its market-hours
+calendars as ``qmx.calendar/1`` files, read from the checkout the node runs from as QMB reads
+them."""
+CALENDAR_WARN_DAYS: Final = 30
+"""How close to the last day its data covers a market-hours calendar shows on the node's status:
+30 days, the starting default of `[node] calendar_warn_days`. The node reads no settings file
+yet, so this value holds until one does; the host doctor reads its own
+`clock.calendar_warn_days`."""
 
 BANNED_BARE_CALENDAR: Final[str] = "calendar"
 BANNED_TIME_SUBSTITUTES: Final[frozenset[str]] = frozenset(
@@ -265,6 +284,60 @@ def activation_effective_trading_date(
             calendar_kind=CalendarKind.DAY_BOUNDARY,
         )
     )
+
+
+@dataclass(frozen=True, slots=True)
+class MarketCalendar:
+    """One shipped market-hours calendar: its open time, and the last day its data covers
+    (``issued`` plus ``max_age_days``), after which its weekly sessions still hold but no closure
+    is known."""
+
+    hours: OpenTime
+    last_day: date
+
+    def open_at(self, at_ns: int) -> bool:
+        return self.hours.open_at(at_ns)
+
+    def note(self, now_ns: int, warn_days: int = CALENDAR_WARN_DAYS) -> str | None:
+        """A status line when ``now_ns`` is within ``warn_days`` of the last day, or past it."""
+        today = datetime.fromtimestamp(now_ns / 1e9, UTC).date()
+        left = (self.last_day - today).days
+        if left > warn_days:
+            return None
+        ref, last = self.hours.ref, self.last_day.isoformat()
+        if left < 0:
+            return (
+                f"The market calendar {ref} ended on {last}, {-left} days ago; its weekly "
+                "sessions still hold, but no closure after it is known."
+            )
+        return f"The market calendar {ref} covers days up to {last}, {left} days from now."
+
+
+@cache
+def market_calendars(folder: Path = EXTENSIONS) -> Mapping[str, MarketCalendar]:
+    """Every market-hours calendar the ``qmf-calendar-*`` packages ship, by ref. A file that
+    cannot be read is left out, named once on stderr, so the node starts and reads it as
+    missing."""
+    found: dict[str, MarketCalendar] = {}
+    for path in sorted(folder.glob("qmf-calendar-*/src/qmf/calendar_*/calendars/*.json")):
+        try:
+            calendar = _market_calendar(path)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            note = {"event": "calendar_unreadable", "file": path.name}
+            print(json.dumps({**note, "error": type(error).__name__}), file=sys.stderr)
+            continue
+        if calendar is not None:
+            found[calendar.hours.ref] = calendar
+    return MappingProxyType(found)
+
+
+def _market_calendar(path: Path) -> MarketCalendar | None:
+    document = cast("Mapping[str, object]", json.loads(path.read_text(encoding="utf-8")))
+    ref, issued, age = document["calendar_ref"], document["issued"], document["max_age_days"]
+    hours = open_time(str(ref))
+    if hours is None or not isinstance(issued, str) or not isinstance(age, int):
+        return None
+    return MarketCalendar(hours, date.fromisoformat(issued) + timedelta(days=age))
 
 
 def _looks_like_day_boundary(port: object) -> bool:

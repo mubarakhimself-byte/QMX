@@ -508,5 +508,6 @@ FOREX_WEEK: Final = parse_calendar(
     }
 )
 """The 17:00 New York forex week with the two full closes of `qmf-calendar-forex` (25 December and
-1 January, each a trading date that starts at 17:00 the day before). That extension holds its rule
-as code, so the engine carries it here as data until the extension ships a calendar file."""
+1 January, each a trading date that starts at 17:00 the day before). The extension ships it as
+`fx-24x5@1.json` too, which wins in `shipped_calendars`; this copy serves where that file cannot
+be found."""

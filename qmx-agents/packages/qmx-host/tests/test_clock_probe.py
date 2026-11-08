@@ -19,6 +19,7 @@ from qmx_engine.heartbeat import ClockBand, ClockFacts, Heartbeat, HeartbeatLog,
 from qmx_host.clock_probe import (
     NTP_EPOCH_S,
     PACKET,
+    calendar_line,
     clock_line,
     mismatch_line,
     mismatch_week,
@@ -219,3 +220,29 @@ def test_a_server_home_holding_the_pcs_row_shows_its_own_clock(tmp_path: Path) -
     pc = host_row(tmp_path, "pc")
     assert pc is not None and pc.clock is not None
     assert (pc.id, pc.clock.offset_ms, pc.clock.source) == ("pc", 3, "pc-src")
+
+
+def test_the_doctor_flags_the_shipped_calendars_within_30_days_of_their_last_day() -> None:
+    assert calendar_line(date(2026, 11, 3)) == DoctorLine(
+        "market calendars",
+        True,
+        "15 shipped calendars cover days up to 2027-12-31 or later; flagged within 30 days of "
+        "the last day",
+    )
+    near = calendar_line(date(2027, 12, 10))
+    late = calendar_line(date(2028, 1, 5), 30)
+
+    assert (near.ok, near.detail.split("; ")[:2]) == (
+        False,
+        [
+            "cme-crypto@1 covers days up to 2027-12-31, 21 days from now",
+            "cme-energy@1 covers days up to 2027-12-31, 21 days from now",
+        ],
+    )
+    assert (late.ok, late.detail.split("; ")[-2:]) == (
+        False,
+        [
+            "us-index-cfd@1 ended on 2027-12-31, 5 days ago",
+            "a QMX update with newer calendars brings the later days",
+        ],
+    )
