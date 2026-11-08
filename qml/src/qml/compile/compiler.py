@@ -931,6 +931,54 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
             "/plain_python",
             f"{_FORMAT} runs the unit's slots, so {unit.plain_python.block} would never run",
         )
+    if unit.modifiers:
+        problems.add(
+            "modifiers_not_built",
+            "/modifiers",
+            f"{_FORMAT} runs one unmodified size, so these would never apply",
+        )
+    if unit.gates:
+        problems.add(
+            "gates_not_built",
+            "/gates",
+            f"{_FORMAT} runs no gate slot, so this unit would enter whatever the gate says",
+        )
+    if unit.tolerations:
+        problems.add(
+            "tolerations_not_built",
+            "/tolerations",
+            f"{_FORMAT} reads no sticker, so nothing would ever need tolerating",
+        )
+    if unit.stages is not None:
+        problems.add(
+            "stages_not_built",
+            "/stages",
+            f"{_FORMAT} runs one set of rows, not stages",
+        )
+    if unit.risk_locks:
+        problems.add(
+            "risk_locks_not_built",
+            "/risk_locks",
+            f"{_FORMAT} runs no pod, so a lock would hold nothing",
+        )
+    if unit.recipe is not None:
+        problems.add(
+            "recipe_not_built",
+            "/recipe",
+            f"{_FORMAT} runs no pod, so this recipe would never be stamped in",
+        )
+    if unit.home_markets:
+        problems.add(
+            "home_markets_not_built",
+            "/home_markets",
+            f"{_FORMAT} runs every market in /markets, not only these",
+        )
+    if unit.tags:
+        problems.add(
+            "tags_not_built",
+            "/tags",
+            f"{_FORMAT} groups nothing, so a tag would select nothing",
+        )
     if unit.sizer is not None:
         for port, ref in unit.sizer.inputs.items():
             problems.add(

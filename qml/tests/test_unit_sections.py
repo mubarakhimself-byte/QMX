@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
-from qml.compile import COMPILER_FORMAT_VERSION
+from qml.compile import COMPILER_FORMAT_VERSION, compile_unit
 from qml.unit.sections import sections
-from test_compile_dummy import _compiled, _document
+from test_compile_dummy import _compiled, _context, _document
 
 Document = dict[str, Any]
 
@@ -28,6 +28,16 @@ _FORGOTTEN = (
     "unit_id",
 )
 """AD-2's nine fields that are in neither of its named lists."""
+
+_STAGES = {
+    "selector": "risk_fraction",
+    "anchor": "market_day_close",
+    "hysteresis": "0.05",
+    "move_up": "card",
+    "move_down": "rule",
+    "rows": {"stage_2": {"numbers": {"target_r": "3"}}},
+}
+"""A stage block whose one stage row moves the target's number, which an exit binds."""
 
 _READ = {
     "reading": "news@1",
@@ -71,6 +81,35 @@ def test_a_forgotten_field_falls_in_logic() -> None:
     assert set(logic.fields) & set(risk.fields) <= {"numbers", "pins", "reads"}
     assert "recipe" not in logic.fields
     assert "recipe" not in risk.fields
+
+
+def test_an_exit_stage_value_makes_the_selector_logic() -> None:
+    document = _document()
+    document["stages"] = _STAGES
+    logic, risk = sections(document, COMPILER_FORMAT_VERSION)
+    assert "stages" in logic.fields
+    assert "stages" not in risk.fields
+
+    risk_only = _document()
+    risk_only["stages"] = {
+        **_STAGES,
+        "rows": {"stage_2": {"numbers": {"risk_fraction": "0.01"}}},
+    }
+    logic, risk = sections(risk_only, COMPILER_FORMAT_VERSION)
+    assert "stages" in risk.fields
+    assert "stages" not in logic.fields
+
+
+def test_a_new_field_refuses_by_name() -> None:
+    document = _document()
+    document["stages"] = _STAGES
+
+    problems = compile_unit(document, _context())
+
+    assert isinstance(problems, tuple), "it compiled"
+    assert [(problem.kind, problem.where) for problem in problems] == [
+        ("stages_not_built", "/stages")
+    ]
 
 
 def test_a_number_bound_in_both_halves_is_logic() -> None:

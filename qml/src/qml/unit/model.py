@@ -50,6 +50,7 @@ __all__ = [
     "Price",
     "Range",
     "Read",
+    "RecipeRef",
     "Role",
     "Roll",
     "RollRule",
@@ -62,6 +63,9 @@ __all__ = [
     "Slot",
     "SlotsSide",
     "Source",
+    "StageMove",
+    "StageRow",
+    "Stages",
     "Stream",
     "StreamInput",
     "SymbolRef",
@@ -198,6 +202,13 @@ class MotionMode(StrEnum):
 class CadenceAt(StrEnum):
     MARKET_DAY_CLOSE = "market_day_close"
     SESSION_CLOSE = "session_close"
+
+
+class StageMove(StrEnum):
+    """How a stage moves, by its own rule or by his card (AD-7)."""
+
+    RULE = "rule"
+    CARD = "card"
 
 
 class Authority(StrEnum):
@@ -467,6 +478,38 @@ class PlainPython:
 
 
 @dataclass(frozen=True)
+class RecipeRef:
+    """The pod stamp a document carries: what filled its risk half, and what that displaced."""
+
+    pod_id: str
+    version: int = field(metadata={"minimum": 1})
+    hash: str
+    displaced: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StageRow:
+    """What one stage puts in force: a sizer, modifiers, control rows and number values."""
+
+    sizer: Binding | None = None
+    modifiers: tuple[Binding, ...] = ()
+    controls: tuple[ScopedBinding, ...] = ()
+    numbers: Mapping[str, Decimal] = field(default_factory=dict[str, Decimal])
+
+
+@dataclass(frozen=True)
+class Stages:
+    """A risk half's stages (AD-7): the selector, its anchor, and the rows in force."""
+
+    selector: str
+    anchor: CadenceAt
+    hysteresis: Decimal
+    move_up: StageMove
+    move_down: StageMove
+    rows: Mapping[str, StageRow]
+
+
+@dataclass(frozen=True)
 class Unit:
     schema: Marker
     unit_id: str
@@ -490,3 +533,11 @@ class Unit:
     routes: Routes | None = None
     baseline: str | None = None
     plain_python: PlainPython | None = None
+    modifiers: tuple[Binding, ...] = ()
+    gates: tuple[Binding, ...] = ()
+    tolerations: tuple[str, ...] = ()
+    stages: Stages | None = None
+    risk_locks: tuple[str, ...] = ()
+    recipe: RecipeRef | None = None
+    home_markets: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()

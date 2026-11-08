@@ -40,6 +40,8 @@ _CENSUS = frozenset(
     Unit.direction Unit.logic Unit.exit_set Unit.halts Unit.reads Unit.numbers Unit.pins
     Unit.title Unit.lineage Unit.sessions Unit.position_limit Unit.sizer Unit.context_needs
     Unit.routes Unit.baseline Unit.plain_python
+    Unit.modifiers Unit.gates Unit.tolerations Unit.stages Unit.risk_locks Unit.recipe
+    Unit.home_markets Unit.tags
     ClaimCard.idea ClaimCard.sources ClaimCard.written_at ClaimCard.claimed_context
     Source.source_ref Source.locator Source.dated Source.quote
     Market.market_id Market.instrument_ref Market.roll Market.settings Market.settings_record
@@ -72,6 +74,9 @@ _CENSUS = frozenset(
     ContextNeeds.require ContextNeeds.warn ContextNeeds.block Need.word Need.reading
     Routes.data Routes.execution
     PlainPython.block
+    RecipeRef.pod_id RecipeRef.version RecipeRef.hash RecipeRef.displaced
+    Stages.selector Stages.anchor Stages.hysteresis Stages.move_up Stages.move_down Stages.rows
+    StageRow.sizer StageRow.modifiers StageRow.controls StageRow.numbers
     """.split()
 )
 """Every field of qmx.unit/1. The PR's census table says why each stands."""

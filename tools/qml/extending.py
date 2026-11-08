@@ -131,6 +131,23 @@ _READ: Final = [
         "stale_after_s": 60,
     }
 ]
+_MODIFIER: Final = [
+    {
+        "name": "probe",
+        "block": "ema@1",
+        "params": {"period": {"number": "ema_period"}},
+        "inputs": {},
+    }
+]
+_STAGES: Final = {
+    "selector": "risk_fraction",
+    "anchor": "market_day_close",
+    "hysteresis": "0.05",
+    "move_up": "card",
+    "move_down": "rule",
+    "rows": {"stage_2": {"numbers": {"risk_fraction": "0.01"}}},
+}
+_RECIPE: Final = {"pod_id": "trend-pullback", "version": 1, "hash": "fp1:sha256:probe"}
 
 _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.streams", "/streams", _two_streams),
@@ -199,6 +216,14 @@ _PROBES: Final[tuple[_Probe, ...]] = (
         "/numbers/min_trend_strength/motion/cadence",
         _put("numbers/min_trend_strength/motion/cadence", {"at": "market_day_close"}),
     ),
+    _Probe("Unit.modifiers", "/modifiers", _put("modifiers", _MODIFIER)),
+    _Probe("Unit.gates", "/gates", _put("gates", _MODIFIER)),
+    _Probe("Unit.tolerations", "/tolerations", _put("tolerations", ["news"])),
+    _Probe("Unit.stages", "/stages", _put("stages", _STAGES)),
+    _Probe("Unit.risk_locks", "/risk_locks", _put("risk_locks", ["sizer"])),
+    _Probe("Unit.recipe", "/recipe", _put("recipe", _RECIPE)),
+    _Probe("Unit.home_markets", "/home_markets", _put("home_markets", ["fx.eurusd"])),
+    _Probe("Unit.tags", "/tags", _put("tags", ["trend"])),
 )
 """One probe per ``_shape_problems`` branch, labelled with the field it proves."""
 

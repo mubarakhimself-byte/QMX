@@ -50,6 +50,14 @@ or the census labels it.
 | `Unit.routes` | `/routes` | `routes_not_built` | compiler format 5 takes no route from a unit, so this one would run on the host's own |
 | `Unit.baseline` | - | - | - |
 | `Unit.plain_python` | `/plain_python` | `plain_python_not_built` | compiler format 5 runs the unit's slots, so ema@1 would never run |
+| `Unit.modifiers` | `/modifiers` | `modifiers_not_built` | compiler format 5 runs one unmodified size, so these would never apply |
+| `Unit.gates` | `/gates` | `gates_not_built` | compiler format 5 runs no gate slot, so this unit would enter whatever the gate says |
+| `Unit.tolerations` | `/tolerations` | `tolerations_not_built` | compiler format 5 reads no sticker, so nothing would ever need tolerating |
+| `Unit.stages` | `/stages` | `stages_not_built` | compiler format 5 runs one set of rows, not stages |
+| `Unit.risk_locks` | `/risk_locks` | `risk_locks_not_built` | compiler format 5 runs no pod, so a lock would hold nothing |
+| `Unit.recipe` | `/recipe` | `recipe_not_built` | compiler format 5 runs no pod, so this recipe would never be stamped in |
+| `Unit.home_markets` | `/home_markets` | `home_markets_not_built` | compiler format 5 runs every market in /markets, not only these |
+| `Unit.tags` | `/tags` | `tags_not_built` | compiler format 5 groups nothing, so a tag would select nothing |
 | `ClaimCard.idea` | - | - | - |
 | `ClaimCard.sources` | - | - | - |
 | `ClaimCard.written_at` | - | - | - |
@@ -153,6 +161,20 @@ or the census labels it.
 | `Routes.data` | - | - | - |
 | `Routes.execution` | - | - | - |
 | `PlainPython.block` | - | - | - |
+| `Stages.selector` | - | - | - |
+| `Stages.anchor` | - | - | - |
+| `Stages.hysteresis` | - | - | - |
+| `Stages.move_up` | - | - | - |
+| `Stages.move_down` | - | - | - |
+| `Stages.rows` | - | - | - |
+| `StageRow.sizer` | - | - | - |
+| `StageRow.modifiers` | - | - | - |
+| `StageRow.controls` | - | - | - |
+| `StageRow.numbers` | - | - | - |
+| `RecipeRef.pod_id` | - | - | - |
+| `RecipeRef.version` | - | - | - |
+| `RecipeRef.hash` | - | - | - |
+| `RecipeRef.displaced` | - | - | - |
 
 ## Block answer shapes
 
