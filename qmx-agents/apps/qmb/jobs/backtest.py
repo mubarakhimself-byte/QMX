@@ -34,7 +34,7 @@ from typing import Final
 from qmb.data.gap_check import HOLES_UNCHECKED
 from qmb.execution.cost import COSTS_UNCALIBRATED
 from qmb.execution.financing import CashEvent, CashKind
-from qmb.host.unit_handler import Fill, UnitTrade
+from qmb.host.unit_handler import Fill
 from qmb.host.unit_runner import (
     LoadedUnit,
     UnitRunRequest,
@@ -63,7 +63,6 @@ _OFF = "motion_off"
 _ACCOUNT: Final = "account"
 """The money measures' currency tag, opaque by `Money`'s rule: no record on this path names one."""
 _CENT: Final = Decimal("0.01")
-_R_PLACES: Final = Decimal("0.0001")
 _RATIO_PLACES: Final = Decimal("0.000001")
 
 
@@ -75,46 +74,6 @@ class _Ran:
     section: dict[str, object]
     measures: dict[str, object]
     files: list[dict[str, object]]
-
-
-def _cash_of_trades(result: UnitRunResult) -> list[tuple[CashEvent, ...]]:
-    """Each trade's cash events, in the trades' order. An event goes to the first trade of its
-    position closing at or after it, so partial closes count a position's cash once."""
-    waiting: dict[str, list[CashEvent]] = {}
-    for event in result.cash_events:
-        waiting.setdefault(event.position_id, []).append(event)
-    found: list[tuple[CashEvent, ...]] = []
-    for trade in result.trades:
-        left = waiting.get(trade.trade_id, [])
-        due = [e for e in left if e.instant.value_ns <= trade.closed_at.value_ns]
-        waiting[trade.trade_id] = left[len(due) :]
-        found.append(tuple(due))
-    return found
-
-
-def _trade(trade: UnitTrade, cash: Decimal) -> dict[str, object]:
-    net_r = (trade.money + cash) / trade.risk if trade.risk else Decimal(0)
-    row: dict[str, object] = {
-        "trade_id": trade.trade_id,
-        "market_id": trade.market_id,
-        "side": trade.side.value,
-        "opened_at": trade.opened_at.value_ns,
-        "closed_at": trade.closed_at.value_ns,
-        "entry_price": str(trade.entry_price),
-        "exit_price": str(trade.exit_price),
-        "stop": str(trade.stop),
-        "quantity": str(trade.quantity),
-        "exit_kind": trade.exit_kind.value,
-        "money": str(trade.money),
-        "r": str(trade.r),
-        "mae_r": str(trade.mae_r),
-        "mfe_r": str(trade.mfe_r),
-        "cash": str(cash),
-        "net_r": str(net_r.quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)),
-    }
-    if trade.gap_through_stop:
-        row["gap_through_stop"] = True
-    return row
 
 
 def _cash(event: CashEvent) -> dict[str, object]:
@@ -164,7 +123,7 @@ def _slot_text(slot: MeasureSlot) -> object:
 def _money_measures(result: UnitRunResult, request: UnitRunRequest) -> dict[str, object]:
     """The contract's money measures (`qmb.results.measures`), net of each trade's cash."""
     closed: list[ClosedTrade] = []
-    for trade, events in zip(result.trades, _cash_of_trades(result), strict=True):
+    for trade, events in zip(result.trades, tester.cash_of_trades(result), strict=True):
         cash = sum((e.money for e in events), Decimal(0))
         paid = sum((e.money for e in events if e.kind is CashKind.COMMISSION), Decimal(0))
         closed.append(
@@ -257,10 +216,7 @@ def _run(run: Path, loaded: LoadedUnit, body: dict[str, object], journal_slot: s
     if is_refusal(closed):
         return f"the run's journal: {tester.reason(closed)}"
     result, journal = ran.value, closed.value
-    trades = [
-        _trade(trade, sum((event.money for event in events), Decimal(0)))
-        for trade, events in zip(result.trades, _cash_of_trades(result), strict=True)
-    ]
+    trades = tester.trade_rows(result)
     section: dict[str, object] = {
         "run_id": result.run_id,
         "trades": trades,

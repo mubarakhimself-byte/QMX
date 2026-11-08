@@ -1,7 +1,0 @@
-{
-  "type": "object",
-  "required": ["explanation"],
-  "properties": {
-    "explanation": {"type": "string", "description": "one short paragraph, from the verdict's own numbers"}
-  }
-}

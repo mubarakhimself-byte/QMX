@@ -52,11 +52,13 @@ __all__ = [
     "Judgement",
     "MarketVerdict",
     "Overall",
+    "Remember",
     "Step",
     "StudySpec",
     "Trade",
     "Verdict",
     "baseline_card",
+    "dead_end_row",
     "death_certificate",
     "deflated_sharpe",
     "judge",
@@ -95,6 +97,8 @@ type Origin = Literal["written", "quick"]
 type Estimator = Literal["spread", "fixed"]
 type Window = tuple[str, str]
 """A run's start and end dates."""
+type Remember = Callable[[Mapping[str, object]], str]
+"""Lands one memory row and answers its object id."""
 
 
 class JudgeRefused(ValueError):
@@ -980,6 +984,22 @@ def death_certificate(verdict_id: str, verdict: Verdict) -> dict[str, object] | 
     }
 
 
+def dead_end_row(
+    verdict_id: str, verdict: Verdict, cause: object, spec: StudySpec
+) -> dict[str, object]:
+    """The memory row a death certificate stands for, so a later build's `memory_check` finds it by
+    the idea or by the unit."""
+    idea = spec.claim.edge.strip() if spec.claim is not None else ""
+    said = f"{verdict.unit} died of {cause}. {verdict.says()}"
+    return {
+        "tag": "dead_end",
+        "intent_key": verdict.unit,
+        "when_to_use": f"before building {idea or verdict.unit} again, or a unit with its rules",
+        "content": f"{idea}: {said}" if idea else said,
+        "refs": [f"object:{verdict.unit}", f"object:{verdict_id}"],
+    }
+
+
 def baseline_card(
     verdict_id: str,
     verdict: Verdict,
@@ -1079,10 +1099,11 @@ def land_judgement(
     spec: StudySpec,
     writer: str,
     placeholders: Sequence[str] = (),
+    remember: Remember | None = None,
 ) -> Judgement:
     """Land the verdict and the cards it calls for, each once: a pass freezes its baseline card
-    and leaves a proposal for his click, a failure lands its death certificate. Landing it again
-    finds every item and writes nothing."""
+    and leaves a proposal for his click, a failure lands its death certificate and, through
+    `remember`, the dead-end row it names. Landing it again finds every item and writes nothing."""
 
     def once(kind: str, item: str, fields: Mapping[str, object], title: str) -> str:
         found = library.find(item)
@@ -1108,7 +1129,11 @@ def land_judgement(
         fields = build()
         if fields is None:
             continue
-        card = once(kind, f"{kind}-{verdict.item}", fields, f"{kind} of {verdict.unit}")
+        item = f"{kind}-{verdict.item}"
+        if kind == DEATH_KIND and remember is not None and library.find(item) is None:
+            row = dead_end_row(verdict_id, verdict, fields["cause"], spec)
+            fields = {**fields, "memory_row": remember(row)}
+        card = once(kind, item, fields, f"{kind} of {verdict.unit}")
         library.link(card, "derived-from", verdict_id, principal=writer)
         cards[kind] = card
     return Judgement(verdict_id, cards)

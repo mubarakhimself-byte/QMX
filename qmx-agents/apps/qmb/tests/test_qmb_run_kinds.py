@@ -174,6 +174,7 @@ def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> N
         (family, CHAT, (opened, result))
     }
     cells = report(world, result)["cells"]
+    assert "trades" not in report(world, result)
     assert [(c["markets"], c["numbers"], c["status"]) for c in cells][:2] == [
         (["fx.eurusd"], {"ema_period": "50"}, "finished"),
         (["fx.eurusd"], {"ema_period": "100"}, "finished"),
@@ -182,11 +183,23 @@ def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> N
     assert [(c["trades"], c["total_r"]) for c in cells] == [
         (3, "-1.6852"),
         (6, "-3.2610"),
-        (6, "-3.2610"),
+        (4, "-1.8102"),
         (3, "0.0013"),
         (2, "1.0013"),
         (3, "-1.0258"),
     ]
+
+
+def test_a_sweep_that_traded_is_judged_on_its_trades(world: World) -> None:
+    result, landed = job(world, "sweep", grid={"markets": ["fx.eurusd"]})
+
+    answer = world.tools["backtest_judge_run"](results=[result])["result"]
+
+    assert landed["measures"]["trades"] == 6
+    assert answer["overall"] == "too_thin"
+    assert answer["per_market"] == [{"market": "fx.eurusd", "outcome": "too_thin", "trades": 6}]
+    assert answer["cards"] == {}
+    assert [t["market_id"] for t in report(world, result)["trades"]] == ["fx.eurusd"] * 6
 
 
 def test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason(world: World) -> None:
@@ -283,7 +296,7 @@ def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> N
     assert [(f["pick"], f["out_of_sample_trades"]) for f in report(world, walked)["folds"]] == [
         (None, 0),
         (None, 0),
-        ("cell-02", 4),
+        ("cell-03", 5),
     ]
     assert report(world, walked)["walk_forward_unmeasured"] == (
         "no fold had a candidate with an in-sample Sharpe to pick on metal.xauusd"

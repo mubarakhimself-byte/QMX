@@ -112,7 +112,7 @@ from qmx_home.files import Busy, Held, hold
 from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
-from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, spec_edit, spec_problems
+from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, Remember, spec_edit, spec_problems
 from qmx_judge.landing import (
     G_CHECK,
     RESULT_KIND,
@@ -161,7 +161,12 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
-from qmx_tools.functions import entry_clashes, entry_items, write_entry_status
+from qmx_tools.functions import (
+    attach_dead_ends,
+    entry_clashes,
+    entry_items,
+    write_entry_status,
+)
 from qmx_tools.gather import check_unit, entry_problems, gather
 from qmx_tools.service import attach_node
 from uvicorn.config import STARTUP_FAILURE
@@ -641,11 +646,30 @@ def compose_memory(
     engine = RecallEngine(store, index=index, home=home / MEMORY_FOLDER)
     install(engine)
     harness.remember_into(engine)
+    attach_dead_ends(control, dead_end_memory(engine, home))
+    render_snapshot(engine, home)
+    return engine
+
+
+def render_snapshot(engine: RecallEngine, home: Path) -> None:
+    """The slot every chat launches on. A slot that cannot be written costs that chat its memory
+    of what was learnt, never the write that asked for it."""
     try:
         write_snapshot(engine, home)
     except (OSError, LibraryRefused) as error:
         print(f"memory: the snapshot slot was not written: {error}", file=sys.stderr)
-    return engine
+
+
+def dead_end_memory(engine: RecallEngine, home: Path) -> Remember:
+    """What a failed verdict's row lands through: this home's scope, written by the judge, and the
+    slot rendered again so the next chat launches on it."""
+
+    def remember(row: Mapping[str, object]) -> str:
+        written = engine.write("home", "judge", row)
+        render_snapshot(engine, home)
+        return written.object_id
+
+    return remember
 
 
 def _hindsight(harness: RecordedHarness, home: Path, control: ControlService) -> HindsightConfig:
@@ -1386,6 +1410,7 @@ async def serve(
                         await asyncio.to_thread(connect.world.logs.process.close)
                     adopt_router(None)
                     install(None)
+                    attach_dead_ends(control, None)
                     await asyncio.to_thread(memory.close)
         finally:
             await harness.close()
