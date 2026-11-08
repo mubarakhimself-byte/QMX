@@ -38,11 +38,12 @@ Do not read the architecture in full. Builders read what their section names. Ne
 1. Confirm the shell (Windows 11, PowerShell 7 and Git Bash) and the root head. Write both in `S/RESUME.md`.
 2. Create `S/` with `RESUME.md`, `decisions.tsv`, `QUESTIONS-FOR-OPERATOR.md`, `BACKLOG.md`, `IDEAS.md`, `lows.md`, `QUEUE.md`, `ledger.tsv`, `STACK-LIST.md`, and the folders `dispatch/`, `review/`, `evidence/`, `homes/`, `data/`, `tools/`. Create `D:/Temp` and `D:/Caches/uv` if missing.
 3. Copy `P/build/BRIEF-BUILDER.md` to `S/BRIEF-BUILDER.md`.
-4. Copy `R/tools/env.sh`, `R/tools/guard/`, `R/tools/run_tests.sh`, `R/tools/safe_host.py` and `R/tools/repair_check.py` to `S/tools/`. Change every `repair-ship` path to `risk-ship`, `D:/Temp/repair-ci` to `D:/Temp/risk-ci`, and the lock owner word `repair` to `risk`. Run `CHECK alive` once to prove the copy loads. Pass `--store=D:/QMX-worktrees/risk-ship` to each gate and carry. If the gate refuses an `rc-nn` id, apply its three checks by hand (exact-head CLEAN review, at least three lane logs with no FAIL line, owner files present) and log that once.
+4. Copy `R/tools/env.sh`, `R/tools/guard/`, `R/tools/run_tests.sh`, `R/tools/safe_host.py` and `R/tools/repair_check.py` to `S/tools/`. Change every `repair-ship` path to `risk-ship`, `D:/Temp/repair-ci` to `D:/Temp/risk-ci`, and the lock owner word `repair` to `risk`. Run `CHECK` with no command once: it prints its usage, which proves the copy loads. Use only its `gate-dsh` and `carry` commands, passing `--store=D:/QMX-worktrees/risk-ship` to each. Its `check`, `gate`, `alive` and `hook` commands were written for the repair program's agents and briefs, and would wrongly fail here. If the gate refuses an `rc-nn` id, apply its three checks by hand (exact-head CLEAN review, at least three lane logs with no FAIL line, owner files present) and log that once.
 5. Create `build/risk-core` at the root and push it. The first PR targets it. Never move it afterwards.
 6. Seed `QUESTIONS-FOR-OPERATOR.md` with OPEN rows 1 to 8b and the plan's Appendix H, each with the default the build takes.
-7. Arm `/loop 1h` with the tick prompt below.
-8. Tell him in plain words what only he can do (the attention list), then dispatch RC-01.
+7. Claim the store. If `S/COORDINATOR` exists and was written in the last two hours by another session, stop and tell him one line: another orchestrator is running on this store. Otherwise write your session's name and the time to it, and rewrite it every tick. Two orchestrators on one store happened on repair, and his "stop" reached the wrong window.
+8. Arm the tick. Call the `loop` skill with no interval, the tick prompt below as its argument, and a delay of about 3,000 seconds. Do not write `/loop 1h`: an interval of 60 minutes or more makes that skill ask a question, which stalls an unattended run.
+9. Tell him in plain words what only he can do (the attention list), then dispatch RC-01.
 
 ## Enforcement: you only orchestrate, and everyone uses poteto-mode
 
@@ -55,6 +56,8 @@ He watched the last orchestrator drift (memory `orchestrator-audit-2026-11-04`).
 - **No PR stacks on your own review,** money path included. A fresh reviewer for every PR, no exceptions.
 - **Run the lanes for every row,** not only the early ones. Last time lanes ran for 54 of the first 74 rows and 6 of the last 19.
 - **Run the whole-repo check on schedule** (loop step 6) and trace every new red before stacking further.
+- **The stack stays one line.** After every append, and before you report any stop point, check each PR's head sits on the one below with `git merge-base --is-ancestor`. On repair, a PR was fixed after the ones above it joined, its last five commits never reached the top, and the list still said "one line". When you fix a PR that has PRs above it, carry the fix up through every one of them.
+- **A join is retested, not only re-reviewed.** After any rebase or merge, rerun that PR's own lane 1 suites at its new head before its gate. On repair, a PR passed its gate and then failed its own test at its joined head.
 - **The plan doesn't grow.** No new PR sections. Findings go to `BACKLOG.md`; his asks to `QUEUE.md`.
 - **Keep agents busy.** No slot sits idle while an unblocked PR exists. Last time a quarter of agent time was idle.
 
@@ -73,7 +76,7 @@ He watched the last orchestrator drift (memory `orchestrator-audit-2026-11-04`).
 11. **Money.** Agents cannot touch money. No PR binds a live account. Only he promotes. Exits are never blocked. Only his hand lowers the kill switch. A PR that weakens any of these is NOT CLEAN.
 12. **Secrets.** Nobody reads, prints or copies a key, token or grant. No Anthropic or OpenAI API spend. Lanes with a model run on `haiku` through the plan login of the ship home `D:/QMX-worktrees/qma-ship/home`, holding `D:/QMX-worktrees/.engine-lane-lock`, with no spend cap on them.
 13. **No invented caps.** Every number is a named setting with a labelled starting default. No QMX cap, no fixed share, and never argue a value. Values wait for the numbers talk (`PARKED-FOR-NUMBERS-TALK.md`).
-14. **Never stop to ask.** Take the plan's default or your recommended option, log it in `decisions.tsv` and `QUESTIONS-FOR-OPERATOR.md` with how to undo it, and keep building. Filter a builder's "open question" against the plan and `OPEN.md` before you relay anything. Stop only when no unblocked PR remains, his weekly usage passes about 96%, or he says stop. Never pause for the context size. Keep `RESUME.md` current so compaction or a fresh session resumes cleanly.
+14. **Never stop to ask.** Take the plan's default or your recommended option, log it in `decisions.tsv` and `QUESTIONS-FOR-OPERATOR.md` with how to undo it, and keep building. Filter a builder's "open question" against the plan and `OPEN.md` before you relay anything. Stop only when no unblocked PR remains, his weekly usage passes about 96%, or he says stop. Read usage each tick with `mcp__ccd_session_mgmt__get_usage`, loading it with `ToolSearch` if it is deferred, and use its "Weekly · all models" bar. Never pause for the context size. Keep `RESUME.md` current so compaction or a fresh session resumes cleanly.
 15. **Never merge, never push `main`, never close a PR, never delete a branch or a builder worktree** without his go. Remove only your own detached check copies under `D:/Temp/` after each verdict.
 16. **Disk `D:` only.** Source `S/tools/env.sh` before every run. Don't gate on memory and don't ask him to close anything.
 17. **No unplanned work.** Findings go to `BACKLOG.md`, ideas to `IDEAS.md`, low findings to `lows.md`. His new asks mid-run go to the end of `QUEUE.md`, taken after the program. A builder may fix the mini-app core where it truly blocks, as its section says.
@@ -113,6 +116,8 @@ Your work:
 - Gates and fallbacks in force: {GATES_OR_NONE}.
 - {SPECIAL}
 
+Also write D:/QMX-worktrees/risk-ship/evidence/{id}/owner-skills.md: every skill and playbook you opened, with its full path, in the order you opened it. The orchestrator checks it.
+
 Write, push and run only the fast checks the brief names. Open the PR ready once your red test exists, with gh pr create --base {PR_BASE} --head build/rc-{nn} --repo MubarakHimself/QMX. Reply as the brief says, ending STACK-READY <sha> or BLOCKED <reason>.
 ```
 
@@ -135,10 +140,10 @@ Apply the bmad-review lenses the section's Review gate names, and the blast-radi
 Write D:/QMX-worktrees/risk-ship/review/{id}-check-{head8}.md. Its first line is CLEAN or NOT CLEAN. Then the blockers, each with file, line and the smallest fix, then the lows. Reply with the first line and the blocker count.
 ```
 
-## Tick prompt for `/loop 1h`
+## Tick prompt
 
 ```text
-Re-read D:/QMX-worktrees/risk-ship/RESUME.md and the head of the plan at D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PLAN.md. Check each running builder, reviewer and background job by its side effects only: pushes, commits, logs. Check each agent's own background processes and stop leftovers. A builder with no push for 90 minutes is stuck: stop it and dispatch a fresh one on the same branch with its dispatch file and what it pushed. Dispatch into any free slot. Post a short status message to him only when something changed since the last one: a PR stacked, a verdict, a gate opened, a stop point reached, a parked PR, a blocker. Log this tick's row in decisions.tsv, naming what you reported or none.
+Re-read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHESTRATOR.md, D:/QMX-worktrees/risk-ship/RESUME.md and the head of the plan at D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PLAN.md. Check each running builder, reviewer and background job by its side effects only: pushes, commits, logs. Check each agent's own background processes and stop leftovers. A builder with no push for 90 minutes is stuck: stop it and dispatch a fresh one on the same branch with its dispatch file and what it pushed. Dispatch into any free slot. Rewrite S/COORDINATOR with this session and the time. Check the stack is one line. Post a short status message to him only when something changed since the last one: a PR stacked, a verdict, a gate opened, a stop point reached, a parked PR, a blocker. Log this tick's row in decisions.tsv, naming what you reported or none.
 ```
 
 ## Attention, for the operator
@@ -172,18 +177,22 @@ Arm the program, tell me in plain words what only I can do, then keep building u
 
 Use this instead of the prompt above, in a fresh DeepSeek harness session opened in `C:/Users/Mubarak/Desktop/QMX` with provider `deepseek-official`, model `deepseek-flash` and reasoning effort `max`. Never run both sessions at once on the same store. Everything in this file holds, with these changes.
 
-- The poteto-mode skill is at `C:/Users/Mubarak/.dsh/skills/poteto-mode/`.
-- Builders and reviewers are background subagents with provider `deepseek-official`, model `deepseek-flash`, reasoning effort `max` (`high` for a scripts-only PR), and `cwd` set to the worktree. The harness has no `poteto-agent` type, so each prompt's first line makes the subagent that agent.
+- Every skill path becomes `C:/Users/Mubarak/.dsh/skills/<name>/SKILL.md`, poteto-mode and its playbooks included. The `bmad-review` lenses stay at `C:/Users/Mubarak/Desktop/QMX/.claude/skills/bmad-review/references/`, read only. Put both lines in every dispatch's `{SPECIAL}`.
+- Builders and reviewers are background subagents with provider `deepseek-official`, model `deepseek-flash`, reasoning effort `max` (`high` for a scripts-only PR), and `cwd` set to the worktree. Give all three route fields together. The harness has no `poteto-agent` type, so each prompt's first line makes the subagent that agent.
+- Claude-only names map to the harness. The `Agent` tool is your subagent tool. `TaskStop` is `interrupt_agent`. You see what runs with `list_agents`. An agent is stuck when it shows running and its worktree, evidence folder and branch have not changed for 45 minutes.
+- The tick is your schedule tool, every 1,800 seconds into this session, not `/loop`. If it takes `rrule`, give one `DTSTART` line and `RRULE:FREQ=MINUTELY;INTERVAL=30`, with target `this_session`. Do not create a goal with `create_goal`: its driver fires a new turn each time you go idle and burns the balance while a lane runs. Between ticks, end your turn and let completion notices wake you.
+- If a tool named here is missing or takes other arguments, use the nearest one, log it, and carry on.
+- Off-peak only, because the balance is small. DeepSeek charges double from 01:00 to 04:00 and 06:00 to 10:00 UTC, Monday to Friday, which is 04:00 to 07:00 and 09:00 to 13:00 on this PC. Start no new agent in those hours. Let running ones finish, end your turn, and wake at the end of the window. Weekends are off-peak all day. If the live price page says other hours, its hours win.
 - Commit messages end with `Co-Authored-By: DeepSeek-V4.1-Flash <noreply@deepseek.com>` and PR bodies end with `🤖 Generated with DeepSeek Harness`, as the builder brief's DeepSeek lines say.
 - Use `CHECK gate-dsh`, since there is no Claude transcript to read.
 - DeepSeek checks DeepSeek, so no other model family reviews the work. The lanes and the reviewer's rerun of the blast-radius fact carry the proof. Name this in `STACK-LIST.md`, because this program changes the money path.
 - There is no weekly bar here, so the stop conditions are no unblocked PR, his word, or the DeepSeek balance running out. When a call fails for credit, stop dispatching, let running agents finish, bring `RESUME.md` and `STACK-LIST.md` up to date, and tell him in one line that it is ready to switch.
-- **He starts on DeepSeek and moves to Claude Code later, on the same store.** Never run both at once. The Claude orchestrator resumes from `RESUME.md`: it treats DeepSeek-built PRs as stacked, gives any DeepSeek PR without a fresh review a fresh Opus reviewer before the next stop point, and goes on with Opus builders. Commit trailers follow the model that wrote each commit.
+- **He starts on DeepSeek and moves to Claude Code later, on the same store.** Never run both at once. Paste into one DeepSeek window only. When the balance ends, delete your tick, so this window never wakes again beside the Claude one. The Claude orchestrator resumes from `RESUME.md`: it treats DeepSeek-built PRs as stacked, gives any DeepSeek PR without a fresh review a fresh Opus reviewer before the next stop point, and goes on with Opus builders. Commit trailers follow the model that wrote each commit.
 
 ```text
 /poteto-mode You are the orchestrator of the QMX risk and sizing build, running in the DeepSeek harness. You never write code.
 Read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHESTRATOR.md, follow it, and apply its section "Optional paste prompt, builders on DeepSeek". First check that the repair stack is finished; if it isn't, tell me plainly and stop.
 The plan is PLAN.md beside it. The store is D:/QMX-worktrees/risk-ship/; read its RESUME.md first if it exists.
 Autopilot-stack, light verification, at most two DeepSeek builders with disjoint files, a fresh DeepSeek reviewer per PR, no merges, never stop to ask.
-Arm the program, tell me in plain words what only I can do, then keep building.
+Arm the program, including the tick from the DeepSeek section, so that you and your sub-agents never sit idle. If this session drops, this same paste resumes it. Tell me in plain words what only I can do, then keep building until the plan is done or the balance runs out.
 ```
