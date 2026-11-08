@@ -576,6 +576,9 @@ class Sent:
     quantity: Decimal | None = None
     """On an accepted entry, the quantity the venue filled, which an IOC order may leave short
     of the ticket's. None when the binding reads only the whole ticket filled."""
+    position_id: str | None = None
+    """On an accepted entry, the venue's id for the position it opened, when it has one apart
+    from the client order id. Journalled, so a later start can ask how that position closed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -585,6 +588,8 @@ class VenueClose:
     kind: FillKind
     price: Decimal
     gap: bool = False
+    guessed: bool = False
+    """No deal named this close, so the price is the stop the node held."""
 
 
 class VenueAccount(Protocol):
@@ -1062,11 +1067,14 @@ class OrderPath:
         match sent.outcome:
             case SubmissionOutcome.ACCEPTED_BY_VENUE if sent.price is not None:
                 filled = ticket.quantity if sent.quantity is None else sent.quantity
-                self._note(
-                    client_order_id,
-                    "filled",
-                    {"step": "filled", "price": str(sent.price), "quantity": str(filled)},
-                )
+                note: dict[str, object] = {
+                    "step": "filled",
+                    "price": str(sent.price),
+                    "quantity": str(filled),
+                }
+                if sent.position_id is not None:
+                    note["position_id"] = sent.position_id
+                self._note(client_order_id, "filled", note)
                 if self._protected(client_order_id, ticket, distance):
                     return Placed(sent.price, None if filled == ticket.quantity else filled)
                 return Unprotected(
@@ -1434,7 +1442,9 @@ class NodeUnit:
     def adopt(self, found: Iterable[Ours]) -> None:
         """Hold each position this deployment sent that the reconcile read open at the venue
         and this unit does not hold, as a process restart finds them: the unit manages its
-        stop, its target and its exits as its own. A position is adopted once."""
+        stop, its target and its exits as its own. A position that closed while the node was
+        down is held too, so the handler books its trade on the next bar. A position is
+        adopted once."""
         handler = self.handler
         client = self.orders.venue.client
         for ours in found:
@@ -1445,7 +1455,7 @@ class NodeUnit:
                 or send.get("deployment_id") != self.deployment.deployment_id
                 or market not in self.traded
                 or name in self.placed
-                or client.closed(name) is not None
+                or (client.closed(name) is not None and not ours.closed_while_down)
             ):
                 continue
             side = Side(venue.side)
@@ -2022,6 +2032,7 @@ class Runtime:
             self.context.standing().tag,
             self.clock_ns,
             self.alarms.append,
+            healed=True,
         )
         for hosted in self.hosted.values():
             unit = hosted.unit
@@ -2112,7 +2123,12 @@ class Runtime:
             if hosted.unit is not None and hosted.deployment.account_id == account
         ]
         if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, unknown):
-            self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units)
+            kept = frozenset(
+                hosted.deployment.deployment_id
+                for hosted in self.hosted.values()
+                if hosted.deployment.account_id == account
+            )
+            self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units, kept)
         for unit in units:
             unit.adopt(self.reconciler.mine(account))
 
