@@ -5,8 +5,8 @@ shape.
 Every child counts as a trial, refused, unbuilt and dead ones included. A child survives when it
 passed every robustness gate and its validated score beats the current best; one that wins only
 in-sample is dead, and a daily Sharpe above 2 is held for a lookahead audit instead of winning.
-The best survivor is the next generation's parent. The loop stops after 2 generations with no gain
-(the loop's own rule) or at its third generation.
+The best survivor is the next generation's parent. `stop` ends the loop once the run has had the
+card's `generations`, or `generations_without_gain` generations in a row with no gain.
 """
 
 import json
@@ -52,6 +52,7 @@ children += [
     }
     for r in checked["refused"]
 ]
+without_gain = 0 if best_score > state["best_score"] else state["without_gain"] + 1
 print(
     json.dumps(
         state
@@ -60,6 +61,9 @@ print(
             "best_score": best_score,
             "children": children,
             "generation": checked["generation"],
+            "without_gain": without_gain,
+            "stop": checked["generation"] >= state["generations"]
+            or without_gain >= state["generations_without_gain"],
             "family_trials": state["family_trials"]
             + len(checked["build"])
             + len(checked["refused"]),

@@ -52,6 +52,13 @@ DIGEST = PACK / "morning-digest"
 CRYSTALLISE = PACK / "crystallise-a-workflow"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
 CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
+JUDGED = (
+    "b-build-and-prove",
+    "d3-iterate-against-qmb",
+    "l4-overnight-lab-loop",
+    "d4-variant-comparison",
+)
+"""The templates that call the `judge` block as their child in place of a copied gate script."""
 
 NO_RENDER = frozenset(
     {
@@ -101,15 +108,10 @@ BLOCK_COPIES = {
         for template in CATALOG
         if template.folder not in NO_RENDER
     ),
-    "overfit-gates/scripts/deflated_sharpe.py": tuple(
-        f"{folder}/scripts/deflated_sharpe.py"
-        for folder in (
-            "b-build-and-prove",
-            "l4-overnight-lab-loop",
-            "d3-iterate-against-qmb",
-            "d4-variant-comparison",
-        )
-    ),
+    **{
+        f"judge/{name}": tuple(f"{folder}/judge/{name}" for folder in JUDGED)
+        for name in ("definition.json", "scripts/judge.py")
+    },
     "understand-extract/scripts/sections.py": (
         "rs2-source-to-component-card/scripts/sections.py",
         "a-fill-the-library/scripts/sections.py",

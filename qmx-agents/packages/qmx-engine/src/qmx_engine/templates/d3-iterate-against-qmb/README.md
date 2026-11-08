@@ -9,15 +9,15 @@ Built from card D3 (iterate against QMB with overfit guards, the old WF2 core) i
 1. `Load the parent's reports` (`scripts/reports.py`) reads the full report, the family's trial count and spec hashes, and the headroom.
 2. `Hide the holdout from the diagnoser` drops every holdout number and refuses a parent without a full report.
 3. `Diagnose weaknesses and why` (role `synthesiser`, the card's diagnoser) sorts weaknesses into fixed buckets, each with a hypothesis and the evidence row.
-4. `Start the generations` makes the parent the first best.
-5. `Each generation` runs at most 3 generations and stops after 2 without gain.
+4. `Start the generations` makes the parent the first best and reads the loop's counts from the card.
+5. `Each generation` runs the card's `generations` (3 to start) and stops after `generations_without_gain` (2 to start) in a row without gain. Both are starting defaults he changes on the run's inputs, never caps. The loop node's `max_iterations` of 1000 is only the engine's rule that every loop ends; the card's counts stop the loop long before it.
    1. `Propose structural children` (role `planner`, the card's generator) proposes 3 or 4 children, each with a change label from a fixed list and the hypothesis it tests.
    2. `Check and dedupe the children` refuses a child with no diagnosed weakness, a parameter nudge, or a spec the family already tried.
-   3. `Build the children` (role `builder`) builds them, 20 turns per child.
-   4. `Compile and test each child` (`scripts/test.py`) is the generation's QMB call: compile, in-sample, walk-forward and template B's robustness gates.
+   3. `Build the children` (role `builder`) builds them, 20 turns per child. The builder's model is the Settings row `roles.builder`, which ships as the strong tier and is his to change.
+   4. `Compile and test each child` (`scripts/test.py`) is the generation's QMB call: compile, in-sample, walk-forward and the judge's shipped preset.
    5. `Record every child` counts every child as a trial; one that wins only in-sample is dead, and the best survivor becomes the next parent.
 6. `Holdout once for the survivor` (`scripts/holdout.py`) touches the holdout on the final survivor only.
-7. `Deflated Sharpe over the family` (the shared `overfit-gates` block) counts the whole family, dead children included.
+7. `Judge the results` (the shared `judge` block, carried in `judge/`) sets the verdict by script over the whole family, dead children included.
 8. `Generation tree and scorecard` keeps dead branches tagged `negative_result` and says whether the survivor held. `Write the scorecard` (role `writer`) writes the summary; `Render and grade` checks its numbers against the reports, the holdout touch and the tree.
 
 ## Left out, and why

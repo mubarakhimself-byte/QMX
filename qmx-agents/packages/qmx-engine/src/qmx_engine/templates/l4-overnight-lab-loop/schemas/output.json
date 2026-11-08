@@ -1,13 +1,13 @@
 {
   "type": "object",
-  "required": ["silent", "trials_tonight", "trials_family", "deflated_sharpe", "survivors",
+  "required": ["silent", "trials_tonight", "trials_family", "judge", "survivors",
                "dead_ends", "moves", "move_reasons", "dead_regions", "decisions", "summary"],
   "x-prose": ["summary", "move_reasons"],
   "properties": {
     "silent": {"type": "boolean"},
     "trials_tonight": {"type": "integer"},
     "trials_family": {"type": "integer"},
-    "deflated_sharpe": {"type": "object"},
+    "judge": {"type": ["object", "null"]},
     "survivors": {"type": "array"},
     "dead_ends": {"type": "array"},
     "moves": {"type": "array"},

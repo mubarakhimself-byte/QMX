@@ -4,7 +4,6 @@
   "properties": {
     "variants": {
       "type": "array",
-      "maxItems": 12,
       "items": {
         "type": "object",
         "required": ["label", "name", "change", "overrides"],

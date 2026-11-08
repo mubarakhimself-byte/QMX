@@ -6,12 +6,12 @@ Built from card D4 (variant generation and comparison) in `research/methodology/
 
 ## Steps
 
-1. `Plan the labelled variants` (role `planner`) lists at most 12 variants, each labelled instrument, timeframe, params, spiced, structural or model-made.
-2. `Identity rule and caps` reads the label table: instrument, timeframe, params and spiced stay `variant_of` the strategy; structural and model-made are new strategies `derived_from` it. At most 4 variants need a builder.
+1. `Plan the labelled variants` (role `planner`) lists the variants his request asks for, each labelled instrument, timeframe, params, spiced, structural or model-made.
+2. `Identity rule and caps` reads the label table: instrument, timeframe, params and spiced stay `variant_of` the strategy; structural and model-made are new strategies `derived_from` it. It keeps the card's `variants` (12 to start, a number he changes on the run's inputs, never a cap) and names the rest. At most 4 variants need a builder.
 3. `Any variant to build?` skips the builder when every variant is a config change.
-4. `Build the structural variants` (role `builder`, 20 turns per variant) builds the spiced, structural and model-made ones.
+4. `Build the structural variants` (role `builder`, 20 turns per variant) builds the spiced, structural and model-made ones. The builder's model is the Settings row `roles.builder`, which ships as the strong tier and is his to change.
 5. `Compile and run every variant` (`scripts/runs.py`) compiles each to a sealed spec on identical windows and costs and runs it on QMB. The holdout is never used here.
-6. `Deflated Sharpe over the variants` (the shared `overfit-gates` block) counts the whole set.
+6. `Judge the results` (the shared `judge` block, carried in `judge/`) sets the verdict by script over the whole set.
 7. `Compare on identical windows` refuses a mixed set, ranks the variants, correlates every pair, and warns when the best edge over the median is inside the bootstrap spread.
 8. `Write the comparison` (role `writer`) writes the summary; `Render and grade` checks its numbers and the variant names against his request, the strategy, the runs and the page's script-made fields.
 

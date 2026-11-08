@@ -4,9 +4,10 @@ avoids them, its best validated score so far, its sealed holdout, and the gate t
 from Settings and bound to the graph's content hash. The loop's tools hold no Settings write and
 no write to the fitness list. No headroom parks the run silent until the window opens.
 
-Its output is the night's starting state: the checked search space and moves, `thresholds`,
-`tried` (spec hashes), `dead_regions`, `trials_family`, `trials_tonight` 0, `best_validated`,
-`history` (search-space moves) empty, `plateau` false and `stop` false. Until QMB's family ledger
+Its output is the night's starting state: the checked search space and moves, the card's `counts`
+as setup passed them, `thresholds`, `tried` (spec hashes), `dead_regions`, `trials_family`,
+`trials_tonight` 0, `revolution` 0, `revolutions_since_gain` 0, `best_validated`, `history`
+(search-space moves) empty, `plateau` false and `stop` false. Until QMB's family ledger
 and gate doors exist this template stays a draft (`needs: qmb-door`) and this script refuses to
 guess.
 """

@@ -6,13 +6,12 @@ Built from cards D2 (strategy to a sealed QMB experiment spec) and D3 (its robus
 
 ## Steps
 
-1. `Seal the experiment spec` (`scripts/spec.py`, zero tokens) splits the data into in-sample, three walk-forward folds and the family's sealed holdout, refuses a spec without costs, with a field that is not point-in-time, with a split below its minimum or with a window over the holdout, and hashes the spec into its memo key.
+1. `Seal the experiment spec` (`scripts/spec.py`, zero tokens) reads the study settings, refuses a spec without costs, with a field that is not point-in-time, with a window below its minimum or with a window over the holdout, and hashes the spec into its memo key. The holdout and the split are his choice per study and both start off, so the whole range is one in-sample window. On the card's `study` input, `split` cuts the range into in-sample (`in_sample_share`, 0.6) and `folds` (3) walk-forward folds, and `holdout` seals the family's holdout or the last `holdout_share` (0.2) of the range.
 2. `Spec checks pass?` stops a refused spec at stage 9; the scorecard lists the problems.
 3. `Register and backtest on QMB` (`scripts/qmb.py`) is the one QMB call: register through the host validator, smoke run, in-sample with costs, walk-forward, Monte Carlo, cost stress at 1.5x.
-4. `Deflated Sharpe over the family` (the shared `overfit-gates` block) sets the bar from every trial the family ran, dead parents included.
-5. `Overfit gates` sets the verdict by script: 100 trades, walk-forward efficiency 0.5, Monte Carlo 5th percentile above zero, positive expectancy at 1.5x costs, deflated Sharpe 0.95. A daily Sharpe above 2 holds the verdict for a lookahead audit.
-6. `Paper card or dead end` gives a survivor a "start paper trial?" card with the demo-only minimal risk profile; anything else becomes a `negative_result` row.
-7. `Write the scorecard` (role `writer`) writes the summary; `Assemble the scorecard` builds the result; `Render and grade` checks every number in the summary against the spec, the QMB results and the gates.
+4. `Judge the results` (the shared `judge` block, carried in `judge/`) sets the verdict by script over the results and every try of the family. No model decides it.
+5. `Paper card or dead end` gives a passing verdict a "start paper trial?" card with the demo-only minimal risk profile; anything else becomes a `negative_result` row with the judge's words and tries.
+6. `Write the scorecard` (role `writer`) writes the summary; `Assemble the scorecard` builds the result; `Render and grade` checks every number in the summary against the spec, the QMB results and the verdict.
 
 ## Left out, and why
 

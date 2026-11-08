@@ -3,9 +3,9 @@ run on the family's sealed holdout, and the touch is logged with who and why. A 
 be a new counted trial with a new window, so this is the only step that touches it.
 
 Its output is `holdout`: each survivor's `spec_hash`, `holdout` score and the validation
-`monte_carlo` band it must land in; plus `family_trials` and `candidate` (the best survivor's
-per-period Sharpe, observations, skew and kurtosis) for the deflated Sharpe over every trial in the
-family tonight and before. Until QMB's holdout door exists this template stays a draft
+`monte_carlo` band it must land in; plus the `judge` block's request (the study `spec`, the
+`study` id, the survivors' landed `results` and the `tries` of every trial in the family tonight
+and before). Until QMB's holdout door exists this template stays a draft
 (`needs: qmb-door`) and this script refuses to guess.
 """
 
