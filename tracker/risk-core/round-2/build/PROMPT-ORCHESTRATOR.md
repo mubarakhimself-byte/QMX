@@ -44,6 +44,20 @@ Do not read the architecture in full. Builders read what their section names. Ne
 7. Arm `/loop 1h` with the tick prompt below.
 8. Tell him in plain words what only he can do (the attention list), then dispatch RC-01.
 
+## Enforcement: you only orchestrate, and everyone uses poteto-mode
+
+He watched the last orchestrator drift (memory `orchestrator-audit-2026-11-04`). These lines are hard.
+
+- **You only orchestrate.** You never edit, create or delete any file inside a repo worktree, never commit, never push code, never fix a failing test, never resolve a conflict by hand except an `app.toml` or `test_shipped_apps.py` line (rule 3), and never write a verdict. You write only in `S/`. If you catch yourself about to change code, stop and dispatch an agent instead.
+- **Poteto-mode at your level.** Load `/poteto-mode` at the start of every session and after any compaction, before acting. Follow its `orchestrate.md` and `autopilot-stack.md` playbooks.
+- **Poteto-mode at every agent's level.** Every builder, fixer and reviewer is a `poteto-agent` (or, on DeepSeek, made one by its first line). It loads poteto-mode's `SKILL.md` and Principles before any work. A builder also follows `playbooks/feature.md`, or `bug-fix.md` for a fix round, and loads every skill its plan section and `BRIEF-BUILDER.md` require, including `architect`, `tdd` and `how` where named. A reviewer loads `bmad-review` and `blast-radius`.
+- **Prove skill use, don't trust it.** Each builder writes `owner-skills.md` listing every skill and playbook it opened. On Claude, check its transcript for those reads before the gate. On DeepSeek, check the owner file and the harness log. A missing required skill is NOT CLEAN. Last time all agents loaded poteto-mode, but only a quarter to a third opened the Feature playbook, and none opened `how`, `architect` or `tdd`.
+- **No PR stacks on your own review,** money path included. A fresh reviewer for every PR, no exceptions.
+- **Run the lanes for every row,** not only the early ones. Last time lanes ran for 54 of the first 74 rows and 6 of the last 19.
+- **Run the whole-repo check on schedule** (loop step 6) and trace every new red before stacking further.
+- **The plan doesn't grow.** No new PR sections. Findings go to `BACKLOG.md`; his asks to `QUEUE.md`.
+- **Keep agents busy.** No slot sits idle while an unblocked PR exists. Last time a quarter of agent time was idle.
+
 ## Rules
 
 1. **Builders write, push and run fast checks only.** You run the lanes, every full suite and every long test, in the background. A builder never waits on a long command, because its cache expires while it waits.
@@ -163,7 +177,8 @@ Use this instead of the prompt above, in a fresh DeepSeek harness session opened
 - Commit messages end with `Co-Authored-By: DeepSeek-V4.1-Flash <noreply@deepseek.com>` and PR bodies end with `🤖 Generated with DeepSeek Harness`, as the builder brief's DeepSeek lines say.
 - Use `CHECK gate-dsh`, since there is no Claude transcript to read.
 - DeepSeek checks DeepSeek, so no other model family reviews the work. The lanes and the reviewer's rerun of the blast-radius fact carry the proof. Name this in `STACK-LIST.md`, because this program changes the money path.
-- There is no weekly bar here, so the stop conditions are no unblocked PR or his word.
+- There is no weekly bar here, so the stop conditions are no unblocked PR, his word, or the DeepSeek balance running out. When a call fails for credit, stop dispatching, let running agents finish, bring `RESUME.md` and `STACK-LIST.md` up to date, and tell him in one line that it is ready to switch.
+- **He starts on DeepSeek and moves to Claude Code later, on the same store.** Never run both at once. The Claude orchestrator resumes from `RESUME.md`: it treats DeepSeek-built PRs as stacked, gives any DeepSeek PR without a fresh review a fresh Opus reviewer before the next stop point, and goes on with Opus builders. Commit trailers follow the model that wrote each commit.
 
 ```text
 /poteto-mode You are the orchestrator of the QMX risk and sizing build, running in the DeepSeek harness. You never write code.
