@@ -25,6 +25,10 @@ qmb = "qmb.doors.cli:main"
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
+[tool.uv]
+# An app installs qmb as a wheel (`uv sync --no-editable`); rebuild it on any source edit.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**" }]
+
 [tool.uv.build-backend]
 # Top-level import qmb — not a qmf.* PEP 420 namespace submodule.
 module-name = "qmb"
