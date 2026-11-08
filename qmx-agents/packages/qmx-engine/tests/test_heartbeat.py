@@ -4,6 +4,7 @@ holding a node whose host lacks its kind, and a consumer's refusal filed on the 
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 import time
 from datetime import UTC, datetime, timedelta
@@ -16,12 +17,15 @@ from qmx_apps.supervisor import Supervisor
 from scheduled import Clock, enabled, fires_of
 
 from qmx_engine.heartbeat import (
+    ClassUse,
+    ClockFacts,
     Heartbeat,
     HeartbeatLog,
     host_kinds,
     kinds_digest,
     latest,
     node_kinds,
+    read_row,
 )
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.service.context import OPERATOR
@@ -62,6 +66,60 @@ def test_a_row_round_trips_through_the_log_and_unknown_fields_are_refused(tmp_pa
     assert len(found[0].model_dump_json()) < 4_096
     with pytest.raises(ValidationError):
         Heartbeat.model_validate({**found[0].model_dump(), "budget": 5})
+
+
+CLOCK = ClockFacts(
+    zone="Europe/London",
+    offset_ms=-3,
+    delay_ms=21,
+    source="0.pool.ntp.org",
+    source_kind="w32time",
+    synced=True,
+    tzdata="2025b",
+    band="ok",
+    probed_at="2026-10-17T08:59:30+00:00",
+)
+
+
+def test_a_row_with_clock_facts_round_trips_and_an_older_row_without_them_loads(
+    tmp_path: Path,
+) -> None:
+    log = HeartbeatLog(tmp_path, 7)
+    older = host_row(T0).model_dump(mode="json")
+    del older["clock"]
+    log.write([host_row(T0 + timedelta(seconds=30)).model_copy(update={"clock": CLOCK})])
+
+    [found] = log.rows()
+
+    assert found.clock == CLOCK
+    assert latest(tmp_path)["host:pc"].clock == CLOCK
+    assert read_row(older).clock is None
+
+
+def test_a_newer_row_with_unknown_fields_loads_and_a_malformed_known_field_is_refused(
+    tmp_path: Path,
+) -> None:
+    newer = host_row(T0).model_dump(mode="json") | {
+        "clock": CLOCK.model_dump(mode="json") | {"leap": "none"},
+        "gpu_seconds": 4.0,
+    }
+    newer["capacity"] = {"chat": {"used": 1, "size": 4, "queued_by_kind": {}}}
+    day = tmp_path / "logs" / "heartbeat-2026-10-17.jsonl"
+    day.parent.mkdir(parents=True)
+    day.write_text(json.dumps(newer) + "\n", encoding="utf-8")
+    (tmp_path / "logs" / "heartbeat-latest.json").write_text(
+        json.dumps({"host:pc": newer}), encoding="utf-8"
+    )
+
+    [row] = HeartbeatLog(tmp_path, 7).rows()
+
+    assert (row.id, row.cpu_seconds, row.clock) == ("pc", 1.5, CLOCK)
+    assert row.capacity == {"chat": ClassUse(used=1, size=4)}
+    assert latest(tmp_path)["host:pc"].clock == CLOCK
+    with pytest.raises(ValidationError, match="offset_ms"):
+        read_row(newer | {"clock": CLOCK.model_dump(mode="json") | {"offset_ms": "three"}})
+    with pytest.raises(ValidationError, match="cpu_seconds"):
+        read_row(json.dumps(newer | {"cpu_seconds": "busy"}))
 
 
 def test_the_supervisors_app_rows_complete_into_the_one_schema(tmp_path: Path) -> None:

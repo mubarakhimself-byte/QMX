@@ -42,6 +42,8 @@ from qmx_engine.ledger.redact import exported, redact
 
 type Subject = Literal["host", "run", "app"]
 type PauseState = Literal["known", "unknown"]
+type TimeService = Literal["ntp", "chrony", "w32time"]
+type ClockBand = Literal["ok", "warn", "no_new_entry", "halt"]
 
 INTERVAL_S: Final = 30.0
 """`heartbeat.interval`, seconds between rows (Claude's default; a `[engine]` setting overrides)."""
@@ -77,6 +79,28 @@ class ConnectionReading(BaseModel):
     latency_ms: int | None = None
     clock_offset_ms: int | None = None
     at: str = ""
+
+
+class ClockFacts(BaseModel):
+    """What one machine proved about its clock at `probed_at` (AD-10, AD-43, Part C contract 5).
+
+    `offset_ms` and `delay_ms` are measured against `source` over SNTP; both are None when no
+    source answered, so the offset is unproven and `band` is None. `source_kind` and `synced`
+    describe the machine's own time service (Windows Time, chrony, or plain NTP), which is a
+    separate fact from the measured offset.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    zone: str
+    offset_ms: int | None
+    delay_ms: int | None
+    source: str
+    source_kind: TimeService
+    synced: bool
+    tzdata: str
+    band: ClockBand | None = None
+    probed_at: str
 
 
 class ClassUse(BaseModel):
@@ -157,6 +181,17 @@ class Heartbeat(BaseModel):
     partitions: dict[str, int] = Field(default_factory=dict[str, int])
     """The partition summary: each series this machine's market-data store holds, with how many
     months of it, which placement by locality reads (AD-65, AD-70)."""
+    clock: ClockFacts | None = None
+    """This machine's own clock, on a host row once its first probe ran (AD-10)."""
+
+
+def read_row(raw: str | Mapping[str, object]) -> Heartbeat:
+    """A row as a reader takes it: fields this build does not know are dropped, at every depth,
+    so a newer machine's rows still load here (LC-X1-03). A known field that is malformed is
+    still refused. Writers build `Heartbeat` directly, which refuses an unknown field."""
+    if isinstance(raw, str):
+        return Heartbeat.model_validate_json(raw, extra="ignore")
+    return Heartbeat.model_validate(raw, extra="ignore")
 
 
 def node_kinds() -> tuple[str, ...]:
@@ -236,7 +271,7 @@ class HeartbeatLog:
             if since is not None and day < since.date():
                 continue
             for line in path.read_text(encoding="utf-8").splitlines():
-                row = Heartbeat.model_validate_json(line)
+                row = read_row(line)
                 if since is None or _when(row.at) >= since:
                     found.append(row)
         return found
@@ -248,7 +283,7 @@ def latest(home: Path) -> dict[str, Heartbeat]:
         raw = json.loads((logs_dir(home) / LATEST).read_text(encoding="utf-8"))
     except OSError, ValueError:
         return {}
-    return {key: Heartbeat.model_validate(value) for key, value in raw.items()}
+    return {key: read_row(value) for key, value in raw.items()}
 
 
 def host_kinds(home: Path) -> Mapping[str, frozenset[str]]:

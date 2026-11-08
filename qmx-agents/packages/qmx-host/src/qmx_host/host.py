@@ -37,7 +37,7 @@ import threading
 import time
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any, Final, Literal, cast
 
@@ -63,6 +63,7 @@ from qmx_engine.heartbeat import (
     INTERVAL_S,
     WINDOW_DAYS,
     ClassUse,
+    ClockFacts,
     Heartbeat,
     HeartbeatLog,
     HubLink,
@@ -126,6 +127,16 @@ from uvicorn.config import STARTUP_FAILURE
 
 from qmx_host.backups import Backups, Refusal, backups_router
 from qmx_host.bring_in import recheck_at_start
+from qmx_host.clock_probe import (
+    DST_NOTICE_DAYS,
+    PROBE_S,
+    TZDATA_MAX_AGE_DAYS,
+    clock_line,
+    mismatch_line,
+    probe_from,
+    tzdata_line,
+    tzdata_version,
+)
 from qmx_host.connect import KINDS, Connect, World, connect_router, placement
 from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
@@ -449,7 +460,7 @@ class HubGateway:
 
 
 def remote_worker(
-    home: Path, core: Engine, authority: PassAuthority, own_door: str = ""
+    home: Path, core: Engine, authority: PassAuthority, own_door: str = "", *, host_id: str = ""
 ) -> PlacementWorker | None:
     """The `node` role's worker: an attempt placed on another owned machine runs there (AD-20).
 
@@ -507,7 +518,7 @@ def remote_worker(
         settings=settings,
         mint=mint,
         remote=providers,
-        live=lambda: host_row(home),
+        live=lambda: host_row(home, host_id),
         doors=doors,
     )
 
@@ -523,10 +534,11 @@ def data_scope_of(node_definition: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
-def host_row(home: Path) -> Heartbeat | None:
-    """The newest heartbeat row this home wrote for its own machine, or None before the first
-    beat. A dispatched attempt's resources and session count read it (D-11)."""
-    return next((row for row in latest(home).values() if row.subject == "host"), None)
+def host_row(home: Path, host_id: str) -> Heartbeat | None:
+    """The newest heartbeat row of the machine `host_id`, or None before its first beat. A home
+    that also runs the Hub holds every machine's row, so it is read by id, never the first host
+    row found. A dispatched attempt's resources and session count read it (D-11)."""
+    return latest(home).get(f"host:{host_id}")
 
 
 def hindsight_runs(control: ControlService, role: Role) -> bool:
@@ -775,7 +787,7 @@ async def serve(
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
-            host_reads=host_reads(qmx_home, control),
+            host_reads=host_reads(qmx_home, control, name),
             market=door if isinstance(door, MarketDoor) else None,
         )
         harness.adopt_passes(passes)
@@ -812,7 +824,7 @@ async def serve(
                     ) as engine:
                         core = engine.svc.ctx.engine
                         placed = (
-                            remote_worker(home, core, passes, own_door(role, port))
+                            remote_worker(home, core, passes, own_door(role, port), host_id=name)
                             if role in ("node", "server")
                             else None
                         )
@@ -846,6 +858,7 @@ async def serve(
                         )
                         upgrade_moment_ended(Layout.from_home(home))
                         server = uvicorn.Server(uvicorn.Config(app))
+                        clock_doctor(harness, home, name, core.settings)
                         beating = asyncio.create_task(
                             heartbeats(
                                 home,
@@ -932,6 +945,7 @@ def beat(
     pause: Pause | None = None,
     *,
     floor: int | None = None,
+    clock: ClockFacts | None = None,
 ) -> Heartbeat:
     """This host's row: its own process and every child, the CLI trees included. `pause` is what
     this host heard from the Hub, so the row says whether its flag is still current (AD-65).
@@ -939,7 +953,8 @@ def beat(
     The row carries this machine's live capacity: the room left on its volume and the floor it
     keeps, and the RAM it can give together with what one of its sessions really holds in memory.
     Admission reads the RAM figure, so no reserved constant stands in for it (D-11, F39). `floor`
-    is the one measured when the host started; left out, it is measured here.
+    is the one measured when the host started; left out, it is measured here. `clock` is this
+    machine's newest clock probe (AD-10).
     """
     tree = [me, *me.children(recursive=True)]
     cpu, rss = 0.0, 0
@@ -971,6 +986,7 @@ def beat(
         disk_floor_bytes=kept,
         free_ram_bytes=free_ram,
         session_bytes=rss,
+        clock=clock,
     )
 
 
@@ -1075,9 +1091,13 @@ async def heartbeats(
     force and the row reads `pause_state: unknown` once five minutes have passed. While
     `heeding()` is False (after a restore, until he carries on) the row still goes but the Hub's
     flag is not written, so a Hub cannot end the pause.
+
+    Every `clock.probe_s` the host probes its clock first, and each row carries the newest facts.
     """
     core = engine.svc.ctx.engine
     me = psutil.Process()
+    clock: ClockFacts | None = None
+    probed: float | None = None
     log = HeartbeatLog(home, setting(core.settings, "heartbeat.window_days", WINDOW_DAYS))
     floor = floor_bytes(core.settings, free_bytes(home))
     pruned: int | None = None
@@ -1085,8 +1105,12 @@ async def heartbeats(
         try:
             pause = None if link is None else link.pause
             await asyncio.to_thread(make_room, home, core, floor)
+            every = setting(core.settings, "clock.probe_s", PROBE_S)
+            if probed is None or time.monotonic() - probed >= every:
+                probed = time.monotonic()
+                clock = await asyncio.to_thread(probe_from, core.settings)
             rows = [
-                beat(home, host_id, me, core, harness, pause, floor=floor),
+                beat(home, host_id, me, core, harness, pause, floor=floor, clock=clock),
                 *app_rows(control, core.paused),
             ]
             await asyncio.to_thread(log.write, rows)
@@ -1099,6 +1123,26 @@ async def heartbeats(
         except (OSError, ValueError, psutil.Error) as error:
             print(f"heartbeat skipped: {type(error).__name__}: {error}", file=sys.stderr)
         await asyncio.sleep(setting(core.settings, "heartbeat.interval", INTERVAL_S))
+
+
+def clock_doctor(
+    harness: Harness, home: Path, host_id: str, settings: Mapping[str, object]
+) -> None:
+    """The doctor's clock, `tzdata` and mismatch week rows. The clock row reads this host's newest
+    row, so opening the doctor never waits on a time source."""
+
+    def today() -> date:
+        return datetime.now(UTC).date()
+
+    def clock() -> DoctorLine:
+        row = host_row(home, host_id)
+        return clock_line(None if row is None else row.clock)
+
+    max_age = setting(settings, "clock.tzdata_max_age_days", TZDATA_MAX_AGE_DAYS)
+    notice = setting(settings, "clock.dst_mismatch_notice_days", DST_NOTICE_DAYS)
+    harness.doctor_from(clock)
+    harness.doctor_from(lambda: tzdata_line(tzdata_version(), today(), max_age))
+    harness.doctor_from(lambda: mismatch_line(today(), notice))
 
 
 def section(control: ControlService, name: str) -> Document:
@@ -1308,10 +1352,10 @@ def drain_router(core: Engine) -> APIRouter:
     return router
 
 
-def host_reads(home: QmxHome, control: ControlService) -> dict[str, HostRead]:
+def host_reads(home: QmxHome, control: ControlService, host_id: str) -> dict[str, HostRead]:
     """The reads this host serves to a chat's `agent_tool` rows, by target."""
     return {
-        "heartbeats": heartbeats_read(home.root),
+        "heartbeats": heartbeats_read(home.root, host_id),
         "provider_rows": provider_rows_read(home.root),
         "provider_test": provider_test_read(home),
         "mark": mark_read(control),
@@ -1374,8 +1418,9 @@ def mark_read(control: ControlService) -> HostRead:
     return read
 
 
-def heartbeats_read(home: Path) -> HostRead:
-    """The `ops_heartbeats` read: the newest row per subject and the host's last rows."""
+def heartbeats_read(home: Path, host_id: str) -> HostRead:
+    """The `ops_heartbeats` read: the newest row per subject, the host's last rows, and the clock
+    of `host_id`, this machine."""
 
     async def read(_arguments: dict[str, Any]) -> Mapping[str, object]:
         def load() -> Mapping[str, object]:
@@ -1383,9 +1428,12 @@ def heartbeats_read(home: Path) -> HostRead:
             since = datetime.now(UTC) - timedelta(hours=1)
             found = HeartbeatLog(home, 1).rows(since)
             hosts = [row for row in found if row.subject == "host"][-HOST_HISTORY:]
+            own = newest.get(f"host:{host_id}")
+            clock = None if own is None else own.clock
             return {
                 "latest": {key: row.model_dump(mode="json") for key, row in newest.items()},
                 "host_history": [row.model_dump(mode="json") for row in hosts],
+                "clock": None if clock is None else clock.model_dump(mode="json"),
             }
 
         return await asyncio.to_thread(load)
