@@ -66,8 +66,8 @@ from qmx_host.connect_node import (
     on_a_server,
     server_setups,
 )
-from qmx_host.host import vault_secrets
 from qmx_host.first_start import FIRST_PARTY
+from qmx_host.host import vault_secrets
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.vault_acl import owner_only
 

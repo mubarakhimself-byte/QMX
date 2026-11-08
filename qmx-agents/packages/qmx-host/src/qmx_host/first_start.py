@@ -634,7 +634,9 @@ def first_party_names(home: Path) -> list[str]:
         found = json.loads((home / FIRST_PARTY).read_text("utf-8"))
     except OSError, ValueError:
         return []
-    return [str(app) for app in found.get("enable", [])] if isinstance(found, dict) else []
+    if not isinstance(found, dict):
+        return []
+    return [str(app) for app in cast(dict[str, list[object]], found).get("enable", [])]
 
 
 def add_first_party(home: Path, names: Sequence[str]) -> None:

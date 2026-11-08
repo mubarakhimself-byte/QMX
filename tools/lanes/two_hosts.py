@@ -145,8 +145,8 @@ class Host:
         output = (self.root.parent / f"{self.place}-host.out").open("ab")
         self.process = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT)
         self.log(f"started {self.place} as {self.role} on port {self.port}, pid {self.process.pid}")
-        deadline = time.monotonic() + wait
-        while time.monotonic() < deadline:
+        deadline = time.monotonic() + wait  # ambient-scan: allow - lane deadline
+        while time.monotonic() < deadline:  # ambient-scan: allow - lane deadline
             if self.process.poll() is not None:
                 raise RuntimeError(f"{self.place} exited {self.process.returncode}; read its .out")
             with contextlib.suppress(OSError, httpx.HTTPError, RuntimeError):
@@ -252,7 +252,7 @@ def hosts(root: Path, place: str, log: Log, wait: float) -> Generator[tuple[Host
     """The two hosts, the pairing key both still hold (the Library's and the run passes'), and
     the pass key This PC and the server share."""
     resolve = agents("qmx_home").resolve
-    shared = secrets.token_hex(32)
+    shared = secrets.token_hex(32)  # ambient-scan: allow - throwaway lane key
     made: list[Host] = []
     for name, role in (("pc", "pc"), (place, "server")):
         layout = resolve(root / name, create=True)
@@ -272,16 +272,16 @@ def verify_us(key: str, place: str, rounds: int = 10_000) -> float:
     """Microseconds per pass verify on the server's side, in this process."""
     forward = agents("qmx_engine.service.forward")
     token = forward.mint_host_pass(key, source="pc", target=place, principal="operator")
-    began = time.perf_counter()
+    began = time.perf_counter()  # ambient-scan: allow - lane timing
     for _ in range(rounds):
         forward.verify_host_pass({"pc": key}, token, target=place)
-    return (time.perf_counter() - began) / rounds * 1e6
+    return (time.perf_counter() - began) / rounds * 1e6  # ambient-scan: allow - lane timing
 
 
 def run(root: Path, place: str, log: Log, wait: float) -> None:
     node_link = agents("qmx_host.node_link")
     passes = agents("qmx_router.passes")
-    began = time.perf_counter()
+    began = time.perf_counter()  # ambient-scan: allow - lane timing
     with hosts(root, place, log, wait) as (pc, far, shared, key):
         start, end = seed_market(far.root / "data")
         far.start(wait)
@@ -297,9 +297,12 @@ def run(root: Path, place: str, log: Log, wait: float) -> None:
         started = far.post(f"/api/apps/{APP}/start")
         log(f"installed {APP} on {place}: {installed.status_code}, started: {started.status_code}")
 
-        deadline = time.monotonic() + wait
+        deadline = time.monotonic() + wait  # ambient-scan: allow - lane deadline
         status, beats = ask(far, key, "heartbeats", {"subjects": [f"host:{place}"]})
-        while time.monotonic() < deadline and not beats.get("value", {}).get("latest"):
+        while (
+            time.monotonic() < deadline  # ambient-scan: allow - lane deadline
+            and not beats.get("value", {}).get("latest")
+        ):
             time.sleep(2)
             status, beats = ask(far, key, "heartbeats", {"subjects": [f"host:{place}"]})
         latest = cast("dict[str, Any]", beats.get("value", {}).get("latest") or {})
@@ -405,7 +408,8 @@ def run(root: Path, place: str, log: Log, wait: float) -> None:
             f"minted on pc: {paired.status_code} with {rows_read} rows; another key: "
             f"{unpaired.status_code}",
         )
-    log(f"METRIC two-host lane seconds {time.perf_counter() - began:.1f} (loopback, one machine)")
+    seconds = time.perf_counter() - began  # ambient-scan: allow - lane timing
+    log(f"METRIC two-host lane seconds {seconds:.1f} (loopback, one machine)")
 
 
 def main() -> int:

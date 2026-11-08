@@ -661,7 +661,11 @@ def _with_refused(
     found = cast(Document, answer).get("value") if enveloped else answer
     if not isinstance(found, list):
         return answer
-    held = {cast(Document, row).get("deployment_id") for row in found if isinstance(row, dict)}
+    held = {
+        deployment_id
+        for row in found
+        if isinstance(row, dict) and isinstance(deployment_id := row.get("deployment_id"), str)
+    }
     rows: list[JsonValue] = list(found)
     for deployment_id, row in (_refused_row(operation, change) for change in refused):
         if deployment_id not in held and wanted in (None, deployment_id):

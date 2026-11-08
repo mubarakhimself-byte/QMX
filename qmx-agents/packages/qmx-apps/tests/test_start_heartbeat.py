@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+
 from qmx_apps.supervisor import Instance, Supervisor
 
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
@@ -18,7 +19,7 @@ def test_a_start_survives_two_missed_heartbeat_reads(
     app = tmp_path / "fixture"
     shutil.copytree(EXAMPLE, app, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
     shutil.copyfile(Path(__file__).with_name("fixture_server.py"), app / "server.py")
-    shipped = Supervisor._heartbeat  # noqa: SLF001
+    shipped = Supervisor._heartbeat  # pyright: ignore[reportPrivateUsage]
     missed: list[str] = []
 
     def reads(self: Supervisor, instance: Instance) -> None:
@@ -28,7 +29,9 @@ def test_a_start_survives_two_missed_heartbeat_reads(
         shipped(self, instance)
 
     monkeypatch.setattr(Supervisor, "_heartbeat", reads)
-    owner = Supervisor(tmp_path / "home", secret_getter=lambda service, username: "declared-fixture")
+    owner = Supervisor(
+        tmp_path / "home", secret_getter=lambda service, username: "declared-fixture"
+    )
     try:
         owner.install(app, trust="first_party")
         owner.start("exchange-status")

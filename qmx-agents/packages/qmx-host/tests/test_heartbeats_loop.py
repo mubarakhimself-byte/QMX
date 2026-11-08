@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+
 from qmx_host import host
 
 
@@ -27,15 +28,27 @@ class Log:
         pass
 
 
+def no_bytes(*_args: object) -> int:
+    return 0
+
+
+def nothing(*_args: object) -> None:
+    return None
+
+
+def one_row(*_args: object, **_kwargs: object) -> str:
+    return "row"
+
+
 def test_the_loop_runs_on_while_a_beat_waits_for_the_supervisors_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(host, "HeartbeatLog", Log)
-    monkeypatch.setattr(host, "floor_bytes", lambda *_args: 0)
-    monkeypatch.setattr(host, "free_bytes", lambda *_args: 0)
-    monkeypatch.setattr(host, "make_room", lambda *_args: None)
-    monkeypatch.setattr(host, "probe_from", lambda *_args: None)
-    monkeypatch.setattr(host, "beat", lambda *_args, **_kwargs: "row")
+    monkeypatch.setattr(host, "floor_bytes", no_bytes)
+    monkeypatch.setattr(host, "free_bytes", no_bytes)
+    monkeypatch.setattr(host, "make_room", nothing)
+    monkeypatch.setattr(host, "probe_from", nothing)
+    monkeypatch.setattr(host, "beat", one_row)
     waiting, lock_free = threading.Event(), threading.Event()
     freed_in_time: list[bool] = []
 

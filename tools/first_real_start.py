@@ -197,7 +197,7 @@ def _refusal(answer: Json) -> str:
 
 
 def _stamp() -> str:
-    return datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+    return datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")  # ambient-scan: allow - script root
 
 
 # --- the connect dialog, on his answers ---
@@ -306,7 +306,7 @@ def _ready(world: World) -> tuple[bool, str]:
 def _ctrader(world: World) -> Json:
     status = world.node("status")
     venues = cast("list[Json]", cast(Json, status.get("value") or {}).get("venues") or [])
-    return next((row for row in venues if row.get("venue") == "ctrader"), {})
+    return next((row for row in venues if row.get("venue") == "ctrader"), Json())
 
 
 def _sign_in(world: World) -> list[Json] | str:
@@ -408,7 +408,7 @@ def _trade(world: World) -> tuple[bool, str]:
         checks = cast("list[Json]", passport.get("checks") or [])
         if passport.get("at") != before and checks:
             world.traded_at = world.monotonic()
-            row = next((check for check in checks if check.get("name") == TEST_TRADE), {})
+            row = next((check for check in checks if check.get("name") == TEST_TRADE), Json())
             value = cast(Json, row.get("value") or {})
             if row.get("ok") is not True:
                 return False, f"the test trade did not finish: {value.get('detail')}"
@@ -434,14 +434,10 @@ def _passport(world: World) -> tuple[bool, str]:
         return False, f"{path} did not land"
     rows = cast("list[Json]", held.get("checks") or [])
     checks = {str(row.get("name")): row for row in rows}
-    wrong = [
-        name
-        for name in SELF_TEST_CHECKS
-        if cast(Json, checks.get(name) or {}).get("ok") is not True
-    ]
+    wrong = [name for name in SELF_TEST_CHECKS if (checks.get(name) or {}).get("ok") is not True]
     if wrong:
         return False, f"the passport landed and these checks are not ok: {', '.join(wrong)}"
-    band = cast(Json, checks.get("clock band") or {}).get("value")
+    band = (checks.get("clock band") or {}).get("value")
     records = "; ".join(world.extras) or "records already on main"
     return True, f"{len(SELF_TEST_CHECKS)} self-test checks ok, clock band {band}; {records}"
 
@@ -449,7 +445,8 @@ def _passport(world: World) -> tuple[bool, str]:
 def _dummy_version(world: World) -> str | None:
     """The dummy unit's newest version the Library holds."""
     found = world.host.rest("GET", "/api/library", query={"query": DUMMY, "limit": "100"})
-    rows = cast("list[Json]", found.body) if found.ok and isinstance(found.body, list) else []
+    body = found.body
+    rows = cast("list[Json]", body) if found.ok and isinstance(body, list) else []
     units = [
         row
         for row in rows
@@ -483,8 +480,9 @@ def _deployed(world: World) -> tuple[bool, str]:
         },
     )
     if not click.ok:
-        body = cast(Json, click.body) if isinstance(click.body, dict) else {}
-        return False, f"the promote was refused: {click.said} {body.get('next_step') or ''}".strip()
+        body = click.body
+        held = cast(Json, body) if isinstance(body, dict) else {}
+        return False, f"the promote was refused: {click.said} {held.get('next_step') or ''}".strip()
     deployment = str(cast(Json, cast(Json, click.body).get("value") or {}).get("deployment_id"))
     read = world.node("deployments")
     rows = cast("list[Json]", read.get("value") or [])
@@ -499,7 +497,8 @@ def _deployed(world: World) -> tuple[bool, str]:
 
 def _harvest_limit(world: World) -> float:
     records = world.host.rest("GET", "/api/settings/records")
-    held = cast(Json, records.body) if records.ok and isinstance(records.body, dict) else {}
+    body = records.body
+    held = cast(Json, body) if records.ok and isinstance(body, dict) else {}
     open_s = held.get("open_harvest_s", 60)
     return float(open_s if isinstance(open_s, int) and open_s > 0 else 60) + HARVEST_GRACE_S
 
@@ -656,10 +655,10 @@ def _receive_code(wait_s: float) -> str | None:
         server = http.server.HTTPServer(RECEIVER, Receiver)
     except OSError:
         return None
-    began = time.monotonic()
+    began = time.monotonic()  # ambient-scan: allow - script root
     server.timeout = 1.0
     try:
-        while not codes and time.monotonic() - began <= wait_s:
+        while not codes and time.monotonic() - began <= wait_s:  # ambient-scan: allow - script root
             server.handle_request()
     finally:
         server.server_close()
@@ -727,7 +726,7 @@ def main(
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     parser.add_argument("--home", type=Path, help="his QMX folder; his pointer file by default")
     parser.add_argument("--port", type=int, default=Options.port)
     parser.add_argument("--account", help="the demo account, when cTrader lists more than one")
