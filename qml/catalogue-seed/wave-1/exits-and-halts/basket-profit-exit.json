@@ -1,0 +1,65 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "basket-profit-exit",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "total profit exit",
+    "close all at basket profit"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close every open position of the unit once their combined open result reaches profit in account money.",
+  "boundaries": "It reads all the unit's open positions together, which no host passes an exit yet, so it has no code. Grid and averaging units use it to close a basket whose single trades are each at a loss. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "When the whole basket is up a set amount, every position closes at once.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/6954",
+      "quote": "Close all open positions if the overall profit reaches a specified sum in $.",
+      "dated": "2019-07-29"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "open_result",
+      "stream_kind": "position",
+      "measure": "money",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "exit_action",
+    "measure": "money"
+  },
+  "parameters": {
+    "profit": {
+      "measure": "money",
+      "default": "100",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.01",
+        "max": "1000000",
+        "step": "0.01"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

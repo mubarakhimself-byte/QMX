@@ -1,0 +1,42 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "zone-recovery-hedge",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "zone recovery",
+    "recovery zone"
+  ],
+  "origin": "qml",
+  "component_type": "entry_order",
+  "definition": "When a trade moves a zone width against it, open a larger trade the other way, and repeat, so that a move out of the zone either side closes the set in profit.",
+  "boundaries": "Known failure: each turn multiplies the lot, as martingale does, so a price that swings inside the zone long enough needs a size the deposit cannot carry. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "Losing trades are answered with bigger hedges the other way.",
+  "eligible_roles": [
+    "entry_order",
+    "re_entry"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/16705",
+      "quote": "a counter-trade is triggered in the opposite direction with an increased lot size",
+      "dated": "2024-12-20"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/8390",
+      "quote": "sooner or later, the deposit becomes insufficient to finish the cycle",
+      "dated": "2020-12-17"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "grid-cycle-age-exit",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "variance age exit",
+    "grid time limit"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close a grid cycle unconditionally once it has been open longer than a set time, whatever its result.",
+  "boundaries": "Known failure it answers: an old grid cycle carries far more risk than a young one with the same equity curve, and grids show steady gains, then one loss that takes it all. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "A grid that has run too long is shut down, win or lose.",
+  "eligible_roles": [
+    "exit",
+    "timeout"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/21833",
+      "quote": "fires unconditionally when the cycle exceeds InpMaxCycleHours (default: 72 hours)",
+      "dated": "2026-03-27"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/21833",
+      "quote": "then a catastrophic loss that wipes everything in days",
+      "dated": "2026-03-27"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

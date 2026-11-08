@@ -1,0 +1,86 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "unrealised-profit-cap",
+  "version": 1,
+  "family": "profit-cap",
+  "aliases": [
+    "unrealized profit cap",
+    "maximum unrealized profit percent",
+    "windfall exit"
+  ],
+  "same_word_as": [
+    "target-reference@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close once the open profit ratio, (close - entry) / entry for a long and mirrored for a short, is above cap.",
+  "boundaries": "LEAN reads its holding's unrealised profit percent at each time step; this reads the bar's close, so a spike inside a bar that closes back below the cap does not close. No fee or spread is counted, and a short's profit is read on bid bars. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "recognition": "A trade that has run far into profit is taken off before it gives it back.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "class_meanings": {
+    "perp": "freqtrade scales a futures trade's profit ratio by its leverage; this ratio is the price's, before leverage.",
+    "index_cfd": "a gap across the close moves past the level between two bars; the exit reads the next bar."
+  },
+  "sources": [
+    {
+      "source_ref": "https://github.com/QuantConnect/Lean/blob/master/Algorithm.Framework/Risk/MaximumUnrealizedProfitPercentPerSecurity.cs (read 2026-11-02)",
+      "quote": "The maximum percentage unrealized profit allowed for any single security holding",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "exit_action",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "cap": {
+      "measure": "ratio",
+      "default": "0.05",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "10",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:3ac714d37b90558ad3e13d770adabc89a99ec5836a570814068329659bf7fdce",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

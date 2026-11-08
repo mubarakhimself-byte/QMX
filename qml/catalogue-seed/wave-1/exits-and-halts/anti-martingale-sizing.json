@@ -1,0 +1,43 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "anti-martingale-sizing",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "anti-martingale",
+    "reverse martingale",
+    "press after a win"
+  ],
+  "origin": "qml",
+  "component_type": "sizer",
+  "definition": "After a winning trade, increase the next trade's size; after a loser, cut it back.",
+  "boundaries": "Known failure: the biggest size meets the loss that ends the streak, so one loss can take back the run's gains; it pays only when wins cluster. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "Size grows while the trades keep winning and shrinks after a loss.",
+  "eligible_roles": [
+    "sizer",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.investopedia.com/terms/a/antimartingale.asp",
+      "quote": "increase their position size after profitable trades and reduce it after losses",
+      "dated": "2026-06-19"
+    },
+    {
+      "source_ref": "https://www.investopedia.com/terms/a/antimartingale.asp",
+      "quote": "exposes him to a single large loss that may wipe out previous gains",
+      "dated": "2026-06-19"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

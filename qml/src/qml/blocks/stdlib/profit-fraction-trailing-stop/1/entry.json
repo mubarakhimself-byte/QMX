@@ -1,0 +1,120 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "profit-fraction-trailing-stop",
+  "version": 1,
+  "family": "trailing-stop",
+  "aliases": [
+    "trail half the profit",
+    "profit-fraction trail"
+  ],
+  "same_word_as": [
+    "trailing-protective-threshold@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Once the profit at the bar's best rate reaches offset, a stop distance below that rate of share times the profit, held between min_distance and max_distance, moved only in the trade's favour.",
+  "boundaries": "Before the offset the level is missing and the unit's own initial stop holds. The rate is the bar's high for a long and its low for a short, as freqtrade's backtest reads it, so a bar that spikes and closes back sets the stop from the spike. It never widens. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does. One instance serves one position at a time on its side, and the entry price names the position: an entry price other than the one it holds starts a new position with fresh state. Two positions back to back at the very same entry price would share state until the runtime names each position.",
+  "recognition": "After a set profit the stop follows the price, keeping half the profit.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "class_meanings": {
+    "perp": "freqtrade scales a futures trade's profit ratio by its leverage; this ratio is the price's, before leverage.",
+    "index_cfd": "a gap across the close moves past the level between two bars; the exit reads the next bar."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.freqtrade.io/en/stable/strategy-callbacks/ (read 2026-11-02)",
+      "quote": "then use a trailing stoploss of 50% of the current profit",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.freqtrade.io/en/stable/strategy-callbacks/ (read 2026-11-02)",
+      "quote": "are provided against the candle's high (or low for short trades)",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "offset": {
+      "measure": "ratio",
+      "default": "0.04",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "share": {
+      "measure": "ratio",
+      "default": "0.5",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "1",
+        "step": "0.0001"
+      }
+    },
+    "min_distance": {
+      "measure": "ratio",
+      "default": "0.025",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "0.9999",
+        "step": "0.0001"
+      }
+    },
+    "max_distance": {
+      "measure": "ratio",
+      "default": "0.05",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "0.9999",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 2
+  },
+  "fingerprint": "fp1:sha256:b9fd3ccbb58c4e38efb50d3b66aa55ac0696d19861b54a0848cb052470ec74f5",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

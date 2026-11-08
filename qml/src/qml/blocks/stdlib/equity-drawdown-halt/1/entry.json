@@ -1,0 +1,88 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "equity-drawdown-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "max drawdown halt",
+    "equity kill switch",
+    "drawdown circuit breaker"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Flatten the account and stop trading once equity has fallen more than max_drawdown below its base: the first equity seen, or its highest when trailing is 1.",
+  "boundaries": "Once it holds it keeps holding, as TradingView's max_drawdown does; LEAN's model restarts from the next value instead. A new high in trailing mode never halts. Equity includes open positions' floating result. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "recognition": "When the account is down a set share from its start or its peak, everything is closed and trading stops.",
+  "eligible_roles": [
+    "halt"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://github.com/QuantConnect/Lean/blob/master/Algorithm.Framework/Risk/MaximumDrawdownPercentPortfolio.cs (read 2026-11-02)",
+      "quote": "the drawdown will be relative to the starting value of the portfolio",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.tradingview.com/pine-script-docs/v5/concepts/strategies/ (read 2026-11-02)",
+      "quote": "after the strategy's drawdown reaches the amount specified in the function call",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "equity",
+      "stream_kind": "account",
+      "measure": "money",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "max_drawdown": {
+      "measure": "ratio",
+      "default": "0.05",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "0.9999",
+        "step": "0.0001"
+      }
+    },
+    "trailing": {
+      "measure": "flag",
+      "default": "0",
+      "origin": "source_stated",
+      "range": {
+        "min": "0",
+        "max": "1",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 2
+  },
+  "fingerprint": "fp1:sha256:ab8d76b6d08c0a21ddc160424b1dea40d70b003da8a26839cc858d8e8f91926d",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

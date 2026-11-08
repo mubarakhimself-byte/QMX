@@ -1,0 +1,89 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "stoploss-guard-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "StoplossGuard",
+    "stop-loss streak lock"
+  ],
+  "same_word_as": [
+    "entry-cooldown@1"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Stop new entries for stop_duration_bars once trade_limit or more trades closed by a stop at a loss within the last lookback_bars bars.",
+  "boundaries": "It needs the unit's closed trades with their exit reasons and the bars they closed on, which no host passes a block yet, so it has no code. freqtrade counts stop_loss, stoploss_on_exchange and trailing_stop_loss exits. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "After several stop-outs in a short time the unit pauses.",
+  "eligible_roles": [
+    "halt",
+    "cooldown"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.freqtrade.io/en/stable/plugins/ (read 2026-11-02)",
+      "quote": "If trade_limit or more trades resulted in stoploss, trading will stop",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "closed_trades",
+      "stream_kind": "trades",
+      "measure": null,
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "trade_limit": {
+      "measure": "count",
+      "default": "4",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    },
+    "lookback_bars": {
+      "measure": "bars",
+      "default": "24",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    },
+    "stop_duration_bars": {
+      "measure": "bars",
+      "default": "4",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

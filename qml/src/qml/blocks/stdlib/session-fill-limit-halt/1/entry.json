@@ -1,0 +1,72 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "session-fill-limit-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "max intraday filled orders",
+    "session fill limit"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Flatten the unit and stop it for the session once its own journal counts more than fills filled orders this session.",
+  "boundaries": "TradingView acts when the strategy fills more than the maximum, so the fill past the limit has already happened when the halt holds. The host resets the count at each session start. The limit is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "recognition": "A unit that trades too often in one session is stopped for the rest of it.",
+  "eligible_roles": [
+    "halt"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/pine-script-docs/v5/concepts/strategies/ (read 2026-11-02)",
+      "quote": "the maximum number of filled orders per trading day",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "session_fills",
+      "stream_kind": "trades",
+      "measure": "count",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "fills": {
+      "measure": "count",
+      "default": "20",
+      "origin": "placeholder",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:ef4b92b620383b0d7730a4f57f9fda05336981e3d666003669b4b3cf5d3c8337",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}
