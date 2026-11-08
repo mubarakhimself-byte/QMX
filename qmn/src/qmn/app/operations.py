@@ -29,7 +29,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final, TypeAlias, cast
+from typing import Final, Protocol, TypeAlias, cast
 
 from qmf.data.journal_envelope import JournalStream
 from qmf.data.journal_reader import JournalLine, stream_folders
@@ -46,6 +46,8 @@ __all__ = [
     "TAIL_ROWS",
     "Answer",
     "Context",
+    "NoVenues",
+    "VenueDoor",
     "answer_change",
     "answer_read",
 ]
@@ -86,6 +88,70 @@ class UnknownInstrumentError(BadArgumentError):
     code = "unknown_instrument"
 
 
+class VenueDoor(Protocol):
+    """What the venue operations ask of the node's composition: the cTrader sign-in, the
+    account bindings and the self-test. Each answers and never raises; the node calls it
+    outside the store's lock, since a sign-in crosses the network."""
+
+    def begin(self, redirect: str | None) -> Answer: ...
+
+    def code(self, op_id: str, code: str) -> Answer:
+        """Exchange the one-time code; a repeated ``op_id`` answers its first answer."""
+        ...
+
+    def bind(self, account: Mapping[str, Json], action: str) -> Answer: ...
+
+    def self_test(self, account: str) -> Answer: ...
+
+    def rotate_keys(self) -> Answer: ...
+
+    def sessions(self, observed: list[Json]) -> list[Json]:
+        """The ``status`` venue rows, from the bound sessions the runtime observed."""
+        ...
+
+    def passport(self) -> dict[str, Json]:
+        """The passport's ``checks``, ``grants`` and ``at``."""
+        ...
+
+
+class NoVenues:
+    """A node with no venue door: every venue change answers ``not_set_up``."""
+
+    def begin(self, redirect: str | None) -> Answer:
+        return _nothing_set_up()
+
+    def code(self, op_id: str, code: str) -> Answer:
+        return _nothing_set_up()
+
+    def bind(self, account: Mapping[str, Json], action: str) -> Answer:
+        return _nothing_set_up()
+
+    def self_test(self, account: str) -> Answer:
+        return _nothing_set_up()
+
+    def rotate_keys(self) -> Answer:
+        return ok({"state": "accepted"})
+
+    def sessions(self, observed: list[Json]) -> list[Json]:
+        return observed or [
+            {
+                "venue": venue,
+                "environment": environment,
+                "session": "not_set_up",
+                "since": None,
+                "last_contact": None,
+            }
+            for venue, environment in VENUES
+        ]
+
+    def passport(self) -> dict[str, Json]:
+        return {"checks": [], "grants": [], "at": None}
+
+
+def _nothing_set_up() -> Answer:
+    return refused("not_set_up", "no venue is set up on this node yet", next_step=NOT_SET_UP)
+
+
 @dataclass(frozen=True, slots=True)
 class Context:
     """What every operation reads: the store, who the node is now, its journal, the clock and
@@ -103,6 +169,8 @@ class Context:
     """Wakes the runtime after a change is kept, so it acts at once instead of at its tick."""
     deploy_preflight: Callable[[Mapping[str, Json]], Answer | None] = lambda _: None
     """``deploy``'s staged-file checks (the runtime's ``deploy_preflight``); None lets it go."""
+    venues: VenueDoor = field(default_factory=NoVenues)
+    """The venue sign-in, binding and self-test (``server.py``); none set up by default."""
 
     def standing(self) -> Standing:
         row = self.store.identity()
@@ -280,6 +348,7 @@ class Applying:
     request: Request
     op_id: str
     now_ns: int
+    acted: Answer | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +363,9 @@ class ChangeSpec:
     preflight: Callable[[Context, Request], Answer | None] | None = None
     """Checks before the change is kept; a refusal here is not kept, so the same op id may be
     asked again once what it names is in place (a staged file the node link copies)."""
+    act: Callable[[Context, Request, Mapping[str, Json], str], Answer] | None = None
+    """The venue door's work, done outside the store's lock and before the change is kept, so
+    a sign-in that crosses the network never holds the store. Its answer is the change's."""
 
 
 def _deploy(arguments: Mapping[str, Json], context: Context) -> Request:
@@ -381,16 +453,30 @@ def _apply_flatten(step: Applying) -> Answer:
 
 
 def _bind(arguments: Mapping[str, Json], _: Context) -> Request:
+    """The account record snapshot names the account by ``id``, as a deployment's ``account``
+    does, and its ``venue`` as the instrument records name it; a cTrader account also carries
+    its ``ctid`` when ``id`` is not that number. All three are kept, so a restart binds the
+    same account again."""
     account = _table(arguments, "account")
     action = arguments.get("action")
     if action not in {"add", "remove"}:
         raise BadArgumentError('action is "add" or "remove"')
     account_id = _text(account, "id")
-    return Request(f"binding:{account_id}", {"account": account_id, "action": action})
+    kept: dict[str, Json] = {"account": account_id, "action": action}
+    venue = _text(account, "venue", required=False)
+    if venue is not None:
+        kept["venue"] = venue
+    ctid = account.get("ctid")
+    if ctid is not None:
+        if not isinstance(ctid, int) or isinstance(ctid, bool) or ctid < 1:
+            raise BadArgumentError("account.ctid is cTrader's positive account number")
+        kept["ctid"] = ctid
+    return Request(f"binding:{account_id}", kept)
 
 
-def _not_set_up(step: Applying) -> Answer:
-    return refused("not_set_up", "no venue is set up on this node yet", next_step=NOT_SET_UP)
+def _acted(step: Applying) -> Answer:
+    """The answer the venue door gave, outside the store's lock, before the change was kept."""
+    return step.acted if step.acted is not None else _nothing_set_up()
 
 
 def _bare(register: str) -> Callable[[Mapping[str, Json], Context], Request]:
@@ -434,8 +520,11 @@ def _sign_in_begin(arguments: Mapping[str, Json], _: Context) -> Request:
     venue = arguments.get("venue", "ctrader")
     if venue != "ctrader":
         raise BadArgumentError('venue is "ctrader"')
-    _text(arguments, "redirect", required=False)
-    return Request("grant:ctrader", {"venue": venue})
+    redirect = _text(arguments, "redirect", required=False)
+    kept: dict[str, Json] = {"venue": venue}
+    if redirect is not None:
+        kept["redirect"] = redirect
+    return Request("grant:ctrader", kept)
 
 
 def _sign_in_code(arguments: Mapping[str, Json], _: Context) -> Request:
@@ -464,17 +553,52 @@ CHANGES: Final[Mapping[str, ChangeSpec]] = {
     "resume": ChangeSpec(frozenset({"scope"}), _scoped("pause"), _apply_resume),
     "kill": ChangeSpec(frozenset({"level", "scope"}), _kill, _apply_kill),
     "flatten": ChangeSpec(frozenset({"scope"}), _flatten, _apply_flatten),
-    "bind": ChangeSpec(frozenset({"account", "action"}), _bind, _not_set_up, trades=True),
+    "bind": ChangeSpec(
+        frozenset({"account", "action"}),
+        _bind,
+        _acted,
+        trades=True,
+        act=lambda context, request, _arguments, _op: context.venues.bind(
+            cast(dict[str, Json], _arguments["account"]), str(request.kept["action"])
+        ),
+    ),
     "confirm_same_node": ChangeSpec(frozenset(), _bare("identity"), _apply_confirm),
     "take_over": ChangeSpec(
         frozenset({"old_tag", "confirmed_gone"}), _take_over, _not_yet_take_over
     ),
     "sign_in_begin": ChangeSpec(
-        frozenset({"venue", "redirect"}), _sign_in_begin, _not_set_up, trades=True
+        frozenset({"venue", "redirect"}),
+        _sign_in_begin,
+        _acted,
+        trades=True,
+        act=lambda context, request, _arguments, _op: context.venues.begin(
+            cast("str | None", request.kept.get("redirect"))
+        ),
     ),
-    "sign_in_code": ChangeSpec(frozenset({"code"}), _sign_in_code, _not_set_up, trades=True),
-    "self_test": ChangeSpec(frozenset({"account"}), _self_test, _not_set_up, trades=True),
-    "rotate_keys": ChangeSpec(frozenset(), _bare("keys"), _accepted),
+    "sign_in_code": ChangeSpec(
+        frozenset({"code"}),
+        _sign_in_code,
+        _acted,
+        trades=True,
+        act=lambda context, _request, arguments, op_id: context.venues.code(
+            op_id, str(arguments["code"])
+        ),
+    ),
+    "self_test": ChangeSpec(
+        frozenset({"account"}),
+        _self_test,
+        _acted,
+        trades=True,
+        act=lambda context, request, _arguments, _op: context.venues.self_test(
+            str(request.kept["account"])
+        ),
+    ),
+    "rotate_keys": ChangeSpec(
+        frozenset(),
+        _bare("keys"),
+        _acted,
+        act=lambda context, _request, _arguments, _op: context.venues.rotate_keys(),
+    ),
 }
 
 
@@ -499,10 +623,21 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
             )
     except BadArgumentError as error:
         return refused(error.code, f"{name}: {error}")
-    if spec.preflight is not None and not context.standing().mismatch:
+    # A kept op id is answered from its row by record below: nothing is checked or done again,
+    # so a retried self-test never trades twice.
+    fresh = context.store.change(op_id) is None and not context.standing().mismatch
+    if spec.preflight is not None and fresh:
         stopped = spec.preflight(context, request)
         if stopped is not None:
             return {**stopped, "op_id": op_id}
+    acted: Answer | None = None
+    if spec.act is not None and fresh:
+        newer = request.register is not None and any(
+            change.register == request.register and change.issued_at_ns > issued
+            for change in context.store.accepted()
+        )
+        if not newer:
+            acted = spec.act(context, request, arguments, op_id)
 
     def decide(desired: Desired) -> Change:
         newer = None if request.register is None else desired.newest_applied(request.register)
@@ -521,7 +656,7 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
                 next_step="Confirm on the node's card that it is the same node, moved.",
             )
         else:
-            answer = spec.apply(Applying(context, desired, request, op_id, arrived))
+            answer = spec.apply(Applying(context, desired, request, op_id, arrived, acted))
             outcome = Outcome.ACCEPTED if answer["ok"] is True else Outcome.REFUSED
         return Change(
             seq=0,
@@ -604,7 +739,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
         headline = "Ready, no units yet"
     else:
         headline = word
-    observed_venues = context.store.observed("runtime.venues")
+    observed_venues = _observed_list(context, "runtime.venues")
     free = shutil.disk_usage(context.data).free
     return ok(
         {
@@ -614,18 +749,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
             "reasons": reasons,
             "identity": standing.document(),
             "clock": None,
-            "venues": observed_venues
-            if isinstance(observed_venues, list) and observed_venues
-            else [
-                {
-                    "venue": venue,
-                    "environment": environment,
-                    "session": "not_set_up",
-                    "since": None,
-                    "last_contact": None,
-                }
-                for venue, environment in VENUES
-            ],
+            "venues": context.venues.sessions(observed_venues),
             "units": {
                 "trading": trading,
                 "warming": states.count("warming up"),
@@ -697,15 +821,16 @@ def _deployments(context: Context, arguments: Mapping[str, Json]) -> Answer:
 
 def _passport(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset())
+    landed = context.venues.passport()
     return ok(
         {
             "schema_version": "qmx.node.passport/1",
             "identity": context.standing().document(),
-            "checks": [],
+            "checks": landed.get("checks") or [],
             "round_trip": [],
-            "grants": [],
+            "grants": landed.get("grants") or [],
             "agent_wallets": [],
-            "at": None,
+            "at": landed.get("at"),
         }
     )
 

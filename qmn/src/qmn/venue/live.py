@@ -861,8 +861,12 @@ class LiveCTraderClient:
         trade_side: object = None,
         volume: object = None,
         client_msg_id: object = None,
+        tags: object = None,
     ) -> Result[EncodedCommand]:
         """Translate a CT-19 ``Command`` onto qmf-venue ProtoOA encode symbols.
+
+        ``tags`` (an ``OrderTags``) ride a ``place_order`` as its ``clientOrderId`` and
+        ``label``, the node's own names for the order and its position.
 
         Never compiles proto messages and never loads compiled proto modules. A
         :class:`~qmf.venue.commands.CompoundCommand` keeps the FTR-02
@@ -936,6 +940,7 @@ class LiveCTraderClient:
                 symbol_id=symbol_id,
                 trade_side=trade_side,
                 client_msg_id=client_msg_id,
+                tags=tags,
             )
         if command.kind is CommandKind.CANCEL_ORDER:
             return encode_cancel_order(

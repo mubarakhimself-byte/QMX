@@ -182,6 +182,11 @@ class Store:
         with closing(self._connect()) as db:
             return Desired(db).accepted()
 
+    def change(self, op_id: str) -> Change | None:
+        """The change kept under ``op_id``, or None."""
+        with closing(self._connect()) as db:
+            return _change_by_op(db, op_id)
+
     def record(self, op_id: str, decide: Callable[[Desired], Change]) -> Change:
         """Decide and keep one change under the write lock, in arrival order.
 

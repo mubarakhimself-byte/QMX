@@ -316,7 +316,37 @@ def _write_keys(run: Run) -> Card | None:
         run.world.keys.delete(APP_SECRET)
     held = "with this PC's cTrader trading app" if "ctrader" in document else "with no venue yet"
     run.say(f"keys: the node's keys document is in Credential Manager as {NODE_KEYS}, {held}")
+    _rotate(run)
     return None
+
+
+def _rotate(run: Run) -> None:
+    """A running node is asked to read its keys again (C-11 review L3). The supervisor hands an
+    app its keys when it starts it, so the node is restarted once it reads safe to restart; one
+    not running yet reads the new document when it starts."""
+    apps = _apps(run)
+    try:
+        running = _installed(apps, NODE_APP) is not None and _running(run)
+    except AppError:
+        running = False
+    if not running:
+        return
+    try:
+        called = apps.call(NODE_APP, "rotate_keys", {})
+    except AppError as error:
+        raise Stopped(f"keys: the trading node did not take the new keys: {error}") from None
+    answer = cast("dict[str, Any]", called.get("result") or {})
+    if answer.get("ok") is not True:
+        raise Stopped(f"keys: the trading node answered rotate_keys with {answer.get('code')}")
+    safe = cast("dict[str, Any]", _ask(run, "status").get("safe_to_restart") or {})
+    if safe.get("ok") is not True:
+        run.say("keys: the trading node reads its new keys at its next safe restart")
+        return
+    try:
+        apps.restart(NODE_APP)
+    except AppError as error:
+        raise Stopped(f"keys: the trading node did not restart on its new keys: {error}") from None
+    run.say("keys: the trading node restarted on its new keys")
 
 
 def _never(_run: Run) -> bool:
@@ -412,8 +442,14 @@ def _session(run: Run, venue: str) -> str:
     return next((str(v.get("session")) for v in venues if v.get("venue") == venue), "not_set_up")
 
 
+SIGNED_IN: Final = frozenset({"signed_in", "connected", "ready", "down"})
+"""The node's cTrader session words that mean it holds a grant it can use. ``not_set_up``,
+``signed_out`` and ``expired`` keep the sign-in waiting, so an expired grant never unblocks the
+self-test (C-11 review L2)."""
+
+
 def _signed_in(run: Run) -> bool:
-    return _session(run, "ctrader") != "not_set_up"
+    return _session(run, "ctrader") in SIGNED_IN
 
 
 def _sign_in_card(_run: Run) -> Card:

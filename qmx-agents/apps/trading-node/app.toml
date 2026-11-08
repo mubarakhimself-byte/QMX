@@ -13,6 +13,7 @@ secrets = { NODE_KEYS = "qmx/trading-node-keys" }
 network = [
     "live.ctraderapi.com",
     "demo.ctraderapi.com",
+    "openapi.ctrader.com",
     "api.hyperliquid.xyz",
     "api.hyperliquid-testnet.xyz",
     "ntfy.sh",
