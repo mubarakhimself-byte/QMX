@@ -4,8 +4,10 @@ AD-28 / FR-WF-67 / FR-WF-68 / J17 / RC-10: two consumers of one tick
 subscription. Cancelling one lease leaves the other running. ``refcount`` is
 derived from live leases. Cutover requires a barrier plus ``cutover-ack``.
 Replay provenance cannot authorize a live command. A stream subscription is
-not trading permission. COMP-QMB wraps the protocol; no sixth COMP; GAP-0081
-chrome is not filled.
+not trading permission. A futures feed's roll from one contract to the next is a
+control event naming both contracts (QB-05), so a live feed and a replay carry it
+the same way and no price is ever adjusted across it. COMP-QMB wraps the
+protocol; no sixth COMP; GAP-0081 chrome is not filled.
 """
 
 from __future__ import annotations
@@ -65,6 +67,7 @@ STREAM_CONTROL_KINDS: Final[tuple[str, ...]] = (
     "loss",
     "cutover-ack",
     "lease-expire",
+    "roll",
 )
 STREAM_DATA_KIND: Final[str] = "data"
 STREAM_RECORD_CLASSES: Final[tuple[str, ...]] = (
@@ -313,6 +316,8 @@ class StreamControlEvent:
     to_sequence: int | None = None
     watermark: StreamCursor | None = None
     lease_id: str | None = None
+    contract: str | None = None
+    next_contract: str | None = None
 
     def as_record(self) -> dict[str, object]:
         """Recorded control event. Kind is one of :data:`STREAM_CONTROL_KINDS`."""
@@ -330,6 +335,10 @@ class StreamControlEvent:
             body["watermark"] = self.watermark.as_record()
         if self.lease_id is not None:
             body["lease_id"] = self.lease_id
+        if self.contract is not None:
+            body["contract"] = self.contract
+        if self.next_contract is not None:
+            body["next_contract"] = self.next_contract
         return body
 
 
@@ -566,11 +575,25 @@ def emit_stream_control(
     to_sequence: object = None,
     watermark: object = None,
     lease_id: object = None,
+    contract: object = None,
+    next_contract: object = None,
 ) -> Result[StreamControlEvent]:
-    """Emit a typed control/evidence event. ``cutover-ack`` does not change phase."""
+    """Emit a typed control/evidence event. ``cutover-ack`` does not change phase.
+
+    A ``roll`` names the contract it leaves and the one it moves to; no other kind names one.
+    """
     kind = clean_token(event_kind)
     if kind is None or kind not in STREAM_CONTROL_KINDS:
         return invalid("event_kind", _SPLIT_REASON, given=repr(event_kind))
+    contracts: list[str | None] = []
+    for name, value in (("contract", contract), ("next_contract", next_contract)):
+        if value is None:
+            contracts.append(None)
+            continue
+        token = clean_token(value)
+        if token is None or kind != "roll":
+            return invalid(name, "only a roll names its contracts", given=repr(value))
+        contracts.append(token)
     when = _parse_instant(detected_at, "detected_at")
     if is_refusal(when):
         return when
@@ -607,6 +630,8 @@ def emit_stream_control(
             to_sequence=to_seq,
             watermark=mark,
             lease_id=lease_token,
+            contract=contracts[0],
+            next_contract=contracts[1],
         )
     )
 

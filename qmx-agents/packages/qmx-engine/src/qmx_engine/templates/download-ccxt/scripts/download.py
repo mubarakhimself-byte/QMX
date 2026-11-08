@@ -9,6 +9,12 @@ when it does not arrive.
 The run claims its partition key, checks free disk, keeps a heartbeat on its own thread, and
 hands the staged month to the door's `commit`. One price side per run is the source's slot; a
 trade-built bar series has one side and says so in its variant.
+
+CCXT states a bar's open in UTC epoch milliseconds, and the stamp check confirms it from the
+stamps' magnitude before the month lands (LD-03). A bar length that differs from the month the
+series last landed (kept beside the claims) is a cadence seam on the card (LD-04). With a
+`calendar` in the source definition the month is counted against open time, and an empty open
+hour holds it open until the source definition lists it in `confirmed_empty` (LD-01).
 """
 
 import json
@@ -23,11 +29,14 @@ from pathlib import Path
 from typing import Any
 
 from qmf.core import is_refusal
+from qmf.data.importers.quality import check_month, confirmed_hours, open_at_of
+from qmf.data.importers.stamps import ClockLedger, StampCheck, card_facts
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import BAR_COLUMNS, TypedWriter
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Partition, SeriesCard, card_fields
 
+from qmx_engine.triggers.preflight import shipped_calendars
 from qmx_engine.workers.zones import home_of
 
 FAILURE = "[QMX_FAILURE]"
@@ -148,6 +157,13 @@ if exchange_name == "" or symbol == "":
 year, month = month_of(str(source.get("month") or ""))
 timeframe = str(source.get("timeframe") or "1m")
 scale = int(source.get("price_scale") or DEFAULT_PRICE_SCALE)
+calendar_ref = str(source.get("calendar") or "").strip() or None
+calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
+if calendar_ref and calendar is None:
+    fail(f"no shipped calendar is named {calendar_ref!r}")
+confirmed = confirmed_hours(source.get("confirmed_empty") or [])
+if isinstance(confirmed, str):
+    fail(f"confirmed_empty: {confirmed}")
 try:
     import ccxt
 except ImportError:
@@ -193,6 +209,25 @@ try:
     if not rows:
         print(json.dumps({"status": "empty", "key": key.value.text}))
         raise SystemExit(0)
+    ledger = ClockLedger(root)
+    unit, cadence = ledger.before(key.value.series, year, month)
+    stamps = StampCheck(cadenced=True, after=unit, after_cadence_ms=cadence)
+    checked = stamps.file(f"{exchange_name}-{symbol}-{timeframe}", rows)
+    if is_refusal(checked):
+        fail(f"the stamps did not check: {checked.context}")
+    rows = list(checked.value)
+    report = (
+        None
+        if calendar is None
+        else check_month(
+            (int(str(row[0])) for row in rows),
+            start_ms=start_ms,
+            end_ms=end_ms,
+            open_at=open_at_of(calendar),
+            confirmed=confirmed,
+        )
+    )
+    hold = None if report is None else report.hold
     staging = root / "staging"
     staged = staging / exchange_name / symbol.replace("/", "") / KIND / VARIANT
     staged = staged / f"{year:04d}-{month:02d}.parquet"
@@ -204,10 +239,11 @@ try:
             f"the partition keeps the disk below its floor: {free:.1f} GB free, {floor:g} GB floor"
         )
     TypedWriter(staged, key.value.text, BAR_COLUMNS).add(rows).finish()
-    landed = door.commit([staged], staging=staging, born_on=placement)
+    landed = door.commit([staged], staging=staging, born_on=placement, hold=hold)
     if is_refusal(landed):
         fail(f"the door refused the commit: {landed.context}")
     receipt = landed.value[0]
+    ledger.record(key.value.series, year, month, stamps)
     partitions = (
         Partition(
             year=year,
@@ -231,12 +267,14 @@ try:
             "timeframe": timeframe,
             "price_scale": scale,
             "topup": "recent days only; a bulk file replaces this month when it is published",
+            "checked": None if report is None else report.as_json(),
         },
     )
     cards = Path(os.environ.get("QMX_WORK") or ".") / "library" / "cards"
     card_path = cards / f"{card.series.replace('/', '_')}.json"
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    card_path.write_text(json.dumps(card_fields(card, partitions), indent=2), encoding="utf-8")
+    fields = {**card_fields(card, partitions), **card_facts(stamps, calendar_ref)}
+    card_path.write_text(json.dumps(fields, indent=2), encoding="utf-8")
     print(
         json.dumps(
             {
@@ -244,6 +282,9 @@ try:
                 "key": key.value.text,
                 "rows": receipt.rows,
                 "frozen": receipt.frozen,
+                "held_open": hold,
+                **card_facts(stamps, calendar_ref),
+                "checked": None if report is None else report.as_json(),
                 "fingerprint": receipt.fingerprint,
                 "exchange": exchange_name,
             },

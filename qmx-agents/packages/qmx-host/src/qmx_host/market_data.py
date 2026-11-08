@@ -550,6 +550,7 @@ class MarketDoor:
         staging: Path,
         born_on: Placement | None = None,
         correction: str | None = None,
+        hold: str | None = None,
     ) -> Result[tuple[CommitReceipt, ...]]:
         """Verify staged partition files and record them: the door is the only writer.
 
@@ -557,7 +558,8 @@ class MarketDoor:
         streamed through the typed writer, so the fingerprint the store records is computed
         here and never taken from the file's own claim. ``born_on`` defaults to this door's
         own place. A file born on the PC stays pinned until the server's commit reports the
-        same fingerprint (`verify`).
+        same fingerprint (`verify`). A ``hold`` keeps the months open whatever their kind's
+        freeze rule says, with its reason (`SeriesStore.commit`).
         """
         if self.too_new is not None:
             return self._read_only("a commit")
@@ -592,7 +594,7 @@ class MarketDoor:
             )
             if is_refusal(key):
                 return key
-            landed = self._commit_one(store, key.value, path, correction)
+            landed = self._commit_one(store, key.value, path, correction, hold)
             if is_refusal(landed):
                 return landed
             receipts.append(landed.value)
@@ -972,7 +974,12 @@ class MarketDoor:
         )
 
     def _commit_one(
-        self, store: SeriesStore, key: SeriesKey, path: Path, correction: str | None
+        self,
+        store: SeriesStore,
+        key: SeriesKey,
+        path: Path,
+        correction: str | None,
+        hold: str | None = None,
     ) -> Result[CommitReceipt]:
         folder = store.folder(key)
         landed = folder / ".incoming.parquet"
@@ -989,7 +996,7 @@ class MarketDoor:
                 "could not stage the partition for the commit",
                 context={"key": key.text, "error": str(exc)},
             )
-        return store.commit_file(key, finished, correction=correction)
+        return store.commit_file(key, finished, correction=correction, hold=hold)
 
     def _pin(self, store: SeriesStore, key: SeriesKey, receipt: CommitReceipt) -> None:
         marker = store.folder(key) / PIN_NAME
