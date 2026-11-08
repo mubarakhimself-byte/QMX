@@ -29,7 +29,7 @@ import qma.telemetry
 from qmx_engine import telemetry
 from qmx_engine.ledger.spans import Span
 from test_connect import Store, qmx_folder, world
-from test_connect_compute import ADDRESS, PLACE, Server, at, quiet, through_the_cards
+from test_connect_compute import ADDRESS, PLACE, TAILNET, Server, at, quiet, through_the_cards
 
 from qmx_host.connect import KINDS, Run, World, run_kind
 from qmx_host.connect_logs import (
@@ -315,7 +315,7 @@ def test_deep_logs_on_a_server_send_the_shipped_units_and_point_send_to_at_it(
     settings = tomllib.loads((there.layout.home / "settings.toml").read_text(encoding="utf-8"))
 
     assert ended["needs"] is None
-    assert sent == [monitoring_script()]
+    assert sent == [monitoring_script(TAILNET)]
     assert "[Unit]\nDescription=OpenObserve" in sent[0]
     assert "storage: file_storage" in sent[0] and "QMX_OTEL_QUEUE" in sent[0]
     assert 'password="$(openssl rand -base64 24)"' in sent[0], "the server makes its own"

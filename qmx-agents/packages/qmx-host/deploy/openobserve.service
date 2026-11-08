@@ -1,6 +1,6 @@
 # OpenObserve, the external monitoring store, as a service (engine AD-69; DATA-PLAN DR10).
 #
-# The collector forwards traces, metrics and logs here over loopback; OpenObserve keeps a short
+# The collector forwards traces, metrics and logs here; OpenObserve keeps a short
 # window (14 days is the default in Appendix D, a Settings value) and the Library keeps each run's
 # trace and logs, so the viewer can be rebuilt or swapped.
 #
@@ -15,7 +15,10 @@
 #   printf 'ZO_ROOT_USER_EMAIL=qmx-observer@example.com\nZO_ROOT_USER_PASSWORD=<made here>\n' \
 #     > /etc/qmx/openobserve.env && chmod 0600 /etc/qmx/openobserve.env
 #   systemctl daemon-reload && systemctl enable --now openobserve
-# Its address on this machine is http://127.0.0.1:5080 and its health line is GET /healthz.
+# `@TAILNET_ADDRESS@` is the server's Tailscale address, which the connect dialog writes in when
+# it installs this file (`qmx_host.connect_logs.monitoring_script`), so OpenObserve answers on
+# the tailnet and nowhere else, even with the firewall off. Its address is then
+# http://<tailnet address>:5080 and its health line is GET /healthz.
 
 [Unit]
 Description=OpenObserve: the traces, metrics and logs QMX sends out
@@ -28,7 +31,9 @@ User=qmx
 Group=qmx
 Environment=HOME=/srv/qmx/home
 Environment=ZO_DATA_DIR=/srv/qmx/monitoring/openobserve
+Environment=ZO_HTTP_ADDR=@TAILNET_ADDRESS@
 Environment=ZO_HTTP_PORT=5080
+Environment=ZO_GRPC_ADDR=@TAILNET_ADDRESS@
 Environment=ZO_TELEMETRY=false
 EnvironmentFile=/etc/qmx/openobserve.env
 ExecStart=/usr/local/bin/openobserve

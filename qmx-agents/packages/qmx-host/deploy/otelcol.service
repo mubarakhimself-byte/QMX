@@ -11,6 +11,8 @@
 #   systemctl daemon-reload && systemctl enable --now otelcol
 # Read the queue and drop counters back with:
 #   curl -s http://127.0.0.1:8888/metrics | grep otelcol_exporter
+# OpenObserve answers only on the server's Tailscale address, `@TAILNET_ADDRESS@`, which the
+# connect dialog writes in when it installs this file.
 
 [Unit]
 Description=QMX OpenTelemetry Collector: the one collector, on the server
@@ -23,7 +25,7 @@ User=qmx
 Group=qmx
 Environment=HOME=/srv/qmx/home
 Environment=QMX_OTEL_QUEUE=/srv/qmx/monitoring/otelcol/queue
-Environment=OO_OTLP_ENDPOINT=http://127.0.0.1:5080/api/default
+Environment=OO_OTLP_ENDPOINT=http://@TAILNET_ADDRESS@:5080/api/default
 EnvironmentFile=/etc/qmx/otelcol.env
 ExecStart=/usr/local/bin/otelcol-contrib --config /etc/qmx/otelcol.yaml
 Restart=on-failure

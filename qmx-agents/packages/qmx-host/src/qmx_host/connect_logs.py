@@ -10,7 +10,8 @@ which is rebuildable and never synced. No collector runs on this PC. The ingest 
 header every sender adds; the agent login is the one agents use at its MCP door.
 
 On his server the step installs the shipped unit files and the collector with its on-disk queue,
-with a password the server makes for itself, and points `send_to` at that server.
+with the server's Tailscale address written in, so OpenObserve answers on the tailnet alone, and a
+password the server makes for itself, and points `send_to` at that server.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ import time
 import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -37,6 +39,7 @@ import httpx
 import psutil
 from qma.telemetry import INGEST_KEY, THIS_PC
 from qmx_broker.credentials import KeyStore
+from qmx_control.node import SetupStopped, address
 from qmx_home import Layout
 from qmx_home.files import plain
 
@@ -464,7 +467,7 @@ def _the_server(run: Run) -> bool:
     return True
 
 
-def _monitoring_on(run: Run) -> bool:
+def monitoring_on(run: Run) -> bool:
     try:
         shown = server_of(run).send("systemctl is-active openobserve otelcol || true")
     except RuntimeError:
@@ -472,16 +475,38 @@ def _monitoring_on(run: Run) -> bool:
     return shown.split() == ["active", "active"]
 
 
-def monitoring_script() -> str:
+ADDRESS_MARK: Final = "@TAILNET_ADDRESS@"
+"""What the shipped unit files hold where a server's own Tailscale address goes."""
+TAILNETS: Final = (ip_network("100.64.0.0/10"), ip_network("fd7a:115c:a1e0::/48"))
+"""The address ranges Tailscale gives a machine on a tailnet."""
+
+
+def rendered(name: str, address: str) -> str:
+    """One shipped unit file with the server's Tailscale address written in. An address outside
+    the tailnet ranges is refused, so OpenObserve never answers on every address the server has."""
+    try:
+        found = ip_address(address)
+    except ValueError:
+        found = None
+    if found is None or not any(found in tailnet for tailnet in TAILNETS):
+        raise Stopped(
+            f"the server's tailnet address reads {address!r}, which is not a Tailscale address; "
+            "check `tailscale ip -4` there, then connect its deep logs again"
+        )
+    return (DEPLOY / name).read_text(encoding="utf-8").replace(ADDRESS_MARK, str(found))
+
+
+def monitoring_script(address: str) -> str:
     """Install OpenObserve and the collector as the server's services, from the unit files QMX
-    ships, with a sign-in the server makes for itself and keeps in root-only files."""
+    ships with the server's Tailscale `address` written in, with a sign-in the server makes for
+    itself and keeps in root-only files."""
     files = {
         "/etc/systemd/system/openobserve.service": "openobserve.service",
         "/etc/systemd/system/otelcol.service": "otelcol.service",
         "/etc/qmx/otelcol.yaml": "otelcol.yaml",
     }
     written = "".join(
-        f"cat > {target} <<'QMXFILE'\n{(DEPLOY / name).read_text(encoding='utf-8')}QMXFILE\n"
+        f"cat > {target} <<'QMXFILE'\n{rendered(name, address)}QMXFILE\n"
         for target, name in files.items()
     )
     email = "qmx-observer@this-server.invalid"
@@ -508,15 +533,34 @@ def monitoring_script() -> str:
     )
 
 
+MISSING_PROGRAMS: Final = (
+    "the server has no OpenObserve or collector program in /usr/local/bin yet, or one did not "
+    "start; install them there"
+)
+
+
+def monitor(run: Run) -> None:
+    """Install and start the server's OpenObserve, on its Tailscale address, and its collector.
+    Raises `Stopped` with the address refusal, or `RuntimeError` when the server did not run it."""
+    server = server_of(run)
+    try:
+        tailnet = address(server)
+    except SetupStopped as stopped:
+        raise Stopped(f"{run.place}: {stopped.line}") from None
+    server.send("sudo bash -s", monitoring_script(tailnet))
+    run.say(
+        f"{run.place}: OpenObserve answers on its tailnet address {tailnet}:{PORT}, and its "
+        "collector runs there with an on-disk queue"
+    )
+
+
 def _monitor(run: Run) -> Card | None:
     try:
-        server_of(run).send("sudo bash -s", monitoring_script())
+        monitor(run)
     except RuntimeError:
         raise Stopped(
-            f"{run.place}: the server has no OpenObserve or collector program in /usr/local/bin "
-            "yet, or one did not start; install them there, then connect its deep logs again"
+            f"{run.place}: {MISSING_PROGRAMS}, then connect its deep logs again"
         ) from None
-    run.say(f"{run.place}: OpenObserve and its collector run there, with an on-disk queue")
     return None
 
 
@@ -539,7 +583,7 @@ ON_A_SERVER: Final = Kind(
     False,
     (
         Step("server", "qmx", _the_server, _nothing),
-        Step("monitoring", "qmx", _monitoring_on, _monitor),
+        Step("monitoring", "qmx", monitoring_on, _monitor),
         Step("send-to", "qmx", _sent_to_it, _send_to(_its_name)),
     ),
 )

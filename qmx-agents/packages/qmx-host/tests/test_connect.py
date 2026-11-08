@@ -139,6 +139,7 @@ def test_the_kinds_name_what_each_can_do_and_every_route_needs_the_bearer(tmp_pa
         ("deep-logs-server", [], False),
         ("trading-node-alarms", [], False),
         ("trading-node-pc", [], False),
+        ("trading-node-server", ["run"], False),
     ]
     assert bare == [401] * 4
 

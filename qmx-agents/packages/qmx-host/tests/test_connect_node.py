@@ -30,6 +30,7 @@ from test_connect import Store, qmx_folder
 from qmx_host.connect import KINDS, Kind, World, run_kind
 from qmx_host.connect_node import (
     APP_SECRET,
+    MIS_APP,
     NODE_APP,
     NODE_KEYS,
     PASSPORT,
@@ -58,6 +59,7 @@ CLOCK = ClockFacts(
 
 def stand_in_proof(apps: Supervisor, app: str, definition_hash: str) -> None:
     """The road's three proofs as passed evidence, the way C-10's app test records them."""
+    version = str(cast("dict[str, Any]", apps.get(app)["definition"])["version"])
     with history(apps.home, app) as state:
         for stage in ("tests", "sandbox", "shadow"):
             if state.stages.get(definition_hash) in {"shadow", "live"}:
@@ -65,7 +67,7 @@ def stand_in_proof(apps: Supervisor, app: str, definition_hash: str) -> None:
             state.append(
                 Evidence(
                     definition_hash=definition_hash,
-                    version="0.1.0",
+                    version=version,
                     stage=cast(Stage, stage),
                     passed=True,
                     inputs={"fixture": True},
@@ -231,7 +233,7 @@ def test_one_click_sets_the_node_up_and_ends_on_the_app_request_with_no_sign_in(
         ("ctrader", "not_set_up"),
         ("hyperliquid", "not_set_up"),
     ]
-    assert host.rows() == {"pc": {"apps": ["trading-node"]}}
+    assert host.rows() == {"pc": {"apps": ["trading-node", "mis"]}}
     assert host.keys_document() == {"schema_version": "qmx.node.keys/1"}
     passport = json.loads((host.layout.home / PASSPORT).read_text(encoding="utf-8"))
     assert [(r["venue"], r["samples"]) for r in passport["round_trip"]] == [
@@ -261,7 +263,7 @@ def test_pasting_the_app_id_ticks_the_waiting_step_and_its_later_steps_run(host:
         "ctrader": {"client_id": CLIENT_ID, "client_secret": STAGED_VALUE},
     }
     assert host.keys.read(APP_SECRET) is None
-    assert host.rows() == {"pc": {"apps": ["trading-node"]}}
+    assert host.rows() == {"pc": {"apps": ["trading-node", "mis"]}}
     again = host.run()
     assert "ctrader-app: already done, skipped" in again["lines"]
     assert again["needs"]["card"] == "sign-in"
@@ -333,7 +335,7 @@ def test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row(
     again = host.run()
 
     assert [ended["needs"]["card"], again["needs"]["card"]] == ["sign-in", "sign-in"]
-    assert host.rows() == {"pc": {"apps": ["trading-node"]}}
+    assert host.rows() == {"pc": {"apps": ["trading-node", "mis"]}}
     assert host.keys_document()["ctrader"] == {
         "client_id": CLIENT_ID,
         "client_secret": STAGED_VALUE,
@@ -341,11 +343,11 @@ def test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row(
     assert host.keys.read(APP_SECRET) is None
     assert host.status()["headline"] == "Ready, no units yet"
     listed = cast("list[dict[str, Any]]", host.apps.list())
-    assert [row["definition"]["id"] for row in listed] == [NODE_APP]
+    assert sorted(row["definition"]["id"] for row in listed) == [MIS_APP, NODE_APP]
 
 
 def test_the_kind_is_registered_beside_the_shipped_kinds() -> None:
-    assert list(KINDS)[-1] == "trading-node-pc"
+    assert list(KINDS)[-2] == "trading-node-pc"
     assert [step.name for step in KINDS["trading-node-pc"].steps] == [
         "ctrader-app",
         "keys",
