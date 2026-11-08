@@ -13,6 +13,7 @@ from collections.abc import Iterable, Iterator
 from decimal import Decimal
 from pathlib import Path
 
+from qmb.execution.fill import BarExecution
 from qmb.host.replay import (
     Aggressor,
     Bar,
@@ -29,7 +30,7 @@ from qmb.host.replay import (
     replay_windowed,
     window_size,
 )
-from qmb.host.unit_handler import ListJournal, NextOpenExecution, UnitSliceHandler, UnitTrade
+from qmb.host.unit_handler import ListJournal, UnitSliceHandler, UnitTrade
 from qmb.host.unit_runner import load_unit_folder, run_unit
 from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
@@ -107,7 +108,7 @@ def _trade_list(tmp_path: Path, fidelity: Fidelity) -> list[tuple[object, ...]]:
         bars=windows,
         opened_by=compiled.compiled_fingerprint,
         equity=asked.equity,
-        execution=NextOpenExecution(),
+        execution=BarExecution(loaded.value.bar_ns),
         journal=ListJournal(),
     )
     assert not isinstance(handler, TypedRefusal), handler

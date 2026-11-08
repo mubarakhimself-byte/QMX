@@ -6,15 +6,26 @@ gaps as ``(start, end, expected, present)``. Calendar-closed absence is
 closure, not a gap. Missing or unresolvable calendar is ``unavailable
 dependency`` (CT-04) — never silently treated as always-open. Never writes
 interior fill (Epic 23 / ``world=simulated``; policy rejection until GAP-0048).
+
+A unit run's preflight (QB-18) counts the bars missing between each two bars a market's stream
+holds, inside the open time of the market's calendar (``calendar_ref`` on its instrument
+record). A hole longer than ``[qmb] gap_bars_refuse`` bars fails the run unless the study
+allows gaps. The open time is the ``qmx.calendar/1`` file a ``qmf-calendar-*`` extension ships
+for that ref (C-03), or the 17:00 New York forex week for ``fx-24x5@1``. A ref with no shipped
+calendar is not counted, and the run says ``holes_unchecked`` rather than guess a session.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Protocol, cast, runtime_checkable
+from zoneinfo import ZoneInfo
 
 from qmf.core.chrono import CalendarIdentity, Instant, SessionWindow
 from qmf.core.fingerprint import World
@@ -27,15 +38,25 @@ from qmb._refuse import clean_token, invalid, policy, unavailable
 from qmb.data.ports import DOWNLOAD_SIDES, DownloadSide
 
 __all__ = [
+    "GAP_BARS_REFUSE",
     "GAP_CHECK_KIND",
+    "HOLES_UNCHECKED",
     "AlwaysOpenCalendar",
     "GapCheckReport",
     "GapCheckRequest",
+    "Hole",
+    "OpenTime",
     "ReportedGap",
+    "find_holes",
     "gap_check",
     "gap_check_identity",
+    "open_time",
     "parse_gap_check_request",
 ]
+
+GAP_BARS_REFUSE: Final[int] = 3
+"""``[qmb] gap_bars_refuse``: the most bars of the unit's stream a hole in open time may miss."""
+HOLES_UNCHECKED: Final[str] = "holes_unchecked"
 
 GAP_CHECK_KIND: Final[str] = "qmb-data-gap-check"
 _RAW_ARCHIVE: Final[str] = "immutable-raw-archive"
@@ -760,3 +781,126 @@ def _optional_ticks(value: object) -> Result[tuple[Mapping[str, object], ...] | 
             )
         rows.append(cast("Mapping[str, object]", item))
     return Ok(tuple(rows))
+
+
+# --- a unit run's preflight (QB-18) -------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Hole:
+    """Bars a market's stream misses inside open time, between two bars it holds."""
+
+    market_id: str
+    after_ns: int
+    """The open of the last bar before the hole."""
+    before_ns: int
+    """The open of the first bar after it."""
+    bars_missing: int
+
+
+_EXTENSIONS: Final = Path(__file__).resolve().parents[4] / "extensions"
+_EPOCH_UTC: Final = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_WEEK_DAYS: Final = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_DAY_MINUTES: Final = 24 * 60
+_FOREX_WEEK: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "calendar_ref": "fx-24x5@1",
+        "zone": "America/New_York",
+        "sessions": ({"open": "sun 17:00", "close": "fri 17:00"},),
+        "closures": (
+            {"from": "2026-12-24T17:00", "to": "2026-12-27T17:00"},
+            {"from": "2026-12-31T17:00", "to": "2027-01-03T17:00"},
+        ),
+    }
+)
+"""``fx-24x5@1`` as the workflow runner's market precheck carries it
+(``qmx_engine.triggers.preflight``), because ``qmf-calendar-forex`` holds its rule as code and
+ships no file. QMB cannot import that package."""
+
+
+@dataclass(frozen=True, slots=True)
+class OpenTime:
+    """One ``qmx.calendar/1`` calendar's open time, read in its own zone.
+
+    ``sessions`` are weekly ``[open, close)`` spans in minutes from Monday 00:00 local, a close at
+    or before its open running into the next week; None is open around the clock. ``closures``
+    are ``[from, to)`` spans in UTC ns that shut the market whatever the sessions say.
+    """
+
+    ref: str
+    zone: ZoneInfo
+    sessions: tuple[tuple[int, int], ...] | None
+    closures: tuple[tuple[int, int], ...]
+
+    def open_at(self, at_ns: int) -> bool:
+        if any(start <= at_ns < end for start, end in self.closures):
+            return False
+        if self.sessions is None:
+            return True
+        local = (_EPOCH_UTC + timedelta(microseconds=at_ns // 1_000)).astimezone(self.zone)
+        minute = local.weekday() * _DAY_MINUTES + local.hour * 60 + local.minute
+        return any(
+            opens <= minute < closes if opens < closes else minute >= opens or minute < closes
+            for opens, closes in self.sessions
+        )
+
+
+def _week_minute(text: str) -> int:
+    day, _, clock = text.partition(" ")
+    hours, minutes = (int(part) for part in clock.split(":"))
+    return _WEEK_DAYS.index(day) * _DAY_MINUTES + hours * 60 + minutes
+
+
+def _read_calendar(document: Mapping[str, object]) -> OpenTime:
+    zone = ZoneInfo(str(document["zone"]))
+    raw = document["sessions"]
+    sessions = (
+        None
+        if raw == "always"
+        else tuple(
+            (_week_minute(span["open"]), _week_minute(span["close"]))
+            for span in cast("list[Mapping[str, str]]", raw)
+        )
+    )
+
+    def utc_ns(local: str) -> int:
+        at = datetime.fromisoformat(local).replace(tzinfo=zone) - _EPOCH_UTC
+        return (at // timedelta(microseconds=1)) * 1_000
+
+    closures = tuple(
+        (utc_ns(span["from"]), utc_ns(span["to"]))
+        for span in cast("list[Mapping[str, str]]", document.get("closures", []))
+    )
+    return OpenTime(str(document["calendar_ref"]), zone, sessions, closures)
+
+
+@cache
+def _shipped() -> Mapping[str, OpenTime]:
+    found = {"fx-24x5@1": _read_calendar(_FOREX_WEEK)}
+    for path in sorted(_EXTENSIONS.glob("qmf-calendar-*/src/qmf/calendar_*/calendars/*.json")):
+        calendar = _read_calendar(json.loads(path.read_text(encoding="utf-8")))
+        found[calendar.ref] = calendar
+    return found
+
+
+def open_time(calendar_ref: str) -> OpenTime | None:
+    """The open time of the shipped calendar ``calendar_ref`` names, or None when none ships."""
+    return _shipped().get(calendar_ref)
+
+
+def find_holes(
+    market_id: str, opens: Iterable[int], *, bar_ns: int, hours: OpenTime, refuse_bars: int
+) -> tuple[Hole, ...]:
+    """Every hole longer than ``refuse_bars`` between the bar opens of one market's stream.
+
+    A bar is missing where a bar open the stream skips falls in open time.
+    """
+    holes: list[Hole] = []
+    last: int | None = None
+    for at in opens:
+        if last is not None:
+            missing = sum(hours.open_at(t) for t in range(last + bar_ns, at, bar_ns))
+            if missing > refuse_bars:
+                holes.append(Hole(market_id, last, at, missing))
+        last = at
+    return tuple(holes)

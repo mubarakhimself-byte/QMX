@@ -7,7 +7,10 @@ A run folder holds what the core gathered for one run:
 - ``records/<market_id>.json``: the instrument record of each of the unit's markets;
 - ``bars/<market_id>/bid.csv`` and ``ask.csv``: the market's closed bars on the unit's stream,
   one row per bar (``timestamp`` is the bar's open in epoch milliseconds, then ``open``,
-  ``high``, ``low``, ``close``), as the Dukascopy download template saves them.
+  ``high``, ``low``, ``close``), as the Dukascopy download template saves them;
+- ``costs/<market_id>.json``, optional: the market's ``qmx.qmb.cost-profile/1``;
+- ``funding/<market_id>.csv``: a market that pays funding, its recorded rates
+  (``timestamp,rate``).
 
 The runner compiles the document through QML's compiler, whose one block loader checks every
 pin's fingerprint, refuses a compiled fingerprint other than the request's before the first
@@ -18,6 +21,13 @@ and its bars close in the venue's day. The result carries every trade in money a
 fill against its sizer receipt, and the ``zero_trades`` label when nothing closed. Given a
 ``RunJournal``, every row the run makes is written to the unit journal on disk, with each
 slice's instant and every hole in a market's bars (B9).
+
+Every market rule reads the instrument record (B10): fills, gaps and liquidation through
+``BarExecution``, swaps, financing, funding and dividends through the record's
+``CarrySchedule``, commission and slippage through the cost profile. Before the first bar a
+preflight counts each market's holes in open time; one longer than the request's
+``gap_bars_refuse`` fails the run unless the request sets ``allow_gaps``, and then the result
+lists it. A run whose costs come from no calibrated profile says ``costs_uncalibrated``.
 """
 
 from __future__ import annotations
@@ -25,6 +35,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final, cast
@@ -38,6 +49,22 @@ from qml.numbers import InstrumentRecord, parse_record
 from qml.protocol.unit import MotionSwitch, OwnPosition, QuoteBar, TraceLevel, construct_unit
 
 from qmb._refuse import invalid, policy
+from qmb.data.gap_check import GAP_BARS_REFUSE, HOLES_UNCHECKED, Hole, find_holes, open_time
+from qmb.execution.cost import (
+    CALIBRATED_MIN_FILLS,
+    COSTS_UNCALIBRATED,
+    CostProfile,
+    parse_cost_profile,
+)
+from qmb.execution.fill import BarExecution
+from qmb.execution.financing import (
+    CarrySchedule,
+    CashEvent,
+    ReplayCash,
+    carry_schedule,
+    read_funding_rates,
+)
+from qmb.execution.risk import MarginRule, margin_rule
 from qmb.host.replay import (
     BarWindow,
     DataCard,
@@ -52,7 +79,6 @@ from qmb.host.unit_handler import (
     ExecutionPort,
     Fill,
     JournalRecord,
-    NextOpenExecution,
     UnitSliceHandler,
     UnitTrade,
 )
@@ -73,6 +99,7 @@ __all__ = [
 
 ZERO_TRADES: Final[str] = "zero_trades"
 _NS_PER_SEC: Final[int] = 1_000_000_000
+_EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
 _QUOTES: Final[DataCard] = DataCard(Fidelity.QUOTES)
 
 BarFeed = Callable[[], Iterator[QuoteBar | TypedRefusal]]
@@ -89,6 +116,10 @@ class UnitRunRequest:
     execution_target: ExecutionTarget
     motion: MotionSwitch = MotionSwitch.ON
     trace: TraceLevel = TraceLevel.EVENTS
+    allow_gaps: bool = False
+    """The study runs over holes in its data; the unit sees each one as a gap row."""
+    gap_bars_refuse: int = GAP_BARS_REFUSE
+    calibrated_min_fills: int = CALIBRATED_MIN_FILLS
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,13 +127,19 @@ class LoadedUnit:
     """A run folder's unit compiled, its block sources, and a bar feed per market id.
 
     A feed opens the market's files each time it is called, so one load serves every run of it
-    (``motion = both`` runs the unit twice).
+    (``motion = both`` runs the unit twice). Beside each market's record sit what the record's
+    rules read: its carry, its margin rule when it states one, and its cost profile when the
+    folder holds one.
     """
 
     compiled: CompiledUnit
     sources: Mapping[str, bytes]
     records: Mapping[str, InstrumentRecord]
     feeds: Mapping[str, BarFeed]
+    bar_ns: int
+    carry: Mapping[str, CarrySchedule]
+    margins: Mapping[str, MarginRule]
+    costs: Mapping[str, CostProfile]
 
     def bars(self) -> Result[dict[str, tuple[QuoteBar, ...]]]:
         """Every market's bars held whole, for a short recorded slice; a run streams them."""
@@ -125,8 +162,14 @@ class UnitRunResult:
     fills: tuple[Fill, ...]
     open_positions: Mapping[str, OwnPosition]
     net_money: Decimal
+    """The trades' money plus every cash event's."""
     total_r: Decimal
     labels: tuple[str, ...]
+    cash_events: tuple[CashEvent, ...] = ()
+    holes: tuple[Hole, ...] = ()
+    """Holes in open time the run went over because the request allowed gaps."""
+    unchecked: tuple[str, ...] = ()
+    """Markets whose calendar QMB cannot read yet, so their holes were not counted."""
 
 
 def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
@@ -170,7 +213,32 @@ def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
         trace = TraceLevel(str(fields.get("trace", "events")))
     except ValueError:
         return invalid("trace", "trace is events or every_bar", given=repr(fields.get("trace")))
-    return Ok(UnitRunRequest(run_id, fp, amount, made.value, motion, trace))
+    allow_gaps = fields.get("allow_gaps") or False
+    if not isinstance(allow_gaps, bool):
+        return invalid("allow_gaps", "allow_gaps is true or false", given=repr(allow_gaps))
+    counts: dict[str, int] = {}
+    for name, default in (
+        ("gap_bars_refuse", GAP_BARS_REFUSE),
+        ("calibrated_min_fills", CALIBRATED_MIN_FILLS),
+    ):
+        given = fields.get(name)
+        value = default if given is None else given
+        if type(value) is not int or value < 0:
+            return invalid(name, f"{name} is a whole number of zero or more", given=repr(value))
+        counts[name] = value
+    return Ok(
+        UnitRunRequest(
+            run_id,
+            fp,
+            amount,
+            made.value,
+            motion,
+            trace,
+            allow_gaps,
+            counts["gap_bars_refuse"],
+            counts["calibrated_min_fills"],
+        )
+    )
 
 
 def _bar_seconds(stream: str) -> int | None:
@@ -202,20 +270,55 @@ class _BarFiles:
         return replay_feed(_QUOTES, rows, BarBuilder(self.day.span, self.seconds))
 
 
-def _bar_files(
-    folder: Path, market: str, record: InstrumentRecord, seconds: int
-) -> Result[_BarFiles]:
+def _bar_files(folder: Path, market: str, day: VenueDay, seconds: int) -> Result[_BarFiles]:
     bid, ask = folder / "bars" / market / "bid.csv", folder / "bars" / market / "ask.csv"
     for path in (bid, ask):
         if not path.is_file():
             return invalid("bars", "a market's bars are a bid and an ask file", missing=str(path))
-    day = VenueDay.try_create(record.zone, record.day_boundary)
-    if is_refusal(day):
-        return day
-    builder = BarBuilder.try_create(day.value.span, seconds)
+    builder = BarBuilder.try_create(day.span, seconds)
     if is_refusal(builder):
         return builder
-    return Ok(_BarFiles(bid, ask, seconds, day.value))
+    return Ok(_BarFiles(bid, ask, seconds, day))
+
+
+@dataclass(frozen=True, slots=True)
+class _MarketRules:
+    carry: CarrySchedule
+    margin: MarginRule | None
+    costs: CostProfile | None
+
+
+def _market_rules(
+    folder: Path,
+    market: str,
+    record: InstrumentRecord,
+    terms: Mapping[str, object],
+    day: VenueDay,
+    bar_ns: int,
+) -> Result[_MarketRules]:
+    """What the market's record and the folder's profile say beyond the price."""
+    rates: Mapping[int, Decimal] | None = None
+    funding = folder / "funding" / f"{market}.csv"
+    if funding.is_file():
+        read = read_funding_rates(funding.read_text(encoding="utf-8").splitlines())
+        if is_refusal(read):
+            return read
+        rates = read.value
+    carry = carry_schedule(
+        market, terms, value_per_point=record.value_per_point, day=day, bar_ns=bar_ns, rates=rates
+    )
+    if is_refusal(carry):
+        return carry
+    margin = margin_rule(record, terms.get("liquidation_rule"))
+    if is_refusal(margin):
+        return margin
+    profile = folder / "costs" / f"{market}.json"
+    if not profile.is_file():
+        return Ok(_MarketRules(carry.value, margin.value, None))
+    costs = parse_cost_profile(json.loads(profile.read_text(encoding="utf-8")))
+    if is_refusal(costs):
+        return costs
+    return Ok(_MarketRules(carry.value, margin.value, costs.value))
 
 
 def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
@@ -233,11 +336,14 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
         sources[pin.name] = (pin / "block.py").read_bytes()
         entries[pin.name] = (pin / "entry.json").read_bytes()
     records: dict[str, InstrumentRecord] = {}
+    terms: dict[str, Mapping[str, object]] = {}
     for path in sorted((folder / "records").glob("*.json")):
-        parsed = parse_record(json.loads(path.read_text(encoding="utf-8")))
+        raw: object = json.loads(path.read_text(encoding="utf-8"))
+        parsed = parse_record(raw)
         if is_refusal(parsed):
             return parsed
         records[path.stem] = parsed.value
+        terms[path.stem] = cast("Mapping[str, object]", raw)
     compiled = compile_unit(
         document, CompileContext(sources=sources, entries=entries, records=records)
     )
@@ -253,13 +359,38 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
             "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
         )
     feeds: dict[str, BarFeed] = {}
+    rules: dict[str, _MarketRules] = {}
     for market, record in compiled.plan.markets:
-        files = _bar_files(folder, market.market_id, record, seconds)
+        day = VenueDay.try_create(record.zone, record.day_boundary)
+        if is_refusal(day):
+            return day
+        files = _bar_files(folder, market.market_id, day.value, seconds)
         if is_refusal(files):
             return files
         feeds[market.market_id] = files.value
-    unit_records = {m.market_id: record for m, record in compiled.plan.markets}
-    return Ok(LoadedUnit(compiled, sources, unit_records, feeds))
+        found = _market_rules(
+            folder,
+            market.market_id,
+            record,
+            terms.get(market.market_id, {}),
+            day.value,
+            seconds * _NS_PER_SEC,
+        )
+        if is_refusal(found):
+            return found
+        rules[market.market_id] = found.value
+    return Ok(
+        LoadedUnit(
+            compiled,
+            sources,
+            {m.market_id: record for m, record in compiled.plan.markets},
+            feeds,
+            seconds * _NS_PER_SEC,
+            {m: r.carry for m, r in rules.items()},
+            {m: r.margin for m, r in rules.items() if r.margin is not None},
+            {m: r.costs for m, r in rules.items() if r.costs is not None},
+        )
+    )
 
 
 def run_unit(
@@ -298,6 +429,10 @@ def run_loaded(
         return invalid(
             "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
         )
+    checked = _preflight(loaded, request)
+    if is_refusal(checked):
+        return checked
+    holes, unchecked = checked.value
     windows = {market: BarWindow(window_size(compiled)) for market in loaded.feeds}
     handler = UnitSliceHandler.start(
         lambda surfaces: construct_unit(
@@ -313,9 +448,12 @@ def run_loaded(
         bars=windows,
         opened_by=compiled.compiled_fingerprint,
         equity=request.equity,
-        execution=execution if execution is not None else NextOpenExecution(),
+        execution=execution
+        if execution is not None
+        else BarExecution(loaded.bar_ns, loaded.costs, loaded.margins),
         journal=_Unkept() if journal is None else journal,
         seeded=seeded,
+        cash=ReplayCash(loaded.carry, loaded.costs, loaded.bar_ns),
     )
     if is_refusal(handler):
         return handler
@@ -327,7 +465,17 @@ def run_loaded(
     )
     if is_refusal(driven):
         return driven
-    trades = handler.value.trades
+    trades, cash = handler.value.trades, handler.value.cash_events
+    uncalibrated = any(
+        market not in loaded.costs
+        or not loaded.costs[market].calibrated(request.calibrated_min_fills)
+        for market in loaded.feeds
+    )
+    labels = (
+        *(() if trades else (ZERO_TRADES,)),
+        *((COSTS_UNCALIBRATED,) if uncalibrated else ()),
+        *((HOLES_UNCHECKED,) if unchecked else ()),
+    )
     return Ok(
         UnitRunResult(
             run_id=request.run_id,
@@ -335,11 +483,47 @@ def run_loaded(
             trades=trades,
             fills=handler.value.fills,
             open_positions=handler.value.open_positions,
-            net_money=sum((t.money for t in trades), Decimal(0)),
+            net_money=sum((t.money for t in trades), Decimal(0))
+            + sum((c.money for c in cash), Decimal(0)),
             total_r=sum((t.r for t in trades), Decimal(0)),
-            labels=() if trades else (ZERO_TRADES,),
+            labels=labels,
+            cash_events=cash,
+            holes=holes,
+            unchecked=unchecked,
         )
     )
+
+
+def _preflight(
+    loaded: LoadedUnit, request: UnitRunRequest
+) -> Result[tuple[tuple[Hole, ...], tuple[str, ...]]]:
+    """Each market's holes in open time, refused past the request's limit unless it allows gaps."""
+    holes: list[Hole] = []
+    unchecked: list[str] = []
+    for market, feed in loaded.feeds.items():
+        hours = open_time(loaded.records[market].calendar_ref)
+        if hours is None:
+            unchecked.append(market)
+            continue
+        opens: list[int] = []
+        for item in feed():
+            if isinstance(item, TypedRefusal):
+                return item
+            opens.append(item.knowable_at.value_ns - loaded.bar_ns)
+        holes += find_holes(
+            market, opens, bar_ns=loaded.bar_ns, hours=hours, refuse_bars=request.gap_bars_refuse
+        )
+    if holes and not request.allow_gaps:
+        first = holes[0]
+        after = _EPOCH + timedelta(microseconds=first.after_ns // 1_000)
+        return policy(
+            "data",
+            f"{first.market_id} misses {first.bars_missing} bars in open time after the bar "
+            f"opening {after:%Y-%m-%d %H:%M} UTC, more than the {request.gap_bars_refuse} a "
+            "run allows unless its study allows gaps",
+            holes=[(h.market_id, h.after_ns, h.before_ns, h.bars_missing) for h in holes],
+        )
+    return Ok((tuple(holes), tuple(unchecked)))
 
 
 class _Unkept:

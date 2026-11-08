@@ -312,9 +312,11 @@ def _identity_row(label: str, result: str, counted_try: bool, click: bool) -> Do
 QMB_DEFAULTS: Final[Document] = {
     "agent_wait_s": 240,
     "bars": "",
+    "calibrated_min_fills": 50,
     "equity": "10000.00",
     "execution_target": {"role": "paper-validation", "venue_id": "qmb", "account_id": "backtest"},
     "g_slice_margin": "0.20",
+    "gap_bars_refuse": 3,
     "window_memory_tolerance": "0.10",
 }
 """`[qmb]` with every default (Part B `qmb.md` section 8): `backtest_run` waits 240 s for a run
@@ -322,7 +324,8 @@ before it answers the run id, below the prompt cache's five minutes; `bars` name
 dukascopy-node's CSV pairs, empty for the market store's `bars/`; a backtest trades 10,000 of the
 account's money on a backtest target that is no account; the behaviour check's slice is the
 warm-up and 20% more; the windowed reader's peak memory at 200,000 steps stays within 10% of its
-peak at 10,000."""
+peak at 10,000; a run's costs count as calibrated from 50 of QMX's own fills; a hole of more than
+3 bars of the unit's stream in open time fails a run unless its study allows gaps."""
 
 
 UNITS_DEFAULTS: Final[Document] = {

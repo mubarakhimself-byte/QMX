@@ -10,8 +10,10 @@ market's own zone.
 | `cme-grains@1` | America/Chicago | Sunday to Friday, 19:00 to 07:45 and 08:30 to 13:20 |
 | `metals-24x5@1` | America/New_York | spot gold and silver CFDs on COMEX's week, 18:00 to 17:00 |
 
-Christmas Day and New Year's Day are full closures. Early closes before a holiday are not modelled
-in version 1.
+Christmas Day and New Year's Day are full closures. `metals-24x5@1` also lists the early halt on
+Martin Luther King Jr. Day and Presidents' Day in 2025 and 2026 (14:30 to 18:00 New York). Other
+early closes are not modelled in version 1. Dated closures are data inside a version: they are
+added in place, and `issued` dates them.
 
 ## The data
 

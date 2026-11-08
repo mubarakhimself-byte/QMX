@@ -1,7 +1,10 @@
 """``qmb data generate`` — config-selected synthetic-series adapters (Story 23.1).
 
 ``qmb data generate`` is a thin front over the ratified QMF data contracts
-(CT-10/CT-15) that produces forex-CFD synthetic series by *selecting* a generator
+(CT-10/CT-15) that produces synthetic series for an instrument record's class
+(``asset_class``: ``fx``, ``metal``, ``commodity_cfd`` and the legacy ``forex-cfd``
+get the forex-CFD generator on forex hours; ``spot_crypto`` and ``perp`` get the
+crypto generator on always-open hours, QB-16) by *selecting* a generator
 process and its variables through one resolved, schema-validated, fingerprinted
 generator config (R1; B-3; AR-14 fp1). The v1 process menu is exactly four
 config-selected adapters — ``block-bootstrap`` (default), ``gaussian-resample``,
@@ -81,9 +84,12 @@ __all__ = [
     "GAUSSIAN_NOISE",
     "GAUSSIAN_RESAMPLE",
     "GBM",
+    "GENERATOR_BY_CLASS",
     "GENERATOR_CONFIG_ARTIFACT_NAME",
     "GENERATOR_CONFIG_CLASS",
     "GENERATOR_CONFIG_FORMAT_VERSION",
+    "GENERATOR_CRYPTO",
+    "GENERATOR_FOREX_CFD",
     "GENERATOR_PROCESSES",
     "GENERATOR_PROVENANCE",
     "GENERATOR_WORLD",
@@ -173,6 +179,23 @@ GENERATOR_CONFIG_ARTIFACT_NAME: Final[str] = "generator-config.json"
 # --- asset class and the events a forex-CFD generator cannot honor (R2) ------
 
 ASSET_CLASS_FOREX_CFD: Final[str] = "forex-cfd"
+GENERATOR_FOREX_CFD: Final[str] = "forex-cfd"
+GENERATOR_CRYPTO: Final[str] = "crypto"
+GENERATOR_BY_CLASS: Final[Mapping[str, tuple[str, str]]] = MappingProxyType(
+    {
+        ASSET_CLASS_FOREX_CFD: (GENERATOR_FOREX_CFD, "forex-17NY"),
+        "fx": (GENERATOR_FOREX_CFD, "forex-17NY"),
+        "metal": (GENERATOR_FOREX_CFD, "forex-17NY"),
+        "commodity_cfd": (GENERATOR_FOREX_CFD, "forex-17NY"),
+        "spot_crypto": (GENERATOR_CRYPTO, "always-open"),
+        "perp": (GENERATOR_CRYPTO, "always-open"),
+    }
+)
+"""The generator and the market-hours rule set each instrument record class gets (QB-16).
+
+An index CFD, a stock, a stock CFD or a future waits for its market's calendar (C-03), so a
+request for one is refused rather than given another class's hours.
+"""
 # Corporate-action events (splits, dividends, renames) are equity-only; a forex
 # CFD instrument cannot honor them — requesting one is a category-appropriate
 # ``invalid input`` mismatch, never a silent drop (R2, R8).
@@ -377,6 +400,11 @@ class ResolvedGeneratorConfig:
         """Whether the process cites a CT-10 source dataset (R2)."""
         return self.process in HISTORY_SEEDED_PROCESSES
 
+    @property
+    def generator(self) -> str:
+        """The generator the instrument's class gets, ``crypto`` for a perp or crypto spot."""
+        return GENERATOR_BY_CLASS[self.asset_class][0]
+
     def fp1_identity(self) -> dict[str, object]:
         """The pinned canonical ``fp1`` identity content (AR-14). No SemVer, no float."""
         return {
@@ -529,6 +557,7 @@ def generate_identity() -> dict[str, object]:
         "rng_is_runtime_stdlib_random": False,
         "seed_derivation_rule": SEED_DERIVATION_RULE,
         "asset_class": ASSET_CLASS_FOREX_CFD,
+        "generator_by_class": {k: list(v) for k, v in sorted(GENERATOR_BY_CLASS.items())},
         "library_is_never_swapped": True,
     }
 
@@ -615,12 +644,13 @@ def resolve_generator_config(resources: object) -> Result[ResolvedGeneratorConfi
         return process
 
     asset_class = clean_token(body.get("asset_class")) or ASSET_CLASS_FOREX_CFD
-    if asset_class != ASSET_CLASS_FOREX_CFD:
+    chosen = GENERATOR_BY_CLASS.get(asset_class)
+    if chosen is None:
         return unsupported(
             "asset_class",
-            "the v1 generator produces forex-CFD series only",
+            "QMB generates series for the instrument classes whose market hours it reads",
             given=asset_class,
-            legal=[ASSET_CLASS_FOREX_CFD],
+            legal=sorted(GENERATOR_BY_CLASS),
         )
 
     instrument = _resolve_instrument(body)
@@ -695,7 +725,7 @@ def resolve_generator_config(resources: object) -> Result[ResolvedGeneratorConfi
         start_ns=start.value,
         end_ns=end.value,
         calendar_rule_set=clean_token(body.get("calendar_rule_set", body.get("rule_set")))
-        or "forex-17NY",
+        or chosen[1],
         source_dataset_id=source_dataset_id.value,
         seed=seed.value,
         scenario_count=scenario_count.value,

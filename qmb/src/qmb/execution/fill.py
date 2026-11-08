@@ -5,21 +5,36 @@ crossing the slice's declared path, dispatched per order type. Default pricing
 is bar-worst-case; optimistic-exact is a labeled mode. Both stay
 ``optimistic``-tainted until GAP-0048. All-or-none: any leg fail → NoFill for
 the whole group.
+
+A unit run fills through ``BarExecution`` (QB-07, RS-13): a market order fills at the next
+bar's open on its side of the quote, moved against it by the hour's slippage from the market's
+cost profile. A stop, liquidation or target the bar's open has already jumped fills at that
+open, never at the level, so a gap through a stop records the loss in R as it fell. Inside the
+bar the loss side is checked first: a stop fills at its level less slippage, a liquidation at
+the record's liquidation price, a target at its level.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import StrEnum
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core.chrono import Duration, Instant
 from qmf.core.exact import Price, PriceDelta, Quantity
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.risk.door import Direction, EntryIntent
+from qml.protocol.unit import QuoteBar
+from qml.unit.model import Side
 
 from qmb._refuse import clean_token, invalid
+from qmb.execution.cost import CostProfile
+from qmb.execution.risk import MarginRule
+
+if TYPE_CHECKING:
+    from qmb.host.unit_handler import HeldPosition
 from qmb.execution.ports import (
     FILL_BASES,
     FILL_BASIS_OPTIMISTIC_EXACT,
@@ -48,9 +63,12 @@ __all__ = [
     "NOFILL_STALE_DATA",
     "ORDER_TYPES",
     "STALE_PRICE_SPAN_KEY",
+    "BarExecution",
+    "FillKind",
     "FillLeg",
     "FillOrder",
     "OrderType",
+    "Reached",
     "cross_declared_path",
     "default_fill_order",
     "entry_reference_price",
@@ -1236,3 +1254,76 @@ def _between_last(previous: Price, nxt: Price, target: Price) -> bool:
     hi = nxt.as_fraction()
     mid = target.as_fraction()
     return (lo <= mid <= hi) or (hi <= mid <= lo)
+
+
+# --- a unit run's bar fills (QB-07, RS-13) ------------------------------------
+
+
+class FillKind(StrEnum):
+    """What a unit handler's fill did; the handler's execution ports answer in these."""
+
+    ENTRY = "entry"
+    STOP = "stop"
+    TARGET = "target"
+    CLOSE = "close"
+    LIQUIDATION = "liquidation"
+
+
+@dataclass(frozen=True, slots=True)
+class Reached:
+    """A protective level a bar reached and the price it filled at."""
+
+    kind: FillKind
+    price: Decimal
+    gap: bool = False
+    """The bar opened past the level, so it filled at the open, not at the level."""
+
+
+@dataclass(frozen=True, slots=True)
+class BarExecution:
+    """The unit handler's execution port over closed bars of both quote sides."""
+
+    bar_ns: int
+    costs: Mapping[str, CostProfile] = field(default_factory=dict[str, CostProfile])
+    margins: Mapping[str, MarginRule] = field(default_factory=dict[str, MarginRule])
+
+    def _slip(self, market: str, bar: QuoteBar) -> Decimal:
+        profile = self.costs.get(market)
+        hour = None if profile is None else profile.at(bar.knowable_at.value_ns - self.bar_ns)
+        return Decimal(0) if hour is None else hour.slippage
+
+    def entry_price(self, market: str, side: Side, bar: QuoteBar, /) -> Decimal:
+        slip = self._slip(market, bar)
+        return bar.ask.open + slip if side is Side.LONG else bar.bid.open - slip
+
+    def close_price(self, market: str, side: Side, bar: QuoteBar, /) -> Decimal:
+        slip = self._slip(market, bar)
+        return bar.bid.open - slip if side is Side.LONG else bar.ask.open + slip
+
+    def protective(self, market: str, held: HeldPosition, bar: QuoteBar, /) -> Reached | None:
+        position, stop, target = held.position, held.stop, held.target
+        long = position.side is Side.LONG
+        quote = bar.bid if long else bar.ask
+        worse = 1 if long else -1
+        slip = self._slip(market, bar)
+        margin = self.margins.get(market)
+        liquidation = (
+            None
+            if margin is None
+            else margin.liquidation_price(position.side, position.entry_price)
+        )
+        if liquidation is not None and (liquidation - stop) * worse > 0:
+            kind, level = FillKind.LIQUIDATION, liquidation
+        else:
+            kind, level = FillKind.STOP, stop
+        if (stop - quote.open) * worse > 0:
+            return Reached(FillKind.STOP, quote.open - worse * slip, gap=True)
+        if kind is FillKind.LIQUIDATION and (level - quote.open) * worse > 0:
+            return Reached(kind, quote.open, gap=True)
+        if target is not None and (quote.open - target) * worse > 0:
+            return Reached(FillKind.TARGET, quote.open, gap=True)
+        if (level - (quote.low if long else quote.high)) * worse >= 0:
+            return Reached(kind, level - worse * slip if kind is FillKind.STOP else level)
+        if target is not None and ((quote.high if long else quote.low) - target) * worse >= 0:
+            return Reached(FillKind.TARGET, target)
+        return None

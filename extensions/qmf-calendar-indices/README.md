@@ -12,8 +12,9 @@ in the market's own zone.
 | `de-index-cfd@1` | Europe/Berlin | Eurex's DAX futures, weekdays 01:10 to 22:00 |
 | `jp-index-cfd@1` | Asia/Tokyo | Osaka's Nikkei 225 futures, 08:45 to 15:45 and 17:00 to 06:00 |
 
-Holidays are full closures through 2026 and the first quarter of 2027. Early closes are not
-modelled in version 1.
+Holidays are full closures through 2026 and the first quarter of 2027. `us-index-cfd@1` also lists
+CME's equity halt on Martin Luther King Jr. Day and Presidents' Day in 2025 and 2026 (12:00 to
+17:00 Chicago). Other early closes are not modelled in version 1.
 
 ## The data
 

@@ -9,14 +9,34 @@ whose rate content stays deferred to GAP-0048. A missing swap table is a typed
 refusal, never a silent zero. Each applied swap mints a distinct CT-13 risk-
 transition journal event; cost drag decomposes fill P&L, slippage, commission,
 and financing.
+
+A unit run's carry is a ``CarrySchedule`` per market, read from its instrument record (QB-04,
+LD-13). Every amount is booked as a ``CashEvent`` at venue time while a position is held:
+
+- ``swap`` ``{long, short, triple_day}``: money per lot per night, at each venue day boundary
+  closing a day the market traded, three nights on the triple day;
+- ``financing`` ``{long, short, days_per_year, triple_day}``: a yearly share of the position's
+  notional, booked per night at the same rollovers;
+- ``funding_interval`` with the run's recorded rates: at each funding time from the venue day's
+  start, a positive rate is paid by longs to shorts on the notional at the first price after it;
+- ``events`` ``{kind: dividend, at, amount_per_lot, side}``: on the ex-date ``at`` the venue
+  day boundary that opens the day holding it books ``amount_per_lot`` to the named side, or to
+  longs and from shorts when no side is named.
+
+A funding time with no recorded rate refuses the run, never a silent zero.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta, tzinfo
+from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
+from enum import StrEnum
 from fractions import Fraction
-from typing import Final, Protocol, cast, runtime_checkable
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
 from qmf.core.chrono import Instant, TradingDate, WriterId
 from qmf.core.exact import MONEY_STORAGE_SCALE, Money, Quantity
@@ -25,14 +45,20 @@ from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.data.journal import JournalEvent, JournalEventType
 from qmf.risk.door import Direction
 from qmf.risk.exit_record import CostComponent
+from qml.protocol.unit import OwnPosition, QuoteBar
+from qml.unit.model import Side
 
-from qmb._refuse import clean_token, invalid, unavailable
+from qmb._refuse import clean_token, invalid, policy, unavailable
+from qmb.execution.cost import CostProfile
 from qmb.execution.fidelity import FidelityIdentity, stamp_fidelity
 from qmb.execution.ports import (
     COMPOSITION_VERSION,
     FINANCING_IS_ORDER_FILL,
     TAINT_OPTIMISTIC,
 )
+
+if TYPE_CHECKING:
+    from qmb.host.unit_handler import Fill
 
 __all__ = [
     "COST_COMPONENT_FINANCING",
@@ -51,16 +77,21 @@ __all__ = [
     "WEEKEND_HOLIDAY_APPLY",
     "WEEKEND_HOLIDAY_HANDLING",
     "WEEKEND_HOLIDAY_SKIP",
+    "CarrySchedule",
+    "CashEvent",
+    "CashKind",
     "CostDrag",
     "FinancingCashEvent",
     "FinancingRollover",
     "FinancingScheduler",
     "OpenPosition",
+    "ReplayCash",
     "RolloverCalendar",
     "SwapCalibration",
     "SwapCharge",
     "SwapRate",
     "apply_financing_rollover",
+    "carry_schedule",
     "charge_swap",
     "decompose_cost_drag",
     "financing_calibration_fingerprint",
@@ -68,6 +99,7 @@ __all__ = [
     "fingerprint_financing",
     "lookup_swap_rate",
     "mint_financing_journal_event",
+    "read_funding_rates",
 ]
 
 FINANCING_ADAPTER_SCHEDULED: Final[str] = "scheduled"
@@ -1056,4 +1088,327 @@ def _optional_calendar_identity(value: object) -> Result[dict[str, object] | Non
         "calendar identity on a swap calibration is the rule-set identity, never "
         "a hardcoded rollover wall time (AD-8)",
         given=repr(type(value).__name__),
+    )
+
+
+# --- a unit run's carry from its instrument record (QB-04, LD-13) -------------
+
+_CENT: Final[Decimal] = Decimal("0.01")
+_EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
+_NS_PER_US: Final[int] = 1_000
+_INTERVAL: Final[re.Pattern[str]] = re.compile(r"PT([1-9][0-9]*)([HM])")
+_UNIT_NS: Final[Mapping[str, int]] = MappingProxyType({"H": 3_600_000_000_000, "M": 60_000_000_000})
+
+
+class CashKind(StrEnum):
+    SWAP = "swap"
+    FINANCING = "financing"
+    FUNDING = "funding"
+    DIVIDEND = "dividend"
+    COMMISSION = "commission"
+
+
+@dataclass(frozen=True, slots=True)
+class CashEvent:
+    """Money a held position or a fill moves with no price change: signed, in cents."""
+
+    instant: Instant
+    """When the venue books it: the rollover, the funding time, the ex-date, the fill."""
+    market_id: str
+    position_id: str
+    kind: CashKind
+    money: Decimal
+    detail: str
+    line: str
+    """The line's id at its position: the carry and its venue time, or the fill it charges."""
+
+
+class VenueClock(Protocol):
+    """The instrument record's venue day: its zone and the span of the day holding an instant."""
+
+    @property
+    def zone(self) -> tzinfo: ...
+
+    def span(self, ns: int) -> tuple[int, int]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _Nightly:
+    kind: CashKind
+    long: Decimal
+    short: Decimal
+    triple_day: int | None
+    days_per_year: Decimal | None
+    """None for a swap in money per lot; the day count of a yearly share of notional otherwise."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Dividend:
+    at_ns: int
+    side: Side | None
+    amount_per_lot: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class CarrySchedule:
+    """What holding one market costs or pays with no fill, read from its instrument record."""
+
+    market_id: str
+    day: VenueClock
+    value_per_point: Decimal
+    bar_ns: int
+    nightly: tuple[_Nightly, ...]
+    dividends: tuple[_Dividend, ...]
+    funding_ns: int | None
+    rates: Mapping[int, Decimal]
+
+    def held(
+        self, position: OwnPosition, since: Instant, until: Instant, bar: QuoteBar
+    ) -> Result[tuple[CashEvent, ...]]:
+        """The cash ``position`` moved from the bar opening at ``since`` to the one at ``until``.
+
+        Bars are stamped at their close, so the position was held from the open of the bar at
+        ``since`` to the open of ``bar``, the first price this slice trades at.
+        """
+        after, upto = since.value_ns - self.bar_ns, until.value_ns - self.bar_ns
+        mark = (bar.bid.open + bar.ask.open) / 2
+        notional = mark * position.quantity * self.value_per_point
+        long = position.side is Side.LONG
+        events: list[CashEvent] = []
+        rollover = self.day.span(after)[1]
+        if rollover <= upto:
+            # The night is named by the venue day the boundary closes, so a day ending at 00:00
+            # names the day before the boundary's own date.
+            closed = (_EPOCH + timedelta(microseconds=(rollover - 1) // _NS_PER_US)).astimezone(
+                self.day.zone
+            )
+            for night in self.nightly:
+                nights = 3 if night.triple_day == closed.weekday() else 1
+                rate = night.long if long else night.short
+                money = (
+                    rate * position.quantity * nights
+                    if night.days_per_year is None
+                    else rate * nights / night.days_per_year * notional
+                )
+                detail = f"{nights} night{'s' if nights > 1 else ''} at {rate}"
+                events.append(self._event(rollover, position, night.kind, money, detail))
+        for dividend in self.dividends:
+            if after < dividend.at_ns <= upto and dividend.side in (None, position.side):
+                sign = 1 if dividend.side is not None or long else -1
+                money = sign * dividend.amount_per_lot * position.quantity
+                detail = f"{dividend.amount_per_lot} per lot"
+                events.append(
+                    self._event(dividend.at_ns, position, CashKind.DIVIDEND, money, detail)
+                )
+        for at in self._funding_times(after, upto):
+            rate = self.rates.get(at)
+            if rate is None:
+                return policy(
+                    "funding",
+                    "the run holds no recorded funding rate for a funding time a position was "
+                    "held through, so its funding is unknown",
+                    market_id=self.market_id,
+                    at_ns=at,
+                )
+            money = (-rate if long else rate) * notional
+            detail = f"rate {rate} on {notional}"
+            events.append(self._event(at, position, CashKind.FUNDING, money, detail))
+        return Ok(tuple(sorted(events, key=lambda event: event.instant.value_ns)))
+
+    def _funding_times(self, after: int, upto: int) -> list[int]:
+        if self.funding_ns is None:
+            return []
+        times: list[int] = []
+        start = self.day.span(after)[0]
+        while start <= upto:
+            end = self.day.span(start)[1]
+            times += [t for t in range(start, end, self.funding_ns) if after < t <= upto]
+            start = end
+        return times
+
+    def _event(
+        self, at: int, position: OwnPosition, kind: CashKind, money: Decimal, detail: str
+    ) -> CashEvent:
+        return CashEvent(
+            Instant(at),
+            self.market_id,
+            position.position_id,
+            kind,
+            money.quantize(_CENT, rounding=ROUND_HALF_EVEN),
+            detail,
+            f"{kind.value}.{at}",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayCash:
+    """The unit handler's cash port in a replay: each market's carry and each fill's commission."""
+
+    carry: Mapping[str, CarrySchedule]
+    costs: Mapping[str, CostProfile]
+    bar_ns: int
+
+    def held(
+        self, market: str, position: OwnPosition, since: Instant, until: Instant, bar: QuoteBar, /
+    ) -> Result[tuple[CashEvent, ...]]:
+        schedule = self.carry.get(market)
+        return Ok(()) if schedule is None else schedule.held(position, since, until, bar)
+
+    def filled(self, fill: Fill, /) -> tuple[CashEvent, ...]:
+        profile = self.costs.get(fill.market_id)
+        if profile is None:
+            return ()
+        money = profile.commission(fill.quantity, fill.instant.value_ns - self.bar_ns)
+        if not money:
+            return ()
+        return (
+            CashEvent(
+                fill.instant,
+                fill.market_id,
+                fill.position_id,
+                CashKind.COMMISSION,
+                money,
+                f"{fill.quantity} lots on {fill.kind.value}",
+                f"commission.{fill.kind.value}.{fill.instant.value_ns}",
+            ),
+        )
+
+
+def _signed(value: object) -> Decimal | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        number = Decimal(value)
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() else None
+
+
+def _weekday(value: object) -> int | None:
+    return WEEKDAYS.index(value) if isinstance(value, str) and value in WEEKDAYS else None
+
+
+def _nightly(kind: CashKind, terms: object, *, yearly: bool) -> Result[_Nightly | None]:
+    if terms is None:
+        return Ok(None)
+    given: Mapping[str, object] = (
+        cast("Mapping[str, object]", terms) if isinstance(terms, Mapping) else {}
+    )
+    long, short = _signed(given.get("long")), _signed(given.get("short"))
+    per_year = _signed(given.get("days_per_year")) if yearly else None
+    triple = given.get("triple_day")
+    if (
+        long is None
+        or short is None
+        or (yearly and (per_year is None or per_year <= 0))
+        or (triple is not None and _weekday(triple) is None)
+    ):
+        wants = "long, short and days_per_year" if yearly else "long and short"
+        return invalid(
+            kind.value,
+            f"{kind.value} terms are {wants} as decimal text and an optional triple_day weekday",
+            given=repr(cast(object, terms)),
+        )
+    return Ok(_Nightly(kind, long, short, _weekday(triple), per_year))
+
+
+def _ex_instant(at: object, day: VenueClock) -> int | None:
+    if not isinstance(at, str):
+        return None
+    try:
+        if len(at) == len("2026-12-18"):
+            midnight = datetime.combine(date.fromisoformat(at), datetime.min.time(), day.zone)
+            ns = (midnight - _EPOCH) // timedelta(microseconds=1) * _NS_PER_US
+            return day.span(ns)[0]
+        stamped = datetime.fromisoformat(at)
+    except ValueError:
+        return None
+    if stamped.tzinfo is None:
+        return None
+    return (stamped - _EPOCH) // timedelta(microseconds=1) * _NS_PER_US
+
+
+def _dividends(events: object, day: VenueClock) -> Result[tuple[_Dividend, ...]]:
+    found: list[_Dividend] = []
+    rows = cast("Sequence[object]", events) if isinstance(events, list) else ()
+    for row in rows:
+        event: Mapping[str, object] = (
+            cast("Mapping[str, object]", row) if isinstance(row, Mapping) else {}
+        )
+        if event.get("kind") != "dividend":
+            continue
+        at, amount, side = (
+            _ex_instant(event.get("at"), day),
+            _signed(event.get("amount_per_lot")),
+            event.get("side"),
+        )
+        if at is None or amount is None or side not in (None, "long", "short"):
+            return invalid(
+                "events",
+                "a dividend is {kind, at: an ex-date or a zoned instant, amount_per_lot, side}",
+                given=repr(cast(object, row)),
+            )
+        found.append(_Dividend(at, None if side is None else Side(side), amount))
+    return Ok(tuple(found))
+
+
+def read_funding_rates(rows: Sequence[str]) -> Result[Mapping[int, Decimal]]:
+    """``timestamp,rate`` lines (epoch milliseconds, decimal text) into rates by UTC ns."""
+    rates: dict[int, Decimal] = {}
+    for line in rows[1:]:
+        stamp, _, text = line.strip().partition(",")
+        rate = _signed(text)
+        if not stamp.isdigit() or rate is None:
+            return invalid("funding", "a funding row is timestamp,rate", given=line)
+        rates[int(stamp) * 1_000_000] = rate
+    return Ok(rates)
+
+
+def carry_schedule(
+    market_id: str,
+    terms: Mapping[str, object],
+    *,
+    value_per_point: Decimal,
+    day: VenueClock,
+    bar_ns: int,
+    rates: Mapping[int, Decimal] | None,
+) -> Result[CarrySchedule]:
+    """The carry an instrument record's terms schedule; a perp needs its recorded rates."""
+    nightly: list[_Nightly] = []
+    for kind, key, yearly in (
+        (CashKind.SWAP, "swap", False),
+        (CashKind.FINANCING, "financing", True),
+    ):
+        parsed = _nightly(kind, terms.get(key), yearly=yearly)
+        if is_refusal(parsed):
+            return parsed
+        if parsed.value is not None:
+            nightly.append(parsed.value)
+    dividends = _dividends(terms.get("events"), day)
+    if is_refusal(dividends):
+        return dividends
+    interval = terms.get("funding_interval")
+    funding_ns: int | None = None
+    if interval is not None:
+        matched = _INTERVAL.fullmatch(str(interval))
+        if matched is None:
+            return invalid("funding_interval", "a funding interval is PT<n>H or PT<n>M")
+        funding_ns = int(matched[1]) * _UNIT_NS[matched[2]]
+        if rates is None:
+            return invalid(
+                "funding",
+                "a market that pays funding needs its recorded rates in the run folder",
+                market_id=market_id,
+            )
+    return Ok(
+        CarrySchedule(
+            market_id,
+            day,
+            value_per_point,
+            bar_ns,
+            tuple(nightly),
+            dividends.value,
+            funding_ns,
+            rates or {},
+        )
     )

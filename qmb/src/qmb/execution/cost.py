@@ -6,14 +6,21 @@ P&L. Catalog shapes are parameterized by a versioned per-broker calibration
 whose rate content is deferred to GAP-0048 — missing calibration is a typed
 refusal, never a silent zero. Admission query and fill-time charge share one
 formula, so the same inputs return the identical amount.
+
+A unit run reads its costs from a ``CostProfile`` per market (QB-03): slippage and commission
+per hour of the week, written from the market journal's ``minute`` rows with the count of QMX's
+own fills it measured. A run with no profile, or one measured from fewer fills than
+``[qmb] calibrated_min_fills``, is labelled ``costs_uncalibrated``.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from fractions import Fraction
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from qmf.core.exact import (
     MAX_SCALE,
@@ -41,6 +48,8 @@ from qmb.execution.ports import (
 )
 
 __all__ = [
+    "CALIBRATED_MIN_FILLS",
+    "COSTS_UNCALIBRATED",
     "COST_ADAPTER_CATALOG",
     "COST_ADAPTER_NOTIONAL_MINIMUM",
     "COST_ADAPTER_PERCENT_OF_NOTIONAL",
@@ -51,6 +60,8 @@ __all__ = [
     "COST_CONTENT_DEFERRED_TO",
     "COST_MODELS",
     "CommissionCalibration",
+    "CostProfile",
+    "HourCost",
     "NotionalProportionalMinimumCostAdapter",
     "PerLotCostAdapter",
     "PercentOfNotionalCostAdapter",
@@ -58,7 +69,9 @@ __all__ = [
     "charge_commission",
     "cost_identity",
     "fingerprint_cost",
+    "hour_of_week",
     "itemize_commission",
+    "parse_cost_profile",
 ]
 
 COST_ADAPTER_ZERO: Final[str] = "zero"
@@ -785,3 +798,98 @@ def _currency_agrees(currency: str | None, amount: Money | None, field: str) -> 
         given=amount.currency,
         currency=currency,
     )
+
+
+# --- a unit run's cost profile (QB-03) ----------------------------------------
+
+COSTS_UNCALIBRATED: Final[str] = "costs_uncalibrated"
+CALIBRATED_MIN_FILLS: Final[int] = 50
+"""``[qmb] calibrated_min_fills``: QMX's own fills a profile is measured from before it counts."""
+COST_PROFILE_SCHEMA: Final[str] = "qmx.qmb.cost-profile/1"
+_HOUR_NS: Final[int] = 3_600_000_000_000
+_HOURS_PER_WEEK: Final[int] = 168
+_EPOCH_HOUR_OF_WEEK: Final[int] = 72
+"""1970-01-01 00:00 UTC, a Thursday, as an hour of a week that starts Monday 00:00 UTC."""
+
+
+def hour_of_week(ns: int) -> int:
+    """The hour of the week in UTC that holds ``ns``, 0 for Monday 00:00 to 01:00."""
+    return (ns // _HOUR_NS + _EPOCH_HOUR_OF_WEEK) % _HOURS_PER_WEEK
+
+
+@dataclass(frozen=True, slots=True)
+class HourCost:
+    slippage: Decimal
+    """Price points a market fill in this hour moves against the order."""
+    commission_per_lot: Decimal
+    """Money per lot per fill, in the instrument's currency."""
+
+
+@dataclass(frozen=True, slots=True)
+class CostProfile:
+    """One market's costs at one broker and account type, by hour of the week."""
+
+    broker: str
+    account_type: str
+    market_id: str
+    fills: int
+    """QMX's own fills the market journal measured these costs from."""
+    hours: Mapping[int, HourCost]
+
+    def at(self, ns: int) -> HourCost | None:
+        """The hour's costs, or None for an hour the journal measured nothing in."""
+        return self.hours.get(hour_of_week(ns))
+
+    def calibrated(self, min_fills: int) -> bool:
+        return self.fills >= min_fills
+
+    def commission(self, quantity: Decimal, ns: int) -> Decimal:
+        """The money a fill of ``quantity`` lots in the hour holding ``ns`` pays, as a debit."""
+        hour = self.at(ns)
+        charged = Decimal(0) if hour is None else -hour.commission_per_lot * quantity
+        return charged.quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
+
+
+def _amount(value: object) -> Decimal | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        amount = Decimal(value)
+    except InvalidOperation:
+        return None
+    return amount if amount.is_finite() and amount >= 0 else None
+
+
+def parse_cost_profile(document: object) -> Result[CostProfile]:
+    """A ``qmx.qmb.cost-profile/1`` document: every amount is non-negative decimal text."""
+    if not isinstance(document, Mapping):
+        return invalid("cost_profile", "a cost profile is a JSON object")
+    given = cast("Mapping[str, object]", document)
+    if given.get("schema") != COST_PROFILE_SCHEMA:
+        return invalid("cost_profile", f"a cost profile is {COST_PROFILE_SCHEMA}")
+    names = [clean_token(given.get(key)) for key in ("broker", "account_type", "market_id")]
+    fills = given.get("fills")
+    if any(name is None for name in names) or type(fills) is not int or fills < 0:
+        return invalid(
+            "cost_profile", "a cost profile names its broker, account type, market and fills"
+        )
+    rows = given.get("hours")
+    if not isinstance(rows, list):
+        return invalid("cost_profile", "a cost profile lists its hours of the week")
+    hours: dict[int, HourCost] = {}
+    for row in cast("list[object]", rows):
+        cell: Mapping[str, object] = (
+            cast("Mapping[str, object]", row) if isinstance(row, Mapping) else {}
+        )
+        hour = cell.get("hour_of_week")
+        slippage = _amount(cell.get("slippage"))
+        commission = _amount(cell.get("commission_per_lot"))
+        if type(hour) is not int or not 0 <= hour < _HOURS_PER_WEEK or hour in hours:
+            return invalid("hour_of_week", "each hour of the week is 0 to 167, once", given=hour)
+        if slippage is None or commission is None:
+            return invalid(
+                "cost_profile", "slippage and commission are non-negative decimal text", hour=hour
+            )
+        hours[hour] = HourCost(slippage, commission)
+    broker, account_type, market_id = (str(name) for name in names)
+    return Ok(CostProfile(broker, account_type, market_id, fills, MappingProxyType(hours)))

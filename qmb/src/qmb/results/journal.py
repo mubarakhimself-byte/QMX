@@ -3,7 +3,9 @@
 Every record the run's unit and its handler make becomes one typed row of the unit journal
 (Level 0 AD-27): each decision is one ``signal`` row with the value, source and version of
 every reading the unit computed (MIS-10, JR-04), and the run adds its ``calibration``,
-``state``, ``guard``, ``fill``, ``trade`` and ``data_event`` rows. The rows land as partition
+``state``, ``guard``, ``fill``, ``trade``, ``cash`` and ``data_event`` rows. A trade that a gap
+took past its stop carries ``gap_through_stop`` (RS-13), and each swap, financing, funding,
+dividend or commission line is one ``cash`` row (B10). The rows land as partition
 files under the run's output folder, and the job hands them to the core as the result's
 ``journal/*`` blobs, so a run's journal is one Library record.
 
@@ -34,6 +36,7 @@ from qml.compile import CompiledUnit
 from qml.protocol.unit import CalibrationRow, DecisionRow, StateEvent
 
 from qmb._refuse import invalid
+from qmb.execution.financing import CashEvent
 from qmb.host.unit_handler import Fill, JournalRecord, Skip, UnitTrade
 
 __all__ = ["JournalPart", "JournalReport", "RunJournal"]
@@ -171,6 +174,8 @@ class RunJournal:
                 self._skip(record)
             case UnitTrade():
                 self._trade(record)
+            case CashEvent():
+                self._cash(record)
 
     def data_gap(self, market_id: str, after: Instant, before: Instant, bars_missing: int) -> None:
         """Bars the unit's stream did not hold between two bars it did (QB-18)."""
@@ -373,4 +378,17 @@ class RunJournal:
             "money": str(trade.money),
             "r": str(trade.r),
         }
+        if trade.gap_through_stop:
+            body["gap_through_stop"] = True
         self._write("trade", body, self._facts(trade.market_id))
+
+    def _cash(self, event: CashEvent) -> None:
+        body: dict[str, object] = {
+            "deal_id": f"{event.position_id}.{event.line}",
+            "position_id": event.position_id,
+            "instant": event.instant.value_ns,
+            "kind": event.kind.value,
+            "money": str(event.money),
+            "detail": event.detail,
+        }
+        self._write("cash", body, self._facts(event.market_id))
