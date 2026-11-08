@@ -1,0 +1,26 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "receipts-grader",
+  "name": "Receipts grader: every number an agent states is held by a receipt it cites, or the step fails",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "grade", "name": "Check every number's receipt", "type": "grader", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/receipts.py"}},
+    {"id": "deliver", "name": "Hand on the note", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Fail on a number with no receipt", "type": "script",
+     "typeVersion": 1, "position": [440, 120], "effect": "none",
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Check every number's receipt", "port": "in", "map": "one"}]]},
+    "Check every number's receipt": {
+      "pass": [[{"node": "Hand on the note", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Fail on a number with no receipt", "port": "in", "map": "one"}]]
+    }
+  },
+  "meta": {"block": true}
+}

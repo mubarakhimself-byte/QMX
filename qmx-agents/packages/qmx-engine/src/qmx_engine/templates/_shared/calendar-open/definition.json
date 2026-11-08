@@ -1,0 +1,17 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "calendar-open",
+  "name": "Calendar open: whether a market is open now, read from its own calendar",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "open", "name": "Read the market's calendar", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/calendar_open.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Read the market's calendar", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}
