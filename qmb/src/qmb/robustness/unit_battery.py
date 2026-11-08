@@ -1,7 +1,8 @@
 """A unit run's robustness evidence: its entries against random entries, and its costs stressed.
 
-Both read one finished unit run's trades and the bars it ran over (B14, the judge's chain steps 2
-and 3, `judge.md` §3):
+Both read trades of one finished unit run and the bars it ran over (B14, the judge's chain steps 2
+and 3, `judge.md` §3). The job measures each market on its own trades (``by_market``), because a
+market answers for its own evidence:
 
 - ``entry_edge``: the entry edge ratio, the trades' summed favourable excursion over their summed
   adverse excursion in the ``horizon`` bars after each fill, both in R of the trade's own stop
@@ -43,6 +44,7 @@ __all__ = [
     "CompactBars",
     "CostStress",
     "EntryEdge",
+    "by_market",
     "compact_bars",
     "cost_stress",
     "entry_edge",
@@ -139,6 +141,14 @@ class CompactBars:
         self.closes_ns.append(bar.knowable_at.value_ns)
         for column, price in zip(columns, prices, strict=True):
             column.append(int(price.scaleb(self.scale)))
+
+
+def by_market(trades: Iterable[UnitTrade]) -> dict[str, list[UnitTrade]]:
+    """Each market's own trades, in the run's order."""
+    found: dict[str, list[UnitTrade]] = {}
+    for trade in trades:
+        found.setdefault(trade.market_id, []).append(trade)
+    return found
 
 
 def compact_bars(

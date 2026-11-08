@@ -39,11 +39,13 @@ from qmx_judge.judge import (
     JudgeRefused,
     judge,
     land_judgement,
+    late_spec,
     parse_spec,
     quick_spec,
+    spec_edit,
 )
 from qmx_judge.landing import REPORT_SLOT, RESULT_KIND, Stored
-from qmx_judge.tries import TRY_KIND, try_item
+from qmx_judge.tries import TRY_KIND, Try, spec_edit_item, try_item
 from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import MAIN, drafts_ref, state_ref
@@ -71,6 +73,8 @@ if TYPE_CHECKING:
 UNIT_KIND: Final = "unit"
 NO_NODE: Final = "no trading node is set up yet"
 REPO: Final = Path(qml.__file__).resolve().parents[3]
+QUICK_STUDY: Final = "study-quick-"
+"""The item prefix of a unit's quick study, the one study written after its results by design."""
 COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "motion", "study")
 """The result fields that make two runs one request, whatever tester ran them."""
 ADDED_TRADE_FIELDS: Final = frozenset({"mae_r", "mfe_r", "cash", "net_r"})
@@ -358,30 +362,46 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         results: list[str], study: str | None = None, response_format: ResponseFormat = "concise"
     ) -> dict[str, Any]:
         """Judge landed results with the core's referee and land the verdict. Answers the
-        verdict in plain words, with the raw and effective tries behind it."""
+        verdict in plain words, with the raw and effective tries behind it. Every market the
+        results traded is judged. A study version made after the results' first try counts as a
+        try and its own k is not used."""
         store = ctx.library.store
         judged = [_judged(store, result_id) for result_id in results]
         pin, spec_fields = _study(store, study, judged)
         tries = _tries(store, judged)
         family = [
             found
-            for result_id in sorted(_landed_results(tries) - set(results))
+            for result_id in sorted(_landed_results(list(tries.values())) - set(results))
             if (found := _judged(store, result_id)).status == "finished"
         ]
         principal = ctx.control._caller()  # pyright: ignore[reportPrivateUsage]
+        late = _written_late(store, pin, judged, tries)
+        edit = _new_spec_edit(store, pin, judged, tries, principal) if late else None
+        library = _JudgeLibrary(store)
         try:
             spec = parse_spec(spec_fields)
             verdict = judge(
-                spec,
+                late_spec(spec) if late else spec,
                 study=pin,
                 results=judged,
-                tries=tries,
+                tries=[*tries.values(), *([] if edit is None else [edit.fields()])],
                 family=family,
                 principal=principal,
                 versions={"checker": f"qml {importlib.metadata.version('qml')}"},
             )
+            if edit is not None:
+                title = f"spec_edit {pin}"
+                library.put(
+                    TRY_KIND,
+                    edit.fields(),
+                    {},
+                    item=spec_edit_item(pin),
+                    title=title,
+                    summary=title,
+                    principal=principal,
+                )
             landed = land_judgement(
-                _JudgeLibrary(store),
+                library,
                 verdict,
                 results=judged,
                 spec=spec,
@@ -675,6 +695,14 @@ def _judged(store: Store, result_id: str) -> JudgedResult:
     return JudgedResult.read(result_id, view.fields, trades)
 
 
+def _quick_fields(store: Store, judged: list[JudgedResult]) -> JsonObject:
+    """The quick spec of the results' unit, its claim the unit's own claim card idea."""
+    unit = judged[0].unit if judged else ""
+    claim = store.get(OPERATOR, unit).fields.get("claim_card") if store.catalog.row(unit) else None
+    idea = cast("dict[str, Any]", claim).get("idea") if isinstance(claim, dict) else None
+    return cast("JsonObject", quick_spec(idea if isinstance(idea, str) else None))
+
+
 def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple[str, JsonObject]:
     """The study the verdict is judged under: the one named, else the results' own, else a quick
     spec over every admitted market, landed once per unit."""
@@ -686,11 +714,9 @@ def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple
             raise ValueError(f"{named} is a {view.kind}; pass the id of a study-spec")
         return named, view.fields
     unit = judged[0].unit if judged else ""
-    claim = store.get(OPERATOR, unit).fields.get("claim_card") if store.catalog.row(unit) else None
-    idea = cast("dict[str, Any]", claim).get("idea") if isinstance(claim, dict) else None
-    fields = cast("JsonObject", quick_spec(idea if isinstance(idea, str) else None))
+    fields = _quick_fields(store, judged)
     key = fingerprint({"unit": unit, "spec": fields})
-    item = f"study-quick-{unit if is_refusal(key) else key.value.digest[:24]}"
+    item = f"{QUICK_STUDY}{unit if is_refusal(key) else key.value.digest[:24]}"
     head = store.head(item, MAIN)
     if head is not None:
         return head[0], fields
@@ -698,8 +724,8 @@ def _study(store: Store, study: str | None, judged: list[JudgedResult]) -> tuple
     return store.put(OPERATOR, draft, on=MAIN, expected_head=None).object_id, fields
 
 
-def _tries(store: Store, judged: list[JudgedResult]) -> list[dict[str, Any]]:
-    """Every `try` of the results' families, and each result's own run tries."""
+def _tries(store: Store, judged: list[JudgedResult]) -> dict[str, dict[str, Any]]:
+    """Every `try` of the results' families, and each result's own run tries, by object id."""
     found: dict[str, dict[str, Any]] = {}
     for result in judged:
         for state in ("opened", "landed"):
@@ -710,7 +736,48 @@ def _tries(store: Store, judged: list[JudgedResult]) -> list[dict[str, Any]]:
     for family in sorted(families):
         for object_id in store.with_field(TRY_KIND, "family", family):
             found[object_id] = dict(store.get(OPERATOR, object_id).fields)
-    return list(found.values())
+    return found
+
+
+def _written_late(
+    store: Store, pin: str, judged: list[JudgedResult], tries: dict[str, dict[str, Any]]
+) -> bool:
+    """Whether this study version was made after the results' families first tried something.
+    The store's move order decides, which no clock and no caller sets. A behaviour check is no
+    try at a result. Only the unit's own quick study is exempt, because it is written late by
+    design and `origin` is a free field an agent could fill in itself."""
+    first = min(
+        (store.catalog.placed_seq(o) for o, row in tries.items() if row.get("kind") != "check"),
+        default=None,
+    )
+    view = store.get(OPERATOR, pin)
+    if first is None or (
+        view.item.startswith(QUICK_STUDY) and view.fields == _quick_fields(store, judged)
+    ):
+        return False
+    moves = store.history_of(OPERATOR, view.item)
+    return min((m.seq for m in moves if m.new_head == pin), default=0) > first
+
+
+def _new_spec_edit(
+    store: Store,
+    pin: str,
+    judged: list[JudgedResult],
+    tries: dict[str, dict[str, Any]],
+    principal: str,
+) -> Try | None:
+    """The counted try of judging under a late study version, or None once it has landed. The
+    item is named by the version, so the host's `land_spec_edit` and this door land one between
+    them."""
+    if store.head(spec_edit_item(pin), MAIN) is not None:
+        return None
+    return spec_edit(
+        pin,
+        unit=judged[0].unit,
+        family=next(str(row["family"]) for row in tries.values() if row.get("family")),
+        principal=principal,
+        at=datetime.now(UTC).isoformat(),
+    )
 
 
 def _landed_results(tries: list[dict[str, Any]]) -> set[str]:

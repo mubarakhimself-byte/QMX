@@ -681,6 +681,7 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("qmb", "1.0.4"): "8e9df6324db027dd72023f4b86a61cf8",
     ("qmb", "1.0.5"): "b9e3efa0a1af83cbd0297985fa2f3f81",
     ("qmb", "1.0.6"): "3ab3477d4d00b38877ac90ae10193521",
+    ("qmb", "1.0.7"): "32c53b83ee77ab46304ef81d610a429c",
     ("trading-node", "0.1.0"): "474d301af9fc35f3352c3230faf4bb63",
     ("trading-node", "0.1.1"): "54d22aff076ea337daad3de7bc19ed75",
     ("trading-node", "0.1.2"): "f41dc6c9d0f206bbae525b7aebde6a0e",
@@ -688,6 +689,7 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("trading-node", "0.1.4"): "60d93b001fa2ccc9a3a7f8f65b81c0a3",
     ("trading-node", "0.1.5"): "044091fa8c9ed9b92b675a0f43adcba7",
     ("trading-node", "0.1.6"): "9bbc7724e4d0e47fc20c80412847c54c",
+    ("trading-node", "0.1.7"): "0c1bb2b76ed9f865e0afd59d062f0d6c",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image

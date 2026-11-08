@@ -1,6 +1,6 @@
 id = "trading-node"
 name = "Trading node"
-version = "0.1.6"
+version = "0.1.7"
 risk = "money"
 kind = "headless"
 startup_timeout_seconds = 90
