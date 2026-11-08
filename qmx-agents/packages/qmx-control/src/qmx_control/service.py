@@ -866,12 +866,19 @@ class ControlService:
         self, db: sqlite3.Connection, topic: EventTopic, subject: str, data: Document
     ) -> None:
         self._aggregate.cache_clear()
-        cursor = db.execute(
+        db.execute(
             "INSERT INTO events(topic,subject,data) VALUES(?,?,?)",
             (topic, subject, json.dumps(data)),
         )
-        if topic in {"runs", "jobs", "apps", "library"}:
-            summary = self._aggregate_counts(cursor.lastrowid or 0)
+
+    def _push_totals(self) -> None:
+        """Push the UI totals after a runs, apps or library event, with the lock released: the
+        engine's active count hops onto the engine's loop, and that loop takes this lock to read
+        settings, so a hop made under the lock deadlocks both (C-33)."""
+        active = self._active_jobs()
+        with self._lock, self._connect() as db:
+            (revision,) = db.execute("SELECT COALESCE(MAX(seq),0) FROM events").fetchone()
+            summary = self._aggregate_counts(int(revision), active)
             db.execute(
                 "INSERT INTO events(topic,subject,data) VALUES('aggregates','',?)",
                 (json.dumps(summary),),
@@ -1378,6 +1385,7 @@ class ControlService:
         with self._lock, self._connect() as db:
             data = self.library.save(item)
             self._event(db, "library", str(data["id"]), {"type": "saved", "item_id": data["id"]})
+        self._push_totals()
         return data
 
     @operation("library", "search", "read", rest=("GET", "/api/library"), cursor=True)
@@ -1485,6 +1493,8 @@ class ControlService:
                         "memo_key": result["memo_key"],
                     }
                     self._event(db, "library", str(result["id"]), event)
+        if produced:
+            self._push_totals()
         return result
 
     @operation("library", "versions", "read", rest=("GET", "/api/library/{artifact_id}/versions"))
@@ -1498,6 +1508,7 @@ class ControlService:
         with self._lock, self._connect() as db:
             data = self.library.link(source_id, target_id, relation)
             self._event(db, "library", source_id, {"type": "linked", **data})
+        self._push_totals()
         return data
 
     @operation("library", "links", "read", rest=("GET", "/api/library/{artifact_id}/links"))
@@ -1549,6 +1560,7 @@ class ControlService:
             raise refused(error) from error
         with self._lock, self._connect() as db:
             self._event(db, "library", commit.object_id, {"type": "branched", "ref": commit.ref})
+        self._push_totals()
         return {"item": commit.item, "ref": commit.ref, "object_id": commit.object_id}
 
     @operation(
@@ -1579,6 +1591,7 @@ class ControlService:
                 merged.object_id,
                 {"type": merged.outcome, "into": into, "from_ref": from_ref},
             )
+        self._push_totals()
         return {"outcome": merged.outcome, "object_id": merged.object_id}
 
     @operation("library", "conflicts", "read", rest=("GET", "/api/library/conflicts"))
@@ -1627,6 +1640,7 @@ class ControlService:
             raise refused(error) from error
         with self._lock, self._connect() as db:
             self._event(db, "library", merged.object_id, {"type": "resolved"})
+        self._push_totals()
         return {"outcome": merged.outcome, "object_id": merged.object_id}
 
     @operation("library", "history", "read", rest=("GET", "/api/library/{artifact_id}/history"))
@@ -1670,18 +1684,20 @@ class ControlService:
         ]
 
     def _aggregate_read(self, revision: int) -> Document:
-        return self._aggregate_counts(revision)
+        active = self._active_jobs()
+        with self._lock:
+            return self._aggregate_counts(revision, active)
 
-    def _aggregate_counts(self, revision: int) -> Document:
+    def _active_jobs(self) -> int:
+        engine = self._workflow_engine
+        if engine is None:
+            return 0
+        return sum(1 for run in engine.workflow_runs_list(None) if run.get("status") == "running")
+
+    def _aggregate_counts(self, revision: int, active: int) -> Document:
         count = self.library.count()
         with closing(sqlite3.connect(self.home / "runs.db")) as index:
             runs = index.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
-        engine = self._workflow_engine
-        active = 0
-        if engine is not None:
-            active = sum(
-                1 for run in engine.workflow_runs_list(None) if run.get("status") == "running"
-            )
         return {
             "revision": revision,
             "library_items": count,
@@ -1695,7 +1711,7 @@ class ControlService:
         self._refresh_runs()
         with self._lock, self._connect() as db:
             revision = db.execute("SELECT COALESCE(MAX(seq),0) FROM events").fetchone()[0]
-            return cast(Document, self._aggregate(revision)).copy()
+        return cast(Document, self._aggregate(revision)).copy()
 
     @staticmethod
     def _page(offset: int, limit: int) -> None:
@@ -1704,8 +1720,11 @@ class ControlService:
 
     def _refresh_runs(self) -> None:
         with self._lock, self._connect() as db:
-            for data in self.run_index.refresh():
+            refreshed = self.run_index.refresh()
+            for data in refreshed:
                 self._event(db, "runs", str(data["id"]), data)
+        if refreshed:
+            self._push_totals()
 
     @staticmethod
     def _unavailable(operation: str, packet: str = "P12-P14") -> NoReturn:
@@ -1942,9 +1961,10 @@ class ControlService:
     def _app_event(self, app_id: str, data: Document) -> None:
         with self._lock, self._connect() as db:
             self._event(db, "apps", app_id, data)
-        with self._lock:
-            for hook in list(self._app_hooks.values()):
-                hook(app_id, data)
+            hooks = list(self._app_hooks.values())
+        self._push_totals()
+        for hook in hooks:
+            hook(app_id, data)
 
     def watch_app_events(self, session_id: str, hook: Callable[[str, Document], None]) -> None:
         """Keep one subscription per session across agent rebuilds."""
@@ -1955,6 +1975,7 @@ class ControlService:
         """Publish an actionable operator notification on the existing app stream."""
         with self._lock, self._connect() as db:
             self._event(db, "apps", app_id, data)
+        self._push_totals()
 
     def close(self) -> None:
         if self._apps is not None:
