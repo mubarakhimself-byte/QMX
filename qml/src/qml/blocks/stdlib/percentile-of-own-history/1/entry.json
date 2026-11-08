@@ -1,0 +1,46 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "percentile-of-own-history",
+  "version": 1,
+  "family": "motion",
+  "component_type": "motion",
+  "definition": "A derived number set to a percentile of a series over its last window of bars.",
+  "eligible_roles": [
+    "motion"
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": null,
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": null
+  },
+  "parameters": {
+    "percentile": {
+      "measure": "ratio"
+    },
+    "window_bars": {
+      "measure": "bars"
+    }
+  },
+  "warm_up": {
+    "rule": "window_bars",
+    "bars": null
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "window_bars",
+    "observations": null
+  },
+  "golden": {
+    "reference": "numpy.percentile linear, numpy shipped with the TA-Lib 0.7.1 run",
+    "cases": "qml/tests/golden/talib-0.7.1.json"
+  },
+  "origin": "qml",
+  "fingerprint": "fp1:sha256:3bf3b12e4f579135da6bc1e362376a1de7097db214195f91d61fbbaec23be717"
+}

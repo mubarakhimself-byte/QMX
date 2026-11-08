@@ -1,0 +1,66 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "trend-floor-from-record",
+  "version": 1,
+  "family": "motion",
+  "component_type": "motion",
+  "definition": "Moves a trend-strength floor one step toward the shrunk lowest bucket edge above which the unit's own closed trades kept a mean R of at least zero.",
+  "eligible_roles": [
+    "motion"
+  ],
+  "inputs": [
+    {
+      "port": "trades",
+      "stream_kind": "trades",
+      "measure": null,
+      "data_level": null
+    },
+    {
+      "port": "current",
+      "stream_kind": "number",
+      "measure": "percent",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "percent"
+  },
+  "parameters": {
+    "buckets": {
+      "measure": "count"
+    },
+    "min_count": {
+      "measure": "count"
+    },
+    "shrink_k": {
+      "measure": "count"
+    },
+    "step_limit": {
+      "measure": "count"
+    },
+    "min": {
+      "measure": "percent"
+    },
+    "max": {
+      "measure": "percent"
+    },
+    "step": {
+      "measure": "percent"
+    },
+    "default": {
+      "measure": "percent"
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "origin": "qml",
+  "fingerprint": "fp1:sha256:e825e436371e7382efdc0fb680caf3e988e13ae23b5949016a9866799bb76ac6"
+}

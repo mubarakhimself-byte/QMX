@@ -1,0 +1,52 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "ema",
+  "version": 1,
+  "family": "moving-average",
+  "component_type": "context",
+  "definition": "Exponential moving average of a series, seeded with the simple mean of its first period values.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location"
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars"
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 1
+  },
+  "golden": {
+    "reference": "talib.EMA 0.7.1",
+    "cases": "qml/tests/golden/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "100"
+    },
+    "bars": 900,
+    "tolerance": "1e-9"
+  },
+  "origin": "qml",
+  "fingerprint": "fp1:sha256:83996dbbf75d4cddefe157cccdffe61c9e86da3f79f7a4a1e6cc4f8f172112f4"
+}

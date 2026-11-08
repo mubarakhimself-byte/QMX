@@ -1,0 +1,40 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "swing-stop-buffer",
+  "version": 1,
+  "family": "protective-stop",
+  "component_type": "exit",
+  "definition": "Protective stop beyond the last swing low (long) or high (short) plus a buffer of its price.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "buffer": {
+      "measure": "percent"
+    }
+  },
+  "warm_up": {
+    "rule": "5 bars",
+    "bars": 5
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 6
+  },
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "fingerprint": "fp1:sha256:db0cf634b2f2a91aff715079fc0e2cf4d1da19a2db04f316e78dc37960aedc52"
+}
