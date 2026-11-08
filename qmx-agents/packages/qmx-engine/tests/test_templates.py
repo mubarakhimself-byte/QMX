@@ -62,6 +62,7 @@ NO_RENDER = frozenset(
         "download-dukascopy",
         "extract-source",
         "feed",
+        "refresh-ccxt-records",
     }
 )
 """Script-first templates with no grader and no deliver step, so they carry no block copy.
@@ -270,8 +271,8 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
 def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 45
-    assert len(set(ids)) == 45
+    assert len(ids) == 46
+    assert len(set(ids)) == 46
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
@@ -297,6 +298,7 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "download-binance",
         "download-ccxt",
         "extract-source",
+        "refresh-ccxt-records",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
@@ -339,6 +341,7 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "download-binance",
         "download-ccxt",
         "extract-source",
+        "refresh-ccxt-records",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -591,7 +594,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_22_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
     home: Path,
 ) -> None:
     with fake_service(home, harness=answers()) as svc:
@@ -607,9 +610,9 @@ def test_install_publishes_22_disabled_saves_23_drafts_and_a_second_install_chan
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 45
+    assert [i.action for i in second] == ["unchanged"] * 46
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 22
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 23
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -630,6 +633,7 @@ def test_install_publishes_22_disabled_saves_23_drafts_and_a_second_install_chan
         ("download-ccxt", "cron", False),
         ("download-dukascopy", "cron", False),
         ("morning-digest", "cron", False),
+        ("refresh-ccxt-records", "cron", False),
         ("rs1-paper-scout", "cron", False),
         ("rv-weekly-review", "cron", False),
         ("t3-news-calendar-watch", "cron", False),

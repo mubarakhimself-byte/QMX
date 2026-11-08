@@ -1,0 +1,71 @@
+{
+  "note": "Hand-written stub, not a capture: the fields refresh.py reads, in the shape ccxt 4.5.85 binance.parse_market and fetch_funding_intervals return (no leverage on the public market list; fundingInfo lists only symbols off the 8-hour clock). The live fetch is a lane run with network.",
+  "rateLimit": 50,
+  "funding_intervals": {
+    "ETH/USDT:USDT": {"symbol": "ETH/USDT:USDT", "interval": "4h"}
+  },
+  "markets": [
+    {
+      "id": "BTCUSDT", "symbol": "BTC/USDT:USDT", "base": "BTC", "quote": "USDT",
+      "settle": "USDT", "type": "swap", "spot": false, "swap": true, "future": false,
+      "option": false, "active": true, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 0.001, "price": 0.1},
+      "limits": {"leverage": {"min": null, "max": null},
+                 "amount": {"min": 0.001, "max": 1000.0},
+                 "price": {"min": 261.1, "max": 809484.0}, "cost": {"min": 100.0, "max": null}}
+    },
+    {
+      "id": "ETHUSDT", "symbol": "ETH/USDT:USDT", "base": "ETH", "quote": "USDT",
+      "settle": "USDT", "type": "swap", "spot": false, "swap": true, "future": false,
+      "option": false, "active": true, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 0.001, "price": 0.01},
+      "limits": {"leverage": {"min": null, "max": null},
+                 "amount": {"min": 0.001, "max": 10000.0},
+                 "price": {"min": 39.86, "max": 306177.0}, "cost": {"min": 20.0, "max": null}}
+    },
+    {
+      "id": "BTCUSDT_261225", "symbol": "BTC/USDT:USDT-261225", "base": "BTC", "quote": "USDT",
+      "settle": "USDT", "type": "future", "spot": false, "swap": false, "future": true,
+      "option": false, "active": true, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": 1798185600000,
+      "expiryDatetime": "2026-12-25T08:00:00.000Z",
+      "precision": {"amount": 0.001, "price": 0.1},
+      "limits": {"leverage": {"min": null, "max": null},
+                 "amount": {"min": 0.001, "max": 500.0},
+                 "price": {"min": 576.3, "max": 1000000.0}, "cost": {"min": 5.0, "max": null}}
+    },
+    {
+      "id": "BTCUSDT_270326", "symbol": "BTC/USDT:USDT-270326", "base": "BTC", "quote": "USDT",
+      "settle": "USDT", "type": "future", "spot": false, "swap": false, "future": true,
+      "option": false, "active": true, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": 1806048000000,
+      "expiryDatetime": "2027-03-26T08:00:00.000Z",
+      "precision": {"amount": 0.001, "price": 0.1},
+      "limits": {"leverage": {"min": null, "max": null},
+                 "amount": {"min": 0.001, "max": 500.0},
+                 "price": {"min": 576.3, "max": 1000000.0}, "cost": {"min": 5.0, "max": null}}
+    },
+    {
+      "id": "BTCUSD_PERP", "symbol": "BTC/USD:BTC", "base": "BTC", "quote": "USD",
+      "settle": "BTC", "type": "swap", "spot": false, "swap": true, "future": false,
+      "option": false, "active": true, "contract": true, "linear": false, "inverse": true,
+      "contractSize": 100.0, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 1.0, "price": 0.1},
+      "limits": {"leverage": {"min": null, "max": null},
+                 "amount": {"min": 1.0, "max": 1000000.0},
+                 "price": {"min": 1000.0, "max": 4520958.0}, "cost": {"min": null, "max": null}}
+    },
+    {
+      "id": "BTCUSDT", "symbol": "BTC/USDT", "base": "BTC", "quote": "USDT", "settle": null,
+      "type": "spot", "spot": true, "swap": false, "future": false, "option": false,
+      "active": true, "contract": false, "linear": null, "inverse": null,
+      "contractSize": null, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 1e-05, "price": 0.01},
+      "limits": {"leverage": {"min": null, "max": null},
+                 "amount": {"min": 1e-05, "max": 9000.0},
+                 "price": {"min": 0.01, "max": 1000000.0}, "cost": {"min": 5.0, "max": 9000000.0}}
+    }
+  ]
+}

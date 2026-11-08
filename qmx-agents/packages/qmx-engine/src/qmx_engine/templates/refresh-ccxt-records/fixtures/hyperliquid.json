@@ -1,0 +1,43 @@
+{
+  "note": "Hand-written stub, not a capture: the fields refresh.py reads, in the shape ccxt 4.5.85 hyperliquid.parse_market returns (contractSize 1, linear, precision from szDecimals, leverage from maxLeverage). The live fetch is a lane run with network.",
+  "rateLimit": 50,
+  "funding_intervals": {},
+  "markets": [
+    {
+      "id": "0", "symbol": "BTC/USDC:USDC", "base": "BTC", "quote": "USDC", "settle": "USDC",
+      "type": "swap", "spot": false, "swap": true, "future": false, "option": false,
+      "active": true, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 1e-05, "price": 1.0},
+      "limits": {"leverage": {"min": null, "max": 40}, "amount": {"min": null, "max": null},
+                 "price": {"min": null, "max": null}, "cost": {"min": 10.0, "max": null}}
+    },
+    {
+      "id": "1", "symbol": "ETH/USDC:USDC", "base": "ETH", "quote": "USDC", "settle": "USDC",
+      "type": "swap", "spot": false, "swap": true, "future": false, "option": false,
+      "active": true, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 0.0001, "price": 0.1},
+      "limits": {"leverage": {"min": null, "max": 25}, "amount": {"min": null, "max": null},
+                 "price": {"min": null, "max": null}, "cost": {"min": 10.0, "max": null}}
+    },
+    {
+      "id": "99", "symbol": "OLD/USDC:USDC", "base": "OLD", "quote": "USDC", "settle": "USDC",
+      "type": "swap", "spot": false, "swap": true, "future": false, "option": false,
+      "active": false, "contract": true, "linear": true, "inverse": false,
+      "contractSize": 1.0, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 1.0, "price": 1e-06},
+      "limits": {"leverage": {"min": null, "max": 3}, "amount": {"min": null, "max": null},
+                 "price": {"min": null, "max": null}, "cost": {"min": 10.0, "max": null}}
+    },
+    {
+      "id": "@1", "symbol": "PURR/USDC", "base": "PURR", "quote": "USDC", "settle": null,
+      "type": "spot", "spot": true, "swap": false, "future": false, "option": false,
+      "active": true, "contract": false, "linear": null, "inverse": null,
+      "contractSize": null, "expiry": null, "expiryDatetime": null,
+      "precision": {"amount": 1.0, "price": 1e-05},
+      "limits": {"leverage": {"min": null, "max": null}, "amount": {"min": null, "max": null},
+                 "price": {"min": null, "max": null}, "cost": {"min": 10.0, "max": null}}
+    }
+  ]
+}

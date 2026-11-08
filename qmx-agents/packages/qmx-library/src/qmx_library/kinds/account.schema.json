@@ -1,0 +1,49 @@
+{
+  "kind": "account",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "description": "One account at one venue as versioned facts (Level 0 AD-26, Part C AD-312, RECORDS.md section 2). It holds no secret: the keys are closed, so a token, key or password field is refused at put.",
+  "fields": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["venue", "account_id", "world"],
+    "properties": {
+      "venue": {"type": "string", "minLength": 1},
+      "account_id": {"type": "string", "minLength": 1},
+      "broker": {"type": "string", "minLength": 1},
+      "world": {"enum": ["demo", "live"], "description": "as the venue proves it"},
+      "position_mode": {"enum": ["netting", "hedging"]},
+      "account_type": {"enum": ["cfd", "futures", "perps", "spot"]},
+      "subaccount": {"type": "string", "minLength": 1},
+      "base_currency": {"type": "string", "minLength": 1},
+      "leverage": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+      "owner": {
+        "description": "the owning node, or null",
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["install_id", "tag"],
+        "properties": {
+          "install_id": {"type": "string", "minLength": 1},
+          "tag": {"type": "string", "minLength": 1}
+        }
+      },
+      "grant_scope": {"type": "string", "minLength": 1, "description": "the scope it was read under"}
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": ["broker", "world", "position_mode", "account_type", "base_currency"],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {"tab": "Facts", "renderer": "json", "source": "fields"},
+      {"tab": "History", "renderer": "table", "source": "computed:history"}
+    ]
+  },
+  "annotations": ["tags", "aliases", "intent_key", "notes"],
+  "merge": {"default": "pick-one"}
+}

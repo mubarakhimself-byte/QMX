@@ -1,0 +1,164 @@
+{
+  "kind": "instrument",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "description": "One market at one venue as versioned facts (Level 0 AD-26, Part C AD-312, RECORDS.md section 2). The keys are exactly RECORDS.md's, every key Part A's CONTRACTS.md 2.3 reads under the same name. A key QML needs and the record lacks is the checker's error, never a guess, so only identity is required here. No record carries a roll rule: the unit names its root and its roll rule.",
+  "fields": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["venue", "symbol", "market_id", "class", "currency", "status"],
+    "allOf": [{"$ref": "#/$defs/no_secrets"}],
+    "$defs": {
+      "no_secrets": {
+        "description": "no key at any depth names a credential (key, token, secret, password, auth), so the open sub-objects can never hold one",
+        "propertyNames": {"not": {"pattern": "[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Aa][Uu][Tt][Hh]"}},
+        "additionalProperties": {"$ref": "#/$defs/no_secrets"},
+        "items": {"$ref": "#/$defs/no_secrets"}
+      },
+      "decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+      "signed_decimal": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+      "data_levels": {
+        "description": "qmx.data-level/1 (Part A CONTRACTS.md 5.2): the levels a market offers, 0 calendar, 1 bars, 2 quote ticks, 3 depth, 4 trade tape with aggressor side, 5 derivatives fields, 6 outside data, with the volume, depth, derivatives-clock and history splits and the licence.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["levels"],
+        "properties": {
+          "schema": {"const": "qmx.data-level/1"},
+          "levels": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "integer", "minimum": 0, "maximum": 6}
+          },
+          "volume": {"enum": ["exchange", "taker_split", "tick_count", "venue"]},
+          "depth": {"enum": ["top", "by_price", "by_order"]},
+          "derivatives_clock": {"enum": ["end_of_day", "five_minutes", "live"]},
+          "history": {"enum": ["complete", "sampled", "provider_limited"]},
+          "licence": {"type": "string"}
+        }
+      }
+    },
+    "properties": {
+      "venue": {"type": "string", "minLength": 1},
+      "symbol": {"type": "string", "minLength": 1},
+      "market_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "the underlying, shared by the same market at every venue (gold, sp500, eurusd, btc)"
+      },
+      "class": {
+        "enum": ["fx", "metal", "index_cfd", "commodity_cfd", "stock_cfd", "future", "perp", "spot_crypto", "stock"]
+      },
+      "currency": {"type": "string", "minLength": 1, "description": "the quote currency"},
+      "digits": {"type": "integer", "minimum": 0},
+      "tick_size": {"$ref": "#/$defs/decimal"},
+      "pip": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["size", "source"],
+        "properties": {
+          "size": {"$ref": "#/$defs/decimal"},
+          "source": {"type": "string", "minLength": 1}
+        }
+      },
+      "contract_size": {
+        "$ref": "#/$defs/decimal",
+        "description": "units of the underlying per lot; a future's multiplier"
+      },
+      "value_per_point": {"$ref": "#/$defs/decimal", "description": "money per price unit per lot"},
+      "value_conversion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["symbol", "method"],
+        "properties": {
+          "symbol": {"type": "string", "minLength": 1},
+          "method": {"type": "string", "minLength": 1}
+        }
+      },
+      "conversion_check": {
+        "description": "value_per_point as each way computed it; agrees is null when only one way exists, false when two ways differ by more than the tolerance, which makes the record suspect",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ways", "tolerance", "agrees"],
+        "properties": {
+          "ways": {"type": "object", "additionalProperties": {"$ref": "#/$defs/decimal"}},
+          "tolerance": {"$ref": "#/$defs/decimal"},
+          "agrees": {"type": ["boolean", "null"]}
+        }
+      },
+      "lot_step": {"$ref": "#/$defs/decimal"},
+      "min_lot": {"$ref": "#/$defs/decimal"},
+      "max_lot": {"$ref": "#/$defs/decimal"},
+      "calendar_ref": {"type": "string", "minLength": 1, "description": "calendar id@version"},
+      "zone": {"type": "string", "minLength": 1},
+      "day_boundary": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+      "server_zone": {"type": "string", "minLength": 1},
+      "data_levels": {"$ref": "#/$defs/data_levels"},
+      "expiry": {"type": "string", "minLength": 1},
+      "last_trade": {"type": "string", "minLength": 1},
+      "settlement": {"type": "string", "minLength": 1},
+      "at_expiry_action": {"type": "string", "minLength": 1},
+      "root": {"type": "string", "minLength": 1},
+      "rolls_to": {"type": "string", "minLength": 1},
+      "funding_interval": {
+        "type": "string",
+        "pattern": "^PT[1-9][0-9]*[HM]$",
+        "description": "an ISO 8601 duration such as PT1H or PT8H"
+      },
+      "funding_source": {"type": "string", "minLength": 1},
+      "leverage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "tiers"],
+        "properties": {
+          "version": {"type": "integer", "minimum": 1},
+          "tiers": {"type": "array", "items": {"type": "object"}}
+        }
+      },
+      "margin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["intraday", "overnight"],
+        "properties": {
+          "intraday": {"$ref": "#/$defs/decimal"},
+          "overnight": {"$ref": "#/$defs/decimal"}
+        }
+      },
+      "liquidation_rule": {"type": "string", "minLength": 1},
+      "record_version": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "the Library's version of this item; readers take it from the Library, so a written value is never what a check reads"
+      },
+      "swap": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "long": {"$ref": "#/$defs/signed_decimal"},
+          "short": {"$ref": "#/$defs/signed_decimal"},
+          "triple_day": {"type": "string"}
+        }
+      },
+      "financing": {"type": "object"},
+      "events": {"type": "array", "items": {"type": "object"}},
+      "measured": {"type": "object"},
+      "status": {"enum": ["specified", "live", "suspect", "delisted"]}
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": ["class", "contract_size", "funding_interval", "data_levels", "status"],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {"tab": "Facts", "renderer": "json", "source": "fields"},
+      {"tab": "Data levels", "renderer": "json", "source": "fields.data_levels"},
+      {"tab": "History", "renderer": "table", "source": "computed:history"}
+    ]
+  },
+  "annotations": ["tags", "aliases", "intent_key", "notes"],
+  "merge": {"default": "pick-one"}
+}
