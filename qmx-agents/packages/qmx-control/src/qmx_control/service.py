@@ -39,6 +39,7 @@ from qmx_home.classes import secret_name
 from qmx_home.versions import open_sqlite, too_new
 from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
+from qmx_library.principal import MAIN
 from qmx_library.store import Store
 
 from qmx_control.cache import read_cache
@@ -75,6 +76,9 @@ type SettingsParser = Callable[[Document, Document], Document]
 HOST_SECTIONS: frozenset[SettingsSection] = frozenset({"claude", "environment"})
 """Sections only a host that registers a parser for them can write."""
 ENGINE = "an attached workflow engine"
+UNIT: Final = "unit"
+UNNAMED: Final = "agent:unnamed"
+"""The caller when no door named one. It is never his, so a missed door refuses a publish."""
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
 EVAL_TASK: Final = "eval-task"
 """The tag of a copilot eval battery task (engine AD-66). A new failure becomes a task with one
@@ -1285,6 +1289,12 @@ class ControlService:
     @operation("library", "save", "domain_write", rest=("POST", "/api/library"))
     def library_save(self, item: LibraryInput) -> Document:
         """Save an immutable object, optionally a new version or URL/date result."""
+        if item.kind == UNIT:
+            raise ControlError(
+                "unit_doors_only",
+                "library_save stores no unit; start one with unit_new, then save and check it "
+                "with unit_check",
+            )
         with self._lock, self._connect() as db:
             data = self.library.save(item)
             self._event(db, "library", str(data["id"]), {"type": "saved", "item_id": data["id"]})
@@ -1422,15 +1432,39 @@ class ControlService:
         except LibraryRefused as error:
             raise refused(error) from error
 
+    def _caller(self) -> str:
+        """Who this call acts as, as the host's door named it (AD-52): `operator` for his own
+        door, `agent:<sid>` for a chat, `run:<id>` for a workflow. The attached engine door
+        carries the host's reader; with none attached no door named the caller."""
+        engine = self._workflow_engine
+        return UNNAMED if engine is None else engine.principal().principal
+
+    def _his_click(self, item: str, source: str, into: str) -> None:
+        """Publishing a unit is his click (AD-31, standing order 7): a move of `item` from its
+        `source` ref that would put a `unit` on `main` refuses every caller but his own door.
+        Agents and runs write drafts."""
+        store = self.library.store
+        head = store.head(item, source)
+        if into != MAIN or head is None or store.get(LIBRARY_OPERATOR, head[0]).kind != UNIT:
+            return
+        caller = self._caller()
+        if caller != LIBRARY_OPERATOR.who:
+            raise ControlError(
+                "his_click",
+                f"publishing a unit onto main is his click; {caller} writes unit drafts only, "
+                "and he publishes them from his own door",
+                403,
+            )
+
     @operation(
         "library", "branch", "domain_write", rest=("POST", "/api/library/{artifact_id}/branch")
     )
     def library_branch(self, artifact_id: str, name: str, from_ref: str = "main") -> Document:
         """Put one item's ref under a new name, so a chat edits it there and nothing else moves."""
         try:
-            commit = self.library.store.branch(
-                LIBRARY_OPERATOR, self._item_of(artifact_id), from_ref=from_ref, name=name
-            )
+            item = self._item_of(artifact_id)
+            self._his_click(item, from_ref, name)
+            commit = self.library.store.branch(LIBRARY_OPERATOR, item, from_ref=from_ref, name=name)
         except LibraryRefused as error:
             raise refused(error) from error
         with self._lock, self._connect() as db:
@@ -1451,12 +1485,10 @@ class ControlService:
 
         A text slot merges line by line and a JSON slot key by key."""
         try:
+            item = self._item_of(artifact_id)
+            self._his_click(item, from_ref, into)
             merged = self.library.store.merge(
-                LIBRARY_OPERATOR,
-                self._item_of(artifact_id),
-                from_ref=from_ref,
-                into=into,
-                strategy=strategy,
+                LIBRARY_OPERATOR, item, from_ref=from_ref, into=into, strategy=strategy
             )
         except LibraryRefused as error:
             raise refused(error) from error
@@ -1504,6 +1536,10 @@ class ControlService:
         `values` answers each entry by its path, and `text` is the resolved text when the
         conflict holds one text slot."""
         try:
+            conflict = self.library.store.get(LIBRARY_OPERATOR, artifact_id)
+            if conflict.kind == "merge-conflict":
+                into = str(conflict.fields["into"])
+                self._his_click(str(conflict.fields["item"]), into, into)
             merged = self.library.store.resolve_conflict(
                 LIBRARY_OPERATOR, artifact_id, text=text, values=values
             )
@@ -2320,11 +2356,22 @@ def data_health(home: Path, library: Library) -> Document:
     )
 
 
+class Named(Protocol):
+    """A caller as the host's door names it (`qmx_engine.service.context.Caller`)."""
+
+    @property
+    def principal(self) -> str: ...
+
+
 class WorkflowEngine(Protocol):
     """What `attach_workflow_engine` takes: the workflow doors, named and typed as on
     `ControlService`. The engine package implements it; this package never imports the engine.
     Every MANAGE door here was already asked of the operator (or came over REST with his
-    bearer), so the engine may act on it as his."""
+    bearer), so the engine may act on it as his. `principal` reads the caller of the current
+    door on the caller's thread."""
+
+    @property
+    def principal(self) -> Callable[[], Named]: ...
 
     def workflows_get(self, workflow_id: str) -> Document: ...
     def workflows_put(self, workflow_id: str, graph: Document) -> Document: ...

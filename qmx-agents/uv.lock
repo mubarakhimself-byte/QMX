@@ -4471,6 +4471,7 @@ dependencies = [
     { name = "qmx-control" },
     { name = "qmx-home" },
     { name = "qmx-judge" },
+    { name = "qmx-library" },
 ]
 
 [package.dev-dependencies]
@@ -4494,6 +4495,7 @@ requires-dist = [
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-home", editable = "packages/qmx-home" },
     { name = "qmx-judge", editable = "packages/qmx-judge" },
+    { name = "qmx-library", editable = "packages/qmx-library" },
 ]
 
 [package.metadata.requires-dev]
