@@ -267,7 +267,7 @@ def backtest(lander: Lander, unit: str, study: str, rs: list[Decimal], out: Path
             "run_id": ticket.run_id,
             "status": "finished",
             "tester": {"app": "qmb", "version": "0.1.0"},
-            "measures": {"trades": len(rs), **EVIDENCE},
+            "measures": {"trades": len(rs)},
             "labels": {"zero_trades": False, "fidelity": "bars"},
             "files": [
                 {"slot": "report", "path": "report.json", "fp": fingerprint_bytes(report).value}
@@ -302,5 +302,10 @@ def test_the_best_of_30_versions_judged_alone_counts_30_tries(tmp_path: Path) ->
     judged = domain_functions(context)["backtest"]["backtest_judge_run"](results=[best])["result"]
 
     assert (judged["overall"], judged["raw_tries"], judged["effective_tries"]) == ("fail", 30, 30)
+    assert judged["says"] == (
+        "Fail by the shipped preset. fx.eurusd fails the try-corrected verdict: deflated Sharpe "
+        "0.8265 over 30 effective tries (luck alone reaches 0.1699 per trade, this market 0.2477). "
+        "Behind it: 30 tries, 30 effective."
+    )
     tries = store.with_field("try", "kind", "run")
     assert {str(store.get(OPERATOR, found).fields["family"]) for found in tries} == {"unit"}
