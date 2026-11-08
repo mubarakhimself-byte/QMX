@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import runpy
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -419,7 +420,9 @@ DAY = datetime(2025, 1, 2, tzinfo=UTC)
 WINDOW = {"start": "2025-01-02T07:00:00Z", "end": "2025-01-02T09:00:00Z"}
 
 
-def _envelope(kind: str, minute: int, body: dict[str, object], **facts: object) -> dict[str, Any]:
+def _envelope(
+    kind: str, minute: int, body: Mapping[str, object], **facts: object
+) -> dict[str, Any]:
     return {
         "kind": kind,
         "record_id": f"node@this-pc/{kind}-{minute}",
@@ -452,12 +455,12 @@ def _day_of_journals(root: Path) -> None:
     ]
     signals[2]["backfilled"] = True
     _partition(root, "journal-unit/dummy/signal/paper.this-pc", signals, minutes)
-    spread = {"min": "0.8", "median": "2.9", "max": "3.4"}
+    body = {"market_id": "fx.eurusd", "minute": "2025-01-02T08:00:00Z", "spread": "0.00029"}
     _partition(
         root,
         "journal-market/fx.eurusd/minute/paper.this-pc",
-        [_envelope("minute", 8 * 60, {"spread": spread})],
-        [8 * 60],
+        [_envelope("minute", 8 * 60, body)],
+        [8 * 60 + 1],
     )
 
 
@@ -493,7 +496,7 @@ def test_why_it_did_not_trade_reads_the_reason_and_the_spread_at_that_minute(
 
     [row] = answer["result"]
     assert (row["at"], row["body"]["reason"]) == ("2025-01-02T08:00:00.000Z", "spread_wide")
-    assert row["market_minute"]["body"]["spread"] == {"min": "0.8", "median": "2.9", "max": "3.4"}
+    assert row["market_minute"]["body"]["spread"] == "0.00029"
 
 
 def test_past_the_data_it_says_where_the_data_stops_and_backfilled_rows_stay_out(

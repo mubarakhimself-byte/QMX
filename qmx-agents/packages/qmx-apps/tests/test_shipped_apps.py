@@ -694,6 +694,7 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("trading-node", "0.1.6"): "9bbc7724e4d0e47fc20c80412847c54c",
     ("trading-node", "0.1.7"): "0c1bb2b76ed9f865e0afd59d062f0d6c",
     ("trading-node", "0.1.8"): "117b0c977d94293302fad6071345cda9",
+    ("trading-node", "0.1.10"): "dd71b14d3f679fd6c809c9564a92a6ba",
     ("trading-node", "0.1.9"): "c1c01a4f5513f17a7ed72ccbb740f7a9",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
 }
@@ -791,3 +792,5 @@ def test_no_shipped_app_or_template_takes_a_core_name() -> None:
         "app Backtest_Result takes the core kind backtest-result",
         "template backtest_run takes the catalog row backtest_run",
     ]
+
+
