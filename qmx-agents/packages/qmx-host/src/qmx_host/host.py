@@ -139,7 +139,7 @@ from qmx_library.port import (
     StoreRole,
     Strategy,
 )
-from qmx_library.principal import MAIN, Act, Principal
+from qmx_library.principal import MAIN, Act, Principal, state_ref
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
@@ -1091,6 +1091,7 @@ async def serve(
             control=control,
             host_reads=host_reads(qmx_home, control, name),
             market=door if isinstance(door, MarketDoor) else None,
+            accounts=lambda account: account_worlds(control, account),
         )
         harness.adopt_passes(passes)
         if vault == "repaired":
@@ -2088,6 +2089,23 @@ def drain_router(core: Engine) -> APIRouter:
 
     _ = drain
     return router
+
+
+def account_worlds(control: ControlService, account_id: str) -> list[str]:
+    """The `world` of each live `account` record on the Library's main whose `account_id` is
+    the id. The harness's demo-only check of a broker MCP server reads it at every launch
+    (C-36). An archived record names nothing, as for a promote."""
+    store = control.library.store
+    found = store.with_field("account", "account_id", account_id)
+    worlds: list[str] = []
+    for item in sorted({store.get(OPERATOR_READ, object_id).item for object_id in found}):
+        head, state = store.head(item, MAIN), store.head(item, state_ref(item))
+        if head is None or (state is not None and state[0] == "archived"):
+            continue
+        fields = store.get(OPERATOR_READ, head[0]).fields
+        if fields.get("account_id") == account_id:
+            worlds.append(str(fields.get("world")))
+    return worlds
 
 
 def host_reads(home: QmxHome, control: ControlService, host_id: str) -> dict[str, HostRead]:

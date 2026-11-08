@@ -348,6 +348,46 @@ JOURNALS_DEFAULTS: Final[Document] = {"settle_days": 1}
 """`[journals]` with its harvest default: a journal month closes a day after it ends, for late rows
 from a machine whose clock was off."""
 
+CTRADER_MCP: Final[Document] = {"credential_ref": "qmx/ctrader-mcp", "venue": "ctrader"}
+"""The `[mcp_servers] ctrader` row's fixed keys (C-36): cTrader's Remote MCP, shipped off. He
+pastes its url and one demo account's token, which stays in Credential Manager. `venue` makes the
+harness offer it only when the token's account is a demo account record on main."""
+
+
+def _check_ctrader(row: JsonValue) -> None:
+    if not isinstance(row, dict) or set(row) - {"url", "enabled", "credential_ref", "venue"}:
+        raise ControlError(
+            "invalid_settings", "Use cTrader MCP url, enabled, credential_ref and venue only."
+        )
+    if (
+        not isinstance(row.get("enabled", False), bool)
+        or any(row.get(key, value) != value for key, value in CTRADER_MCP.items())
+        or ("url" in row and not plain_https(row["url"]))
+    ):
+        raise ControlError(
+            "invalid_settings",
+            "cTrader MCP needs an HTTPS url, an enabled boolean, qmx/ctrader-mcp and venue "
+            "ctrader.",
+        )
+
+
+def plain_https(url: JsonValue) -> bool:
+    """An HTTPS url with a host and no user, password, query or fragment to hold a secret. Plain
+    HTTP passes only on the loopback, where a fixture server stands in for the broker's."""
+    try:
+        parts = urlsplit(url) if isinstance(url, str) else None
+    except ValueError:
+        return False
+    return (
+        parts is not None
+        and bool(parts.hostname)
+        and (
+            parts.scheme == "https"
+            or (parts.scheme == "http" and parts.hostname in {"127.0.0.1", "localhost", "::1"})
+        )
+        and not any((parts.username, parts.password, parts.query, parts.fragment))
+    )
+
 
 UNITS_DEFAULTS: Final[Document] = {
     "identity_table": [
@@ -999,6 +1039,10 @@ class ControlService:
                     "credential_ref": "qmx/firecrawl",
                     **firecrawl,
                 }
+                ctrader = values.get("ctrader", {})
+                if not isinstance(ctrader, dict):
+                    raise ControlError("invalid_settings", "cTrader MCP settings must be a table.")
+                values["ctrader"] = {"enabled": False, **ctrader, **CTRADER_MCP}
             if section == "backup":
                 values = cast(
                     Document, backup_defaults(values, cast(Document, stored.get("engine", {})))
@@ -1175,6 +1219,8 @@ class ControlService:
                     "invalid_settings",
                     "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
                 )
+        if section == "mcp_servers" and "ctrader" in values:
+            _check_ctrader(values["ctrader"])
         if section == "telemetry":
             _check_telemetry(values, self._stored("engine"))
         if section == "units":

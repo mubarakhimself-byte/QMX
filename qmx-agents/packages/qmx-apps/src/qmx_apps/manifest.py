@@ -76,6 +76,7 @@ HOST_SECRETS: Final[Mapping[str, str]] = MappingProxyType(
         "qmx/openobserve-agent": "deep-logs sign-in",
         "qmx/ctrader-client-id": "cTrader app Client ID, which can sign in to his broker",
         "qmx/ctrader-client-secret": "cTrader app Client secret, which can sign in to his broker",
+        "qmx/ctrader-mcp": "cTrader MCP token, which acts on his cTrader account",
     }
 )
 HOST_SECRET_PREFIXES: Final[Mapping[str, str]] = MappingProxyType(
@@ -84,8 +85,9 @@ HOST_SECRET_PREFIXES: Final[Mapping[str, str]] = MappingProxyType(
 """The entries the host holds for itself, which no app may declare on any role: the bearer
 (`qmx_control.server`), the chat sign-ins `qmx/chatgpt` and `qmx/chatgpt-<n>`
 (`qmx_router.gpt.siwc`), the backup password (`qmx_home.rclone`), the vault files a home signs
-passes with, the deep-logs sign-in (`qmx_host.connect_logs`) and the cTrader app keys he types
-(`qmx_broker.credentials`). The server's vault reader (`qmx_host.host.HOST_VAULT`) reads this
+passes with, the deep-logs sign-in (`qmx_host.connect_logs`), the cTrader app keys he types
+(`qmx_broker.credentials`) and the cTrader MCP token agents' chats use (`qma.harness.tools`,
+C-36). The server's vault reader (`qmx_host.host.HOST_VAULT`) reads this
 table, so a new host name is refused in both places. Compared case-folded, because Credential
 Manager and NTFS ignore case."""
 RETIRED: Final = frozenset({"emits", "accepts"})

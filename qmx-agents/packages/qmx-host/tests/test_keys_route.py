@@ -62,11 +62,12 @@ def test_a_declared_key_he_typed_elsewhere_is_listed_and_an_empty_value_is_refus
 ) -> None:
     keys = Store()
     keys.values["qmx/ctrader-client-secret"] = VALUE
+    keys.values["qmx/ctrader-mcp"] = VALUE
     with client(tmp_path, keys) as rest:
         empty = rest.put("/api/keys/qmx/e2b", json={"value": ""}, headers=BEARER)
         listed = rest.get("/api/keys", headers=BEARER).json()
     assert empty.status_code == 422
-    assert listed == {"set": ["qmx/ctrader-client-secret"]}
+    assert listed == {"set": ["qmx/ctrader-client-secret", "qmx/ctrader-mcp"]}
 
 
 def test_both_key_routes_need_the_bearer(tmp_path: Path) -> None:

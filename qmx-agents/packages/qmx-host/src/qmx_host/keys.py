@@ -28,9 +28,11 @@ KEY_NAMES: Final = (
     "qmx/modal-token-id",
     "qmx/modal-token-secret",
     "qmx/e2b",
+    "qmx/ctrader-mcp",
 )
 """The keys he types, each a card of some kind: the cTrader app's id and secret, a provider's
-key. A storage's key is named by its place row (`credential_ref`) or by the card that asks."""
+key, the cTrader Remote MCP token. A storage's key is named by its place row (`credential_ref`)
+or by the card that asks."""
 MADE_BY_QMX: Final = frozenset({CONFIG_KEY, "qmx/control-token", "qmx/chatgpt"})
 FILED: Final = ("qmx/read/", "qmx/data/", "qmx/token/")
 NAME: Final = re.compile(r"qmx(/[A-Za-z0-9][A-Za-z0-9._-]{0,127}){1,4}")
