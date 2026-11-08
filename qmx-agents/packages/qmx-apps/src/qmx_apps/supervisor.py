@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+import tomllib
 import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine, Mapping
@@ -154,6 +155,23 @@ MOVES: Final = "moves"
 SNAPSHOT: Final = "snapshot.json"
 """A move's manifest: the app, the machine it came from and will go to, the lease generation and
 one checksum per file. It is left out of its own checksums."""
+BUILT_FROM: Final = "qmx-sources.json"
+"""In each app env, a digest of every path source's `src` files as the env last installed them."""
+
+
+def path_sources(project: Path) -> dict[str, str]:
+    """Each package `project`'s lock builds from a local folder, with a digest of its `src` files.
+
+    `uv sync --no-editable` installs such a package as a wheel, which uv reuses until one of the
+    package's cache keys changes. Those keys see file times and never the file list, so a deleted
+    module would stay in the wheel. The digest sees both."""
+    digests: dict[str, str] = {}
+    for package in tomllib.loads((project / "uv.lock").read_text(encoding="utf-8"))["package"]:
+        source = package.get("source", {})
+        folder = source.get("editable") or source.get("directory")
+        if folder is not None:
+            digests[package["name"]] = image_hash(project / folder / "src")
+    return digests
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,10 +505,25 @@ class Supervisor:
                 "UV_PYTHON_INSTALL_DIR",
             }
         }
-        environment["UV_PROJECT_ENVIRONMENT"] = str(self.environments / definition.hash)
+        env = self.environments / definition.hash
+        environment["UV_PROJECT_ENVIRONMENT"] = str(env)
         # The image holds this lock byte for byte, but a lock's relative path sources (QMB's QMX
         # libraries) resolve only from the folder the definition was installed from.
         source = definition.root if image_hash(definition.root) == definition.hash else image
+        try:
+            sources = path_sources(source)
+        except (OSError, ValueError, KeyError) as error:
+            raise AppError(
+                "install_failed", "The app's lock or a path source it names is unreadable.", 422
+            ) from error
+        try:
+            recorded: object = json.loads((env / BUILT_FROM).read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            recorded = None
+        built = cast(Document, recorded) if isinstance(recorded, dict) else {}
+        # A missing or unreadable record rebuilds every path source. A new env needs that too,
+        # because uv's cached wheel may still hold a module deleted since it was built.
+        changed = [name for name, digest in sources.items() if built.get(name) != digest]
         result = subprocess.run(
             [
                 uv,
@@ -503,6 +536,7 @@ class Supervisor:
                 "--no-install-project",
                 # The runtime cannot write bytecode into its locked dependencies.
                 "--compile-bytecode",
+                *(f"--reinstall-package={name}" for name in changed),
             ],
             env=environment,
             capture_output=True,
@@ -522,6 +556,9 @@ class Supervisor:
                 f"uv could not install the app's lock; check its lock and sources.{why}",
                 422,
             )
+        staged = env / f"{BUILT_FROM}.tmp"
+        staged.write_text(json.dumps(sources), encoding="utf-8")
+        staged.replace(env / BUILT_FROM)
 
     def _definition(self, app_id: str) -> Definition:
         if self.proof_mode and app_id in self._proof_images:
