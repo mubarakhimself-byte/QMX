@@ -94,6 +94,10 @@ class HeldPosition:
     """The money the whole entry quantity risked at its entry stop: the trade's 1 R."""
     realized_r: Decimal = Decimal(0)
     """The R the position's partial closes already took."""
+    mae_r: Decimal = Decimal(0)
+    """How far the price has gone against the position since its entry, in R of its entry stop."""
+    mfe_r: Decimal = Decimal(0)
+    """How far the price has gone for the position since its entry, in R of its entry stop."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +147,12 @@ class UnitTrade:
     """``money`` over the whole entry's risk, so a position's trades add up to its R."""
     gap_through_stop: bool = False
     """The price jumped the stop and it filled at the first tradable price, past 1 R."""
+    mae_r: Decimal = Decimal(0)
+    """How close the position came to its stop before this close, where 1 reaches it."""
+    mfe_r: Decimal = Decimal(0)
+    """How far the position's price ran its way before this close."""
+    risk: Decimal = Decimal(0)
+    """The money the whole entry risked at its entry stop: the trade's 1 R."""
 
 
 JournalRecord = DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade | CashEvent
@@ -223,6 +233,22 @@ def _stamps(row: DecisionRow | None) -> dict[str, Decimal]:
 
 def _decimal(value: int, scale: int) -> Decimal:
     return Decimal(value).scaleb(-scale)
+
+
+def _with_excursion(held: HeldPosition, bar: QuoteBar) -> HeldPosition:
+    """The position with this bar's reach against and for it, on the side it would close at."""
+    entry, distance = held.position.entry_price, abs(held.position.entry_price - held.entry_stop)
+    if not distance:
+        return held
+    if held.position.side is Side.LONG:
+        against, away = entry - bar.bid.low, bar.bid.high - entry
+    else:
+        against, away = bar.ask.high - entry, entry - bar.ask.low
+    return replace(
+        held,
+        mae_r=max(held.mae_r, (against / distance).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)),
+        mfe_r=max(held.mfe_r, (away / distance).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)),
+    )
 
 
 def _price(level: Decimal, instrument: Instrument) -> Price:
@@ -362,6 +388,16 @@ class UnitSliceHandler:
         return tuple(self._cash)
 
     @property
+    def max_drawdown_r(self) -> Decimal:
+        """The deepest fall of the running total of the trades' R from its high."""
+        total = high = worst = Decimal(0)
+        for trade in self._trades:
+            total += trade.r
+            high = max(high, total)
+            worst = max(worst, high - total)
+        return worst
+
+    @property
     def open_positions(self) -> Mapping[str, OwnPosition]:
         held = {m: h.position for m, h in self._held.items()}
         return held | {m: p for m, p in self._foreign.items() if m not in held}
@@ -430,6 +466,8 @@ class UnitSliceHandler:
         self._latest[stream_id] = bar
         held = self._held.get(stream_id)
         if held is not None:
+            held = _with_excursion(held, bar)
+            self._held[stream_id] = held
             reached = self._execution.protective(stream_id, held, bar)
             if reached is not None:
                 self._close(
@@ -659,6 +697,9 @@ class UnitSliceHandler:
             money,
             r,
             gap_through_stop=gapped and kind is FillKind.STOP,
+            mae_r=held.mae_r,
+            mfe_r=held.mfe_r,
+            risk=held.risk,
         )
         self._record_fill(fill)
         self._trades.append(trade)

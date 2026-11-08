@@ -277,6 +277,27 @@ def test_two_results_of_one_request_compare_trade_by_trade(world: World) -> None
     ]
 
 
+def test_a_row_from_before_the_added_fields_compares_on_what_both_rows_hold(world: World) -> None:
+    older = {"market_id": "fx.eurusd", "opened_at": "1740787200000000000", "money": "1.00"}
+    newer = {**older, "mae_r": "0.20", "mfe_r": "0.80", "cash": "-1.00", "net_r": "0.40"}
+    before = world.landed("row-before", [older])
+    after = world.landed("row-after", [newer])
+    charged = world.landed("row-charged", [{**newer, "cash": "-2.00"}])
+
+    across = world.backtest["backtest_compare"](left=before, right=after)
+    within = world.backtest["backtest_compare"](left=after, right=charged)
+
+    assert (across["same_trades"], across["result"]) == (True, [])
+    assert within["result"] == [
+        {
+            "market_id": "fx.eurusd",
+            "opened_at": 1740787200000000000,
+            "order": 0,
+            "differs": {"cash": ["-1.00", "-2.00"]},
+        },
+    ]
+
+
 def test_trades_at_one_market_and_instant_pair_in_order_and_a_malformed_time_is_refused(
     world: World,
 ) -> None:

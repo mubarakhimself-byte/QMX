@@ -132,7 +132,7 @@ def passing_g(store: HostStore, compiled: str) -> None:
         "run_id": "qmbr-g-records",
         "status": "finished",
         "compiled_fingerprint": compiled,
-        "behaviour": {},
+        "behaviour": {"slice": {"market_ids": ["fx.eurusd", "metal.xauusd"]}},
         "safety": {"verdict": "pass"},
     }
     store.put(

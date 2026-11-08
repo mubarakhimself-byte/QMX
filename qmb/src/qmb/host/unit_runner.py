@@ -39,11 +39,12 @@ costs come from no calibrated profile says ``costs_uncalibrated``.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import partial
+from itertools import islice
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -163,12 +164,13 @@ class LoadedUnit:
     margins: Mapping[str, MarginRule]
     costs: Mapping[str, CostProfile]
 
-    def bars(self) -> Result[dict[str, tuple[QuoteBar, ...]]]:
-        """Every market's bars held whole, for a short recorded slice; a run streams them."""
+    def bars(self, limit: int | None = None) -> Result[dict[str, tuple[QuoteBar, ...]]]:
+        """Each market's first ``limit`` bars held whole, or all of them, for a short recorded
+        slice; a run streams them."""
         held: dict[str, tuple[QuoteBar, ...]] = {}
         for market, feed in self.feeds.items():
             bars: list[QuoteBar] = []
-            for item in feed():
+            for item in islice(feed(), limit):
                 if isinstance(item, TypedRefusal):
                     return item
                 bars.append(item)
@@ -194,6 +196,8 @@ class UnitRunResult:
     """Markets whose calendar QMB cannot read yet, so their holes were not counted."""
     short: tuple[ShortEnds, ...] = ()
     """Markets whose bars stop short of the window, with the open bars missing at each end."""
+    max_drawdown_r: Decimal = Decimal(0)
+    """The deepest fall of the running total of the trades' R from its high."""
 
 
 def _window_ns(given: object) -> Result[tuple[int, int] | None]:
@@ -610,8 +614,29 @@ def run_loaded(
             holes=holes,
             unchecked=unchecked,
             short=short,
+            max_drawdown_r=handler.value.max_drawdown_r,
         )
     )
+
+
+@dataclass
+class _Opens:
+    """One market's bar opens as its feed gives them, holding only the first and last, so a scan
+    of any run length stays flat, and the refusal that stopped the feed, if one did."""
+
+    feed: Iterable[QuoteBar | TypedRefusal]
+    bar_ns: int
+    ends: tuple[int, ...] = ()
+    refused: TypedRefusal | None = None
+
+    def __iter__(self) -> Iterator[int]:
+        for item in self.feed:
+            if isinstance(item, TypedRefusal):
+                self.refused = item
+                return
+            at = item.knowable_at.value_ns - self.bar_ns
+            self.ends = (self.ends[0] if self.ends else at, at)
+            yield at
 
 
 def _preflight(
@@ -629,19 +654,17 @@ def _preflight(
         if hours is None:
             unchecked.append(market)
             continue
-        opens: list[int] = []
-        for item in feed():
-            if isinstance(item, TypedRefusal):
-                return item
-            opens.append(item.knowable_at.value_ns - loaded.bar_ns)
+        opens = _Opens(feed(), loaded.bar_ns)
         holes += find_holes(
             market, opens, bar_ns=loaded.bar_ns, hours=hours, refuse_bars=request.gap_bars_refuse
         )
+        if opens.refused is not None:
+            return opens.refused
         if request.window_ns is None:
             continue
         start_ns, end_ns = request.window_ns
         ends = short_ends(
-            market, opens, bar_ns=loaded.bar_ns, hours=hours, start_ns=start_ns, end_ns=end_ns
+            market, opens.ends, bar_ns=loaded.bar_ns, hours=hours, start_ns=start_ns, end_ns=end_ns
         )
         if ends.before_first or ends.after_last:
             short.append(ends)

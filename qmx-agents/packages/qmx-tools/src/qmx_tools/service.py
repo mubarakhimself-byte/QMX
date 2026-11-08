@@ -298,7 +298,9 @@ class DomainContext:
 
         The job crosses the supervisor's one run path, where the core's lander opens the run,
         counts its try and lands its result (Part B AD-202). A run still going when the wait
-        ends answers its run id, read from the `opened` try this chat's run landed."""
+        ends answers its run id, read from the `opened` try this chat's run landed. A first run
+        whose behaviour check is still going has no run id yet, so it answers `checking` with the
+        check's, and `run_after_check` names the run from there."""
         principal = self.control._caller()  # pyright: ignore[reportPrivateUsage]
         wait = float(cast("int | float", self.control.settings_get("qmb")["agent_wait_s"]))
         asked_at = datetime.now(UTC).isoformat()
@@ -309,7 +311,8 @@ class DomainContext:
                 outcome["ran"] = self.control.app_job(
                     QMB_APP, QMB_BACKTEST, inputs=request, principal=principal
                 )
-            except ControlError as error:
+            except Exception as error:
+                # A raise here would end the thread and read as a run still going.
                 outcome["refused"] = error
 
         worker = threading.Thread(target=start, name="qmx-backtest", daemon=True)
@@ -329,32 +332,50 @@ class DomainContext:
             if fields.get("reason"):
                 found["reason"] = fields["reason"]
             return self.output(found, "backtest", response_format)
-        opened = self._opened(principal, str(request["unit"]), asked_at)
+        unit = str(request["unit"])
+        opened = self._opened(principal, unit, asked_at)
+        checking = None if opened else self._opened(principal, unit, asked_at, kind="check")
         return self.output(
-            {"run_id": opened, "status": "running", "result_id": None, "waited_s": wait},
+            {
+                "run_id": opened or checking,
+                "status": "checking" if checking else "running",
+                "result_id": None,
+                "waited_s": wait,
+            },
             "backtest",
             response_format,
+        )
+
+    def run_after_check(self, check: Mapping[str, Any]) -> str | None:
+        """The run a behaviour check went before: the newest its principal opened on its unit
+        since it opened, closed or not, or None while none has."""
+        return self._opened(
+            str(check.get("principal")),
+            str(check.get("unit")),
+            str(check.get("at", "")),
+            closed_too=True,
         )
 
     def _fields(self, object_id: str) -> dict[str, Any]:
         return dict(self.library.store.get(OPERATOR, object_id).fields)
 
-    def _opened(self, principal: str, unit: str, since: str) -> str | None:
-        """The newest run (not a check) this principal opened on `unit` since `since` that has
-        not closed."""
+    def _opened(
+        self, principal: str, unit: str, since: str, *, kind: str = "run", closed_too: bool = False
+    ) -> str | None:
+        """The newest try of `kind` this principal opened on `unit` since `since` that has not
+        closed, or that has when `closed_too`."""
         store = self.library.store
         newest: tuple[str, str] | None = None
         for object_id in store.with_field(TRY_KIND, "principal", principal):
             fields = self._fields(object_id)
             run_id, at = str(fields.get("run_id")), str(fields.get("at", ""))
             if (fields.get("kind"), fields.get("state"), fields.get("unit")) != (
-                "run",
+                kind,
                 "opened",
                 unit,
             ) or at < since:
                 continue
-            if store.head(try_item(run_id, "landed"), MAIN) is None and (
-                newest is None or at > newest[1]
-            ):
+            still_open = store.head(try_item(run_id, "landed"), MAIN) is None
+            if (closed_too or still_open) and (newest is None or at > newest[1]):
                 newest = (run_id, at)
         return None if newest is None else newest[0]

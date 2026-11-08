@@ -39,7 +39,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -62,7 +62,7 @@ from qmx_apps.artifacts import Landing as AppLanding
 from qmx_apps.artifacts import Ticket as AppTicket
 from qmx_apps.errors import AppError
 from qmx_apps.manifest import HOST_SECRETS, Definition
-from qmx_apps.supervisor import MARKET_STORE, RUNS, Supervisor
+from qmx_apps.supervisor import JOB_QUEUE, MARKET_STORE, RUNS, Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.models import Document
@@ -124,7 +124,7 @@ from qmx_judge.landing import (
 )
 from qmx_judge.landing import Lander as RunLander
 from qmx_judge.paper import PaperRule
-from qmx_judge.runs import BundleRefused, Landing, ResultBundle, Ticket, parse_bundle
+from qmx_judge.runs import BundleRefused, Landing, ResultBundle, RunId, Ticket, parse_bundle
 from qmx_judge.tries import TRY_KIND, spec_edit_item, try_item
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.cards import Partition, SeriesCard, write_card
@@ -990,6 +990,18 @@ def enable_apps(home: Path, runtime: Supervisor) -> None:
         print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
 
 
+def close_stranded_runs(home: Path, run: QmbRun) -> None:
+    """Close what the last host left open. A store or volume that refuses is named and the host
+    starts anyway; the next start tries again."""
+    try:
+        closed = fail_stranded_runs(home, run)
+    except (AppError, LibraryRefused, OSError, ValueError) as refused:
+        print(f"apps: the runs the last host left open did not close: {refused}", file=sys.stderr)
+        return
+    if closed:
+        print(f"apps: closed as failed, the host restarted: {', '.join(closed)}", file=sys.stderr)
+
+
 def land_first_unit(store: Store) -> None:
     """The dummy unit waits in his Library as a draft from the first start on (AD-118). A store
     that refuses the put (a replica, a read-only store) is named and the host starts anyway."""
@@ -1194,15 +1206,15 @@ async def serve(
                     land_dictionary_statuses(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
-                runtime.attach_landers(
-                    landers(
-                        store,
-                        runtime,
-                        name,
-                        settings=lambda: control.settings_get("qmb"),
-                        door=door,
-                    )
+                registered = landers(
+                    store,
+                    runtime,
+                    name,
+                    settings=lambda: control.settings_get("qmb"),
+                    door=door,
                 )
+                runtime.attach_landers(registered)
+                close_stranded_runs(runtime.home, cast(QmbRun, registered[QMB_RUN]))
                 threading.Thread(
                     target=enable_apps, args=(home, runtime), name="qmx-first-apps", daemon=True
                 ).start()
@@ -1900,15 +1912,28 @@ class LanderLibrary:
         found = self.unit(unit) if self.holds(unit) else None
         return found.compiled.compiled_fingerprint.value if isinstance(found, RunUnit) else None
 
-    def g_record(self, compiled_fp: str) -> GRecord | None:
-        """The first finished layer G `test-report` of `compiled_fp`: a check that failed or
-        was killed gave no verdict, so the next run checks again."""
+    def markets_of(self, unit: str) -> Sequence[str]:
+        found = self.unit(unit)
+        return found.markets if isinstance(found, RunUnit) else ()
+
+    def g_record(self, compiled_fp: str, markets: Collection[str]) -> GRecord | None:
+        """The layer G verdict of `compiled_fp` over `markets`, read from each finished
+        `test-report`'s own slice. A failure seen on any of them answers first. Otherwise the
+        first pass that saw them all, and otherwise none, so a market no check saw is checked
+        before it runs and refused a move. A check that failed or was killed gave no verdict."""
+        asked, passed = set(markets), None
         for object_id in self.store.with_field(TEST_REPORT, "compiled_fingerprint", compiled_fp):
             fields = self.store.get(OPERATOR_READ, object_id).fields
-            if fields.get("check") == G_CHECK and fields.get("status") == "finished":
-                safety = cast(dict[str, object], fields.get("safety") or {})
-                return GRecord(object_id, safety.get("verdict") == "pass")
-        return None
+            if fields.get("check") != G_CHECK or fields.get("status") != "finished":
+                continue
+            behaviour = cast(dict[str, dict[str, list[str]]], fields.get("behaviour") or {})
+            saw = set(behaviour.get("slice", {}).get("market_ids", ()))
+            safety = cast(dict[str, object], fields.get("safety") or {})
+            if safety.get("verdict") != "pass" and saw & asked:
+                return GRecord(object_id, False)
+            if passed is None and safety.get("verdict") == "pass" and asked <= saw:
+                passed = GRecord(object_id, True)
+        return passed
 
 
 OPERATOR_READ: Final = Principal.parse("operator")
@@ -1924,6 +1949,21 @@ _CARDS_LOCK: Final = threading.Lock()
 """One `dataset` card head at a time on this host, so two runs of a new series both land."""
 
 
+COST_PROFILE: Final = "cost-profile"
+"""The word `library_save` keeps for a stated cost profile. The Library has no such kind yet."""
+HOST_RESTARTED: Final = "host restarted"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StatedCosts:
+    """A cost profile a run was told to pay: its pin, each market's `qmx.qmb.cost-profile/1`, and
+    each market's funding rates as the tester's `timestamp,rate` CSV text."""
+
+    pin: str
+    profiles: Mapping[str, JsonObject]
+    funding: Mapping[str, str]
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class CsvPair:
     """One market's hand-saved bid and ask files for exactly the run's window."""
@@ -1936,7 +1976,8 @@ class CsvPair:
 class RunWindow:
     """A run's window, its months, and the seal it reads them through. `run` names that seal only
     when a study states a holdout: a name fixes its first answer for good, so a name for no stated
-    holdout would keep today's Settings default for this study and window after he changes it."""
+    holdout would keep today's Settings default for this study and window after he changes it. A
+    quick study's "off" is no statement, because he never wrote it, so his Settings seal holds."""
 
     start: str
     end: str
@@ -2024,7 +2065,7 @@ class QmbRun:
         fails after the try opened fails that try, so no run stays open for good."""
         unknown = [
             f"{name} {pin} names no object in the Library"
-            for name in ("unit", "study")
+            for name in ("unit", "study", "cost_profile")
             if isinstance(pin := inputs.get(name), str) and pin and not self.library.holds(pin)
         ]
         if unknown:
@@ -2034,14 +2075,53 @@ class QmbRun:
         if isinstance(found, str):
             raise BundleRefused([found])
         bars = None if found is None else self._bars(found, inputs)
+        costs = None if bars is None else self._stated_costs(inputs, bars)
         ticket = self.lander.open(app_id, version, job, inputs, principal)
         if ticket is not None and found is not None and bars is not None:
+            laid = self.folder_of(app_id, ticket.run_id) / "in"
             try:
-                self._lay_out(self.folder_of(app_id, ticket.run_id) / "in", ticket, found, bars)
+                self._lay_out(laid, ticket, found, bars, costs)
             except (OSError, ValueError, LibraryRefused) as error:
                 self.lander.fail(ticket, str(error), status="failed")
+                _lighten(laid)
                 raise BundleRefused([str(error)]) from error
         return ticket
+
+    def _stated_costs(self, inputs: Document, markets: Collection[str]) -> StatedCosts | None:
+        """The cost profile a run is told to pay: the study's `cost_rule` when it names a Library
+        object, as a study's `allow_gaps` beats a chat's, else the request's `cost_profile`. A
+        `cost_rule` naming no object is words. The object is what `library_save` lands, and
+        anything else is refused before any try, as is a profile that charges one of `markets`
+        nothing. Only a `costs` entry counts: funding reaches a market only if its record pays
+        funding, so funding alone can charge nothing while the result names the profile."""
+        rule = self._study_fields(inputs).get("cost_rule")
+        named = rule if isinstance(rule, str) and self.library.holds(rule) else None
+        pin = named or inputs.get("cost_profile")
+        if pin is None:
+            return None
+        if not isinstance(pin, str):
+            raise BundleRefused(["cost_profile names one cost-profile in the Library, as text"])
+        store = self.library.store
+        view = store.get(OPERATOR_READ, pin)
+        said = view.fields.get("legacy_kind", view.kind)
+        blob = view.blobs.get("content")
+        if said != COST_PROFILE or blob is None:
+            raise BundleRefused([f"cost_profile {pin} is a {said}, not a {COST_PROFILE}"])
+        body: object = json.loads(store.read_blob(blob.blob_id))
+        held = cast(dict[str, Any], body).get("content", body) if isinstance(body, dict) else body
+        stated = cast(dict[str, Any], held) if isinstance(held, dict) else {"costs": held}
+        profiles, funding = stated.get("costs") or {}, stated.get("funding") or {}
+        if not (_maps_to(profiles, dict) and _maps_to(funding, str)):
+            raise BundleRefused(
+                [
+                    f"cost_profile {pin} needs costs by market, each an object, and funding by "
+                    "market, each CSV text"
+                ]
+            )
+        missing = [market for market in markets if market not in profiles]
+        if missing:
+            raise BundleRefused([f"cost_profile {pin} names no costs for {', '.join(missing)}"])
+        return StatedCosts(pin, profiles, funding)
 
     def _study_fields(self, inputs: Document) -> Mapping[str, Any]:
         pin = inputs.get("study")
@@ -2088,7 +2168,8 @@ class QmbRun:
         if not isinstance(window, dict) or not {"start", "end"} <= set(window):
             raise BundleRefused(["a unit run names its window, {start, end} as dates"])
         start, end = str(window["start"])[:10], str(window["end"])[:10]
-        holdout = self._study_fields(inputs).get("holdout")
+        study = self._study_fields(inputs)
+        holdout = None if study.get("origin") == "quick" else study.get("holdout")
         return RunWindow(
             start,
             end,
@@ -2172,6 +2253,7 @@ class QmbRun:
         ticket: Ticket,
         found: RunUnit,
         bars: Mapping[str, CsvPair | StoreMonths],
+        costs: StatedCosts | None = None,
     ) -> None:
         settings = self.settings()
         pin = ticket.study
@@ -2181,6 +2263,7 @@ class QmbRun:
             "equity": settings.get("equity"),
             "execution_target": settings.get("execution_target"),
             "g_slice_margin": settings.get("g_slice_margin"),
+            "g_slice_bars": settings.get("g_slice_bars"),
             "gap_bars_refuse": settings.get("gap_bars_refuse"),
             "calibrated_min_fills": settings.get("calibrated_min_fills"),
             "motion": "on",
@@ -2191,6 +2274,7 @@ class QmbRun:
             "run_id": ticket.run_id,
             "markets": list(bars),
             "fixture_records": list(found.fixture_records),
+            **({} if costs is None else {"cost_profile": costs.pin}),
         }
         root.mkdir(parents=True, exist_ok=True)
         (root / "request.json").write_text(json.dumps(request, indent=2), "utf-8")
@@ -2212,6 +2296,22 @@ class QmbRun:
             (root / "bars" / market).mkdir(parents=True, exist_ok=True)
             shutil.copyfile(data.bid, root / "bars" / market / "bid.csv")
             shutil.copyfile(data.ask, root / "bars" / market / "ask.csv")
+        if costs is not None:
+            self._lay_costs(root, costs, bars)
+
+    def _lay_costs(
+        self, root: Path, costs: StatedCosts, bars: Mapping[str, CsvPair | StoreMonths]
+    ) -> None:
+        """Each market's stated profile and funding where the tester reads them. A stated profile
+        measured no fills whatever it says, so the run stays `costs_uncalibrated`."""
+        (root / "costs").mkdir(exist_ok=True)
+        for market in bars:
+            (root / "costs" / f"{market}.json").write_text(
+                json.dumps({**costs.profiles[market], "fills": 0}, indent=2), "utf-8"
+            )
+            if market in costs.funding:
+                (root / "funding").mkdir(exist_ok=True)
+                (root / "funding" / f"{market}.csv").write_text(costs.funding[market], "utf-8")
 
     def _copy_months(self, folder: Path, market: str, data: StoreMonths) -> None:
         """A market's months as verified copies, beside the card the tester reads them by."""
@@ -2270,15 +2370,64 @@ class QmbRun:
         ticket = cast(Ticket, run.ticket)
         bundle = _with_its_data(parse_bundle(data), run.folder / "in")
         try:
-            return self.lander.close(Landing(ticket, bundle, run.folder))
+            landed = self.lander.close(Landing(ticket, bundle, run.folder))
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
+        _lighten(run.folder / "in")
+        return landed
 
     def fail(self, ticket: AppTicket, reason: str, status: Ending) -> str:
+        own = cast(Ticket, ticket)
         try:
-            return self.lander.fail(cast(Ticket, ticket), reason, status=status)
+            landed = self.lander.fail(own, reason, status=status)
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
+        _lighten(self.folder_of(own.app_id, own.run_id) / "in")
+        return landed
+
+
+def _lighten(laid: Path) -> None:
+    """A landed run's copies of its bars go, last of all, because the lander reads them first. The
+    market store and the result keep what they held. A file still open stays, and fails no run."""
+    for copied in ("bars", "data"):
+        shutil.rmtree(laid / copied, ignore_errors=True)
+
+
+def fail_stranded_runs(home: Path, run: QmbRun) -> list[str]:
+    """Close each run this machine left open, before any app starts. The thread that waited on it
+    died with the last host, and a leftover request would run with nobody to close it. Answers the
+    run ids it closed; a second start finds none."""
+    store = run.library.store
+    prefix = f"qmbr-{run.lander.machine}"
+    closed: list[str] = []
+    for object_id in store.with_field(TRY_KIND, "state", "opened"):
+        view = store.get(OPERATOR_READ, object_id)
+        fields = cast(dict[str, Any], view.fields)
+        run_id = str(fields["run_id"])
+        if run_id.rpartition("-")[0] != prefix or run.library.find(try_item(run_id, "failed")):
+            continue
+        app = str(fields["tester"]["app"])
+        queue = Volume(home, app).root / JOB_QUEUE
+        for request in queue.glob("*.request.json"):
+            asked = json.loads(request.read_text("utf-8"))
+            if asked.get("inputs", {}).get("run_id") == run_id:
+                request.unlink(missing_ok=True)
+        laid = run.folder_of(app, run_id) / "in" / "request.json"
+        ticket = Ticket(
+            run_id=RunId(run_id),
+            app_id=app,
+            version=str(fields["tester"]["version"]),
+            job=view.title.split(" ")[0],
+            principal=str(fields["principal"]),
+            unit=str(fields["unit"]),
+            study=fields.get("study"),
+            family=str(fields["family"]),
+            opened=object_id,
+            request=json.loads(laid.read_text("utf-8")) if laid.is_file() else {},
+        )
+        run.fail(ticket, HOST_RESTARTED, "failed")
+        closed.append(run_id)
+    return closed
 
 
 def _months_of(start: str, end: str) -> tuple[str, ...]:
@@ -2303,6 +2452,12 @@ def _sources(asked: object, studied: object) -> list[str]:
     if not all(isinstance(source, str) and source for source in named):
         raise BundleRefused(["source names one source in the market store, as text"])
     return list(dict.fromkeys(cast(list[str], named))) or [DEFAULT_SOURCE]
+
+
+def _maps_to(value: object, kind: type) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(entry, kind) for entry in cast(dict[str, object], value).values()
+    )
 
 
 def _asked_markets(traded: Sequence[str], asked: object) -> tuple[str, ...]:
