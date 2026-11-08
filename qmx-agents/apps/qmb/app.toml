@@ -6,7 +6,17 @@ kind = "headless"
 
 [entrypoints]
 mcp = "server.py"
-jobs = ["jobs/backtest.py", "jobs/behaviour_check.py", "jobs/conformance.py"]
+jobs = [
+  "jobs/backtest.py",
+  "jobs/behaviour_check.py",
+  "jobs/conformance.py",
+  "jobs/sweep.py",
+  "jobs/walk_forward.py",
+  "jobs/robustness.py",
+  "jobs/optimize.py",
+  "jobs/whatif.py",
+  "jobs/replay_check.py",
+]
 
 [operations.capabilities]
 description = "What this tester replays: its contract, run kinds, fidelities and markets."
