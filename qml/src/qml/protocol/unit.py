@@ -13,7 +13,7 @@ The host injects these read surfaces, each an object with ``at(instant)``:
 - ``account``: the ``Account`` facts the sizer reads.
 
 On each instant, for each market whose bar is new: every block updates, exits run for the
-positions this compiled fingerprint opened, then entries. A market's entries wait for its
+positions this unit version's logic half opened, then entries. A market's entries wait for its
 derived warm-up (``warming``, then ``ready``). Calibrated numbers move last, from
 ``own_journal``, only when the unit is flat. The stream's ``close`` and its bars are the bid
 side; an entry's reference price is the ask close for a long and the bid close for a short.
@@ -669,8 +669,17 @@ class _Run:
     # --- exits ---------------------------------------------------------------------
 
     def exits(self, m: _Market, position: OwnPosition | None, new_bar: bool) -> None:
-        mine = (
-            position is not None and position.opened_by == self.unit.compiled.compiled_fingerprint
+        """This market's per-bar exits on ``position``.
+
+        A position is this unit's when its key is this version's logic half, which a risk edit
+        leaves alone, or this compile's own fingerprint, which a host that pins one compile
+        stamps (AD-3). Either names this unit version, so another version's position is never
+        closed.
+        """
+        version = self.unit.compiled
+        mine = position is not None and position.opened_by in (
+            version.logic_fingerprint,
+            version.compiled_fingerprint,
         )
         for gone in [pid for pid in m.timers if position is None or pid != position.position_id]:
             del m.timers[gone]

@@ -12,7 +12,8 @@ liquidation level is checked against it (``update_closed_data``); then the unit 
 the slice's instant and its intents rest for the next bar (``mint_intents``). A fill's quantity
 is the sizer receipt's rounded down to the market's lot step, or what the node's venue filled of
 it; below the minimum lot the entry is skipped with its reason. The handler closes only
-positions this compiled fingerprint opened. An exit acts by its kind: ``close_full`` closes the
+positions keyed by the fingerprint its host passed, and the node passes the logic half, so a size
+edit leaves a held position's exits running. An exit acts by its kind: ``close_full`` closes the
 position, ``close_partial`` closes its lot-rounded quantity and keeps the rest held, and
 ``amend_protection`` moves the held stop and target, tightening only.
 
@@ -312,7 +313,9 @@ class UnitSliceHandler:
         """A handler whose unit ``host`` built from this handler's read surfaces.
 
         QMB passes ``construct_unit``; the node passes its resume call, so this file never
-        restores a unit itself.
+        restores a unit itself. ``opened_by`` is the fingerprint the positions it opens are
+        keyed by: QMB pins one compile and passes that, the node passes the unit version's logic
+        half so a size edit keeps a held position's exits (AD-3).
         """
         handler = cls(
             stream=stream,
@@ -610,7 +613,7 @@ class UnitSliceHandler:
         if held is None or held.position.position_id != exit_.position_ref.position_id:
             return policy(
                 "position_ref",
-                "a unit closes only a position its own compiled fingerprint opened",
+                "a unit closes only a position its own unit version opened",
                 position_id=exit_.position_ref.position_id,
             )
         row_id = exit_.decision_row_id
