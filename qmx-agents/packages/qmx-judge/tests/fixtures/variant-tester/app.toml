@@ -1,0 +1,21 @@
+id = "qmb-cents-down"
+name = "QMB, money cut down to the cent"
+version = "1.0.0"
+risk = "runs"
+kind = "headless"
+
+[entrypoints]
+mcp = "server.py"
+jobs = ["jobs/backtest.py", "jobs/conformance.py"]
+
+[operations.capabilities]
+description = "What this tester replays."
+approval = "read"
+state = "none"
+
+[provides.backtest-result]
+lander = "qmb-run"
+
+[provides.backtest-result.schema]
+type = "object"
+required = ["run_id", "status"]

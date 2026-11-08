@@ -58,6 +58,39 @@ if TYPE_CHECKING:
 UNIT_KIND: Final = "unit"
 NO_NODE: Final = "no trading node is set up yet"
 REPO: Final = Path(qml.__file__).resolve().parents[3]
+COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "motion", "study")
+"""The result fields that make two runs one request, whatever tester ran them."""
+
+
+type Opening = tuple[str, int, int, str]
+"""A trade's pairing key: market, opening instant, its order among the trades the result opened
+on that market at that instant, and the trade id of a row landed before B6."""
+
+
+def _opened_at(result_id: str, n: int, trade: dict[str, Any]) -> int:
+    value = trade.get("opened_at", 0)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.isascii() and value.isdigit():
+        return int(value)
+    raise ValueError(
+        f"{result_id}: trade {n} opens at {value!r}, not a whole number of nanoseconds"
+    )
+
+
+def _by_opening(result_id: str, trades: list[dict[str, Any]]) -> dict[Opening, dict[str, Any]]:
+    """A result's trades by market and opening instant, since a unit holds one position per
+    market, then by their order, so two trades opened together never merge. A row with no
+    opening instant, landed before B6, pairs by its trade id."""
+    rows: dict[Opening, dict[str, Any]] = {}
+    seen: dict[tuple[str, int, str], int] = {}
+    for n, trade in enumerate(trades):
+        market, at = str(trade.get("market_id")), _opened_at(result_id, n, trade)
+        legacy = "" if "opened_at" in trade else str(trade.get("trade_id"))
+        order = seen.get((market, at, legacy), 0)
+        seen[market, at, legacy] = order + 1
+        rows[market, at, order, legacy] = trade
+    return rows
 
 
 def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., dict[str, Any]]]]:
@@ -237,26 +270,50 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         cursor: int = 0,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
-        """Compare two landed results: differing measures, and trades in one only or differing."""
+        """Compare two landed results trade by trade (the parity diff): each trade only one made,
+        each trade both made whose prices, size, money or R differ, and the measures that
+        differ. Trades pair by market, opening time and their order among trades opened on
+        that market at that time, so two testers' names never matter."""
         (first, mine), (second, theirs) = _result(left), _result(right)
-        ours = {str(t["trade_id"]): t for t in mine}
-        other = {str(t["trade_id"]): t for t in theirs}
-        rows = [
-            {"trade_id": key, "left": ours.get(key), "right": other.get(key)}
-            for key in sorted(ours.keys() | other.keys())
-            if ours.get(key) != other.get(key)
-        ]
-        a = cast("dict[str, Any]", first.get("measures") or {})
-        b = cast("dict[str, Any]", second.get("measures") or {})
+        ours, other = _by_opening(left, mine), _by_opening(right, theirs)
+        rows: list[dict[str, Any]] = []
+        for key in sorted(ours.keys() | other.keys(), key=lambda k: (k[1], k[0], k[2], k[3])):
+            a, b = ours.get(key), other.get(key)
+            trade = {"market_id": key[0], "opened_at": key[1], "order": key[2]}
+            if a is None or b is None:
+                rows.append({**trade, "only": "right" if a is None else "left", "row": a or b})
+                continue
+            differs = {
+                name: [a.get(name), b.get(name)]
+                for name in sorted((a.keys() | b.keys()) - {"trade_id"})
+                if a.get(name) != b.get(name)
+            }
+            if differs:
+                rows.append({**trade, "differs": differs})
+        a_measures = cast("dict[str, Any]", first.get("measures") or {})
+        b_measures = cast("dict[str, Any]", second.get("measures") or {})
         measures = {
-            key: [a.get(key), b.get(key)]
-            for key in sorted(a.keys() | b.keys())
-            if a.get(key) != b.get(key)
+            key: [a_measures.get(key), b_measures.get(key)]
+            for key in sorted(a_measures.keys() | b_measures.keys())
+            if a_measures.get(key) != b_measures.get(key)
+        }
+        request = {
+            name: [first.get(name), second.get(name)]
+            for name in COMPARED_REQUEST
+            if first.get(name) != second.get(name)
         }
         page = ctx.page(
             rows, Page(limit=limit, cursor=cursor, response_format=response_format), "comparison"
         )
-        return {**page, "same_trades": not rows, "measures": measures}
+        return {
+            **page,
+            "testers": [first.get("tester"), second.get("tester")],
+            "statuses": [first.get("status"), second.get("status")],
+            "same_request": not request,
+            "request_differs": request,
+            "same_trades": not rows,
+            "measures": measures,
+        }
 
     def backtest_judge_run(
         results: list[str], study: str | None = None, response_format: ResponseFormat = "concise"

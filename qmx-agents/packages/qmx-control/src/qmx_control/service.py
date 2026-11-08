@@ -313,6 +313,7 @@ QMB_DEFAULTS: Final[Document] = {
     "agent_wait_s": 240,
     "bars": "",
     "calibrated_min_fills": 50,
+    "default_tester": "qmb@1.0.0",
     "equity": "10000.00",
     "execution_target": {"role": "paper-validation", "venue_id": "qmb", "account_id": "backtest"},
     "g_slice_margin": "0.20",
@@ -325,7 +326,8 @@ dukascopy-node's CSV pairs, empty for the market store's `bars/`; a backtest tra
 account's money on a backtest target that is no account; the behaviour check's slice is the
 warm-up and 20% more; the windowed reader's peak memory at 200,000 steps stays within 10% of its
 peak at 10,000; a run's costs count as calibrated from 50 of QMX's own fills; a hole of more than
-3 bars of the unit's stream in open time fails a run unless its study allows gaps."""
+3 bars of the unit's stream in open time fails a run unless its study allows gaps. The default
+tester is the shipped QMB, and it moves only to a tester whose conformance check passed."""
 
 
 UNITS_DEFAULTS: Final[Document] = {
@@ -1070,6 +1072,37 @@ class ControlService:
             "Send a name to mint an observer token, or a revoke id to end one.",
         )
 
+    def _check_default_tester(self, values: Document) -> None:
+        """Refuse moving `[qmb] default_tester` to a tester whose newest conformance report on
+        the current pack did not pass, with that report's first difference (Part B AD-206).
+        Keeping the default where it is needs no report. Each report goes to the judge with
+        where it and its result were placed, since only the core's own reports count."""
+        from qmx_judge.conformance import CHECK, Placed, Proof, unproven  # noqa: PLC0415
+
+        pin = values.get("default_tester")
+        if pin is None or pin == self.settings_get("qmb").get("default_tester"):
+            return
+        if not isinstance(pin, str) or pin.count("@") != 1 or pin.startswith("@"):
+            raise ControlError(
+                "invalid_qmb",
+                f"[qmb] default_tester is app@version, such as qmb@1.0.0, not {pin!r}",
+            )
+        store = self.library.store
+
+        def placed(object_id: str) -> Placed:
+            ref, principal, _ = store.placement(object_id) or ("", "", "")
+            return Placed(store.get(LIBRARY_OPERATOR, object_id).fields, ref, principal)
+
+        proofs: list[Proof] = []
+        for found in store.with_field("test-report", "check", CHECK):
+            report = placed(found)
+            result = report.fields.get("result")
+            held = isinstance(result, str) and store.catalog.row(result) is not None
+            proofs.append((report, placed(str(result)) if held else None))
+        why = unproven(pin, proofs)
+        if why is not None:
+            raise ControlError("default_tester_unproven", f"[qmb] default_tester stays: {why}", 409)
+
     def _settings_put(self, section: SettingsSection, values: Document) -> Document:
         if section == "observers":
             return self._observers_put(values)
@@ -1116,6 +1149,8 @@ class ControlService:
             _check_telemetry(values, self._stored("engine"))
         if section == "units":
             _check_units(values)
+        if section == "qmb":
+            self._check_default_tester(values)
         if section == "backup":
             _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
         elif section in ("brokers", "connections"):
