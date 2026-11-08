@@ -63,6 +63,8 @@ CORE_TOOLSETS: Final = (
     "lab",
     "unit",
     "blocks",
+    "instrument",
+    "readings",
 )
 CORE_PACK: Final = "qmx"
 APP_PREFIX: Final = "app:"
@@ -340,8 +342,9 @@ DOMAIN_ROWS: Final = (
         "domain_fn",
         "journal_query",
         "read",
-        "Read a journal (unit, market, node or readings) over a required time window, filtered by"
-        " envelope fields such as unit_id, market_id, kind or world. The `trades_with_context`"
+        "Read a journal (unit, market or node) over a required time window, filtered by"
+        " envelope fields such as unit_id, market_id, kind or world. Reading history is read"
+        " with readings_query. The `trades_with_context`"
         " view puts each decision and trade beside its market's minute, spread included, which"
         " answers why a unit did or did not trade; `digest` counts per unit, market and day. Past"
         " the data it says where the data stops. Reads only.",
@@ -466,6 +469,29 @@ DOMAIN_ROWS: Final = (
         "read",
         "Match each sentence of a source to the dictionary entry it states. A sentence no entry"
         " covers comes back as an append request; never invent an entry for it silently.",
+    ),
+    _row(
+        "instrument",
+        "get",
+        "domain_fn",
+        "instrument_get",
+        "read",
+        "Read the facts of one instrument record (contract size, pip, digits, lots, calendar,"
+        " funding, leverage, data levels, status) as they stood at an instant, `at`, now by"
+        " default. Name it by `venue` and `symbol`, or by `market_id` when one venue holds it;"
+        " `version` reads one version. Answers the record with its id, version and fingerprint.",
+    ),
+    _row(
+        "readings",
+        "query",
+        "domain_fn",
+        "readings_query",
+        "read",
+        "Read what a reading (an MIS or node market state such as the volatility state) said"
+        " over a required time window, the open month included, narrowed by markets, tier,"
+        " source and version. Each row carries its value or word, its health and when it was"
+        " computed. Continue with `cursor`; `data_ends_at` says where the recorded data stops."
+        " The only way to read reading history. Reads only.",
     ),
 )
 """`qmx_tools.functions.domain_functions` by name. Its `library_search`, `library_save` and
