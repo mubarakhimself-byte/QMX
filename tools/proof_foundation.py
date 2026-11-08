@@ -256,8 +256,217 @@ TABLE: Final[tuple[Check, ...]] = (
     ),
 )
 
-WALLS: Final[tuple[Check, ...]] = ()
-"""R24 fills this table; `--walls` selects it and runs it the same way."""
+WALLS: Final[tuple[Check, ...]] = (
+    Check(
+        1,
+        "A wheel-built node loads the alarm list and a real alarm reaches a loopback ntfy",
+        (
+            _root(
+                "qmn/tests/test_qmn_failures_gate.py::test_the_installed_layout_gives_a_push_sender"
+            ),
+            _root(
+                "qmn/tests/test_qmn_failures_gate.py::"
+                "test_status_says_alarms_off_while_the_register_will_not_load"
+            ),
+            _root(
+                "qmn/tests/test_app_alarms.py::"
+                "test_a_protection_escalation_reaches_ntfy_once_with_priority_5_on_a_shut_market"
+            ),
+        ),
+        600.0,
+    ),
+    Check(
+        2,
+        "OpenObserve stops and comes back, and the doctor returns to green",
+        (
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_app_logs.py::"
+                "test_outage_then_recovery_leaves_the_doctor_green_with_the_count"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_app_logs.py::"
+                "test_a_200000_deep_line_ships_as_text_and_the_next_line_ships"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_app_logs.py::"
+                "test_a_breaker_line_reads_as_an_error"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        3,
+        "The node blocks an entry on each unlisted text and rows keep landing",
+        (
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_node_trade_reaches_the_library.py::"
+                "test_each_unlisted_text_keeps_rows_landing"
+            ),
+            _root(
+                "qmn/tests/test_journal_reason_census.py::"
+                "test_every_text_the_node_can_write_has_a_code"
+            ),
+        ),
+        600.0,
+    ),
+    Check(
+        4,
+        "A real node trade travels writer, harvester and Library, and rounds change nothing",
+        (
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_node_trade_reaches_the_library.py::"
+                "test_a_real_writer_row_lands_a_trade_and_a_paper_run"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_records.py::"
+                "test_a_second_and_third_round_score_the_same_paper_run"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_records.py::"
+                "test_a_pulled_trade_lands_a_library_item"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        5,
+        "Host start on a fresh folder with QMB broken names the failure and carries on",
+        (
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_repair_lands.py::"
+                "test_an_app_that_never_installed_is_named_and_the_next_one_starts"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_repair_lands.py::"
+                "test_one_bad_app_does_not_stop_the_others"
+            ),
+        ),
+        1200.0,
+    ),
+    Check(
+        6,
+        "The configure job publishes readings and a read error does not stop the next round",
+        (
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_mis_configure.py::"
+                "test_a_market_with_bars_under_a_source_is_configured_and_publishes"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_mis_configure.py::"
+                "test_running_twice_does_nothing_and_a_market_with_no_bars_is_named"
+            ),
+            _agents(
+                "qmx-agents/apps/mis/tests/mis_app_test.py::"
+                "test_a_read_error_in_a_round_leaves_the_thread_alive"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        7,
+        "A deploy stalled past thirty seconds lands once, and a click after a refusal deploys",
+        (
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_promote_edges.py::"
+                "test_a_timed_out_deploy_waits_and_lands_once"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_promote_edges.py::"
+                "test_a_click_after_a_refused_deploy_deploys_again"
+            ),
+            _agents(
+                "qmx-agents/packages/qmx-host/tests/test_node_link_refused.py::"
+                "test_a_deploy_the_supervisor_could_not_answer_stays_waiting_and_reads_as_the_node"
+                "_has_it"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        8,
+        "Drop the socket, fire the stop, reconnect, and the trade books at the broker's price",
+        (
+            _root(
+                "qmn/tests/test_app_broker_wins.py::"
+                "test_a_stop_fired_while_down_books_at_the_brokers_price"
+            ),
+            _root(
+                "qmn/tests/test_app_broker_wins.py::"
+                "test_the_brokers_rate_limit_waits_for_the_true_price"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        9,
+        "A restart puts a lost stop back or closes with an alarm, and a gone position books",
+        (
+            _root(
+                "qmn/tests/test_app_every_way_out.py::"
+                "test_a_restart_puts_a_missing_stop_back_before_any_entry"
+            ),
+            _root(
+                "qmn/tests/test_app_every_way_out.py::"
+                "test_a_stop_it_cannot_put_back_closes_with_an_alarm"
+            ),
+            _root(
+                "qmn/tests/test_app_broker_wins.py::"
+                "test_a_stop_fired_while_the_process_was_down_writes_the_missing_close"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        10,
+        "RED and flatten end flat with true rows, and a restart replays nothing",
+        (
+            _root("qmn/tests/test_app_every_way_out.py::test_red_closes_a_position_no_unit_holds"),
+            _root(
+                "qmn/tests/test_app_every_way_out.py::"
+                "test_flatten_closes_and_a_restart_replays_nothing"
+            ),
+            _root(
+                "qmn/tests/test_app_every_way_out.py::"
+                "test_a_flatten_held_across_a_restart_with_the_session_down_waits_and_ends_flat"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        11,
+        "A reboot with no network waits then trades, and a late market or unlisted symbol behaves",
+        (
+            _root(
+                "qmn/tests/test_app_deployed_runs.py::"
+                "test_a_reboot_with_no_network_waits_then_trades_at_the_real_balance"
+            ),
+            _root(
+                "qmn/tests/test_app_deployed_runs.py::"
+                "test_a_new_market_after_bind_gets_its_bars_with_a_position_held"
+            ),
+            _root(
+                "qmn/tests/test_app_deployed_runs.py::"
+                "test_an_unlisted_symbol_is_refused_by_name_and_the_account_keeps_trading"
+            ),
+        ),
+        900.0,
+    ),
+    Check(
+        12,
+        "A refused socket stays under a set count, a weekend reads closed, and a short unit waits",
+        (
+            _root(
+                "qmn/tests/test_app_connections.py::"
+                "test_an_hour_of_refused_socket_stays_under_a_set_count_of_sign_ins"
+            ),
+            _root("qmn/tests/test_app_connections.py::test_a_weekend_reads_closed_not_stopped"),
+            _root(
+                "qmn/tests/test_app_deployed_runs.py::test_a_five_minute_unit_is_refused_by_name"
+            ),
+        ),
+        900.0,
+    ),
+)
 
 
 def _python(environment: Environment) -> Path:
