@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import itertools
 from collections.abc import Callable
 from pathlib import Path
@@ -161,6 +160,4 @@ def test_an_id_with_an_at_sign_maps_to_its_fixed_token() -> None:
     assert key_token("node@pc-1") == "node+pc-1"
     assert key_token("EURUSD.spot") == "EURUSD.spot"
     assert key_token("a/b c") == "a+b_c"
-    assert key_token(long_id) == (
-        "unit+" + "x" * 46 + "-" + hashlib.sha256(long_id.encode()).hexdigest()[:12]
-    )
+    assert key_token(long_id) == "unit+" + "x" * 46 + "-6289b9ff077f"
