@@ -4,6 +4,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
+**9 Nov, READ FIRST: next is the numbers and strategy talk with him. Start at `NUMBERS-TALK-START.md`.** The build runs elsewhere (`D:/QMX-worktrees/risk-ship/`); don't touch it.
+
 **READ FIRST: round two finished on his word (M54). Go to `round-2/RUN.md`, then `round-2/WALKTHROUGH.html`. Design: `round-2/arch/final/`. Plan and prompt: `round-2/build/`. Nothing coded, merged or pushed. Older items below are superseded where they conflict.**
 
 **7 Nov, READ FIRST: he rejected the template (M49). See `REVIEW-2026-11-07.md`. The next step, on his go, is a recut around unit plus pod. Q1-Q9 are withdrawn. Numbers and methodology stay out.**
