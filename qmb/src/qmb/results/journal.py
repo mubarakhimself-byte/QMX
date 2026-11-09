@@ -128,10 +128,10 @@ def _family_code(text: str) -> str | None:
 def _fire_body(code: str, root: str, incident: str | None = None) -> dict[str, object]:
     """A risk event's body: what fired, the incident it belongs to, and the alert he reads.
 
-    ``root`` is the root-cause key the one card is filed under, so two rows of one broken block make
-    one card. ``event_id`` names the incident and not the row, so the same brake firing again after a
-    restart files under one incident; a brake passes its own row, because two brakes can run one
-    block. ``actionable`` is true because only his hand resumes a brake, and a row carries no
+    ``root`` is the root-cause key the one card is filed under, so two rows of one broken block
+    make one card. ``event_id`` names the incident and not the row, so the same brake firing again
+    after a restart files under one incident; a brake passes its own row, because two brakes can run
+    one block. ``actionable`` is true because only his hand resumes a brake, and a row carries no
     deadline because nothing about it expires.
     """
     return {
