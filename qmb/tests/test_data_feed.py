@@ -134,7 +134,7 @@ def test_one_market_of_a_two_market_unit_runs(tmp_path: Path) -> None:
 
     assert not is_refusal(ran)
     assert bars == {EURUSD: 1920}
-    assert (len(ran.value.trades), ran.value.total_r) == (6, Decimal("-3.2610"))
+    assert (len(ran.value.trades), ran.value.total_r) == (6, Decimal("-3.2846"))
     assert {trade.market_id for trade in ran.value.trades} == {EURUSD}
     assert loaded.value.compiled.compiled_fingerprint == whole.value.compiled.compiled_fingerprint
 

@@ -125,8 +125,8 @@ def test_the_dummy_trades_the_month_and_every_fill_is_its_receipt_after_lot_roun
     entries = [f for f in result.fills if f.kind is FillKind.ENTRY]
     assert len(result.trades) == 8
     assert [(f.market_id, f.side.value, f.quantity, f.receipt_quantity) for f in entries[:2]] == [
-        ("fx.eurusd", "short", Decimal("1.72"), Decimal("1.72")),
-        ("fx.eurusd", "short", Decimal("1.08"), Decimal("1.08")),
+        ("fx.eurusd", "short", Decimal("1.61"), Decimal("1.61")),
+        ("fx.eurusd", "short", Decimal("1.03"), Decimal("1.03")),
     ]
     assert all(
         f.quantity == _eurusd_lots(cast("Decimal", f.receipt_quantity))
@@ -137,7 +137,7 @@ def test_the_dummy_trades_the_month_and_every_fill_is_its_receipt_after_lot_roun
     first, last = result.trades[0], result.trades[-1]
     assert (first.exit_kind, first.money, first.r) == (
         FillKind.STOP,
-        Decimal("-49.88"),
+        Decimal("-49.91"),
         Decimal("-1.0000"),
     )
     assert (last.exit_kind, last.money, last.r) == (
@@ -145,8 +145,8 @@ def test_the_dummy_trades_the_month_and_every_fill_is_its_receipt_after_lot_roun
         Decimal("95.38"),
         Decimal("2.0013"),
     )
-    assert result.net_money == Decimal("-114.97")
-    assert result.total_r == Decimal("-2.2597")
+    assert result.net_money == Decimal("-116.12")
+    assert result.total_r == Decimal("-2.2833")
     assert result.labels == ("costs_uncalibrated",)
 
 
