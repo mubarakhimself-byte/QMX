@@ -17,8 +17,9 @@ kinds are read at unit scope:
 what the snapshot holds: `cached()` is JSON-safe, and `from_cache` reads a cache that does not parse
 back as empty, because rows are the truth and a cache is a cache.
 
-The word is derived, never stored: a fire leaves the word its verb names, a restore leaves
-``RESTORE``, and a fact past its limit makes the word ``UNKNOWN``. ``since`` is dated from the row
+The word is derived, never stored: a fire of a verb that acts raises the word to its own and never
+lowers a stronger one, a warn-only fire leaves the word as it was, a restore row is the one that
+lowers it, and a fact past its limit makes the word ``UNKNOWN``. ``since`` is dated from the row
 that began the word, so a brake firing every bar does not reset it.
 """
 
@@ -34,6 +35,16 @@ __all__ = ["Fold", "fold"]
 
 _KINDS: Final[frozenset[str]] = frozenset({"risk_event", "restore", "fact"})
 _DEFAULT_VERB: Final[Verb] = Verb.NO_NEW_ENTRIES
+_RANK: Final[Mapping[StateWord, int]] = {
+    StateWord.ACTIVE: 0,
+    StateWord.RESTORE: 0,
+    StateWord.REDUCING: 1,
+    StateWord.BENCHED: 2,
+    StateWord.HALTED: 3,
+}
+"""How strong each word is. A fire raises the word and never lowers it, so a weaker fire cannot
+clear a stronger brake; ``RESTORE`` ranks with ``ACTIVE`` because it is the row that lets a lower
+word arrive again."""
 
 
 def fold(rows: Iterable[Mapping[str, object]], scope: str, clock: Instant) -> RiskState:
@@ -159,12 +170,17 @@ class Fold:
         given = row.get("verb")
         verb = _DEFAULT_VERB if given is None else _verb(given)
         reason = _reason(row, _text(row, "code"))
+        if verb is Verb.NONE:  # a warn-only fire refuses nothing, so it never releases a bench
+            return
         self._arrive(word_for(verb), reason, at)
 
     def _leave(self, code: str, at: int) -> None:
         self._arrive(StateWord.RESTORE, code, at)
 
     def _arrive(self, word: StateWord, reason: str, at: int) -> None:
+        """Take ``word`` unless a stronger one since the last restore already holds."""
+        if word is not StateWord.RESTORE and _RANK[word] < _RANK[self._word]:
+            return
         if word is self._word:
             return
         self._word = word

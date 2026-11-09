@@ -4,7 +4,9 @@ The three seams are the section's Verify, unit block. Each gives the same journa
 different reader: the fold taken cold, the node's incremental path (a cache in the snapshot, then
 the rest of the journal), and the unit the shared handler drives in QMB. K9 test 9 is the middle
 sentence: ``RiskState`` from one fold in every reader. A fourth test holds the five words the
-section names, because the three readers cannot show RESTORE without a restore row.
+section names, because the three readers cannot show RESTORE without a restore row. The rest hold
+the fold's safety surface: which rows may move the word, and that an empty seed still reads the
+bench its snapshot caches.
 """
 
 # pyright: reportPrivateUsage=false
@@ -92,8 +94,16 @@ def _unit(compiled: CompiledUnit, rows: Sequence[Mapping[str, object]] = ()) -> 
     )
 
 
-def _restored(compiled: CompiledUnit, snapshot: Mapping[str, object]) -> HostedUnit:
-    """The same unit hosted again with only its snapshot: the journal rows are not handed."""
+def _restored(
+    compiled: CompiledUnit,
+    snapshot: Mapping[str, object],
+    rows: Sequence[Mapping[str, object]] | None = None,
+) -> HostedUnit:
+    """The same unit hosted again with only its snapshot: the journal rows are not handed.
+
+    ``rows`` is what a host's journal reader found before the restore; the node hands ``()`` when
+    it finds no brake row at all.
+    """
     return _ok(
         restore_unit(
             snapshot,
@@ -101,6 +111,7 @@ def _restored(compiled: CompiledUnit, snapshot: Mapping[str, object]) -> HostedU
             read_surfaces=_surfaces(_slice()),
             scope_id="run-rc14",
             execution_target=_target(),
+            risk_rows=rows,
         )
     )
 
@@ -164,6 +175,54 @@ def test_the_fold_derives_each_word_a_row_names() -> None:
     assert restored.since == Instant(_FIRE_NS + 1)
 
 
+def test_a_warn_only_fire_keeps_the_bench_it_fires_after() -> None:
+    """A fire that refuses nothing records its event and leaves the word where it was."""
+    clock = Instant(_CLOCK_NS)
+    rows = [_fire(_FIRE_NS), _fire(_FIRE_NS + 1, "none", "session-fill-limit-halt")]
+
+    cold = fold(rows, _SCOPE, clock)
+    qmb = _unit(_compiled(), rows).risk_state(clock)
+
+    assert (cold.word, cold.since) == (
+        StateWord.BENCHED,
+        Instant(_FIRE_NS),
+    ), "a warn-only fire cannot release the bench it fires after; only a restore row does"
+    assert qmb == cold, "the unit reads the same fold"
+
+
+def test_a_weaker_fire_never_clears_a_stronger_word() -> None:
+    """A fire raises the word to its own or leaves a stronger one in place: the strongest word
+    since the last restore is what the scope is doing."""
+    clock = Instant(_CLOCK_NS)
+    halted = fold(
+        [_fire(_FIRE_NS, "flatten"), _fire(_FIRE_NS + 1), _fire(_FIRE_NS + 2, "reduce")],
+        _SCOPE,
+        clock,
+    )
+    benched = fold([_fire(_FIRE_NS), _fire(_FIRE_NS + 1, "reduce")], _SCOPE, clock)
+
+    assert (halted.word, halted.since) == (StateWord.HALTED, Instant(_FIRE_NS)), (
+        "neither a bench nor a reduce can lower a halt"
+    )
+    assert (benched.word, benched.since) == (StateWord.BENCHED, Instant(_FIRE_NS)), (
+        "a reduce cannot lower a bench"
+    )
+
+
+def test_a_restore_row_is_what_lets_a_lower_word_arrive() -> None:
+    """The one row that lowers the word is a restore: the next fire sets its own word again."""
+    clock = Instant(_CLOCK_NS)
+    rows = [
+        _fire(_FIRE_NS, "flatten"),
+        {"kind": "restore", "scope": _SCOPE, "at": _FIRE_NS + 1, "id": "r1", "code": "hand"},
+        _fire(_FIRE_NS + 2, "reduce"),
+    ]
+
+    state = fold(rows, _SCOPE, clock)
+
+    assert (state.word, state.since) == (StateWord.REDUCING, Instant(_FIRE_NS + 2))
+
+
 # --- a restart keeps a bench from rows ----------------------------------------------
 
 
@@ -184,6 +243,23 @@ def test_restart_keeps_a_bench_from_rows() -> None:
         StateWord.BENCHED,
         Instant(_FIRE_NS),
     )
+
+
+def test_an_empty_row_set_reads_the_snapshot_bench() -> None:
+    """A node that finds no brake row hands ``()``. That is a reader that found none, not the
+    truth that the scope is up, so the snapshot's cached bench answers: a bench lost on a restart
+    is the state AD-12 exists to keep."""
+    clock = Instant(_CLOCK_NS)
+    compiled = _compiled()
+    snapshot = dict(_unit(compiled, _forty_rows()).snapshot())
+
+    found_none = _restored(compiled, snapshot, ())
+
+    assert (found_none.risk_state(clock).word, found_none.risk_state(clock).since) == (
+        StateWord.BENCHED,
+        Instant(_FIRE_NS),
+    ), "an empty row set must not read as a lift of the bench the snapshot holds"
+    assert found_none.risk_state(clock) == _restored(compiled, snapshot).risk_state(clock)
 
 
 # --- a stale input -------------------------------------------------------------------

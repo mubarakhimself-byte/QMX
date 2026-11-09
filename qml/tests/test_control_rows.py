@@ -17,7 +17,7 @@ from typing import cast
 
 import pytest
 from qmf.core.chrono import Instant
-from qmf.risk.controls import Verb
+from qmf.risk.controls import StateWord, Verb
 from qmf.risk.unit_intent import UnitEntryIntent, UnitExitIntent
 from qml.blocks.api import Signal
 from qml.compile import CompiledUnit, compile_unit
@@ -263,6 +263,26 @@ def test_a_raising_row_stops_no_exit() -> None:
     assert len(exits) == 1, "the held position's time exit still fires"
     intent, at = exits[0]
     assert (intent.kind.value, at) == ("close_full", instants[4])
+
+
+def test_a_raising_row_moves_no_risk_word() -> None:
+    """A raise is a fault, not a brake fire: the row never answered, so the fold cannot read a
+    bench that no restore row could lift and that the node's restart reader never saw."""
+    compiled = _compiled(_one_market_with(_session_loss()))
+    bars = _slice()[_MARKET]
+    instant = _instants({_MARKET: bars})[0]
+    unit = _host(compiled, _surfaces(bars))
+    unit._core.halt_instances["unit.session_loss"] = _Raising()  # the row's block has a bug
+
+    raised = _step(unit, instant)
+    state = unit.risk_state(instant)
+
+    assert [(fault.block, fault.code) for fault in raised.faults] == [
+        ("session-loss-limit-halt@1", "link_fault")
+    ], "the raising row is still a fault"
+    assert (state.word, state.since) == (StateWord.ACTIVE, None), (
+        "a raise is not a brake; only a fired row moves the risk word"
+    )
 
 
 # --- a row in shadow -----------------------------------------------------------------
