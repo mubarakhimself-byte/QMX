@@ -7,17 +7,20 @@ reads the host's surfaces and returns a ``UnitStep``: CT-23 format 3 intents (ad
 
 The host injects these read surfaces, each an object with ``at(instant)``:
 
-- ``bars:<stream>:<market_id>``: the latest closed ``QuoteBar`` knowable at the instant.
+- ``bars:<stream>:<market_id>``: the latest closed ``QuoteBar`` of that stream knowable at the
+  instant.
 - ``own_position:<market_id>``: the position open on that market as a ``PositionFacts``, the
   ``OwnPosition`` a host that tracks none of its protection answers, or ``None`` when flat.
 - ``own_journal``: the ``ClosedTrade`` rows this run or deployment closed.
 - ``account``: the ``Account`` facts the sizer reads.
 
-On each instant, for each market whose bar is new: every block updates, exits run for the
-positions this unit version's logic half opened, then entries. A market's entries wait for its
-derived warm-up (``warming``, then ``ready``). Calibrated numbers move last, from
-``own_journal``, only when the unit is flat. The stream's ``close`` and its bars are the bid
-side; an entry's reference price is the ask close for a long and the bid close for a short.
+On each instant, for each market whose primary bar is new: every block updates, exits run for the
+positions this unit version's logic half opened, then entries. A slot reads a slower stream at its
+last closed bar, so neither the step nor any block sees a bar knowable after the instant. A
+market's entries wait for every stream's own warm-up (``warming``, then ``ready``). Calibrated
+numbers move last, from ``own_journal``, only when the unit is flat. The primary stream's ``close``
+and its bars are the bid side; an entry's reference price is the ask close for a long and the bid
+close for a short.
 """
 
 from __future__ import annotations
@@ -565,8 +568,12 @@ class _Market:
     instances: dict[str, Instance]
     derived: dict[Side, dict[str, Decimal]]
     """Each side's derived numbers: a number both sides bind moves once per bar per side."""
-    last_bar_ns: int | None = None
-    bars: int = 0
+    last_bar_ns: dict[str, int] = field(default_factory=dict[str, int])
+    """Each stream's bar this market last read, by when that bar became knowable."""
+    bars: dict[str, int] = field(default_factory=dict[str, int])
+    """Each stream's closed bars this market has read, counted apart from the others."""
+    ready: bool = False
+    """Whether every stream's warm-up was met here, so ``ready`` lands once."""
     timers: dict[str, ExitStack] = field(default_factory=dict[str, ExitStack])
     """Each held position's per-bar exits, by position id (AD-13)."""
     exited: set[str] = field(default_factory=set[str])
@@ -606,7 +613,10 @@ class _Core:
         """Each held position's consecutive bars with no exit able to run (AD-13)."""
         self.close_asked: set[str] = set()
         """The positions whose host was already asked to close them, so the ask fires once."""
-        self.warm_up = max(compiled.warm_up.values(), default=0)
+        self.warm_up = dict(compiled.warm_up)
+        """The bars each of the unit's streams needs before entries."""
+        self.warm = max(self.warm_up.values(), default=0)
+        """The longest stream warm-up, which the ``warming`` event names."""
         self.slow = {
             s.number.name: SlowState(value=calibrated[s.number.name]) for s in self.plan.slow
         }
@@ -645,7 +655,14 @@ class _Core:
         return out
 
     def market(self, market_id: str, record: InstrumentRecord) -> _Market:
-        state = _Market(market_id, record, {}, {})
+        state = _Market(
+            market_id,
+            record,
+            {},
+            {},
+            last_bar_ns=dict.fromkeys(self.plan.streams, -1),
+            bars=dict.fromkeys(self.plan.streams, 0),
+        )
         numbers = self.settled()
         for side in self.plan.sides:
             for slot in side.slots:
@@ -675,8 +692,9 @@ class _Core:
         markets: dict[str, object] = {}
         for m in self.markets:
             markets[m.market_id] = {
-                "last_bar_ns": m.last_bar_ns,
-                "bars": m.bars,
+                "last_bar_ns": dict(m.last_bar_ns),
+                "bars": dict(m.bars),
+                "ready": m.ready,
                 "derived": {
                     side.value: {k: str(v) for k, v in values.items()}
                     for side, values in m.derived.items()
@@ -743,9 +761,15 @@ class _Core:
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
             saved = markets[m.market_id]
-            last = saved["last_bar_ns"]
-            m.last_bar_ns = last if isinstance(last, int) else None
-            m.bars = cast("int", saved["bars"])
+            m.last_bar_ns = {
+                stream: int(when)
+                for stream, when in cast("Mapping[str, int]", saved["last_bar_ns"]).items()
+            }
+            m.bars = {
+                stream: int(count)
+                for stream, count in cast("Mapping[str, int]", saved["bars"]).items()
+            }
+            m.ready = bool(saved["ready"])
             m.derived = {
                 Side(side): {k: Decimal(v) for k, v in values.items()}
                 for side, values in cast(
@@ -1005,6 +1029,7 @@ class _Run:
     def step(self) -> Result[UnitStep]:
         journal = self.surface("own_journal")
         positions: dict[str, PositionFacts | None] = {}
+        seen: dict[str, dict[str, QuoteBar]] = {}
         fresh: dict[str, QuoteBar] = {}
         for m in self.unit.markets:
             position = self.surface(f"own_position:{m.market_id}")
@@ -1015,19 +1040,28 @@ class _Run:
                     market=m.market_id,
                 )
             positions[m.market_id] = None if position is None else facts_from(position)
-            bar = self.surface(f"bars:{self.plan.stream}:{m.market_id}")
-            if bar is None:
-                continue
-            if not isinstance(bar, QuoteBar):
-                return invalid(
-                    "bars", "a bar surface answers a QuoteBar or None", market=m.market_id
-                )
-            if bar.knowable_at.value_ns > self.instant.value_ns:
-                return invalid(
-                    "bars", "a bar knowable after the instant is a look-ahead", market=m.market_id
-                )
-            if m.last_bar_ns is None or bar.knowable_at.value_ns > m.last_bar_ns:
-                fresh[m.market_id] = bar
+            bars: dict[str, QuoteBar] = {}
+            for stream in self.plan.streams:
+                given = self.surface(f"bars:{stream}:{m.market_id}")
+                if given is None:
+                    continue
+                if not isinstance(given, QuoteBar):
+                    return invalid(
+                        "bars", "a bar surface answers a QuoteBar or None", market=m.market_id
+                    )
+                if given.knowable_at.value_ns > self.instant.value_ns:
+                    return invalid(
+                        "bars",
+                        "a bar knowable after the instant is a look-ahead",
+                        market=m.market_id,
+                    )
+                bars[stream] = given
+                if given.knowable_at.value_ns > m.last_bar_ns.get(stream, -1):
+                    m.last_bar_ns[stream] = given.knowable_at.value_ns
+                    m.bars[stream] = m.bars.get(stream, 0) + 1
+                    if stream == self.plan.stream:
+                        fresh[m.market_id] = given
+            seen[m.market_id] = bars
         if fresh and self.unit.benched and self.unit.clean_bars >= self.unit.fault_clean_bars:
             self.unit.benched = False
         benched = self.unit.benched
@@ -1037,7 +1071,7 @@ class _Run:
             if bar is None:
                 continue
             try:
-                results[m.market_id] = self.update(m, bar)
+                results[m.market_id] = self.update(m, bar, seen[m.market_id])
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.UPDATE)
         for m in self.unit.markets:
@@ -1076,16 +1110,18 @@ class _Run:
 
     # --- blocks ------------------------------------------------------------------
 
-    def update(self, m: _Market, bar: QuoteBar) -> dict[Side, _Side]:
-        m.last_bar_ns = bar.knowable_at.value_ns
-        m.bars += 1
-        if m.bars == 1:
-            self.events.append(StateEvent("warming", m.market_id, f"{self.unit.warm_up} bars"))
-        if m.bars == self.unit.warm_up:
+    def update(self, m: _Market, bar: QuoteBar, bars: Mapping[str, QuoteBar]) -> dict[Side, _Side]:
+        if m.bars.get(self.plan.stream) == 1:
+            self.events.append(StateEvent("warming", m.market_id, f"{self.unit.warm} bars"))
+        if not m.ready and all(
+            m.bars.get(stream, 0) >= self.unit.warm_up.get(stream, 0)
+            for stream in self.plan.streams
+        ):
+            m.ready = True
             self.events.append(StateEvent("ready", m.market_id))
         m.in_force = {plan.side: self.unit.numbers(m, plan.side) for plan in self.plan.sides}
         sides = {
-            plan.side: self.side(m, plan, bar, m.in_force[plan.side]) for plan in self.plan.sides
+            plan.side: self.side(m, plan, bars, m.in_force[plan.side]) for plan in self.plan.sides
         }
         for side in (Side.LONG, Side.SHORT):
             series = bar.bid.fields() if side is Side.LONG else bar.ask.fields()
@@ -1098,7 +1134,11 @@ class _Run:
         return sides
 
     def side(
-        self, m: _Market, plan: SidePlan, bar: QuoteBar, numbers: Mapping[str, Decimal]
+        self,
+        m: _Market,
+        plan: SidePlan,
+        bars: Mapping[str, QuoteBar],
+        numbers: Mapping[str, Decimal],
     ) -> _Side:
         outputs: dict[str, object] = {}
         trail: list[SlotOutput] = []
@@ -1107,7 +1147,8 @@ class _Run:
 
         def resolve(ref: str) -> object:
             stream, _, part = ref.partition(".")
-            if stream == self.plan.stream:
+            bar = bars.get(stream)
+            if bar is not None:
                 if part == "":
                     return {**bar.bid.fields(), "time": bar.knowable_at.value_ns}
                 return bar.bid.fields()[part]
@@ -1336,7 +1377,10 @@ class _Run:
                 elif self.unit.trace is TraceLevel.EVERY_BAR:
                     self.decision(m, side, "no_signal", result.trail, result.reason)
                 continue
-            if m.bars < self.unit.warm_up:
+            if any(
+                m.bars.get(stream, 0) < self.unit.warm_up.get(stream, 0)
+                for stream in self.plan.streams
+            ):
                 self.decision(m, side, "suppressed_warming", result.trail, "warming up")
             elif len(signalled) > 1:
                 self.decision(m, side, "dropped_opposite", result.trail, "both sides signalled")
@@ -1487,7 +1531,8 @@ class _Run:
 def _required_keys(compiled: CompiledUnit) -> frozenset[str]:
     keys = {"account", "own_journal"}
     for market, _ in compiled.plan.markets:
-        keys.add(f"bars:{compiled.plan.stream}:{market.market_id}")
+        for stream in compiled.plan.streams:
+            keys.add(f"bars:{stream}:{market.market_id}")
         keys.add(f"own_position:{market.market_id}")
     return frozenset(keys)
 
