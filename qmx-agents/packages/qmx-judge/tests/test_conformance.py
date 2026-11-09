@@ -36,6 +36,7 @@ from qmx_apps.volume import Volume
 from qmx_control.models import LibraryInput
 from qmx_control.service import ControlError, ControlService
 from qmx_engine.ledger import redact
+from qmx_host import host as host_module  # pyright: ignore[reportMissingTypeStubs]
 from qmx_host.first_start import land_dummy  # pyright: ignore[reportMissingTypeStubs]
 from qmx_host.host import LanderLibrary, landers  # pyright: ignore[reportMissingTypeStubs]
 from qmx_library.port import Draft, JsonObject
@@ -408,6 +409,12 @@ def test_nothing_a_tester_says_about_itself_counts() -> None:
     assert verdict.cases[1].reason == "the tester left no output for motion-off"
 
 
+def _keep_laid(_laid: Path) -> None:
+    """Keep a landed run's laid files: the regeneration reads the dummy's run folder after it
+    lands, and the host clears the copied bars at that point."""
+    return None
+
+
 def regenerate() -> None:
     """Remake the fixture from the host's own run layout, then the goldens from the shipped
     tester's run of the pack."""
@@ -420,12 +427,17 @@ def regenerate() -> None:
         tempfile.TemporaryDirectory(prefix="b12-pack-") as scratch,
         world_at(Path(scratch)) as world,
     ):
-        ran = world.runtime.run_job(
-            "qmb",
-            "jobs/backtest.py",
-            inputs={"unit": world.dummy, "window": MARCH},
-            principal="operator",
-        )
+        kept = host_module._lighten
+        host_module._lighten = _keep_laid
+        try:
+            ran = world.runtime.run_job(
+                "qmb",
+                "jobs/backtest.py",
+                inputs={"unit": world.dummy, "window": MARCH},
+                principal="operator",
+            )
+        finally:
+            host_module._lighten = kept
         data = str(world.runtime.status("qmb").get("data") or "data")
         laid = Volume(world.runtime.home, "qmb").root / data / RUNS / str(ran["run_id"]) / "in"
         request = json.loads((laid / "request.json").read_text("utf-8"))
