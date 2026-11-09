@@ -340,7 +340,9 @@ class UnitSliceHandler:
     ) -> None:
         self._stream = stream
         self._records = records
-        self._bars = bars
+        self._bars: dict[tuple[str, str], Mapping[int, QuoteBar]] = {
+            (stream, market): window for market, window in bars.items()
+        }
         self._opened_by = opened_by
         self._equity = equity
         self._execution = execution
@@ -349,14 +351,14 @@ class UnitSliceHandler:
         self._rates = rates
         self._port: HostPort = self if port is None else port
         self._unit: SteppingUnit | None = None
-        self._latest: dict[str, QuoteBar] = {}
+        self._latest: dict[tuple[str, str], QuoteBar] = {}
         self._held: dict[str, HeldPosition] = {}
         self._foreign: dict[str, OwnPosition] = dict(seeded or {})
         self._closed: list[ClosedTrade] = []
         self._trades: list[UnitTrade] = []
         self._fills: list[Fill] = []
         self._cash: list[CashEvent] = []
-        self._carried: dict[str, Instant] = {}
+        self._carried: dict[tuple[str, str], Instant] = {}
         self._stepped: tuple[int, UnitStep, tuple[Priced, ...]] | None = None
         self._entry_stamps: dict[str, dict[str, Decimal]] = {}
         self._entry_rates: dict[str, tuple[Fraction | None, Instant | None]] = {}
@@ -415,6 +417,24 @@ class UnitSliceHandler:
             unit.value.attach_port(handler._port)
         return Ok(handler)
 
+    def _key(self, stream_id: str) -> tuple[str, str] | None:
+        """The ``(stream, market)`` a stream id names, or None when it names no stream read.
+
+        The node's accumulator names both, ``m15:fx.eurusd``. A host that declares one stream
+        per market, as QMB's replay does, passes the market itself as its stream id.
+        """
+        if (self._stream, stream_id) in self._bars:
+            return (self._stream, stream_id)
+        head, _, market = stream_id.partition(":")
+        if head == self._stream and (self._stream, market) in self._bars:
+            return (self._stream, market)
+        return None
+
+    def market_of(self, stream_id: str) -> str | None:
+        """The market a stream id names, or None when the unit reads no stream by that id."""
+        key = self._key(stream_id)
+        return None if key is None else key[1]
+
     def close_scope(self, unit: object, why: str) -> None:
         """The host's last fall-through in QMB: close every held position at its market's next
         bar's open, the side's closing quote (AD-13). The node's own port closes through its
@@ -471,9 +491,8 @@ class UnitSliceHandler:
             "own_journal": _At(lambda _i: tuple(self._closed)),
         }
         for market in self._records:
-            surfaces[f"bars:{self._stream}:{market}"] = _At(
-                lambda _i, m=market: self._latest.get(m)
-            )
+            key = (self._stream, market)
+            surfaces[f"bars:{self._stream}:{market}"] = _At(lambda _i, k=key: self._latest.get(k))
             surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: self._facts(m))
         return surfaces
 
@@ -578,9 +597,14 @@ class UnitSliceHandler:
         self, stream_id: str, observation: SliceObservation | None, frontier: Instant
     ) -> Result[None]:
         del frontier
-        if stream_id not in self._records:
-            return invalid("stream_id", "a unit's streams are its market ids", stream_id=stream_id)
-        if observation is not None and observation.instant.value_ns not in self._bars[stream_id]:
+        key = self._key(stream_id)
+        if key is None:
+            return invalid(
+                "stream_id",
+                "a unit's streams are its stream and market ids",
+                stream_id=stream_id,
+            )
+        if observation is not None and observation.instant.value_ns not in self._bars[key]:
             return invalid(
                 "observation",
                 "every observation names a bar the run fed",
@@ -590,15 +614,22 @@ class UnitSliceHandler:
         return Ok(None)
 
     def scheduled_position_event(self, stream_id: str, frontier: Instant) -> Result[None]:
-        bar = self._bars.get(stream_id, {}).get(frontier.value_ns)
+        key = self._key(stream_id)
+        if key is None:
+            return invalid(
+                "stream_id",
+                "a unit's streams are its stream and market ids",
+                stream_id=stream_id,
+            )
+        bar = self._bars.get(key, {}).get(frontier.value_ns)
         if bar is None:
             return Ok(None)
-        since = self._carried.get(stream_id)
-        self._carried[stream_id] = frontier
-        held = self._held.get(stream_id)
+        since = self._carried.get(key)
+        self._carried[key] = frontier
+        held = self._held.get(key[1])
         if self._cash_port is None or held is None or since is None:
             return Ok(None)
-        booked = self._cash_port.held(stream_id, held.position, since, frontier, bar)
+        booked = self._cash_port.held(key[1], held.position, since, frontier, bar)
         if is_refusal(booked):
             return booked
         for event in booked.value:
@@ -621,12 +652,19 @@ class UnitSliceHandler:
         entry it filled only in part, which the position then holds; QMB's replay fills whole."""
         if observation is None or not observation.closed:
             return Ok(False)
-        bar = self._bars[intent.stream_id][observation.instant.value_ns]
+        key = self._key(intent.stream_id)
+        if key is None:
+            return invalid(
+                "stream_id",
+                "a unit's streams are its stream and market ids",
+                stream_id=intent.stream_id,
+            )
+        bar = self._bars[key][observation.instant.value_ns]
         wire = cast("Mapping[str, object]", intent.order)
         if wire.get("intent_family") == "entry":
-            self._fill_entry(intent.stream_id, wire, bar, frontier, filled)
+            self._fill_entry(key[1], wire, bar, frontier, filled)
         else:
-            exited = self._fill_exit(intent.stream_id, wire, bar, frontier)
+            exited = self._fill_exit(key[1], wire, bar, frontier)
             if is_refusal(exited):
                 return exited
         return Ok(True)
@@ -634,16 +672,23 @@ class UnitSliceHandler:
     def update_closed_data(
         self, stream_id: str, observation: SliceObservation, frontier: Instant
     ) -> Result[None]:
-        bar = self._bars[stream_id][observation.instant.value_ns]
-        self._latest[stream_id] = bar
-        held = self._held.get(stream_id)
+        key = self._key(stream_id)
+        if key is None:
+            return invalid(
+                "stream_id",
+                "a unit's streams are its stream and market ids",
+                stream_id=stream_id,
+            )
+        bar = self._bars[key][observation.instant.value_ns]
+        self._latest[key] = bar
+        held = self._held.get(key[1])
         if held is not None:
             held = _with_excursion(held, bar)
-            self._held[stream_id] = held
-            reached = self._execution.protective(stream_id, held, bar)
+            self._held[key[1]] = held
+            reached = self._execution.protective(key[1], held, bar)
             if reached is not None:
                 self._close(
-                    stream_id,
+                    key[1],
                     held,
                     reached.kind,
                     reached.price,
@@ -651,13 +696,21 @@ class UnitSliceHandler:
                     held.decision_row_id,
                     gapped=reached.gap,
                 )
-        self._close_at_open(stream_id, bar, frontier)
+        self._close_at_open(key[1], bar, frontier)
         return Ok(None)
 
     def mint_intents(self, stream_id: str, frontier: Instant) -> Result[object]:
         step = self._step(frontier)
         if is_refusal(step):
             return step
+        key = self._key(stream_id)
+        if key is None:
+            return invalid(
+                "stream_id",
+                "a unit's streams are its stream and market ids",
+                stream_id=stream_id,
+            )
+        market_of_stream = key[1]
         priced = self._stepped[2] if self._stepped is not None else ()
         wires = [intent.to_wire() for intent in step.value.intents]
         wires += [one.intent.to_wire() for one in priced if one.intent is not None]
@@ -666,10 +719,10 @@ class UnitSliceHandler:
         minted: list[RestingIntent] = []
         for wire in wires:
             market = self._market_of(wire)
-            if market != stream_id:
+            if market != market_of_stream:
                 continue
             made = RestingIntent.try_create(
-                f"{wire['intent_family']}:{wire['decision_row_id']}", market, order=wire
+                f"{wire['intent_family']}:{wire['decision_row_id']}", stream_id, order=wire
             )
             if is_refusal(made):
                 return made

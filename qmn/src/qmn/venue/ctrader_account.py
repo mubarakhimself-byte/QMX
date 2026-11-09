@@ -112,10 +112,14 @@ ANSWER_WAIT_S: Final = 5.0
 one request before the order reads UNKNOWN."""
 HEARTBEAT_NS: Final = 10_000_000_000
 """cTrader asks a client for a heartbeat every 10 s."""
-BAR_NS: Final = 900_000_000_000
-"""`[node] ctrader_bar_s`, starting at 900 (the dummy's 15-minute bars): the bars the node builds
-from cTrader's spots, both quote sides. A labelled starting value until a deployment names its
-own timeframe to the feed."""
+BAR_NS: Final = 60_000_000_000
+"""`[node] ctrader_bar_s`, starting at 60 s: the base bar the node builds from cTrader's spots,
+both quote sides. A labelled setting, owner numbers talk. 60 s is the fastest stream the shipped
+templates read (the scalper's 1-minute bars), so every shipped stream is a whole multiple of it
+and a 15-minute unit rolls fifteen of these up. It started at 900 s, which a 1-minute unit could
+not read at all. Range: one second to one day. A unit whose stream is not a whole multiple of it
+is refused at the host by name. The feed's work per bar is small (OPEN row 23): one bucket per
+market per minute."""
 FILL_ROUNDING: Final = RoundingMode.HALF_EVEN
 """The rounding a venue execution-price double crosses at the symbol's digits."""
 SPOT_SCALE: Final = 5

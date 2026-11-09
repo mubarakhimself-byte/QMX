@@ -417,7 +417,7 @@ def test_the_exit_fault_streak_survives_a_step_of_the_other_markets_bar(tmp_path
     metal_market = next(one for one in hosted._core.markets if one.market_id == METAL)
 
     def serve(market_id: str, bar: QuoteBar) -> None:
-        handler._latest[market_id] = bar
+        handler._latest[(handler._stream, market_id)] = bar
 
     def step(at: int) -> None:
         answer = hosted.on_instant(Instant(at))
