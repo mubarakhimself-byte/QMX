@@ -19,6 +19,12 @@ from fractions import Fraction
 from pathlib import Path
 from typing import TypeVar, cast
 
+from qmb.execution.fill import BarExecution
+from qmb.host.facts import ReplayRates
+from qmb.host.replay import BarWindow, window_size
+from qmb.host.unit_handler import ListJournal, UnitSliceHandler
+from qmb.host.unit_runner import LoadedUnit, load_unit_folder
+from qmb.runloop import RestingIntent
 from qmf.core.chrono import Instant
 from qmf.core.identity import AccountRole, VenueId
 from qmf.core.refusal import Ok, Result, is_refusal
@@ -32,18 +38,16 @@ from qml.protocol.unit import (
     Account,
     DecisionRow,
     HostedUnit,
+    Priced,
     Proposal,
     QuoteBar,
     RatePort,
+    Surface,
     TraceLevel,
+    UnitStep,
     construct_unit,
 )
 from qml.unit.model import Side
-from qmb.execution.fill import BarExecution
-from qmb.host.facts import ReplayRates
-from qmb.host.replay import BarWindow, window_size
-from qmb.host.unit_handler import ListJournal, UnitSliceHandler
-from qmb.host.unit_runner import LoadedUnit, load_unit_folder
 from qmn.app.facts import FeedRates, provided, refs
 from qmn.app.feed_keeper import (
     Bar,
@@ -112,8 +116,7 @@ def _write_side(path: Path, opens: Sequence[int], cells: Sequence[OHLC]) -> None
 
 def _write_bars(folder: Path, market: str, bars: Sequence[Prices]) -> None:
     opens = [
-        (START_NS + step * BAR_NS) // 1_000_000 - BAR_NS // 1_000_000
-        for step in range(len(bars))
+        (START_NS + step * BAR_NS) // 1_000_000 - BAR_NS // 1_000_000 for step in range(len(bars))
     ]
     for side, index in (("bid", 0), ("ask", 1)):
         cells = [OHLC(*(Decimal(cell) for cell in bar[index])) for bar in bars]
@@ -121,7 +124,7 @@ def _write_bars(folder: Path, market: str, bars: Sequence[Prices]) -> None:
 
 
 def _flat(bid: str, ask: str, count: int = 3) -> list[Prices]:
-    return [((bid,) * 4, (ask,) * 4) for _ in range(count)]
+    return [((bid, bid, bid, bid), (ask, ask, ask, ask)) for _ in range(count)]
 
 
 def _folder(root: Path) -> Path:
@@ -225,23 +228,23 @@ class _Standing:
         self._proposals = tuple(proposals)
         self._at = proposals[0].row.instant.value_ns
 
-    def on_instant(self, instant: object, /) -> Result[object]:
+    def on_instant(self, instant: object, /) -> Result[UnitStep]:
         assert isinstance(instant, Instant)
         step = self._real.on_instant(instant)
         if is_refusal(step) or instant.value_ns != self._at:
             return step
         return Ok(replace(step.value, proposals=self._proposals))
 
-    def price(self, proposal: Proposal, facts: Account) -> object:
+    def price(self, proposal: Proposal, facts: Account) -> Priced:
         return self._real.price(proposal, facts)
 
 
 def _hosted(loaded: LoadedUnit, rates: RatePort, proposals: Sequence[Proposal]) -> UnitSliceHandler:
-    def host(surfaces: Mapping[str, object]) -> Result[object]:
+    def host(surfaces: Mapping[str, Surface]) -> Result[_Standing]:
         real = _ok(
             construct_unit(
                 loaded.compiled,
-                read_surfaces=cast("Mapping[str, object]", surfaces),
+                read_surfaces=surfaces,
                 scope_id="rc-07",
                 execution_target=_target(),
                 trace_level=TraceLevel.EVENTS,
@@ -271,7 +274,10 @@ def _sizes(
     handler = _hosted(loaded, rates, proposals)
     quantities: dict[str, str] = {}
     for proposal in proposals:
-        minted = _ok(handler.mint_intents(proposal.market_id, proposal.row.instant))
+        minted = cast(
+            "tuple[RestingIntent, ...]",
+            _ok(handler.mint_intents(proposal.market_id, proposal.row.instant)),
+        )
         assert len(minted) == 1, (proposal.market_id, minted)
         wire = cast("Mapping[str, object]", minted[0].order)
         quantities[proposal.market_id] = cast("str", wire["quantity"])
@@ -282,7 +288,9 @@ def _sizes(
 def _rate_of(account: Account, record: InstrumentRecord) -> Fraction:
     if record.currency == account.currency:
         return Fraction(1)
-    return Fraction(account.rates[record.currency].value)
+    fact = account.rates[record.currency]
+    assert fact.value is not None, record.currency
+    return Fraction(fact.value)
 
 
 def test_k9_16_currency(tmp_path: Path) -> None:

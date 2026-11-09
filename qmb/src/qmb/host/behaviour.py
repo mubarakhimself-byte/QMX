@@ -26,7 +26,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Final, TextIO, cast
 
-from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qml.check.layer_g import layer_g
 from qml.protocol.unit import ACCOUNT_CURRENCY
 
@@ -109,10 +109,17 @@ def check_behaviour(
 
 
 def _rates(loaded: LoadedUnit, limit: int) -> SliceRates | None:
-    """The same rate facts the replay reads, over this bounded slice's conversion bars (AD-10)."""
+    """The same rate facts the replay reads, over this bounded slice's conversion bars (AD-10).
+
+    A conversion feed that refuses is left out: the entry it would size skips by the named
+    ``rate_absent``, which the report already names on its decision rows.
+    """
     if not loaded.conversions:
         return None
-    shown = {market: tuple(islice(feed(), limit)) for market, feed in loaded.rate_feeds.items()}
+    shown = {
+        market: tuple(bar for bar in islice(feed(), limit) if not isinstance(bar, TypedRefusal))
+        for market, feed in loaded.rate_feeds.items()
+    }
     return SliceRates(ACCOUNT_CURRENCY, loaded.conversions, shown)
 
 

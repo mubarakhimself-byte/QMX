@@ -149,7 +149,8 @@ class RatePort(Protocol):
     what lets either host put the fact in front of the one converter.
     """
 
-    currency: str
+    @property
+    def currency(self) -> str: ...
 
     def rate(self, record: InstrumentRecord, instant: Instant) -> Fact | None: ...
 

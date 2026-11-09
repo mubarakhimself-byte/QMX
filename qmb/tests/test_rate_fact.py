@@ -20,27 +20,6 @@ from fractions import Fraction
 from pathlib import Path
 from typing import TypeVar, cast
 
-from qmf.core.chrono import Instant
-from qmf.core.identity import AccountRole, VenueId
-from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-from qmf.risk.paper import ExecutionTarget
-from qmf.risk.unit_intent import UNIT_INTENT_FORMAT_VERSION
-from qml.blocks.api import EntryFace, parse_entry
-from qml.check.layer_g import layer_g
-from qml.compile import CompiledUnit
-from qml.numbers import InstrumentRecord, parse_record
-from qml.protocol.unit import (
-    OHLC,
-    Account,
-    DecisionRow,
-    HostedUnit,
-    Proposal,
-    QuoteBar,
-    RatePort,
-    TraceLevel,
-    construct_unit,
-)
-from qml.unit.model import Side
 from qmb.execution.fill import BarExecution
 from qmb.host.facts import RATE_ABSENT, ReplayRates, SliceRates, provided, rate_fact
 from qmb.host.replay import BarWindow, window_size
@@ -58,6 +37,30 @@ from qmb.host.unit_runner import (
     run_loaded,
 )
 from qmb.runloop import DeclaredStream, SliceObservation, StreamSet, run_slice
+from qmf.core.chrono import Instant
+from qmf.core.identity import AccountRole, VenueId
+from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
+from qmf.risk.paper import ExecutionTarget
+from qmf.risk.unit_intent import UNIT_INTENT_FORMAT_VERSION
+from qml.blocks.api import EntryFace, parse_entry
+from qml.check.layer_g import layer_g
+from qml.compile import CompiledUnit
+from qml.numbers import InstrumentRecord, parse_record
+from qml.protocol.unit import (
+    OHLC,
+    Account,
+    DecisionRow,
+    HostedUnit,
+    Priced,
+    Proposal,
+    QuoteBar,
+    RatePort,
+    Surface,
+    TraceLevel,
+    UnitStep,
+    construct_unit,
+)
+from qml.unit.model import Side
 
 REPO = Path(__file__).resolve().parents[2]
 STDLIB = REPO / "qml" / "src" / "qml" / "blocks" / "stdlib"
@@ -114,8 +117,7 @@ def _write_side(path: Path, opens: Sequence[int], cells: Sequence[OHLC]) -> None
 
 def _write_bars(folder: Path, market: str, bars: Sequence[Prices]) -> None:
     opens = [
-        (START_NS + step * BAR_NS) // 1_000_000 - BAR_NS // 1_000_000
-        for step in range(len(bars))
+        (START_NS + step * BAR_NS) // 1_000_000 - BAR_NS // 1_000_000 for step in range(len(bars))
     ]
     for side, index in (("bid", 0), ("ask", 1)):
         cells = [OHLC(*(Decimal(cell) for cell in bar[index])) for bar in bars]
@@ -198,7 +200,7 @@ def _four_markets() -> tuple[list[tuple[str, str]], dict[str, dict[str, object]]
 
 def _flat(bid: str, ask: str, count: int = 3) -> list[Prices]:
     """``count`` bars whose four quotes sit at ``bid`` on the bid side and ``ask`` on the ask."""
-    return [((bid,) * 4, (ask,) * 4) for _ in range(count)]
+    return [((bid, bid, bid, bid), (ask, ask, ask, ask)) for _ in range(count)]
 
 
 def _target() -> ExecutionTarget:
@@ -268,7 +270,7 @@ class _Scripted:
         self._real = real
         self._queued = dict(queued)
 
-    def on_instant(self, instant: object, /) -> Result[object]:
+    def on_instant(self, instant: object, /) -> Result[UnitStep]:
         assert isinstance(instant, Instant)
         step = self._real.on_instant(instant)
         if is_refusal(step):
@@ -276,15 +278,15 @@ class _Scripted:
         extra = self._queued.get(instant.value_ns, ())
         return Ok(replace(step.value, proposals=extra)) if extra else step
 
-    def price(self, proposal: Proposal, facts: Account) -> object:
+    def price(self, proposal: Proposal, facts: Account) -> Priced:
         return self._real.price(proposal, facts)
 
 
-def _host(compiled: CompiledUnit, surfaces: Mapping[str, object]) -> HostedUnit:
+def _host(compiled: CompiledUnit, surfaces: Mapping[str, Surface]) -> HostedUnit:
     return _ok(
         construct_unit(
             compiled,
-            read_surfaces=cast("Mapping[str, object]", surfaces),
+            read_surfaces=surfaces,
             scope_id="rc-07",
             execution_target=_target(),
             trace_level=TraceLevel.EVENTS,
@@ -304,9 +306,13 @@ class _Rig:
     ) -> None:
         self.journal = ListJournal()
         self.windows = {market: BarWindow(window_size(loaded.compiled)) for market in loaded.feeds}
+
+        def host(surfaces: Mapping[str, Surface]) -> Result[_Scripted]:
+            return Ok(_Scripted(_host(loaded.compiled, surfaces), queued))
+
         self.handler = _ok(
             UnitSliceHandler.start(
-                lambda surfaces: Ok(_Scripted(_host(loaded.compiled, surfaces), queued)),
+                host,
                 stream=loaded.compiled.plan.stream,
                 records=loaded.records,
                 bars=self.windows,
@@ -454,7 +460,10 @@ def test_the_g_check_sizes_a_jpy_unit(tmp_path: Path) -> None:
         _write_side(folder / "bars" / "fx.usdjpy" / f"{side}.csv", opens, cells)
     loaded = _ok(load_unit_folder(folder))
     series = _ok(loaded.bars())
-    conversion = {market: tuple(feed()) for market, feed in loaded.rate_feeds.items()}
+    conversion = {
+        market: tuple(bar for bar in feed() if not isinstance(bar, TypedRefusal))
+        for market, feed in loaded.rate_feeds.items()
+    }
 
     sized = layer_g(
         loaded.compiled,

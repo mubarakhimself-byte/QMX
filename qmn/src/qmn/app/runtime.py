@@ -115,7 +115,8 @@ from qml.unit.model import Side
 
 from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
-from qmn.app.facts import FeedRates, refs as rate_refs
+from qmn.app.facts import FeedRates
+from qmn.app.facts import refs as rate_refs
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, cleared_by, refused, same_market

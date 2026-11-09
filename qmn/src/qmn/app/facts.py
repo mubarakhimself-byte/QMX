@@ -16,12 +16,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from qmb.host.facts import RATE_ABSENT, conversions, provided, rate_fact
 from qmf.core.chrono import Instant
 from qmf.risk.facts import Fact
 from qml.numbers import ConversionRef, InstrumentRecord
 from qml.protocol.unit import ACCOUNT_CURRENCY, QuoteBar
-
-from qmb.host.facts import RATE_ABSENT, conversions, provided, rate_fact
 
 __all__ = [
     "RATE_ABSENT",
