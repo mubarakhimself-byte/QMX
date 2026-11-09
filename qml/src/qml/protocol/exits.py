@@ -143,11 +143,13 @@ class ExitSlot:
 
 @dataclass(frozen=True, slots=True)
 class ExitAnswer:
-    """One exit's answer on one bar, with the exit that gave it."""
+    """One exit's answer on one bar, with the exit that gave it and the words its close row
+    carries."""
 
     pin: str
     key: str
     action: ExitAction
+    detail: str
 
 
 class ExitStack:

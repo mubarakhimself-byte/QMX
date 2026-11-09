@@ -48,6 +48,7 @@ from qml._refuse import invalid, unsupported
 from qml.blocks.api import (
     Amount,
     EntryOrder,
+    ExitAction,
     Instance,
     OutputType,
     Signal,
@@ -1245,7 +1246,14 @@ class _Run:
                 continue
             ran += 1
             if action is not None:
-                answers.append(ExitAnswer(plan.binding.pin, plan.binding.key, action))
+                answers.append(
+                    ExitAnswer(
+                        plan.binding.pin,
+                        plan.binding.key,
+                        action,
+                        self.close_words(plan.binding.pin, raw, action),
+                    )
+                )
         for pin in raised:
             self.fault(pin, FaultPhase.EXIT)
         if raised and not ran:
@@ -1256,13 +1264,7 @@ class _Run:
         if winner is None or winner.action.kind != "close_full":
             return
         m.exited.add(position.position_id)
-        row = self.decision(
-            m,
-            position.side,
-            "taken",
-            (),
-            f"{winner.pin} closes the position: {winner.action.reason_code}",
-        )
+        row = self.decision(m, position.side, "taken", (), winner.detail)
         self.intents.append(
             {
                 "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
@@ -1277,6 +1279,13 @@ class _Run:
                 "decision_row_id": row,
             }
         )
+
+    def close_words(self, pin: str, raw: object, action: ExitAction) -> str:
+        """The one sentence a close row carries. A per-bar exit that answers the old way keeps
+        the shipped time exit's sentence; one that answers an ``ExitAction`` names itself."""
+        if isinstance(raw, Signal):
+            return f"time exit after {_text(raw)} bars"
+        return f"{pin} closes the position: {action.reason_code}"
 
     def no_exit_ran(self, position: PositionFacts) -> None:
         """One held position's exits could not run this bar. After ``exit_fault_bars`` in a row
