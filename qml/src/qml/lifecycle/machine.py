@@ -4,7 +4,8 @@ section 8, standing order 7).
 His clicks, the judge's verdicts and risk stops are events written by three writers on their own
 partitions. ``fold`` orders them by ``(at, writer, sequence)`` and applies each through one
 transition table. A move it refuses is kept as a rejected event with a typed reason, never
-dropped. Only his click with principal ``operator`` moves toward paper or live.
+dropped. Only his click with principal ``operator`` promotes a unit toward live; a risk rule may
+send a stopped member back to paper, and never anywhere else.
 """
 
 from __future__ import annotations
@@ -110,6 +111,7 @@ def _rows() -> tuple[Transition, ...]:
         Transition(s.PAPER, s.STOPPED, risk),
         Transition(s.LIVE, s.STOPPED, risk),
         Transition(s.STOPPED, s.STOPPED, risk),
+        Transition(s.STOPPED, s.PAPER, risk),
         Transition(s.STOPPED, s.PAPER, click),
         Transition(s.STOPPED, s.LIVE, click),
         Transition(s.LIVE, s.PARKED, click),
@@ -121,7 +123,9 @@ def _rows() -> tuple[Transition, ...]:
 
 TRANSITIONS: Final = _rows()
 """Who may cause each move. A stop on a stopped market records the newer stop. Paper to parked
-is his click, so admitting a new version can park the one on paper in the same click (UT-23)."""
+is his click, so admitting a new version can park the one on paper in the same click (UT-23). A
+stopped market moves to paper by the rule that stopped it or by his click; only his click takes it
+to live."""
 
 
 class Refusal(StrEnum):
@@ -166,8 +170,14 @@ def _refusal(
     to, actor = event.to_state, event.by
     if actor.kind is ActorKind.HIS_CLICK and actor.principal != OPERATOR:
         return Refusal.NOT_OPERATOR, f"a click by {actor.principal!r} is not his click"
-    if to in TRADING and actor.principal != OPERATOR:
-        return Refusal.NOT_OPERATOR, f"only his click moves a unit to {to}"
+    if (
+        to in TRADING
+        and actor.principal != OPERATOR
+        and not (to is State.PAPER and actor.kind is ActorKind.RISK_RULE)
+    ):
+        return Refusal.NOT_OPERATOR, (
+            f"only his click promotes a unit to {to}; a risk rule may only send it to paper"
+        )
     is_stop = actor.kind is ActorKind.RISK_RULE and to is State.STOPPED
     if not is_stop and event.from_state is not current:
         return Refusal.FROM_MISMATCH, f"the market is {current}, not {event.from_state}"

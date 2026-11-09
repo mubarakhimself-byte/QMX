@@ -1,5 +1,6 @@
 """Each unit's one lifecycle (Part A slice A9, AD-115, AG-13): every move by every actor is
-allowed or refused as the table says, and nothing but his click reaches paper or live."""
+allowed or refused as the table says. Only his click promotes a unit; a risk rule may send a
+stopped member back to paper, and never anywhere else."""
 
 from __future__ import annotations
 
@@ -91,6 +92,7 @@ ALLOWED = {
     (S.PAPER, S.STOPPED, ActorKind.RISK_RULE),
     (S.LIVE, S.STOPPED, ActorKind.RISK_RULE),
     (S.STOPPED, S.STOPPED, ActorKind.RISK_RULE),
+    (S.STOPPED, S.PAPER, ActorKind.RISK_RULE),
     (S.STOPPED, S.PAPER, ActorKind.HIS_CLICK),
     (S.STOPPED, S.LIVE, ActorKind.HIS_CLICK),
     (S.LIVE, S.PARKED, ActorKind.HIS_CLICK),
@@ -118,16 +120,24 @@ def test_every_move_by_every_actor_is_allowed_or_refused_as_the_table_says() -> 
 
 TOWARD_TRADING = [(S.TESTED, S.PAPER), (S.PAPER, S.LIVE), (S.STOPPED, S.PAPER), (S.STOPPED, S.LIVE)]
 OTHERS = ["agent:copilot-1", "run:wf-9", "node:vps-1", "system", "", "Operator", "operator "]
+BACK_TO_PAPER = (S.STOPPED, S.PAPER, ActorKind.RISK_RULE)
 
 
 @pytest.mark.parametrize("principal", OTHERS)
-def test_no_principal_but_operator_moves_a_unit_toward_paper_or_live(principal: str) -> None:
-    refusals = {
+def test_no_principal_but_operator_promotes_a_unit(principal: str) -> None:
+    """A principal that is not his click makes one move toward trading: a risk rule sends a
+    stopped member back to paper. Every other move toward paper or live, and every move to live,
+    stays his."""
+    moves = {
         (start, to, kind): _attempt(start, to, Actor(kind, principal))
         for (start, to), kind in itertools.product(TOWARD_TRADING, ActorKind)
     }
 
-    assert refusals == {move: [Refusal.NOT_OPERATOR] for move in refusals}
+    assert {move for move, refusals in moves.items() if refusals == []} == {BACK_TO_PAPER}
+    assert all(refusals for move, refusals in moves.items() if move != BACK_TO_PAPER)
+    assert {
+        move: refusals for move, refusals in moves.items() if move[1] is S.LIVE
+    } == {move: [Refusal.NOT_OPERATOR] for move in moves if move[1] is S.LIVE}
 
 
 def test_the_judge_never_moves_a_unit_to_paper() -> None:
