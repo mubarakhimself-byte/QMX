@@ -37,6 +37,7 @@ from qmf.core.fingerprint import Fingerprint
 from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.risk.facts import Fact
+from qmf.risk.journal import RiskEvent
 from qmf.risk.unit_intent import (
     AmendProtection,
     CloseFull,
@@ -51,6 +52,9 @@ from qml.protocol.unit import (
     Account,
     CalibrationRow,
     DecisionRow,
+    Fault,
+    HostPort,
+    HostedUnit,
     OwnPosition,
     Priced,
     Proposal,
@@ -174,7 +178,9 @@ class UnitTrade:
     """How old that rate was when the position closed, stamped so a reader never reads one."""
 
 
-JournalRecord = DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade | CashEvent
+JournalRecord = (
+    DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade | CashEvent | RiskEvent
+)
 
 
 class JournalPort(Protocol):
@@ -322,6 +328,7 @@ class UnitSliceHandler:
         seeded: Mapping[str, OwnPosition] | None = None,
         cash: CashPort | None = None,
         rates: RatePort | None = None,
+        port: HostPort | None = None,
     ) -> None:
         self._stream = stream
         self._records = records
@@ -332,6 +339,7 @@ class UnitSliceHandler:
         self._journal = journal
         self._cash_port = cash
         self._rates = rates
+        self._port: HostPort = self if port is None else port
         self._unit: SteppingUnit | None = None
         self._latest: dict[str, QuoteBar] = {}
         self._held: dict[str, HeldPosition] = {}
@@ -345,6 +353,11 @@ class UnitSliceHandler:
         self._entry_stamps: dict[str, dict[str, Decimal]] = {}
         self._entry_rates: dict[str, tuple[Fraction | None, Instant | None]] = {}
         self._entries = 0
+        self._fault_roots: set[str] = set()
+        """Each root-cause key a fault already landed a ``risk_event`` row, and so a card, for."""
+        self._scope_close: str | None = None
+        """The unit asked its host's last fall-through to close a position, at the next bar's
+        open (AD-13); cleared when that close is made."""
 
     @classmethod
     def start(
@@ -361,6 +374,7 @@ class UnitSliceHandler:
         seeded: Mapping[str, OwnPosition] | None = None,
         cash: CashPort | None = None,
         rates: RatePort | None = None,
+        port: HostPort | None = None,
     ) -> Result[UnitSliceHandler]:
         """A handler whose unit ``host`` built from this handler's read surfaces.
 
@@ -369,6 +383,8 @@ class UnitSliceHandler:
         keyed by: QMB pins one compile and passes that, the node passes the unit version's logic
         half so a size edit keeps a held position's exits (AD-3). ``rates`` is where the host
         supplies ``market.rate:<quote>``; a host with none sizes only its own currency's quotes.
+        ``port`` is the host's last fall-through when a held position's exits cannot run; QMB
+        leaves it out and closes at the next bar's open itself (AD-13).
         """
         handler = cls(
             stream=stream,
@@ -381,12 +397,39 @@ class UnitSliceHandler:
             seeded=seeded,
             cash=cash,
             rates=rates,
+            port=port,
         )
         unit = host(handler.read_surfaces())
         if is_refusal(unit):
             return unit
         handler._unit = unit.value
+        if isinstance(unit.value, HostedUnit):
+            unit.value.attach_port(handler._port)
         return Ok(handler)
+
+    def close_scope(self, unit: object, why: str) -> None:
+        """The host's last fall-through in QMB: close the held position at the next bar's open,
+        the side's closing quote (AD-13). The node's own port closes through its scope close."""
+        del unit
+        self._scope_close = why
+
+    def _close_at_open(self, market: str, bar: QuoteBar, frontier: Instant) -> None:
+        """Close the position the unit's exits could not, at this bar's open, once."""
+        why, self._scope_close = self._scope_close, None
+        held = self._held.get(market)
+        if held is None or why is None:
+            return
+        quote = bar.bid if held.position.side is Side.LONG else bar.ask
+        self._close(market, held, FillKind.CLOSE, quote.open, frontier, held.decision_row_id)
+
+    def _note_faults(self, faults: Sequence[Fault]) -> None:
+        """One ``risk_event`` row, and so one card, per root-cause key (AD-23): the same broken
+        block raising every bar lands one card, not one per bar."""
+        for fault in faults:
+            if fault.block in self._fault_roots:
+                continue
+            self._fault_roots.add(fault.block)
+            self._journal.append(RiskEvent(fault.code, fault.block))
 
     def adopt(
         self,
@@ -565,6 +608,7 @@ class UnitSliceHandler:
                     held.decision_row_id,
                     gapped=reached.gap,
                 )
+        self._close_at_open(stream_id, bar, frontier)
         return Ok(None)
 
     def mint_intents(self, stream_id: str, frontier: Instant) -> Result[object]:
@@ -600,6 +644,7 @@ class UnitSliceHandler:
         step = self._unit.on_instant(frontier)
         if is_refusal(step):
             return step
+        self._note_faults(step.value.faults)
         priced: tuple[Priced, ...] = ()
         if step.value.proposals:
             unit = cast("PricingUnit", self._unit)

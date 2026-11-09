@@ -69,6 +69,8 @@ from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
 __all__ = [
     "ACCOUNT_CURRENCY",
+    "EXIT_FAULT",
+    "EXIT_FAULT_BARS",
     "FAULT_CLEAN_BARS",
     "OHLC",
     "PER_TRADE_CAP_SHARE",
@@ -82,6 +84,7 @@ __all__ = [
     "DecisionRow",
     "Fault",
     "FaultPhase",
+    "HostPort",
     "HostedUnit",
     "MotionSwitch",
     "OwnPosition",
@@ -128,6 +131,16 @@ FAULT_CLEAN_BARS: Final[int] = 8
 before its entries come back (AD-23). Eight bars is about two hours on the 15-minute stream the
 shipped templates run, long enough for the fault's card to be seen and short enough that a fixed
 block returns the same session. Labelled placeholder, range one to 96 bars, owner numbers talk."""
+EXIT_FAULT: Final[str] = "exit_fault"
+"""The reason a position is closed when its unit's own exits cannot run for ``exit_fault_bars``
+bars (AD-13, AD-23 step 4). It is the ``close_scope`` port's word, and the host's close row
+carries it."""
+EXIT_FAULT_BARS: Final[int] = 3
+"""Starting default of the ``exit_fault_bars`` setting: the bars a held position's exits may fail to
+run before the host's ``close_scope`` port closes it (AD-13, AD-23 step 4). The venue's stop rests
+through the gap, so three bars is long enough for a transient fault to clear and short enough that
+a position never sits with no exit able to run for an hour on the 15-minute stream the shipped
+templates run. Labelled placeholder, range one to 96 bars, owner numbers talk."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -352,6 +365,18 @@ class AdmitPort(Protocol):
     def admit(self, proposal: Proposal, entry: PricedEntry) -> str | None: ...
 
 
+class HostPort(Protocol):
+    """The host's last fall-through when a held position's own exits cannot run (AD-13, AD-23
+    step 4).
+
+    The unit answers the fault and, after ``exit_fault_bars`` bars with no exit able to run, asks
+    its host to close the position. The node closes it through its own scope close; QMB closes it
+    at the next bar's open. ``qml`` imports no host, so the host injects this port.
+    """
+
+    def close_scope(self, unit: object, why: str) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class SizeBand:
     """The one row that catches an absurd size after the converter (AD-10, PH E8): a ceiling on
@@ -551,6 +576,8 @@ class _Core:
         trace_level: TraceLevel,
         motion: MotionSwitch,
         fault_clean_bars: int,
+        exit_fault_bars: int = EXIT_FAULT_BARS,
+        port: HostPort | None = None,
     ) -> None:
         self.compiled = compiled
         self.plan = compiled.plan
@@ -560,6 +587,13 @@ class _Core:
         self.trace = trace_level
         self.motion = motion
         self.fault_clean_bars = fault_clean_bars
+        self.exit_fault_bars = exit_fault_bars
+        self.port = port
+        """The host's last fall-through, attached by the host after the unit is built (AD-13)."""
+        self.exit_faults: dict[str, int] = {}
+        """Each held position's consecutive bars with no exit able to run (AD-13)."""
+        self.close_asked: set[str] = set()
+        """The positions whose host was already asked to close them, so the ask fires once."""
         self.warm_up = max(compiled.warm_up.values(), default=0)
         self.slow = {
             s.number.name: SlowState(value=calibrated[s.number.name]) for s in self.plan.slow
@@ -740,12 +774,28 @@ class _Core:
             self.params(per_bar.binding, self.plan.defaults), per_bar.binding.inputs
         )
 
+    @property
+    def exit_pin(self) -> str:
+        """The per-bar exit's pin, the root-cause key its fault is filed under (AD-13)."""
+        per_bar = next((e for e in self.plan.exits if e.use is ExitUse.PER_BAR), None)
+        return "per-bar-exit" if per_bar is None else per_bar.binding.pin
+
 
 class HostedUnit:
     """One compiled unit hosted for one run or deployment, driven one instant at a time."""
 
     def __init__(self, core: _Core) -> None:
         self._core = core
+
+    def attach_port(self, port: HostPort) -> None:
+        """Hand this unit its host's last fall-through (AD-13). The host attaches it after the
+        unit is built, because the port lives on the handler that builds its surfaces."""
+        self._core.port = port
+
+    def bench(self) -> None:
+        """Stop this unit's entries until its clean bars pass: the host's own fault wall
+        (AD-23)."""
+        self._core.bench()
 
     @property
     def compiled(self) -> CompiledUnit:
@@ -1133,7 +1183,9 @@ class _Run:
         A position is this unit's when its key is this version's logic half, which a risk edit
         leaves alone, or this compile's own fingerprint, which a host that pins one compile
         stamps (AD-3). Either names this unit version, so another version's position is never
-        closed.
+        closed. A raising exit block is skipped with a ``Fault`` and the next exit still runs; no
+        exit able to run for ``exit_fault_bars`` bars asks the host's ``close_scope`` port to
+        close the position (AD-13, AD-23 step 4).
         """
         version = self.unit.compiled
         mine = position is not None and position.opened_by in (
@@ -1144,6 +1196,8 @@ class _Run:
             del m.timers[gone]
             m.exited.discard(gone)
         if position is None or not mine or not new_bar or position.position_id in m.exited:
+            if position is not None:
+                self.unit.exit_faults.pop(position.position_id, None)
             return
         timer = m.timers.get(position.position_id)
         if timer is None:
@@ -1151,7 +1205,13 @@ class _Run:
             if timer is None:
                 return
             m.timers[position.position_id] = timer
-        out = timer.update({})
+        try:
+            out = timer.update({})
+        except Exception:  # an exit's raise is this bar's Fault, never a step refusal (AD-13)
+            self.fault(self.unit.exit_pin, FaultPhase.EXIT)
+            self.no_exit_ran(position)
+            return
+        self.unit.exit_faults.pop(position.position_id, None)
         if not (isinstance(out, Signal) and out.state):
             return
         m.exited.add(position.position_id)
@@ -1170,6 +1230,20 @@ class _Run:
                 "decision_row_id": row,
             }
         )
+
+    def no_exit_ran(self, position: OwnPosition) -> None:
+        """One held position's exits could not run this bar. After ``exit_fault_bars`` in a row
+        the host's ``close_scope`` port closes it, once (AD-13, AD-23 step 4)."""
+        if position.position_id in self.unit.close_asked:
+            return
+        bars = self.unit.exit_faults.get(position.position_id, 0) + 1
+        self.unit.exit_faults[position.position_id] = bars
+        if bars < self.unit.exit_fault_bars:
+            return
+        self.unit.close_asked.add(position.position_id)
+        port = self.unit.port
+        if port is not None:
+            port.close_scope(self.unit, EXIT_FAULT)
 
     # --- entries ---------------------------------------------------------------------
 
@@ -1387,6 +1461,8 @@ def _core(
     trace_level: TraceLevel,
     motion: MotionSwitch,
     fault_clean_bars: int,
+    exit_fault_bars: int,
+    port: HostPort | None,
 ) -> Result[_Core]:
     needed = _required_keys(compiled)
     missing, extra = sorted(needed - set(read_surfaces)), sorted(set(read_surfaces) - needed)
@@ -1405,6 +1481,12 @@ def _core(
             "the clean bars before entries return are zero or more",
             given=repr(fault_clean_bars),
         )
+    if exit_fault_bars < 1:
+        return invalid(
+            "exit_fault_bars",
+            "the bars before the close-scope fall-through are one or more",
+            given=repr(exit_fault_bars),
+        )
     start = _starting(compiled, assignment)
     if is_refusal(start):
         return start
@@ -1418,6 +1500,8 @@ def _core(
             trace_level=trace_level,
             motion=motion,
             fault_clean_bars=fault_clean_bars,
+            exit_fault_bars=exit_fault_bars,
+            port=port,
         )
     )
 
@@ -1432,10 +1516,13 @@ def construct_unit(
     trace_level: TraceLevel = TraceLevel.EVENTS,
     motion: MotionSwitch = MotionSwitch.ON,
     fault_clean_bars: int = FAULT_CLEAN_BARS,
+    exit_fault_bars: int = EXIT_FAULT_BARS,
+    port: HostPort | None = None,
 ) -> Result[HostedUnit]:
     """Host a compiled unit. ``assignment`` holds the calibrated values the run starts from
     (the unit's defaults when ``None``); ``scope_id`` is the QMB run id or the deployment id;
-    ``fault_clean_bars`` is the clean bars a faulted unit waits before its entries return."""
+    ``fault_clean_bars`` is the clean bars a faulted unit waits before its entries return;
+    ``exit_fault_bars`` is the bars its exits may fail to run before ``port`` closes a position."""
     core = _core(
         compiled,
         read_surfaces,
@@ -1445,6 +1532,8 @@ def construct_unit(
         trace_level,
         motion,
         fault_clean_bars,
+        exit_fault_bars,
+        port,
     )
     if is_refusal(core):
         return core
@@ -1462,6 +1551,8 @@ def restore_unit(
     trace_level: TraceLevel = TraceLevel.EVENTS,
     motion: MotionSwitch = MotionSwitch.ON,
     fault_clean_bars: int = FAULT_CLEAN_BARS,
+    exit_fault_bars: int = EXIT_FAULT_BARS,
+    port: HostPort | None = None,
 ) -> Result[HostedUnit]:
     """Resume from ``snapshot``. A snapshot of another state schema, compiled fingerprint or
     interpreter, or one whose markets, blocks, slow numbers or fields differ in shape from
@@ -1477,6 +1568,8 @@ def restore_unit(
         trace_level,
         motion,
         fault_clean_bars,
+        exit_fault_bars,
+        port,
     )
     if is_refusal(built):
         return built

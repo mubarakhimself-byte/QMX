@@ -15,9 +15,12 @@ fill kind, a ``trade`` the fill that closed it. So a slice written again repeats
 the writer drops the repeat. ``guard`` and ``data_event`` rows carry sequence ids, so this
 journal keeps one per decision row id and one per gap.
 
-A taken decision waits for its fill: a filled one is written ``taken``, and one the host
-would not fill (a position already open, a size below the minimum lot) is written
-``blocked`` with its reason code, beside the ``guard`` row that said no.
+A taken decision is written when it is decided, before any order it names can leave, and it is
+never rewritten. One the host would not fill (a position already open, a size below the minimum
+lot) lands a second ``signal`` row with outcome ``blocked``, linked to it by
+``decision_row_id`` and carrying the reason code and the guard's words, beside the ``guard`` row
+that said no. A block that raised lands one ``risk_event`` row per root-cause key, which is the
+card's record.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from qmf.core.chrono import Instant
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import AppendOutcome, JournalWriter, WriterScope
+from qmf.risk.journal import RiskEvent
 from qml.compile import CompiledUnit
 from qml.protocol.unit import CalibrationRow, DecisionRow, StateEvent
 from qml.receipt import stored_row
@@ -227,6 +231,8 @@ class RunJournal:
                 self._trade(record)
             case CashEvent():
                 self._cash(record)
+            case RiskEvent():
+                self._risk_event(record)
 
     def data_gap(self, market_id: str, after: Instant, before: Instant, bars_missing: int) -> None:
         """Bars the unit's stream did not hold between two bars it did (QB-18)."""
@@ -399,6 +405,17 @@ class RunJournal:
             self._repeats += 1
             return
         self._once.add(key)
+        blocked: dict[str, object] = {
+            "row_id": f"{skip.decision_row_id}/blocked",
+            "instant": skip.instant.value_ns,
+            "market_id": skip.market_id,
+            "outcome": "blocked",
+            "reason": code,
+            "detail": skip.reason,
+            "decision_row_id": skip.decision_row_id,
+            "residue_r": str(skip.residue_r),
+        }
+        self._write("signal", blocked, self._facts(skip.market_id))
         guard: dict[str, object] = {
             "decision_row_id": skip.decision_row_id,
             "instant": skip.instant.value_ns,
@@ -408,6 +425,11 @@ class RunJournal:
             "residue_r": str(skip.residue_r),
         }
         self._write("guard", guard, self._facts(skip.market_id))
+
+    def _risk_event(self, event: RiskEvent) -> None:
+        """The code that fired and the root cause its one card is filed under (AD-23)."""
+        body: dict[str, object] = {"code": event.code, "root": event.root}
+        self._write("risk_event", body, self._facts(None))
 
     def _trade(self, trade: UnitTrade) -> None:
         deal = self._deals.get(

@@ -92,6 +92,7 @@ from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmf.risk.facts import AccountFacts, Stake, account_name
+from qmf.risk.journal import UNIT_FAULT, RiskEvent
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     AmendProtection,
@@ -106,7 +107,9 @@ from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import (
     ACCOUNT_CURRENCY,
     DecisionRow,
+    FaultPhase,
     HostedUnit,
+    HostPort,
     OwnPosition,
     QuoteBar,
     RatePort,
@@ -1599,6 +1602,19 @@ class _OwnJournal:
         )
 
 
+class _ScopeClose:
+    """A unit's last fall-through: the node closes every position of the deployment whose own
+    exits could not run for ``exit_fault_bars`` bars, with the reason it gives (AD-13)."""
+
+    def __init__(self, runtime: Runtime, deployment_id: str) -> None:
+        self._runtime = runtime
+        self._deployment_id = deployment_id
+
+    def close_scope(self, unit: object, why: str) -> None:
+        del unit
+        self._runtime.close_scope(self._deployment_id, why)
+
+
 class NodeUnit:
     """One deployment's unit on this node: the shared handler, wrapped with the order path.
 
@@ -1619,6 +1635,7 @@ class NodeUnit:
         guard: Callable[[str], str | None],
         assignment: Mapping[str, Decimal] | None = None,
         rates: RatePort | None = None,
+        port: object | None = None,
     ) -> None:
         self.deployment = deployment
         self.assignment = assignment
@@ -1627,6 +1644,9 @@ class NodeUnit:
         self.records = records
         self.orders = orders
         self.journal = journal
+        self.port = port
+        """This unit's last fall-through: the runtime closes the positions its own exits cannot
+        run for (AD-13, AD-23 step 4)."""
         self.lane = deployment.lane
         self.journal_world = JournalWorld.PAPER
         self.guard = guard
@@ -1717,6 +1737,7 @@ class NodeUnit:
             execution=self._execution,
             journal=self._port,
             rates=self.rates,
+            port=cast("HostPort | None", self.port),
         )
         if is_refusal(started):
             return started
@@ -2036,6 +2057,9 @@ class _Hosted:
     venue: Venue | None = None
     held_compile: CompiledUnit | None = None
     """The compiled unit, kept while its account's session is not up or not bound yet."""
+    fault_roots: set[str] = field(default_factory=set[str])
+    """Each root-cause key this deployment already filed a ``risk_event`` row, and so a card, for
+    (AD-23). The same broken piece raising every tick lands one card, not one per tick."""
 
 
 class _Sink:
@@ -2693,6 +2717,11 @@ class Runtime:
                 )
         return found
 
+    def close_scope(self, deployment_id: str, why: str) -> int:
+        """The last fall-through for one deployment: close every position at its scope whose
+        unit's own exits could not run, with the reason it gives (AD-13, AD-23 step 4)."""
+        return self._close_scope(f"deployment_id:{deployment_id}", why, set())
+
     def _close_scope(self, scope: str, why: str, tried: set[str], *, every: bool = False) -> int:
         """Close every position of this node at ``scope``, or all of them with ``every``;
         answers how many the venue closed now. A position already tried this tick waits."""
@@ -3082,6 +3111,7 @@ class Runtime:
             self.guard(hosted),
             assignment,
             FeedRates(venue.feed.recording, rate_refs(records, ACCOUNT_CURRENCY), ACCOUNT_CURRENCY),
+            port=_ScopeClose(self, deployment.deployment_id),
         )
         unit.journal_world = world
         unit.account = lambda account=deployment.account_id: self._account_inputs(account)
@@ -3271,9 +3301,27 @@ class Runtime:
     def _drive(self, venue: Venue, bars: Sequence[Bar]) -> None:
         for hosted in self.hosted.values():
             if hosted.venue is venue and hosted.phase in (Phase.WARMING, Phase.TRADING):
-                self._drive_one(hosted, bars)
+                try:
+                    self._drive_one(hosted, bars)
+                except Exception as error:  # one unit's raise costs that unit, not the next one
+                    self._unit_fault(hosted, FaultPhase.HOST, type(error).__name__, repr(error))
+                    continue
                 if hosted.phase is Phase.WARMING:
                     self._settle_warm(hosted)
+
+    def _unit_fault(self, hosted: _Hosted, phase: FaultPhase, root: str, why: str) -> None:
+        """One raise or refusal past a unit's own step is that unit's fault (AD-23 step 2): its
+        entries stop, one ``risk_event`` row is filed per root-cause key, its phase stays
+        ``TRADING``, and the driver steps it again on the next bar."""
+        unit = hosted.unit
+        if unit is not None:
+            if unit.hosted_unit is not None:
+                unit.hosted_unit.bench()
+            key = f"{phase.value}:{root}"
+            if key not in hosted.fault_roots:
+                hosted.fault_roots.add(key)
+                unit.journal.append(RiskEvent(UNIT_FAULT, key))
+        hosted.detail = f"a fault: {why}"
 
     def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar]) -> None:
         unit, loop = hosted.unit, hosted.loop
@@ -3300,7 +3348,12 @@ class Runtime:
             unit.journal.at(Instant(ns))
             driven = loop.close_frontier()
             if is_refusal(driven):
-                hosted.phase, hosted.detail = Phase.STOPPED, _why(driven)
+                self._unit_fault(
+                    hosted,
+                    FaultPhase.HOST,
+                    str(driven.context.get("field") or "close_frontier"),
+                    _why(driven),
+                )
                 return
             if unit.warming:
                 unit.warm_seen += 1
