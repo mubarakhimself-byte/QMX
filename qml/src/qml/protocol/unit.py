@@ -34,6 +34,7 @@ from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.facts import Fact
+from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     UNIT_INTENT_FORMAT_VERSION,
@@ -68,6 +69,7 @@ from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
 __all__ = [
     "ACCOUNT_CURRENCY",
+    "FAULT_CLEAN_BARS",
     "OHLC",
     "PER_TRADE_CAP_SHARE",
     "SEAM_JUMP_SCALE",
@@ -78,6 +80,8 @@ __all__ = [
     "AdmitPort",
     "CalibrationRow",
     "DecisionRow",
+    "Fault",
+    "FaultPhase",
     "HostedUnit",
     "MotionSwitch",
     "OwnPosition",
@@ -119,6 +123,11 @@ PER_TRADE_CAP_SHARE: Final[Decimal] = Decimal("1")
 """Starting default of the ``per_trade_cap_share`` setting: the largest share of equity one entry
 may put at risk. At 1 an entry may risk the whole account, so only an answer above that (a bug,
 not a choice) is refused. Labelled placeholder, owner numbers talk."""
+FAULT_CLEAN_BARS: Final[int] = 8
+"""Starting default of the ``fault_clean_bars`` setting: the clean bars a unit needs after a fault
+before its entries come back (AD-23). Eight bars is about two hours on the 15-minute stream the
+shipped templates run, long enough for the fault's card to be seen and short enough that a fixed
+block returns the same session. Labelled placeholder, range one to 96 bars, owner numbers talk."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -268,6 +277,32 @@ class StateEvent:
     reason: str = ""
 
 
+class FaultPhase(StrEnum):
+    """The phase of one step that raised. ``exit`` and ``host`` are raised by later PRs: a raising
+    exit block is the exit step's, and a raise past ``_Run.step`` is the host's (AD-23, AD-13)."""
+
+    UPDATE = "update"
+    ENTRIES = "entries"
+    PRICE = "price"
+    MOTION = "motion"
+    EXIT = "exit"
+    HOST = "host"
+
+
+@dataclass(frozen=True, slots=True)
+class Fault:
+    """One block's raise, as a row on the answer (AD-23).
+
+    ``block`` is the raising binding's pin, so a card and a journal row name the block its owner
+    fixes. ``code`` is the risk-event code this row becomes; every fault the unit raises today is a
+    ``unit_fault``, and a later chain link's fault carries its own code.
+    """
+
+    block: str
+    phase: FaultPhase
+    code: str = UNIT_FAULT
+
+
 @dataclass(frozen=True, slots=True)
 class UnitStep:
     instant: Instant
@@ -277,6 +312,9 @@ class UnitStep:
     state_events: tuple[StateEvent, ...]
     proposals: tuple[Proposal, ...] = ()
     """The entries whose slots held, with no size yet: the host prices each one in pass two."""
+    faults: tuple[Fault, ...] = ()
+    """Each block that raised, with the phase it raised in. That unit's entries stop until
+    ``fault_clean_bars`` clean bars have passed; its exits keep running."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -512,6 +550,7 @@ class _Core:
         execution_target: ExecutionTarget,
         trace_level: TraceLevel,
         motion: MotionSwitch,
+        fault_clean_bars: int,
     ) -> None:
         self.compiled = compiled
         self.plan = compiled.plan
@@ -520,15 +559,27 @@ class _Core:
         self.target = execution_target
         self.trace = trace_level
         self.motion = motion
+        self.fault_clean_bars = fault_clean_bars
         self.warm_up = max(compiled.warm_up.values(), default=0)
         self.slow = {
             s.number.name: SlowState(value=calibrated[s.number.name]) for s in self.plan.slow
         }
         self.slow_rules = {s.number.name: s.block.make(s.params, {}) for s in self.plan.slow}
         self.pending: list[StateEvent] = []
+        self.pending_faults: list[Fault] = []
+        """A fault made outside a step, waiting for the next answer to carry it."""
+        self.benched = False
+        """Entries are off after a fault until ``fault_clean_bars`` clean bars have passed."""
+        self.clean_bars = 0
+        """Bars with no fault since the one that benched the unit."""
         self.markets = [
             self.market(market.market_id, record) for market, record in self.plan.markets
         ]
+
+    def bench(self) -> None:
+        """A fault benches the unit's entries and starts the clean count again (AD-23)."""
+        self.benched = True
+        self.clean_bars = 0
 
     # --- building --------------------------------------------------------------
 
@@ -753,26 +804,31 @@ class HostedUnit:
                 "sizer_skip",
                 "the proposal names no market this unit runs",
             )
-        answer = market.instances["sizer"].update(
-            {
-                "equity": facts.equity,
-                "entry_price": proposal.entry_price,
-                "stop_price": proposal.stop,
-                "record": proposal.record,
-            }
-            | dict(proposal.params)
-        )
-        amount = _amount(answer)
-        if isinstance(amount, _Skip):
-            return ended(proposal.row, {}, ("sizer: refuse",), amount.code, amount.detail)
-        converted = to_quantity(
-            amount,
-            proposal.entry_price,
-            proposal.stop,
-            proposal.record,
-            _rate(proposal.record, facts, proposal.row.instant),
-            RoundRule(now=proposal.row.instant),
-        )
+        try:
+            answer = market.instances["sizer"].update(
+                {
+                    "equity": facts.equity,
+                    "entry_price": proposal.entry_price,
+                    "stop_price": proposal.stop,
+                    "record": proposal.record,
+                }
+                | dict(proposal.params)
+            )
+            amount = _amount(answer)
+            if isinstance(amount, _Skip):
+                return ended(proposal.row, {}, ("sizer: refuse",), amount.code, amount.detail)
+            converted = to_quantity(
+                amount,
+                proposal.entry_price,
+                proposal.stop,
+                proposal.record,
+                _rate(proposal.record, facts, proposal.row.instant),
+                RoundRule(now=proposal.row.instant),
+            )
+        except Exception:  # the fault wall: a sizer or converter raise is a skip, never a crash
+            core.pending_faults.append(Fault(compiled.plan.sizer.pin, FaultPhase.PRICE))
+            core.bench()
+            return ended(proposal.row, {}, ("sizer: refuse",), UNIT_FAULT, "the sizer raised")
         if converted.skipped is not None or converted.quantity is None:
             return ended(
                 proposal.row,
@@ -830,6 +886,23 @@ class HostedUnit:
         return self._core.snapshot_state()
 
 
+class _Fault(Exception):
+    """A block's own exception, carried to its phase's wall with the block named."""
+
+    def __init__(self, block: str) -> None:
+        super().__init__(block)
+        self.block = block
+
+
+def _answered(block: str, instance: Instance, evidence: Mapping[str, object]) -> object:
+    """One block call. A raise becomes this bar's ``Fault``, named by the block's pin, and the
+    phase it raised in keeps running (AD-23). No threads: a plain ``try``."""
+    try:
+        return instance.update(evidence)
+    except Exception as bad:  # a block's raise is a Fault, never a step refusal (AD-23)
+        raise _Fault(block) from bad
+
+
 class _Run:
     """One ``on_instant`` call: reads the surfaces once, then exits, entries and motion."""
 
@@ -843,7 +916,16 @@ class _Run:
         self.calibrations: list[CalibrationRow] = []
         self.events: list[StateEvent] = list(unit.pending)
         unit.pending.clear()
+        self.faults: list[Fault] = list(unit.pending_faults)
+        unit.pending_faults.clear()
+        self.raised = False
         self.ordinal = 0
+
+    def fault(self, block: str, phase: FaultPhase) -> None:
+        """Record this bar's fault, and bench the unit's entries from here (AD-23)."""
+        self.faults.append(Fault(block, phase))
+        self.raised = True
+        self.unit.bench()
 
     def row_id(self) -> str:
         made = fingerprint(
@@ -881,20 +963,37 @@ class _Run:
                 )
             if m.last_bar_ns is None or bar.knowable_at.value_ns > m.last_bar_ns:
                 fresh[m.market_id] = bar
+        if fresh and self.unit.benched and self.unit.clean_bars >= self.unit.fault_clean_bars:
+            self.unit.benched = False
+        benched = self.unit.benched
         results: dict[str, dict[Side, _Side]] = {}
         for m in self.unit.markets:
             bar = fresh.get(m.market_id)
-            if bar is not None:
+            if bar is None:
+                continue
+            try:
                 results[m.market_id] = self.update(m, bar)
+            except _Fault as fault:
+                self.fault(fault.block, FaultPhase.UPDATE)
         for m in self.unit.markets:
             self.exits(m, positions[m.market_id], m.market_id in fresh)
         for m in self.unit.markets:
             bar = fresh.get(m.market_id)
-            if bar is not None:
-                self.entries(m, bar, results[m.market_id], positions[m.market_id])
+            sides = results.get(m.market_id)
+            if benched or bar is None or sides is None:
+                continue
+            try:
+                self.entries(m, bar, sides, positions[m.market_id])
+            except _Fault as fault:
+                self.fault(fault.block, FaultPhase.ENTRIES)
         if self.unit.motion is MotionSwitch.ON:
             trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
-            self.motion(trades, all(p is None for p in positions.values()))
+            try:
+                self.motion(trades, all(p is None for p in positions.values()))
+            except _Fault as fault:
+                self.fault(fault.block, FaultPhase.MOTION)
+        if fresh and self.unit.benched and not self.raised:
+            self.unit.clean_bars += 1
         admitted = accept_unit_intents(self.intents)
         if is_refusal(admitted):
             return admitted
@@ -906,6 +1005,7 @@ class _Run:
                 calibrations=tuple(self.calibrations),
                 state_events=tuple(self.events),
                 proposals=tuple(self.proposals),
+                faults=tuple(self.faults),
             )
         )
 
@@ -924,11 +1024,13 @@ class _Run:
         }
         for side in (Side.LONG, Side.SHORT):
             for e in self.plan.exits:
-                if e.use is ExitUse.STOP and f"{side.value}.{e.binding.key}" in m.instances:
-                    instance = m.instances[f"{side.value}.{e.binding.key}"]
-                    instance.update(
-                        {"series": bar.bid.fields()} | self.unit.params(e.binding, m.in_force[side])
-                    )
+                key = f"{side.value}.{e.binding.key}"
+                if e.use is not ExitUse.STOP or key not in m.instances:
+                    continue
+                evidence = {"series": bar.bid.fields()} | self.unit.params(
+                    e.binding, m.in_force[side]
+                )
+                _answered(e.binding.pin, m.instances[key], evidence)
         return sides
 
     def side(
@@ -952,7 +1054,7 @@ class _Run:
             for b in slot.bindings:
                 evidence = {port: resolve(ref) for port, ref in b.inputs.items()}
                 evidence |= self.unit.params(b, numbers)
-                out = m.instances[b.key].update(evidence)
+                out = _answered(b.pin, m.instances[b.key], evidence)
                 outputs[b.name] = out
                 trail.append(SlotOutput(slot.name, b.name, _text(out)))
                 if isinstance(out, EntryOrder):
@@ -961,8 +1063,10 @@ class _Run:
             held[slot.name] = self.combine(slot, conditions)
         for d in self.plan.derived:
             if d.side is plan.side:
-                fed = m.instances[f"derived.{d.side.value}.{d.number}"].update(
-                    {"series": _value(outputs.get(d.source))}
+                fed = _answered(
+                    d.pin,
+                    m.instances[f"derived.{d.side.value}.{d.number}"],
+                    {"series": _value(outputs.get(d.source))},
                 )
                 spec = self.unit.compiled.unit.numbers[d.number]
                 if isinstance(fed, Decimal) and spec.range is not None:
@@ -1122,7 +1226,13 @@ class _Run:
         reference = bar.ask.close if side is Side.LONG else bar.bid.close
         stop_plan = next((e for e in self.plan.exits if e.use is ExitUse.STOP), None)
         raw_stop = (
-            _value(m.instances[f"{side.value}.{stop_plan.binding.key}"].update({}))
+            _value(
+                _answered(
+                    stop_plan.binding.pin,
+                    m.instances[f"{side.value}.{stop_plan.binding.key}"],
+                    {},
+                )
+            )
             if stop_plan is not None
             else None
         )
@@ -1141,9 +1251,11 @@ class _Run:
         targets: list[dict[str, object]] = []
         for e in self.plan.exits:
             if e.use is ExitUse.TARGET:
-                level = m.instances[f"{side.value}.{e.binding.key}"].update(
+                level = _answered(
+                    e.binding.pin,
+                    m.instances[f"{side.value}.{e.binding.key}"],
                     {"entry_price": reference, "stop_price": stop}
-                    | self.unit.params(e.binding, numbers)
+                    | self.unit.params(e.binding, numbers),
                 )
                 if isinstance(level, Decimal):
                     targets.append({"price": str(_price(level, record)), "fraction": "1/1"})
@@ -1208,14 +1320,17 @@ class _Run:
         unit = self.unit
         for slow in self.plan.slow:
             name = slow.number.name
-            state, move = calibrate(
-                slow.number,
-                unit.slow_rules[name],
-                unit.slow[name],
-                trades,
-                instant=self.instant,
-                flat=flat,
-            )
+            try:
+                state, move = calibrate(
+                    slow.number,
+                    unit.slow_rules[name],
+                    unit.slow[name],
+                    trades,
+                    instant=self.instant,
+                    flat=flat,
+                )
+            except Exception as bad:  # the fault wall: a rule's raise is a Fault (AD-23)
+                raise _Fault(slow.number.rule_pin) from bad
             unit.slow[name] = state
             if move is None:
                 continue
@@ -1271,6 +1386,7 @@ def _core(
     assignment: Mapping[str, Decimal] | None,
     trace_level: TraceLevel,
     motion: MotionSwitch,
+    fault_clean_bars: int,
 ) -> Result[_Core]:
     needed = _required_keys(compiled)
     missing, extra = sorted(needed - set(read_surfaces)), sorted(set(read_surfaces) - needed)
@@ -1283,6 +1399,12 @@ def _core(
         )
     if not scope_id.strip():
         return invalid("scope_id", "a hosted unit needs the run or deployment id")
+    if fault_clean_bars < 0:
+        return invalid(
+            "fault_clean_bars",
+            "the clean bars before entries return are zero or more",
+            given=repr(fault_clean_bars),
+        )
     start = _starting(compiled, assignment)
     if is_refusal(start):
         return start
@@ -1295,6 +1417,7 @@ def _core(
             execution_target=execution_target,
             trace_level=trace_level,
             motion=motion,
+            fault_clean_bars=fault_clean_bars,
         )
     )
 
@@ -1308,11 +1431,20 @@ def construct_unit(
     assignment: Mapping[str, Decimal] | None = None,
     trace_level: TraceLevel = TraceLevel.EVENTS,
     motion: MotionSwitch = MotionSwitch.ON,
+    fault_clean_bars: int = FAULT_CLEAN_BARS,
 ) -> Result[HostedUnit]:
     """Host a compiled unit. ``assignment`` holds the calibrated values the run starts from
-    (the unit's defaults when ``None``); ``scope_id`` is the QMB run id or the deployment id."""
+    (the unit's defaults when ``None``); ``scope_id`` is the QMB run id or the deployment id;
+    ``fault_clean_bars`` is the clean bars a faulted unit waits before its entries return."""
     core = _core(
-        compiled, read_surfaces, scope_id, execution_target, assignment, trace_level, motion
+        compiled,
+        read_surfaces,
+        scope_id,
+        execution_target,
+        assignment,
+        trace_level,
+        motion,
+        fault_clean_bars,
     )
     if is_refusal(core):
         return core
@@ -1329,6 +1461,7 @@ def restore_unit(
     assignment: Mapping[str, Decimal] | None = None,
     trace_level: TraceLevel = TraceLevel.EVENTS,
     motion: MotionSwitch = MotionSwitch.ON,
+    fault_clean_bars: int = FAULT_CLEAN_BARS,
 ) -> Result[HostedUnit]:
     """Resume from ``snapshot``. A snapshot of another state schema, compiled fingerprint or
     interpreter, or one whose markets, blocks, slow numbers or fields differ in shape from
@@ -1336,7 +1469,14 @@ def restore_unit(
     ``cold_start`` event with the reason, so a restart never silently changes what the unit
     does. A block's ``export_state`` keeps the same keys for the whole run."""
     built = _core(
-        compiled, read_surfaces, scope_id, execution_target, assignment, trace_level, motion
+        compiled,
+        read_surfaces,
+        scope_id,
+        execution_target,
+        assignment,
+        trace_level,
+        motion,
+        fault_clean_bars,
     )
     if is_refusal(built):
         return built
