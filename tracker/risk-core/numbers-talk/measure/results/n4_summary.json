@@ -1,0 +1,1984 @@
+{
+ "info": {
+  "US100|a": {
+   "rows": 108011,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:14:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "US100|b": {
+   "rows": 143382,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:14:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "US500|a": {
+   "rows": 108008,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:14:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "US500|b": {
+   "rows": 143382,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:14:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "US30|a": {
+   "rows": 108014,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:14:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "US30|b": {
+   "rows": 143382,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:14:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "US2000|a": {
+   "rows": 108015,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:14:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "US2000|b": {
+   "rows": 143381,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:14:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "DE40|a": {
+   "rows": 107876,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "DE40|b": {
+   "rows": 143293,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "EU50|a": {
+   "rows": 77397,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "EU50|b": {
+   "rows": 100798,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "FR40|a": {
+   "rows": 77400,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "FR40|b": {
+   "rows": 102358,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-24",
+    "2025-12-31"
+   ],
+   "neg_spread_min": 0
+  },
+  "NL25|a": {
+   "rows": 77400,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "NL25|b": {
+   "rows": 102358,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-24",
+    "2025-12-31"
+   ],
+   "neg_spread_min": 0
+  },
+  "IT40|a": {
+   "rows": 77379,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:58:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "IT40|b": {
+   "rows": 100798,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "ES35|a": {
+   "rows": 69667,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 18:57:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "ES35|b": {
+   "rows": 92672,
+   "days_kept": 79,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 18:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-17",
+    "2025-12-24",
+    "2025-12-31"
+   ],
+   "neg_spread_min": 0
+  },
+  "CH20|a": {
+   "rows": 77400,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "CH20|b": {
+   "rows": 99258,
+   "days_kept": 79,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "UK100|a": {
+   "rows": 107840,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:00:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "UK100|b": {
+   "rows": 142790,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:00:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "PL20|a": {
+   "rows": 57538,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 15:49:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "PL20|b": {
+   "rows": 74094,
+   "days_kept": 78,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 15:49:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "SA40|a": {
+   "rows": 13465,
+   "days_kept": 14,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-08-28 15:29:00+00:00",
+   "holidays_dropped": [
+    "2026-08-31"
+   ],
+   "neg_spread_min": 0
+  },
+  "SA40|b": {
+   "rows": 74084,
+   "days_kept": 79,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 15:29:00+00:00",
+   "holidays_dropped": [
+    "2025-12-24"
+   ],
+   "neg_spread_min": 0
+  },
+  "JP225|a": {
+   "rows": 108015,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:14:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "JP225|b": {
+   "rows": 143382,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:14:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "HK50|a": {
+   "rows": 63239,
+   "days_kept": 62,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 16:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "HK50|b": {
+   "rows": 78240,
+   "days_kept": 76,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 16:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-24",
+    "2025-12-31",
+    "2026-02-16"
+   ],
+   "neg_spread_min": 0
+  },
+  "CN50|a": {
+   "rows": 78676,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:29:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "CN50|b": {
+   "rows": 102070,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:29:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "SG|a": {
+   "rows": 80536,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "SG|b": {
+   "rows": 104540,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "AU200|a": {
+   "rows": 108237,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 19:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "AU200|b": {
+   "rows": 136252,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 19:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-24",
+    "2025-12-31",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "XAUUSD|a": {
+   "rows": 108596,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "XAUUSD|b": {
+   "rows": 144267,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "XAGUSD|a": {
+   "rows": 108598,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "XAGUSD|b": {
+   "rows": 144266,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "COPPER|a": {
+   "rows": 108597,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "COPPER|b": {
+   "rows": 144266,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "WTI|a": {
+   "rows": 108600,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "WTI|b": {
+   "rows": 144257,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "BRENT|a": {
+   "rows": 80671,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "BRENT|b": {
+   "rows": 108579,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "NATGAS|a": {
+   "rows": 108542,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "NATGAS|b": {
+   "rows": 144239,
+   "days_kept": 82,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-11-28",
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "NVDA|a": {
+   "rows": 75898,
+   "days_kept": 63,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "NVDA|b": {
+   "rows": 100434,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "TSLA|a": {
+   "rows": 75898,
+   "days_kept": 63,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "TSLA|b": {
+   "rows": 100434,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "AAPL|a": {
+   "rows": 75898,
+   "days_kept": 63,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "AAPL|b": {
+   "rows": 100434,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "MSFT|a": {
+   "rows": 75898,
+   "days_kept": 63,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "MSFT|b": {
+   "rows": 100434,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "AMZN|a": {
+   "rows": 75898,
+   "days_kept": 63,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "AMZN|b": {
+   "rows": 100434,
+   "days_kept": 80,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 20:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "EURUSD|a": {
+   "rows": 108595,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "EURUSD|b": {
+   "rows": 144718,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "GBPUSD|a": {
+   "rows": 108596,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "GBPUSD|b": {
+   "rows": 144715,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  },
+  "USDJPY|a": {
+   "rows": 108595,
+   "days_kept": 64,
+   "first": "2026-08-11 00:00:00+00:00",
+   "last": "2026-11-06 21:59:00+00:00",
+   "holidays_dropped": [],
+   "neg_spread_min": 0
+  },
+  "USDJPY|b": {
+   "rows": 144719,
+   "days_kept": 83,
+   "first": "2025-11-03 00:00:00+00:00",
+   "last": "2026-02-27 21:59:00+00:00",
+   "holidays_dropped": [
+    "2025-12-25",
+    "2026-01-01"
+   ],
+   "neg_spread_min": 0
+  }
+ },
+ "jp225_vs_us100": {
+  "all hours": {
+   "corr": 0.7440333945815966,
+   "n": 16572
+  },
+  "Tokyo cash session only (US100 CFD trading at night)": {
+   "corr": 0.6778915379129201,
+   "n": 4209
+  },
+  "New York cash session only (JP225 CFD trading at night)": {
+   "corr": 0.8457844494782643,
+   "n": 4956
+  },
+  "both in own cash session": {
+   "corr": null,
+   "n": 0
+  },
+  "neither in own cash session": {
+   "corr": 0.7742439136778388,
+   "n": 7407
+  }
+ },
+ "global_clusters": [
+  [
+   "US100",
+   "US500",
+   "NVDA"
+  ],
+  [
+   "US30",
+   "US2000"
+  ],
+  [
+   "JP225"
+  ],
+  [
+   "DE40",
+   "UK100",
+   "FR40",
+   "IT40",
+   "EU50",
+   "NL25",
+   "ES35"
+  ],
+  [
+   "XAUUSD",
+   "XAGUSD",
+   "SA40"
+  ],
+  [
+   "TSLA"
+  ],
+  [
+   "AMZN"
+  ],
+  [
+   "AAPL"
+  ],
+  [
+   "BRENT",
+   "WTI"
+  ],
+  [
+   "MSFT"
+  ],
+  [
+   "CH20"
+  ],
+  [
+   "USDJPY"
+  ],
+  [
+   "EURUSD",
+   "GBPUSD"
+  ],
+  [
+   "CN50"
+  ],
+  [
+   "AU200"
+  ],
+  [
+   "COPPER"
+  ],
+  [
+   "PL20"
+  ],
+  [
+   "HK50"
+  ],
+  [
+   "NATGAS"
+  ],
+  [
+   "SG"
+  ],
+  [
+   "BTC",
+   "ETH",
+   "SOL"
+  ]
+ ],
+ "global_clusters_all_hours": [
+  [
+   "US100",
+   "JP225",
+   "US2000",
+   "US500",
+   "NVDA"
+  ],
+  [
+   "US30",
+   "DE40",
+   "EU50"
+  ],
+  [
+   "UK100",
+   "FR40",
+   "IT40",
+   "CH20",
+   "NL25",
+   "ES35"
+  ],
+  [
+   "XAUUSD",
+   "XAGUSD"
+  ],
+  [
+   "TSLA"
+  ],
+  [
+   "AMZN"
+  ],
+  [
+   "AAPL"
+  ],
+  [
+   "BRENT",
+   "WTI"
+  ],
+  [
+   "MSFT"
+  ],
+  [
+   "USDJPY"
+  ],
+  [
+   "EURUSD",
+   "GBPUSD"
+  ],
+  [
+   "CN50"
+  ],
+  [
+   "AU200"
+  ],
+  [
+   "SA40"
+  ],
+  [
+   "COPPER"
+  ],
+  [
+   "PL20"
+  ],
+  [
+   "HK50"
+  ],
+  [
+   "NATGAS"
+  ],
+  [
+   "SG"
+  ],
+  [
+   "BTC",
+   "ETH",
+   "SOL"
+  ]
+ ],
+ "bets": [
+  {
+   "session": "Asia (00-07 UTC)",
+   "n_candidates": 5,
+   "n_bets": 3,
+   "clusters": [
+    {
+     "lead": "JP225",
+     "members": [
+      "JP225",
+      "US100"
+     ],
+     "session_ratio": 17.431475029044545,
+     "best_hour_in_session": 0,
+     "r5_med_best_hour": 160.0764999999992,
+     "ratio_best_hour": 30.986546651196008,
+     "within_cluster_min_corr": 0.6836573091618294
+    },
+    {
+     "lead": "US30",
+     "members": [
+      "US30",
+      "FR40"
+     ],
+     "session_ratio": 7.049049049051768,
+     "best_hour_in_session": 6,
+     "r5_med_best_hour": 19.554000000000087,
+     "ratio_best_hour": 9.786786786788827,
+     "within_cluster_min_corr": 0.641667487471748
+    },
+    {
+     "lead": "XAUUSD",
+     "members": [
+      "XAUUSD"
+     ],
+     "session_ratio": 5.533333333330701,
+     "best_hour_in_session": 1,
+     "r5_med_best_hour": 6.114999999999782,
+     "ratio_best_hour": 7.7405063291200635,
+     "within_cluster_min_corr": null
+    }
+   ],
+   "bets_at_threshold": {
+    "0.5": 3,
+    "0.6": 3,
+    "0.7": 5
+   },
+   "session_corr": {
+    "JP225": {
+     "JP225": 1.0,
+     "US100": 0.68,
+     "US30": 0.44,
+     "FR40": 0.4,
+     "XAUUSD": 0.2
+    },
+    "US100": {
+     "JP225": 0.68,
+     "US100": 1.0,
+     "US30": 0.6,
+     "FR40": 0.48,
+     "XAUUSD": 0.3
+    },
+    "US30": {
+     "JP225": 0.44,
+     "US100": 0.6,
+     "US30": 1.0,
+     "FR40": 0.64,
+     "XAUUSD": 0.32
+    },
+    "FR40": {
+     "JP225": 0.4,
+     "US100": 0.48,
+     "US30": 0.64,
+     "FR40": 1.0,
+     "XAUUSD": 0.29
+    },
+    "XAUUSD": {
+     "JP225": 0.2,
+     "US100": 0.3,
+     "US30": 0.32,
+     "FR40": 0.29,
+     "XAUUSD": 1.0
+    }
+   }
+  },
+  {
+   "session": "Europe (Frankfurt 09:00 to New York 08:00)",
+   "n_candidates": 9,
+   "n_bets": 3,
+   "clusters": [
+    {
+     "lead": "DE40",
+     "members": [
+      "DE40",
+      "US30",
+      "UK100",
+      "FR40",
+      "US2000",
+      "US500"
+     ],
+     "session_ratio": 19.06108202448033,
+     "best_hour_in_session": 7,
+     "r5_med_best_hour": 28.5,
+     "ratio_best_hour": 24.869109947630083,
+     "within_cluster_min_corr": 0.4810801092707859
+    },
+    {
+     "lead": "US100",
+     "members": [
+      "US100",
+      "JP225"
+     ],
+     "session_ratio": 13.497620666233994,
+     "best_hour_in_session": 8,
+     "r5_med_best_hour": 22.772000000000844,
+     "ratio_best_hour": 15.480625424905497,
+     "within_cluster_min_corr": 0.8102422911842316
+    },
+    {
+     "lead": "XAUUSD",
+     "members": [
+      "XAUUSD"
+     ],
+     "session_ratio": 5.774603174607716,
+     "best_hour_in_session": 7,
+     "r5_med_best_hour": 3.9960000000000946,
+     "ratio_best_hour": 6.34285714286242,
+     "within_cluster_min_corr": null
+    }
+   ],
+   "bets_at_threshold": {
+    "0.5": 2,
+    "0.6": 3,
+    "0.7": 5
+   },
+   "session_corr": {
+    "DE40": {
+     "DE40": 1.0,
+     "US100": 0.53,
+     "JP225": 0.56,
+     "US30": 0.64,
+     "UK100": 0.67,
+     "FR40": 0.77,
+     "US2000": 0.65,
+     "US500": 0.64,
+     "XAUUSD": 0.36
+    },
+    "US100": {
+     "DE40": 0.53,
+     "US100": 1.0,
+     "JP225": 0.81,
+     "US30": 0.57,
+     "UK100": 0.35,
+     "FR40": 0.47,
+     "US2000": 0.72,
+     "US500": 0.91,
+     "XAUUSD": 0.4
+    },
+    "JP225": {
+     "DE40": 0.56,
+     "US100": 0.81,
+     "JP225": 1.0,
+     "US30": 0.58,
+     "UK100": 0.4,
+     "FR40": 0.51,
+     "US2000": 0.69,
+     "US500": 0.8,
+     "XAUUSD": 0.42
+    },
+    "US30": {
+     "DE40": 0.64,
+     "US100": 0.57,
+     "JP225": 0.58,
+     "US30": 1.0,
+     "UK100": 0.55,
+     "FR40": 0.6,
+     "US2000": 0.8,
+     "US500": 0.79,
+     "XAUUSD": 0.45
+    },
+    "UK100": {
+     "DE40": 0.67,
+     "US100": 0.35,
+     "JP225": 0.4,
+     "US30": 0.55,
+     "UK100": 1.0,
+     "FR40": 0.7,
+     "US2000": 0.53,
+     "US500": 0.48,
+     "XAUUSD": 0.28
+    },
+    "FR40": {
+     "DE40": 0.77,
+     "US100": 0.47,
+     "JP225": 0.51,
+     "US30": 0.6,
+     "UK100": 0.7,
+     "FR40": 1.0,
+     "US2000": 0.6,
+     "US500": 0.58,
+     "XAUUSD": 0.32
+    },
+    "US2000": {
+     "DE40": 0.65,
+     "US100": 0.72,
+     "JP225": 0.69,
+     "US30": 0.8,
+     "UK100": 0.53,
+     "FR40": 0.6,
+     "US2000": 1.0,
+     "US500": 0.85,
+     "XAUUSD": 0.48
+    },
+    "US500": {
+     "DE40": 0.64,
+     "US100": 0.91,
+     "JP225": 0.8,
+     "US30": 0.79,
+     "UK100": 0.48,
+     "FR40": 0.58,
+     "US2000": 0.85,
+     "US500": 1.0,
+     "XAUUSD": 0.47
+    },
+    "XAUUSD": {
+     "DE40": 0.36,
+     "US100": 0.4,
+     "JP225": 0.42,
+     "US30": 0.45,
+     "UK100": 0.28,
+     "FR40": 0.32,
+     "US2000": 0.48,
+     "US500": 0.47,
+     "XAUUSD": 1.0
+    }
+   }
+  },
+  {
+   "session": "London-New York overlap (NY 08:00-09:30)",
+   "n_candidates": 9,
+   "n_bets": 3,
+   "clusters": [
+    {
+     "lead": "DE40",
+     "members": [
+      "DE40",
+      "US30",
+      "JP225",
+      "UK100",
+      "FR40"
+     ],
+     "session_ratio": 17.48080279236636,
+     "best_hour_in_session": 13,
+     "r5_med_best_hour": 23.46150000000125,
+     "ratio_best_hour": 20.47251308905988,
+     "within_cluster_min_corr": 0.47528644080663773
+    },
+    {
+     "lead": "US100",
+     "members": [
+      "US100",
+      "US2000",
+      "US500"
+     ],
+     "session_ratio": 16.031951053728832,
+     "best_hour_in_session": 13,
+     "r5_med_best_hour": 37.77149999999892,
+     "ratio_best_hour": 29.032667179022685,
+     "within_cluster_min_corr": 0.7497817842284847
+    },
+    {
+     "lead": "XAUUSD",
+     "members": [
+      "XAUUSD"
+     ],
+     "session_ratio": 8.817187500004055,
+     "best_hour_in_session": 13,
+     "r5_med_best_hour": 6.690000000000055,
+     "ratio_best_hour": 10.45312499999741,
+     "within_cluster_min_corr": null
+    }
+   ],
+   "bets_at_threshold": {
+    "0.5": 2,
+    "0.6": 3,
+    "0.7": 4
+   },
+   "session_corr": {
+    "DE40": {
+     "DE40": 1.0,
+     "US30": 0.65,
+     "US100": 0.54,
+     "JP225": 0.61,
+     "XAUUSD": 0.39,
+     "US2000": 0.57,
+     "UK100": 0.76,
+     "US500": 0.59,
+     "FR40": 0.87
+    },
+    "US30": {
+     "DE40": 0.65,
+     "US30": 1.0,
+     "US100": 0.67,
+     "JP225": 0.64,
+     "XAUUSD": 0.53,
+     "US2000": 0.77,
+     "UK100": 0.55,
+     "US500": 0.81,
+     "FR40": 0.6
+    },
+    "US100": {
+     "DE40": 0.54,
+     "US30": 0.67,
+     "US100": 1.0,
+     "JP225": 0.84,
+     "XAUUSD": 0.55,
+     "US2000": 0.75,
+     "UK100": 0.38,
+     "US500": 0.91,
+     "FR40": 0.49
+    },
+    "JP225": {
+     "DE40": 0.61,
+     "US30": 0.64,
+     "US100": 0.84,
+     "JP225": 1.0,
+     "XAUUSD": 0.59,
+     "US2000": 0.69,
+     "UK100": 0.48,
+     "US500": 0.77,
+     "FR40": 0.57
+    },
+    "XAUUSD": {
+     "DE40": 0.39,
+     "US30": 0.53,
+     "US100": 0.55,
+     "JP225": 0.59,
+     "XAUUSD": 1.0,
+     "US2000": 0.59,
+     "UK100": 0.35,
+     "US500": 0.56,
+     "FR40": 0.37
+    },
+    "US2000": {
+     "DE40": 0.57,
+     "US30": 0.77,
+     "US100": 0.75,
+     "JP225": 0.69,
+     "XAUUSD": 0.59,
+     "US2000": 1.0,
+     "UK100": 0.48,
+     "US500": 0.82,
+     "FR40": 0.54
+    },
+    "UK100": {
+     "DE40": 0.76,
+     "US30": 0.55,
+     "US100": 0.38,
+     "JP225": 0.48,
+     "XAUUSD": 0.35,
+     "US2000": 0.48,
+     "UK100": 1.0,
+     "US500": 0.45,
+     "FR40": 0.78
+    },
+    "US500": {
+     "DE40": 0.59,
+     "US30": 0.81,
+     "US100": 0.91,
+     "JP225": 0.77,
+     "XAUUSD": 0.56,
+     "US2000": 0.82,
+     "UK100": 0.45,
+     "US500": 1.0,
+     "FR40": 0.54
+    },
+    "FR40": {
+     "DE40": 0.87,
+     "US30": 0.6,
+     "US100": 0.49,
+     "JP225": 0.57,
+     "XAUUSD": 0.37,
+     "US2000": 0.54,
+     "UK100": 0.78,
+     "US500": 0.54,
+     "FR40": 1.0
+    }
+   }
+  },
+  {
+   "session": "US open (NY 09:30-11:00)",
+   "n_candidates": 18,
+   "n_bets": 10,
+   "clusters": [
+    {
+     "lead": "US100",
+     "members": [
+      "US100",
+      "JP225",
+      "US500",
+      "NVDA"
+     ],
+     "session_ratio": 50.97270854800866,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 42.40600000000086,
+     "ratio_best_hour": 43.67250257476828,
+     "within_cluster_min_corr": 0.5897510942390594
+    },
+    {
+     "lead": "US30",
+     "members": [
+      "US30"
+     ],
+     "session_ratio": 40.053404539396745,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 52.51800000000003,
+     "ratio_best_hour": 35.05874499333399,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "DE40",
+     "members": [
+      "DE40",
+      "UK100",
+      "FR40",
+      "IT40"
+     ],
+     "session_ratio": 21.412303664976385,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 23.0,
+     "ratio_best_hour": 20.06980802797571,
+     "within_cluster_min_corr": 0.6121643413488939
+    },
+    {
+     "lead": "US2000",
+     "members": [
+      "US2000"
+     ],
+     "session_ratio": 17.129277566544687,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 3.8969999999999345,
+     "ratio_best_hour": 14.817490494300838,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "XAUUSD",
+     "members": [
+      "XAUUSD",
+      "XAGUSD"
+     ],
+     "session_ratio": 10.632812499997378,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 6.587999999999738,
+     "ratio_best_hour": 10.293750000004271,
+     "within_cluster_min_corr": 0.8573994726468233
+    },
+    {
+     "lead": "TSLA",
+     "members": [
+      "TSLA"
+     ],
+     "session_ratio": 7.290254237289142,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 1.3710000000000377,
+     "ratio_best_hour": 6.347222222222758,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "AAPL",
+     "members": [
+      "AAPL"
+     ],
+     "session_ratio": 6.753968253967564,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 0.6910000000000025,
+     "ratio_best_hour": 5.956896551723038,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "AMZN",
+     "members": [
+      "AMZN"
+     ],
+     "session_ratio": 5.70634920634987,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 0.5909999999999656,
+     "ratio_best_hour": 5.094827586205641,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "MSFT",
+     "members": [
+      "MSFT"
+     ],
+     "session_ratio": 5.528195488721882,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 1.1800000000000068,
+     "ratio_best_hour": 4.796747967480473,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "WTI",
+     "members": [
+      "WTI",
+      "BRENT"
+     ],
+     "session_ratio": 5.400000000000228,
+     "best_hour_in_session": 14,
+     "r5_med_best_hour": 0.2599999999999909,
+     "ratio_best_hour": 5.200000000000114,
+     "within_cluster_min_corr": 0.9465893008093809
+    }
+   ],
+   "bets_at_threshold": {
+    "0.5": 9,
+    "0.6": 10,
+    "0.7": 11
+   },
+   "session_corr": {
+    "US100": {
+     "US100": 1.0,
+     "US30": 0.27,
+     "JP225": 0.82,
+     "DE40": 0.38,
+     "US2000": 0.4,
+     "US500": 0.86,
+     "XAUUSD": 0.25,
+     "UK100": 0.02,
+     "NVDA": 0.7,
+     "FR40": 0.26,
+     "TSLA": 0.44,
+     "AAPL": 0.18,
+     "AMZN": 0.48,
+     "MSFT": 0.38,
+     "IT40": 0.42,
+     "WTI": -0.08,
+     "BRENT": -0.08,
+     "XAGUSD": 0.34
+    },
+    "US30": {
+     "US100": 0.27,
+     "US30": 1.0,
+     "JP225": 0.27,
+     "DE40": 0.5,
+     "US2000": 0.57,
+     "US500": 0.6,
+     "XAUUSD": 0.3,
+     "UK100": 0.48,
+     "NVDA": 0.11,
+     "FR40": 0.46,
+     "TSLA": 0.18,
+     "AAPL": 0.19,
+     "AMZN": 0.27,
+     "MSFT": 0.2,
+     "IT40": 0.43,
+     "WTI": -0.21,
+     "BRENT": -0.2,
+     "XAGUSD": 0.32
+    },
+    "JP225": {
+     "US100": 0.82,
+     "US30": 0.27,
+     "JP225": 1.0,
+     "DE40": 0.45,
+     "US2000": 0.48,
+     "US500": 0.71,
+     "XAUUSD": 0.32,
+     "UK100": 0.16,
+     "NVDA": 0.59,
+     "FR40": 0.39,
+     "TSLA": 0.35,
+     "AAPL": 0.03,
+     "AMZN": 0.3,
+     "MSFT": 0.18,
+     "IT40": 0.52,
+     "WTI": -0.14,
+     "BRENT": -0.13,
+     "XAGUSD": 0.42
+    },
+    "DE40": {
+     "US100": 0.38,
+     "US30": 0.5,
+     "JP225": 0.45,
+     "DE40": 1.0,
+     "US2000": 0.53,
+     "US500": 0.49,
+     "XAUUSD": 0.35,
+     "UK100": 0.63,
+     "NVDA": 0.24,
+     "FR40": 0.81,
+     "TSLA": 0.24,
+     "AAPL": 0.05,
+     "AMZN": 0.22,
+     "MSFT": 0.15,
+     "IT40": 0.75,
+     "WTI": -0.3,
+     "BRENT": -0.3,
+     "XAGUSD": 0.4
+    },
+    "US2000": {
+     "US100": 0.4,
+     "US30": 0.57,
+     "JP225": 0.48,
+     "DE40": 0.53,
+     "US2000": 1.0,
+     "US500": 0.55,
+     "XAUUSD": 0.36,
+     "UK100": 0.4,
+     "NVDA": 0.23,
+     "FR40": 0.5,
+     "TSLA": 0.25,
+     "AAPL": -0.05,
+     "AMZN": 0.21,
+     "MSFT": 0.07,
+     "IT40": 0.5,
+     "WTI": -0.2,
+     "BRENT": -0.2,
+     "XAGUSD": 0.4
+    },
+    "US500": {
+     "US100": 0.86,
+     "US30": 0.6,
+     "JP225": 0.71,
+     "DE40": 0.49,
+     "US2000": 0.55,
+     "US500": 1.0,
+     "XAUUSD": 0.31,
+     "UK100": 0.23,
+     "NVDA": 0.6,
+     "FR40": 0.38,
+     "TSLA": 0.4,
+     "AAPL": 0.27,
+     "AMZN": 0.51,
+     "MSFT": 0.4,
+     "IT40": 0.49,
+     "WTI": -0.15,
+     "BRENT": -0.15,
+     "XAGUSD": 0.38
+    },
+    "XAUUSD": {
+     "US100": 0.25,
+     "US30": 0.3,
+     "JP225": 0.32,
+     "DE40": 0.35,
+     "US2000": 0.36,
+     "US500": 0.31,
+     "XAUUSD": 1.0,
+     "UK100": 0.34,
+     "NVDA": 0.15,
+     "FR40": 0.33,
+     "TSLA": 0.13,
+     "AAPL": 0.04,
+     "AMZN": 0.11,
+     "MSFT": 0.06,
+     "IT40": 0.32,
+     "WTI": -0.31,
+     "BRENT": -0.31,
+     "XAGUSD": 0.86
+    },
+    "UK100": {
+     "US100": 0.02,
+     "US30": 0.48,
+     "JP225": 0.16,
+     "DE40": 0.63,
+     "US2000": 0.4,
+     "US500": 0.23,
+     "XAUUSD": 0.34,
+     "UK100": 1.0,
+     "NVDA": -0.03,
+     "FR40": 0.73,
+     "TSLA": 0.07,
+     "AAPL": -0.0,
+     "AMZN": 0.05,
+     "MSFT": -0.03,
+     "IT40": 0.61,
+     "WTI": -0.19,
+     "BRENT": -0.19,
+     "XAGUSD": 0.34
+    },
+    "NVDA": {
+     "US100": 0.7,
+     "US30": 0.11,
+     "JP225": 0.59,
+     "DE40": 0.24,
+     "US2000": 0.23,
+     "US500": 0.6,
+     "XAUUSD": 0.15,
+     "UK100": -0.03,
+     "NVDA": 1.0,
+     "FR40": 0.15,
+     "TSLA": 0.26,
+     "AAPL": 0.05,
+     "AMZN": 0.24,
+     "MSFT": 0.17,
+     "IT40": 0.3,
+     "WTI": -0.02,
+     "BRENT": -0.02,
+     "XAGUSD": 0.21
+    },
+    "FR40": {
+     "US100": 0.26,
+     "US30": 0.46,
+     "JP225": 0.39,
+     "DE40": 0.81,
+     "US2000": 0.5,
+     "US500": 0.38,
+     "XAUUSD": 0.33,
+     "UK100": 0.73,
+     "NVDA": 0.15,
+     "FR40": 1.0,
+     "TSLA": 0.16,
+     "AAPL": -0.0,
+     "AMZN": 0.12,
+     "MSFT": 0.0,
+     "IT40": 0.78,
+     "WTI": -0.25,
+     "BRENT": -0.25,
+     "XAGUSD": 0.38
+    },
+    "TSLA": {
+     "US100": 0.44,
+     "US30": 0.18,
+     "JP225": 0.35,
+     "DE40": 0.24,
+     "US2000": 0.25,
+     "US500": 0.4,
+     "XAUUSD": 0.13,
+     "UK100": 0.07,
+     "NVDA": 0.26,
+     "FR40": 0.16,
+     "TSLA": 1.0,
+     "AAPL": 0.09,
+     "AMZN": 0.19,
+     "MSFT": 0.18,
+     "IT40": 0.25,
+     "WTI": -0.05,
+     "BRENT": -0.06,
+     "XAGUSD": 0.18
+    },
+    "AAPL": {
+     "US100": 0.18,
+     "US30": 0.19,
+     "JP225": 0.03,
+     "DE40": 0.05,
+     "US2000": -0.05,
+     "US500": 0.27,
+     "XAUUSD": 0.04,
+     "UK100": -0.0,
+     "NVDA": 0.05,
+     "FR40": -0.0,
+     "TSLA": 0.09,
+     "AAPL": 1.0,
+     "AMZN": 0.15,
+     "MSFT": 0.18,
+     "IT40": -0.0,
+     "WTI": -0.09,
+     "BRENT": -0.06,
+     "XAGUSD": 0.03
+    },
+    "AMZN": {
+     "US100": 0.48,
+     "US30": 0.27,
+     "JP225": 0.3,
+     "DE40": 0.22,
+     "US2000": 0.21,
+     "US500": 0.51,
+     "XAUUSD": 0.11,
+     "UK100": 0.05,
+     "NVDA": 0.24,
+     "FR40": 0.12,
+     "TSLA": 0.19,
+     "AAPL": 0.15,
+     "AMZN": 1.0,
+     "MSFT": 0.4,
+     "IT40": 0.18,
+     "WTI": -0.09,
+     "BRENT": -0.07,
+     "XAGUSD": 0.17
+    },
+    "MSFT": {
+     "US100": 0.38,
+     "US30": 0.2,
+     "JP225": 0.18,
+     "DE40": 0.15,
+     "US2000": 0.07,
+     "US500": 0.4,
+     "XAUUSD": 0.06,
+     "UK100": -0.03,
+     "NVDA": 0.17,
+     "FR40": 0.0,
+     "TSLA": 0.18,
+     "AAPL": 0.18,
+     "AMZN": 0.4,
+     "MSFT": 1.0,
+     "IT40": 0.06,
+     "WTI": -0.03,
+     "BRENT": -0.02,
+     "XAGUSD": 0.1
+    },
+    "IT40": {
+     "US100": 0.42,
+     "US30": 0.43,
+     "JP225": 0.52,
+     "DE40": 0.75,
+     "US2000": 0.5,
+     "US500": 0.49,
+     "XAUUSD": 0.32,
+     "UK100": 0.61,
+     "NVDA": 0.3,
+     "FR40": 0.78,
+     "TSLA": 0.25,
+     "AAPL": -0.0,
+     "AMZN": 0.18,
+     "MSFT": 0.06,
+     "IT40": 1.0,
+     "WTI": -0.19,
+     "BRENT": -0.18,
+     "XAGUSD": 0.39
+    },
+    "WTI": {
+     "US100": -0.08,
+     "US30": -0.21,
+     "JP225": -0.14,
+     "DE40": -0.3,
+     "US2000": -0.2,
+     "US500": -0.15,
+     "XAUUSD": -0.31,
+     "UK100": -0.19,
+     "NVDA": -0.02,
+     "FR40": -0.25,
+     "TSLA": -0.05,
+     "AAPL": -0.09,
+     "AMZN": -0.09,
+     "MSFT": -0.03,
+     "IT40": -0.19,
+     "WTI": 1.0,
+     "BRENT": 0.95,
+     "XAGUSD": -0.28
+    },
+    "BRENT": {
+     "US100": -0.08,
+     "US30": -0.2,
+     "JP225": -0.13,
+     "DE40": -0.3,
+     "US2000": -0.2,
+     "US500": -0.15,
+     "XAUUSD": -0.31,
+     "UK100": -0.19,
+     "NVDA": -0.02,
+     "FR40": -0.25,
+     "TSLA": -0.06,
+     "AAPL": -0.06,
+     "AMZN": -0.07,
+     "MSFT": -0.02,
+     "IT40": -0.18,
+     "WTI": 0.95,
+     "BRENT": 1.0,
+     "XAGUSD": -0.28
+    },
+    "XAGUSD": {
+     "US100": 0.34,
+     "US30": 0.32,
+     "JP225": 0.42,
+     "DE40": 0.4,
+     "US2000": 0.4,
+     "US500": 0.38,
+     "XAUUSD": 0.86,
+     "UK100": 0.34,
+     "NVDA": 0.21,
+     "FR40": 0.38,
+     "TSLA": 0.18,
+     "AAPL": 0.03,
+     "AMZN": 0.17,
+     "MSFT": 0.1,
+     "IT40": 0.39,
+     "WTI": -0.28,
+     "BRENT": -0.28,
+     "XAGUSD": 1.0
+    }
+   }
+  },
+  {
+   "session": "US afternoon (NY 11:00-15:00)",
+   "n_candidates": 8,
+   "n_bets": 2,
+   "clusters": [
+    {
+     "lead": "US100",
+     "members": [
+      "US100",
+      "US30",
+      "JP225",
+      "US500",
+      "US2000",
+      "DE40",
+      "NVDA"
+     ],
+     "session_ratio": 26.091143151452187,
+     "best_hour_in_session": 15,
+     "r5_med_best_hour": 32.1830000000009,
+     "ratio_best_hour": 33.14418125651508,
+     "within_cluster_min_corr": 0.4602509118255121
+    },
+    {
+     "lead": "XAUUSD",
+     "members": [
+      "XAUUSD"
+     ],
+     "session_ratio": 5.921875000002635,
+     "best_hour_in_session": 15,
+     "r5_med_best_hour": 5.0949999999998,
+     "ratio_best_hour": 7.960937500003307,
+     "within_cluster_min_corr": null
+    }
+   ],
+   "bets_at_threshold": {
+    "0.5": 2,
+    "0.6": 2,
+    "0.7": 3
+   },
+   "session_corr": {
+    "US100": {
+     "US100": 1.0,
+     "US30": 0.69,
+     "JP225": 0.87,
+     "US500": 0.93,
+     "US2000": 0.73,
+     "DE40": 0.68,
+     "XAUUSD": 0.44,
+     "NVDA": 0.76
+    },
+    "US30": {
+     "US100": 0.69,
+     "US30": 1.0,
+     "JP225": 0.69,
+     "US500": 0.86,
+     "US2000": 0.8,
+     "DE40": 0.72,
+     "XAUUSD": 0.5,
+     "NVDA": 0.46
+    },
+    "JP225": {
+     "US100": 0.87,
+     "US30": 0.69,
+     "JP225": 1.0,
+     "US500": 0.85,
+     "US2000": 0.74,
+     "DE40": 0.72,
+     "XAUUSD": 0.47,
+     "NVDA": 0.67
+    },
+    "US500": {
+     "US100": 0.93,
+     "US30": 0.86,
+     "JP225": 0.85,
+     "US500": 1.0,
+     "US2000": 0.81,
+     "DE40": 0.74,
+     "XAUUSD": 0.49,
+     "NVDA": 0.7
+    },
+    "US2000": {
+     "US100": 0.73,
+     "US30": 0.8,
+     "JP225": 0.74,
+     "US500": 0.81,
+     "US2000": 1.0,
+     "DE40": 0.71,
+     "XAUUSD": 0.52,
+     "NVDA": 0.5
+    },
+    "DE40": {
+     "US100": 0.68,
+     "US30": 0.72,
+     "JP225": 0.72,
+     "US500": 0.74,
+     "US2000": 0.71,
+     "DE40": 1.0,
+     "XAUUSD": 0.48,
+     "NVDA": 0.49
+    },
+    "XAUUSD": {
+     "US100": 0.44,
+     "US30": 0.5,
+     "JP225": 0.47,
+     "US500": 0.49,
+     "US2000": 0.52,
+     "DE40": 0.48,
+     "XAUUSD": 1.0,
+     "NVDA": 0.3
+    },
+    "NVDA": {
+     "US100": 0.76,
+     "US30": 0.46,
+     "JP225": 0.67,
+     "US500": 0.7,
+     "US2000": 0.5,
+     "DE40": 0.49,
+     "XAUUSD": 0.3,
+     "NVDA": 1.0
+    }
+   }
+  },
+  {
+   "session": "US close (NY 15:00-16:15)",
+   "n_candidates": 9,
+   "n_bets": 3,
+   "clusters": [
+    {
+     "lead": "US100",
+     "members": [
+      "US100",
+      "US30",
+      "JP225",
+      "US500",
+      "US2000",
+      "DE40",
+      "NVDA"
+     ],
+     "session_ratio": 22.40284842319118,
+     "best_hour_in_session": 19,
+     "r5_med_best_hour": 22.572500000002037,
+     "ratio_best_hour": 23.270618556675203,
+     "within_cluster_min_corr": 0.4357891283232389
+    },
+    {
+     "lead": "TSLA",
+     "members": [
+      "TSLA"
+     ],
+     "session_ratio": 5.277027027026921,
+     "best_hour_in_session": 20,
+     "r5_med_best_hour": 1.424999999999983,
+     "ratio_best_hour": 6.850961538461246,
+     "within_cluster_min_corr": null
+    },
+    {
+     "lead": "AAPL",
+     "members": [
+      "AAPL"
+     ],
+     "session_ratio": 5.238636363635754,
+     "best_hour_in_session": 20,
+     "r5_med_best_hour": 0.7755000000000223,
+     "ratio_best_hour": 5.619565217390928,
+     "within_cluster_min_corr": null
+    }
+   ],
+   "bets_at_threshold": {
+    "0.5": 3,
+    "0.6": 3,
+    "0.7": 5
+   },
+   "session_corr": {
+    "US100": {
+     "US100": 1.0,
+     "US30": 0.61,
+     "JP225": 0.87,
+     "US500": 0.9,
+     "US2000": 0.61,
+     "DE40": 0.69,
+     "NVDA": 0.71,
+     "TSLA": 0.46,
+     "AAPL": 0.38
+    },
+    "US30": {
+     "US100": 0.61,
+     "US30": 1.0,
+     "JP225": 0.59,
+     "US500": 0.82,
+     "US2000": 0.72,
+     "DE40": 0.66,
+     "NVDA": 0.44,
+     "TSLA": 0.34,
+     "AAPL": 0.32
+    },
+    "JP225": {
+     "US100": 0.87,
+     "US30": 0.59,
+     "JP225": 1.0,
+     "US500": 0.8,
+     "US2000": 0.63,
+     "DE40": 0.75,
+     "NVDA": 0.6,
+     "TSLA": 0.42,
+     "AAPL": 0.25
+    },
+    "US500": {
+     "US100": 0.9,
+     "US30": 0.82,
+     "JP225": 0.8,
+     "US500": 1.0,
+     "US2000": 0.73,
+     "DE40": 0.75,
+     "NVDA": 0.67,
+     "TSLA": 0.43,
+     "AAPL": 0.42
+    },
+    "US2000": {
+     "US100": 0.61,
+     "US30": 0.72,
+     "JP225": 0.63,
+     "US500": 0.73,
+     "US2000": 1.0,
+     "DE40": 0.67,
+     "NVDA": 0.49,
+     "TSLA": 0.39,
+     "AAPL": 0.2
+    },
+    "DE40": {
+     "US100": 0.69,
+     "US30": 0.66,
+     "JP225": 0.75,
+     "US500": 0.75,
+     "US2000": 0.67,
+     "DE40": 1.0,
+     "NVDA": 0.44,
+     "TSLA": 0.33,
+     "AAPL": 0.2
+    },
+    "NVDA": {
+     "US100": 0.71,
+     "US30": 0.44,
+     "JP225": 0.6,
+     "US500": 0.67,
+     "US2000": 0.49,
+     "DE40": 0.44,
+     "NVDA": 1.0,
+     "TSLA": 0.35,
+     "AAPL": 0.2
+    },
+    "TSLA": {
+     "US100": 0.46,
+     "US30": 0.34,
+     "JP225": 0.42,
+     "US500": 0.43,
+     "US2000": 0.39,
+     "DE40": 0.33,
+     "NVDA": 0.35,
+     "TSLA": 1.0,
+     "AAPL": 0.13
+    },
+    "AAPL": {
+     "US100": 0.38,
+     "US30": 0.32,
+     "JP225": 0.25,
+     "US500": 0.42,
+     "US2000": 0.2,
+     "DE40": 0.2,
+     "NVDA": 0.2,
+     "TSLA": 0.13,
+     "AAPL": 1.0
+    }
+   }
+  }
+ ],
+ "fx_last": {
+  "EURUSD": 1.13819,
+  "GBPUSD": 1.34025,
+  "USDJPY": 158.069
+ },
+ "last_close": {
+  "US100": 26866.71,
+  "US500": 7368.084,
+  "US30": 51391.987,
+  "US2000": 2752.764,
+  "DE40": 25647.577,
+  "EU50": 6138.845,
+  "FR40": 8110.904,
+  "NL25": 1115.447,
+  "IT40": 49788.539,
+  "ES35": 19312.388,
+  "CH20": 14740.279,
+  "UK100": 10635.086,
+  "PL20": 4159.834,
+  "SA40": 109319.09000000003,
+  "JP225": 57915.468,
+  "HK50": 24657.76,
+  "CN50": 12890.622,
+  "SG": 471.747,
+  "AU200": 9013.889,
+  "XAUUSD": 4054.995,
+  "XAGUSD": 51.608,
+  "COPPER": 6.2524,
+  "WTI": 90.43,
+  "BRENT": 97.737,
+  "NATGAS": 3.0042,
+  "NVDA": 186.707,
+  "TSLA": 357.907,
+  "AAPL": 342.317,
+  "MSFT": 529.957,
+  "AMZN": 259.177,
+  "EURUSD": 1.1148,
+  "GBPUSD": 1.33603,
+  "USDJPY": 158.253
+ },
+ "corr_nobs_all_min": 322
+}
