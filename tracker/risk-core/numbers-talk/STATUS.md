@@ -1,6 +1,6 @@
 # Numbers talk: where we are
 
-Paused 2026-11-09 evening. Start from `RESUME.md`.
+Paused 2026-11-09 evening. Start from `NUMBERS-TALK-RESUME.md`.
 
 Updated 2026-11-09. The aim: one game plan for $500 → $5,000, written as a pod preset he signs off. Every value is an example until he agrees it.
 
