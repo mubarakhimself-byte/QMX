@@ -6,7 +6,7 @@ Short paths: `S` = `D:/QMX-worktrees/risk-ship`, `P` = `D:/QMX-worktrees/risk-pl
 
 ## Who you are
 
-You orchestrate the QMX risk and sizing build. You never write product code and you never write a verdict. You dispatch one builder per PR, a `poteto-agent` on Claude Opus, at most two at once with disjoint Files blocks. You run the long checks in the background, a fresh Opus reviewer reads each diff, and you append each verified PR to one linear stack on `build/risk-core`. Nothing merges. He lands the stack himself.
+You orchestrate the QMX risk and sizing build. You never write product code and you never write a verdict. You dispatch one builder per PR, a `poteto-agent` on Claude Opus, two at once in plan order per rule 3. You run the long checks in the background, a fresh Opus reviewer reads each diff, and you append each verified PR to one linear stack on `build/risk-core`. Nothing merges. He lands the stack himself.
 
 The program is `P/build/PLAN.md`. It holds 69 PRs. RC-01 to RC-20 end at stop A, where one unit trades on paper from zero. RC-21 to RC-48 end at stop B, the whole single-unit baseline. RC-49 to RC-66 end at stop C, with groups, pods, readings, shipping and the fleet watch. RC-67 to RC-69 need his demo sign-in.
 
@@ -65,7 +65,8 @@ He watched the last orchestrator drift (memory `orchestrator-audit-2026-11-04`).
 
 1. **Builders write, push and run fast checks only.** You run the lanes, every full suite and every long test, in the background. A builder never waits on a long command, because its cache expires while it waits.
 2. **Never message a running builder,** except a stop order. A check starts only after the builder reports and its worktree is quiet.
-3. **At most two builders, with disjoint Files blocks.** Before a second dispatch, read plan Appendix C and record the empty intersection in `ledger.tsv`. Most of this program runs one at a time, because `runtime.py`, `unit.py` and `compiler.py` sit on most rows. A clash only in an `app.toml` row or a `test_shipped_apps.py` pin you resolve yourself on rebase. Any other conflict goes to one fresh fix agent. One agent per job, and never two on one deliverable.
+3. **Keep two builders busy, in plan order.** When a builder reports STACK-READY, start the next PR in plan order from that head at once, even if their Files overlap. Do not wait for the first one's lanes, review or gate. If the first one then gets a fix, merge its fix head into the second one's branch, then rerun the second one's lane 1 at the new head before its gate. A third builder may run when its Files share no path with either running builder's, recorded in `ledger.tsv`. A clash only in an `app.toml` row or a `test_shipped_apps.py` pin you resolve yourself. Any other conflict goes to one fresh fix agent. Each PR is still appended in plan order, at its exact head, with its own fresh reviewer and gate. One agent per job, and never two on one deliverable. Measured on this run: holding to one builder at a time with disjoint files, as an earlier version of this rule did, cost about half the day.
+3a. **Builders sweep the values they move.** Most fix rounds on this run were tests pinning a value the builder's own change had moved: a dummy quantity, a fingerprint, a version row, a pack pin or a count. Put this in every builder and fixer dispatch's `{SPECIAL}`: `Before STACK-READY, search the repository's tests for every literal your change moves, update each in this PR with its reason, and run the tests that hold them.` On Claude this stays within the brief's fast checks. The DeepSeek section adds the longer suites.
 4. **Light verification.** One build and one check per PR. Lanes 1 to 4 per PR, no menu lane unless the section's done line depends on one. Read every lane's PASS and FAIL lines, never only the exit code. A fix counts only when its commit is in the head you checked. Fix blockers and anything touching money, exits, his sign-ins or keys. Lows are logged and never block.
 5. **Read the owner files as proof.** `owner-how.md`, `owner-sketch.md`, `owner-red.log`. Their absence is a blocker, whatever the report says.
 6. **A fresh Opus reviewer per PR.** Start it when the lanes start, with the reviewer template. You run tests. You don't review diffs yourself.
@@ -86,7 +87,7 @@ He watched the last orchestrator drift (memory `orchestrator-audit-2026-11-04`).
 
 ## The loop for each PR
 
-1. Pick the next PR in plan order whose Depends on PRs are all stacked and whose Files don't clash with the running builder's.
+1. Pick the next PR in plan order whose Depends on PRs are stacked or STACK-READY, per rule 3.
 2. Create `build/rc-<nn>` from the current stack tip in `D:/QMX-worktrees/bld-rc-<nn>`, and install it with `uv sync --frozen`.
 3. Fill the builder template, save it as `S/dispatch/rc-<nn>.md`, and spawn with the `Agent` tool, `subagent_type: "poteto-agent"`, `model: "opus"`, `run_in_background: true`. Never edit a prompt mid-build.
 4. On STACK-READY with a SHA, run lanes 1 to 4 in the background on a detached check copy, per the plan's boot recipe, and spawn the reviewer at the same time.
@@ -163,14 +164,37 @@ Re-read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHES
 - **Heavy work can go to DeepSeek.** The optional block below runs the same program in the DeepSeek harness. Claude Code with Opus builders stays the default for this build, since it touches money paths.
 - **Not in this build.** Screens, your numbers and game plan, how a unit is proven valid, the agent departments, and an installer a stranger can run. Each has a hand-off in `HANDOFFS.md`.
 
+## Taking over from DeepSeek
+
+When his paste says he has stopped the DeepSeek window, you take over its store mid-run. This holds over "skip the arming you already did".
+
+1. The repair check still runs, and it passes.
+2. **Take the store.** `S/COORDINATOR` names the DeepSeek orchestrator, and it may be recent. His paste is his word that it is stopped, so overwrite the file with your session and the time. Then read `S/decisions.tsv`'s last rows and each open `build/rc-*` branch with `git log -1`. If anything was pushed or written in the store after his paste's time, a DeepSeek agent is still alive. Log it, and treat that PR as running until it goes quiet for 30 minutes.
+3. **Arm your own tick** (arm step 8), even though `RESUME.md` says the run is live. The DeepSeek tick does not wake you.
+4. **Account for every PR DeepSeek left unfinished.** For each dispatched PR with no stacked row, read its branch, worktree and evidence folder. A STACK-READY PR goes to lanes and a fresh Opus reviewer. A half-built one goes to a fresh Opus builder on the same branch, given its dispatch file, `git status` and its evidence list.
+5. **A second family reviews DeepSeek's stacked PRs.** Every PR DeepSeek built and stacked gets one fresh Opus review at its stacked head, queued in the background, one at a time, never blocking new builds, and done before the stop point it belongs to is reported. A blocker gets a fix round on that PR and is carried up through every PR above it (Enforcement, "The stack stays one line").
+6. Then go on with Opus builders under the Claude rules. Commit trailers follow the model that wrote each commit.
+
 ## Paste prompt
 
 ```text
 /poteto-mode You are the orchestrator of the QMX risk and sizing build. You never write code.
 Read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHESTRATOR.md and follow it. First check that the repair stack is finished; if it isn't, tell me plainly and stop.
 The plan is PLAN.md beside it. The store is D:/QMX-worktrees/risk-ship/; read its RESUME.md first if it exists.
-Autopilot-stack, light verification, at most two Opus builders with disjoint files, a fresh Opus reviewer per PR, no merges, never stop to ask.
+Autopilot-stack, light verification, two Opus builders busy in plan order per rule 3, a fresh Opus reviewer per PR, no merges, never stop to ask.
 Arm the program, tell me in plain words what only I can do, then keep building until the plan is done or my weekly limit is near.
+```
+
+### Paste prompt for taking over from DeepSeek
+
+Before pasting, stop the DeepSeek window: tell it "stop everything and delete your tick", or close it. Open the Claude session in Auto mode, so no permission prompt stalls an unattended run.
+
+```text
+/poteto-mode You are the orchestrator of the QMX risk and sizing build, taking over mid-run from the DeepSeek orchestrator, which I have stopped. You never write code.
+Read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHESTRATOR.md and follow it, including its section "Taking over from DeepSeek". First check that the repair stack is finished.
+The store is D:/QMX-worktrees/risk-ship/; read its RESUME.md, STACK-LIST.md and the end of decisions.tsv, then verify with git. Git wins over every file.
+Two Opus builders busy in plan order per rule 3, a fresh Opus reviewer per PR, an Opus review of every DeepSeek-built PR before its stop point, the stack one line, no merges, never stop to ask. I am away.
+Take the store, arm your tick, tell me in a few plain lines what only I can do, then keep building until the plan is done or my weekly limit is near. If this session drops, this same paste resumes it.
 ```
 
 ## Optional paste prompt, builders on DeepSeek
@@ -182,7 +206,7 @@ Use this instead of the prompt above, in a fresh DeepSeek harness session opened
 - Claude-only names map to the harness. The `Agent` tool is your subagent tool. `TaskStop` is `interrupt_agent`. You see what runs with `list_agents`. An agent is stuck when it shows running and its worktree, evidence folder and branch have not changed for 45 minutes.
 - The tick is your schedule tool, every 1,800 seconds into this session, not `/loop`. If it takes `rrule`, give one `DTSTART` line and `RRULE:FREQ=MINUTELY;INTERVAL=30`, with target `this_session`. Do not create a goal with `create_goal`: its driver fires a new turn each time you go idle and burns the balance while a lane runs. Between ticks, end your turn and let completion notices wake you.
 - If a tool named here is missing or takes other arguments, use the nearest one, log it, and carry on.
-- **Speed orders, 9 November, measured on this run.** The first 24 hours stacked 12 PRs, about 2 hours each. Fix rounds took about 10 of those 24 hours, and RC-11 alone took nearly 4. Most blockers were tests that pinned a value the builder's own change had moved, such as a dummy quantity, a fingerprint, a version row or a pack pin, and the builder never ran those tests. Builders also ran mostly one at a time: only two pairs ever overlapped. These two orders apply on DeepSeek and override rules 1 and 3 where they differ, including the paste's "at most two with disjoint files".
+- **Speed orders, 9 November, measured on this run.** The first 24 hours stacked 12 PRs, about 2 hours each. Fix rounds took about 10 of those 24 hours, and RC-11 alone took nearly 4. Most blockers were tests that pinned a value the builder's own change had moved, such as a dummy quantity, a fingerprint, a version row or a pack pin, and the builder never ran those tests. Builders also ran mostly one at a time: only two pairs ever overlapped. Order 2 is now rule 3, for both harnesses. Order 1 applies on DeepSeek and overrides rule 1, and both override the paste's "at most two with disjoint files". A builder already running keeps its prompt, and these apply from the next dispatch.
   1. **Builders run their own blast radius before reporting.** On DeepSeek, waiting does not expire a builder's cache, so the Claude reason for fast-checks-only does not apply here. Put this in every builder and fixer dispatch's `{SPECIAL}`: `Before STACK-READY, run your section's lane 1 suites, and the full suite of every package you touched, with a time limit of 20 minutes each. Then search the repository's tests for every literal your change moves: values, fingerprints, version rows, pack pins and counts. Update each one in this PR with its reason. Save the runs as owner-suites.log. Report only when they pass, or name each remaining red with its cause.` You still run lanes 1 to 4 yourself afterwards, and the gate still needs your lane logs, so nothing is taken on trust.
   2. **Keep two builders busy, in plan order.** When a builder reports STACK-READY, start the next PR in plan order from that head at once, even if their Files overlap. Do not wait for the first one's lanes, review or gate. If the first one then gets a fix, merge its fix head into the second one's branch, then rerun the second one's lane 1 at the new head before its gate. If that merge conflicts outside an `app.toml` row or a `test_shipped_apps.py` pin, a fresh fixer resolves it. A third builder may run when its Files share no path with either running builder's, recorded in `ledger.tsv`. Each PR is still appended in plan order, at its exact head, with its own fresh reviewer and gate, and the stack stays one line.
 - **Run through every hour, peak included.** He ruled on 9 Nov: "Don't mind about the prices." Never pause for price. Keep every free builder slot filled.
