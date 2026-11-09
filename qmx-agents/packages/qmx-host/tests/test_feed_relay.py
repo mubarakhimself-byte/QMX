@@ -51,9 +51,9 @@ TAG = "a4dqobyh"
 OPEN_FACTS = {"placement": "this-pc", "holdout": {"on": False}}
 PLACEMENT = {"tier": "bar", "reading": "efficiency-ratio", "favours": ["trending"]}
 THE_DUMMYS_ENTRIES = [
-    ("fx.eurusd", Decimal("1.72")),
-    ("fx.eurusd", Decimal("1.08")),
-    ("fx.eurusd", Decimal("0.75")),
+    ("fx.eurusd", Decimal("1.61")),
+    ("fx.eurusd", Decimal("1.03")),
+    ("fx.eurusd", Decimal("0.72")),
 ]
 """What the dummy sends in two live days with no board: C-12a's literal tickets."""
 
