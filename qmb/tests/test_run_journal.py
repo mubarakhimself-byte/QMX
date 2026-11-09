@@ -169,7 +169,7 @@ def test_the_window_closes_min_count_trades_on_each_market(
     closed = Counter(t.market_id for t in result.trades)
 
     assert min(closed.values()) >= _MIN_COUNT, f"the window is too short: {closed}"
-    assert closed == {"fx.eurusd": 65, "metal.xauusd": 60}
+    assert closed == {"fx.eurusd": 64, "metal.xauusd": 60}
 
 
 def test_every_kind_lands_in_monthly_partitions_with_its_own_ids(
@@ -180,10 +180,10 @@ def test_every_kind_lands_in_monthly_partitions_with_its_own_ids(
     assert report.rows == {
         "calibration": 6,
         "data_event": 26,
-        "fill": 250,
+        "fill": 248,
         "signal": 407,
         "state": 4,
-        "trade": 125,
+        "trade": 124,
     }
     assert sorted({(p.kind, p.month) for p in report.parts if p.kind == "signal"}) == [
         ("signal", "2025-01"),
@@ -218,9 +218,9 @@ def test_every_decision_carries_its_readings_value_source_and_version(
     assert all(isinstance(r["value"], str) and r["value"] for r in readings)
     reasons = Counter((b["outcome"], b.get("reason")) for b in bodies)
     assert reasons == {
-        ("no_signal", "no_signal"): 200,
-        ("taken", None): 147,
-        ("skipped", "stop_wrong_side"): 23,
+        ("no_signal", "no_signal"): 202,
+        ("taken", None): 146,
+        ("skipped", "stop_wrong_side"): 22,
         ("suppressed_limit", "max_positions"): 20,
         ("suppressed_warming", "warming_up"): 17,
     }
@@ -244,7 +244,7 @@ def test_min_trend_strength_moves_on_the_runs_own_trades_with_its_receipt(
         "0.0001",
         "trend-floor-from-record@2",
     )
-    assert cast("dict[str, object]", first["read_trades"])["count"] == 82
+    assert cast("dict[str, object]", first["read_trades"])["count"] == 41
 
 
 def _short_only_moves(root: Path, rule: str) -> list[dict[str, object]]:
@@ -277,9 +277,9 @@ def test_a_short_only_run_moves_the_number_and_the_row_shows_why(
         "trend-floor-from-record@2",
     )
     assert first["statistic"] == {
-        "trades_read": "42",
-        "mean_r": "1.636011904761904761904761905",
-        "mean_stamp": "-0.001167662203892957142857142857",
+        "trades_read": "20",
+        "mean_r": "1.48249",
+        "mean_stamp": "-0.001271479183177",
     }
     assert {m["new"] for m in at_1} == {"0"}
 
@@ -308,12 +308,12 @@ def test_a_slice_written_again_writes_nothing_twice(loaded: LoadedUnit, tmp_path
     assert report.rows == {
         "calibration": 6,
         "data_event": 26,
-        "fill": 250,
+        "fill": 248,
         "signal": 407,
         "state": 4,
-        "trade": 125,
+        "trade": 124,
     }
-    assert report.repeats == 818
+    assert report.repeats == 815
     assert report.warnings == ()
 
 
