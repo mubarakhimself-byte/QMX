@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 from qmf.risk.unit_intent import UnitExitIntent
 from qml.blocks.api import Block, EntryFace, ExitAction, Instance, Side, parse_entry
@@ -31,7 +32,6 @@ from test_compile_dummy import (
     _host,
     _slice,
     _surfaces,
-    _ok,
 )
 
 _QML = Path(__file__).resolve().parents[1]
@@ -127,8 +127,8 @@ def _short_only() -> dict[str, object]:
     document["direction"] = "short"
     document["markets"] = [
         market
-        for market in document["markets"]  # pyright: ignore[reportUnknownVariableType]
-        if market["market_id"] == _MARKET  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        for market in cast("list[dict[str, object]]", document["markets"])
+        if market["market_id"] == _MARKET
     ]
     return document
 
