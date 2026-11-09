@@ -15,11 +15,12 @@ from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from typing import cast
 
+import pytest
 from qmf.core.chrono import Instant
 from qmf.risk.controls import Verb
 from qmf.risk.unit_intent import UnitEntryIntent, UnitExitIntent
 from qml.blocks.api import Signal
-from qml.compile import CompiledUnit
+from qml.compile import CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.protocol.unit import (
     Account,
@@ -33,7 +34,7 @@ from qml.protocol.unit import (
 )
 from qml.unit.model import Side
 
-from test_compile_dummy import _compiled, _document, _instants, _ok, _slice, _target
+from test_compile_dummy import _compiled, _context, _document, _instants, _ok, _slice, _target
 
 _MARKET = "fx.eurusd"
 
@@ -335,3 +336,21 @@ def test_a_row_in_shadow_never_refuses() -> None:
         for intent in (*step.intents, *(one.intent for one in priced))
         if isinstance(intent, UnitEntryIntent)
     ]
+
+
+# --- a row whose own scope disagrees with the list it sits in ------------------------
+
+
+@pytest.mark.parametrize(("listed", "declared"), [("unit", "position"), ("position", "unit")])
+def test_a_halt_row_filed_under_another_scope_is_refused(listed: str, declared: str) -> None:
+    """A row says its scope twice. The list decides where it runs, so the row's own field can
+    only agree or refuse; a row the compiler silently re-scopes would brake the wrong thing."""
+    row = _session_loss()
+    row["scope"] = declared
+    document = _one_market()
+    _with_halt(document, row, listed)
+
+    problems = compile_unit(document, _context())
+
+    assert isinstance(problems, tuple), "a row whose scope field disagrees with its list compiled"
+    assert [(p.kind, p.where) for p in problems] == [("halt_scope", f"/halts/{listed}/0/scope")]
