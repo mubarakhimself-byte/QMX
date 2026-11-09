@@ -10,6 +10,10 @@ The runner lives in ``qml.protocol.controls``. This module holds the types and t
 that decides whether a fired row refuses an entry, so a host or the fold reads a row without
 importing ``qml`` (AD-21). It imports nothing from ``qml`` and nothing from a host.
 
+It also holds the words a brake leaves behind and the shape the fold answers them in (``StateWord``,
+``RiskState``), for the same reason: an agent, a card or a host reads a unit's state without
+importing the library that derived it.
+
 ``Verb`` has four words. ``no_new_entries`` is the one this build runs: a brake stops entries and
 nothing else, so it can never reach an exit. ``reduce`` and ``flatten`` are stated and refused at
 compile until their executor lands, and ``none`` fires without refusing anything.
@@ -23,6 +27,8 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Final
 
+from qmf.core.chrono import Instant
+
 __all__ = [
     "ENTRY_SCOPES",
     "Answer",
@@ -30,9 +36,12 @@ __all__ = [
     "ControlRow",
     "OnFire",
     "Restore",
+    "RiskState",
+    "StateWord",
     "Verb",
     "gate_open",
     "refuses_entries",
+    "word_for",
 ]
 
 
@@ -99,6 +108,55 @@ class Answer:
     factor: Decimal | None
     reason: str
     code: str
+
+
+class StateWord(StrEnum):
+    """What a scope is doing, as the fold reads it from rows (AD-12, AD-18).
+
+    ``RESTORE`` is a word and not only a row: a scope that was released says so, so a reader can
+    tell "never fired" from "fired and came back". ``UNKNOWN`` is the fold refusing to answer for a
+    state it cannot see: a fact it needs is past its limit.
+    """
+
+    ACTIVE = "ACTIVE"
+    REDUCING = "REDUCING"
+    BENCHED = "BENCHED"
+    HALTED = "HALTED"
+    RESTORE = "RESTORE"
+    UNKNOWN = "UNKNOWN"
+
+
+_WORDS: Final[Mapping[Verb, StateWord]] = {
+    Verb.NONE: StateWord.ACTIVE,
+    Verb.NO_NEW_ENTRIES: StateWord.BENCHED,
+    Verb.REDUCE: StateWord.REDUCING,
+    Verb.FLATTEN: StateWord.HALTED,
+}
+"""The word each verb leaves behind. ``none`` fired without refusing anything, so the scope is
+still ``ACTIVE``; the plan's other two words are a restore row's and a stale read's."""
+
+
+def word_for(verb: Verb) -> StateWord:
+    """The word a fire of ``verb`` leaves on its scope."""
+    return _WORDS[verb]
+
+
+@dataclass(frozen=True, slots=True)
+class RiskState:
+    """One scope's risk state, as ``qml.fold.fold`` derives it from rows and a clock.
+
+    ``since`` is the instant of the row that began ``word``: a fire of a word the scope already had
+    keeps the earlier instant, so a brake that fires every bar does not reset the clock.
+    ``unknown`` names the facts whose last read is past their limit at ``stamp``; when it is not
+    empty the word is ``UNKNOWN``, because the fold will not answer for what it cannot see.
+    """
+
+    scope: str
+    word: StateWord
+    since: Instant | None
+    reason: str
+    stamp: Instant
+    unknown: tuple[str, ...] = ()
 
 
 ENTRY_SCOPES: Final[frozenset[str]] = frozenset({"unit", "account"})

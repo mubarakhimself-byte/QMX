@@ -34,7 +34,7 @@ from typing import Final, Protocol, cast
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-from qmf.risk.controls import Verb
+from qmf.risk.controls import RiskState, Verb
 from qmf.risk.facts import Fact
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
@@ -64,6 +64,7 @@ from qml.compile.compiler import (
     SlotPlan,
 )
 from qml.environment import current_environment
+from qml.fold import Fold
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
@@ -615,6 +616,7 @@ class _Core:
         fault_clean_bars: int,
         exit_fault_bars: int = EXIT_FAULT_BARS,
         port: HostPort | None = None,
+        risk_rows: Sequence[Mapping[str, object]] | None = None,
     ) -> None:
         self.compiled = compiled
         self.plan = compiled.plan
@@ -647,6 +649,14 @@ class _Core:
             [halt.control for halt in self.plan.halts], self.halt_instances
         )
         """The unit's brakes, and the scopes a raise stands down (AD-12)."""
+        self.risk = Fold(f"unit:{scope_id}")
+        """What this unit's brakes say it is doing (AD-18): one fold, fed by the rows its own
+        control path answers and by the journal rows a host hands on a restart."""
+        self.risk_seeded = risk_rows is not None
+        """Whether a host handed the rows: when it did they are the truth, and the snapshot's
+        cache is not read."""
+        if risk_rows is not None:
+            self.risk.extend(risk_rows)
         self.pending: list[StateEvent] = []
         self.pending_faults: list[Fault] = []
         """A fault made outside a step, waiting for the next answer to carry it."""
@@ -736,6 +746,7 @@ class _Core:
             "environment": {"python": current_environment().python},
             "markets": markets,
             "slow": slow,
+            "risk": self.risk.cached(),
         }
 
     def shape_gap(self, snapshot: Mapping[str, object]) -> str | None:
@@ -776,6 +787,7 @@ class _Core:
         return None
 
     def load(self, snapshot: Mapping[str, object]) -> None:
+        self._load_risk(snapshot)
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
             saved = markets[m.market_id]
@@ -811,6 +823,18 @@ class _Core:
                 ),
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
             )
+
+    def _load_risk(self, snapshot: Mapping[str, object]) -> None:
+        """Read the fold's cache back when the host handed no rows.
+
+        A cache that does not read as this unit's scope is ignored: the rows are the truth, and a
+        cache is a cache.
+        """
+        if self.risk_seeded:
+            return
+        cached = Fold.from_cache(snapshot.get("risk"))
+        if cached.scope == self.risk.scope:
+            self.risk = cached
 
     def timer(self, side: Side) -> ExitStack | None:
         """The per-bar exits for one position on ``side``, in the compiled order, or ``None`` for
@@ -980,6 +1004,14 @@ class HostedUnit:
         """Every instance's state, the motion state and the fingerprint it belongs to (UT-09)."""
         return self._core.snapshot_state()
 
+    def risk_state(self, at: Instant) -> RiskState:
+        """What this unit's brakes say it is doing at ``at`` (AD-18).
+
+        One answer for every reader: the fold this unit keeps, read at the clock asked. A fact past
+        its limit makes the word UNKNOWN rather than let the fold answer for what it cannot see.
+        """
+        return self._core.risk.state(at)
+
 
 class _Fault(Exception):
     """A block's own exception, carried to its phase's wall with the block named."""
@@ -1136,6 +1168,7 @@ class _Run:
         run = self.unit.control_runner.run(facts)
         for raised in run.raised:
             self.faults.append(Fault(raised.row.pin, FaultPhase.CONTROLS, raised.code))
+            self._fold(raised.row.key, raised.code, Verb.NO_NEW_ENTRIES, f"{raised.row.pin} raised")
         for fired in run.fired:
             self.controls_out.append(
                 ControlEvent(
@@ -1149,6 +1182,8 @@ class _Run:
                     reason=fired.answer.reason,
                 )
             )
+            if not fired.shadowed:  # a would-have refuses nothing, so the scope stays as it is
+                self._fold(fired.row.key, fired.answer.code, fired.answer.verb, fired.answer.reason)
         for cold in run.cold:
             self.controls_out.append(
                 ControlEvent(
@@ -1163,6 +1198,24 @@ class _Run:
                 )
             )
         return run.refusal_reason
+
+    def _fold(self, key: str, code: str, verb: Verb, reason: str) -> None:
+        """Hand the fold the row this step's brake answer becomes (AD-12, AD-18).
+
+        The row is the same shape a host's journal writes, so the unit's own answer and a restart's
+        reader give the fold the same thing.
+        """
+        self.unit.risk.add(
+            {
+                "kind": "risk_event",
+                "scope": self.unit.risk.scope,
+                "at": self.instant.value_ns,
+                "id": f"{self.instant.value_ns}:{key}:{code}",
+                "code": code,
+                "verb": verb.value,
+                "reason": reason,
+            }
+        )
 
     # --- blocks ------------------------------------------------------------------
 
@@ -1612,6 +1665,7 @@ def _core(
     fault_clean_bars: int,
     exit_fault_bars: int,
     port: HostPort | None,
+    risk_rows: Sequence[Mapping[str, object]] | None,
 ) -> Result[_Core]:
     needed = _required_keys(compiled)
     missing, extra = sorted(needed - set(read_surfaces)), sorted(set(read_surfaces) - needed)
@@ -1651,6 +1705,7 @@ def _core(
             fault_clean_bars=fault_clean_bars,
             exit_fault_bars=exit_fault_bars,
             port=port,
+            risk_rows=risk_rows,
         )
     )
 
@@ -1667,11 +1722,13 @@ def construct_unit(
     fault_clean_bars: int = FAULT_CLEAN_BARS,
     exit_fault_bars: int = EXIT_FAULT_BARS,
     port: HostPort | None = None,
+    risk_rows: Sequence[Mapping[str, object]] | None = (),
 ) -> Result[HostedUnit]:
     """Host a compiled unit. ``assignment`` holds the calibrated values the run starts from
     (the unit's defaults when ``None``); ``scope_id`` is the QMB run id or the deployment id;
     ``fault_clean_bars`` is the clean bars a faulted unit waits before its entries return;
-    ``exit_fault_bars`` is the bars its exits may fail to run before ``port`` closes a position."""
+    ``exit_fault_bars`` is the bars its exits may fail to run before ``port`` closes a position;
+    ``risk_rows`` are the journal rows the host already holds, which seed the fold."""
     core = _core(
         compiled,
         read_surfaces,
@@ -1683,6 +1740,7 @@ def construct_unit(
         fault_clean_bars,
         exit_fault_bars,
         port,
+        risk_rows,
     )
     if is_refusal(core):
         return core
@@ -1702,12 +1760,16 @@ def restore_unit(
     fault_clean_bars: int = FAULT_CLEAN_BARS,
     exit_fault_bars: int = EXIT_FAULT_BARS,
     port: HostPort | None = None,
+    risk_rows: Sequence[Mapping[str, object]] | None = None,
 ) -> Result[HostedUnit]:
     """Resume from ``snapshot``. A snapshot of another state schema, compiled fingerprint or
     interpreter, or one whose markets, blocks, slow numbers or fields differ in shape from
     this unit's own snapshot, starts the unit cold, and its first step carries a
     ``cold_start`` event with the reason, so a restart never silently changes what the unit
-    does. A block's ``export_state`` keeps the same keys for the whole run."""
+    does. A block's ``export_state`` keeps the same keys for the whole run.
+
+    ``risk_rows`` are the journal rows the host read back, which are the truth for the fold; when
+    the host hands none, the snapshot's cache answers instead."""
     built = _core(
         compiled,
         read_surfaces,
@@ -1719,6 +1781,7 @@ def restore_unit(
         fault_clean_bars,
         exit_fault_bars,
         port,
+        risk_rows,
     )
     if is_refusal(built):
         return built
