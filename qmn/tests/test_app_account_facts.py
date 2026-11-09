@@ -73,7 +73,11 @@ def test_open_risk_known_answer() -> None:
     )
     assert isinstance(venue, Ok), venue.context
     node = LiveAccount(
-        lambda: venue.value, currency=CURRENCY, budget_share=Decimal(1), stale_s=BALANCE_STALE_S
+        lambda: venue.value,
+        currency=CURRENCY,
+        budget_share=Decimal(1),
+        supplied_by="the fake conformance double",
+        stale_s=BALANCE_STALE_S,
     )
     node.refresh(OPEN)
     qmb = ReplayAccount(currency=CURRENCY, balance=BALANCE, budget_share=Decimal(1))
@@ -90,6 +94,7 @@ def test_open_risk_known_answer() -> None:
     assert node_risk.source == "node:venue"
     assert qmb_risk.source == "qmb:replay"
     assert "counts only the positions this node holds" in node_facts.basis
+    assert "the fake conformance double's balance" in node_facts.basis
     assert "counts only the positions this run holds" in qmb_facts.basis
 
 

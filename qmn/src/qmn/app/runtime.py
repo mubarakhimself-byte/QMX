@@ -91,7 +91,7 @@ from qmf.core import (
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter, WriterScope
-from qmf.risk.facts import AccountFacts, Fact, Stake
+from qmf.risk.facts import AccountFacts, Stake, account_name
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     AmendProtection,
@@ -1653,15 +1653,17 @@ class NodeUnit:
         self.handler: UnitSliceHandler | None = None
         self.hosted_unit: HostedUnit | None = None
         self.target: ExecutionTarget | None = None
-        self.account: Callable[[], Mapping[str, Fact]] | None = None
-        """The account's facts as the node last read them, for the rows this unit writes. The
-        runtime sets it at the host; a unit hosted without one stamps no account fact."""
+        self.account: Callable[[], Mapping[str, object]] | None = None
+        """The account's facts and basis as the node last read them, for the rows this unit
+        writes. The runtime sets it at the host; a unit hosted without one stamps no account
+        fact."""
         self.kept_values: dict[str, Decimal] = {}
         """The slow numbers the deployment's saved snapshot already holds, so a write happens
         only when one of them moves."""
 
-    def account_inputs(self) -> Mapping[str, Fact]:
-        """The account's facts beside the size trail, so a row says what the account read.
+    def account_inputs(self) -> Mapping[str, object]:
+        """The account's facts and basis beside the size trail, so a row says what the account
+        read.
 
         The sizer's own ``equity`` input is left exactly as the sizer read it, so a replayed row
         still reaches its quantity; the live account facts ride beside it under ``account.*``.
@@ -2468,14 +2470,21 @@ class Runtime:
         The currency is the labelled default until a real account is bound: cTrader states its
         deposit asset by id, and nothing on this node turns that id into a name (G-DEMO reads it
         from the demo account). The binding is asked for at every refresh, so the client under
-        the venue is the one read, never a copy taken here.
+        the venue is the one read, never a copy taken here. The basis names the conformance
+        double when that is the client, so a row written on the fake never says the venue.
         """
         source = self._accounts.get(account)
         if source is None:
+            supplied_by = (
+                "the fake conformance double"
+                if isinstance(venue.client, ConformanceAccount)
+                else "the venue"
+            )
             source = LiveAccount(
                 lambda venue=venue: venue.client,
                 currency=ACCOUNT_CURRENCY,
                 budget_share=BUDGET_SHARE,
+                supplied_by=supplied_by,
             )
             self._accounts[account] = source
         return source
@@ -2502,10 +2511,13 @@ class Runtime:
         """The account's facts as the last refresh left them, or None before the first read."""
         return self._facts.get(account)
 
-    def _account_inputs(self, account: str) -> Mapping[str, Fact]:
-        """The account's facts by their names, for a decision row the units of ``account`` write."""
+    def _account_inputs(self, account: str) -> Mapping[str, object]:
+        """The account's facts by their names and its basis, for a decision row the units of
+        ``account`` write."""
         facts = self._facts.get(account)
-        return {} if facts is None else facts.facts()
+        if facts is None:
+            return {}
+        return {**facts.facts(), account_name("basis"): facts.basis}
 
     def _stakes(self, account: str, instant: Instant) -> tuple[Stake, ...]:
         """Every position a unit on ``account`` holds, at the money it loses if its stop fills.

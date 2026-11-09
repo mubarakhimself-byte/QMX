@@ -123,7 +123,8 @@ class LiveAccount:
     tick, after the pass that drives the units. ``read`` answers from the last read and never
     touches the venue, so a decision row written inside a pass cannot start a venue round trip. A
     re-read the venue refuses leaves the last balance standing, and its age then reads the fact
-    ``stale`` with that read time still on it.
+    ``stale`` with that read time still on it. ``supplied_by`` is who the basis names as the
+    supplier of the cash: the venue, or the fake standing in for it.
     """
 
     def __init__(
@@ -132,10 +133,12 @@ class LiveAccount:
         *,
         currency: str,
         budget_share: Decimal,
+        supplied_by: str = "the venue",
         read_s: Decimal = BALANCE_READ_S,
         stale_s: Decimal = BALANCE_STALE_S,
     ) -> None:
         self._binding = binding
+        self.supplied_by = supplied_by
         self.currency = currency
         self.budget_share = budget_share
         self.read_s = read_s
@@ -173,7 +176,7 @@ class LiveAccount:
             AccountReading(
                 currency=self.currency,
                 source="node:venue",
-                equity_words="the venue's balance, with no open profit marked",
+                equity_words=f"{self.supplied_by}'s balance, with no open profit marked",
                 holds="the positions this node holds",
                 read_at=self.read_at,
                 balance=self.balance,
