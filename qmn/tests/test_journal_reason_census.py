@@ -1,7 +1,9 @@
 """Every reason text the node's order path, guard and handler can write has a journal code.
 
 The walk reads the shipped source, so a new text with no code fails here. On a live journal such
-a text only costs a label (``unlisted``), but a label is what his records are read by.
+a text only costs a label (``unlisted``), but a label is what his records are read by. A brake's
+own words are not in this source: they come from its block, so the table that codes them, and the
+family a user block names its own code in, are enrolled here from the module that declares them.
 """
 
 # pyright: reportPrivateUsage=false
@@ -11,7 +13,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from qmb.results.journal import _reason_code
+from qmb.results.journal import BLOCK_REASON_FAMILY, BRAKE_REASON_HEADS, _reason_code
 from qmn.app.reconciler import _STAND_DOWN
 from qmn.app.stand_down import TABLE
 
@@ -24,6 +26,13 @@ WALKED = (
 )
 WRITES_A_REASON = frozenset({"Blocked", "Unprotected", "Skip"})
 ANSWERS_WITH_A_REASON = frozenset({"check", "holds", "blocking"})
+BRAKE_TEXTS = (
+    "halt slot: X answers X",
+    *(f"a brake answers: {head}" for head in BRAKE_REASON_HEADS),
+    f"{BLOCK_REASON_FAMILY}their-own-rule held",
+)
+"""The texts a brake writes and the family a user block names its own code in. A brake publishes
+its words from its block, so they are enrolled from the table that codes them and not the walk."""
 
 
 def words(node: ast.expr | None) -> str | None:
@@ -54,6 +63,8 @@ def written_texts() -> dict[str, str]:
         found.setdefault(f"{row.blocks} (X)", f"stand_down.py TABLE {row.kind.value}")
     for text in _STAND_DOWN.values():
         found.setdefault(text, "reconciler.py _STAND_DOWN")
+    for text in BRAKE_TEXTS:
+        found.setdefault(text, "journal.py brake table")
     return found
 
 
@@ -65,7 +76,7 @@ def test_every_text_the_node_can_write_has_a_code() -> None:
     }
 
     assert no_code == {}
-    assert len(found) >= 40, "the walk has stopped finding the node's texts"
+    assert len(found) == 53, "the walk has stopped finding the node's texts"
     assert {
         "the cross-unit hook refused the order",
         "the close could not be built (X)",
@@ -74,4 +85,10 @@ def test_every_text_the_node_can_write_has_a_code() -> None:
         "a position is open",
         "stood down, disk: free space is below the node journal guard (X)",
         "the node cannot prove the account is its own: a twin with its tag trades it",
+        "halt slot: X answers X",
+        "block:their-own-rule held",
     } <= set(found)
+    assert {_reason_code("blocked", text) for text in BRAKE_TEXTS} == {
+        "halt_slot",
+        "block:their-own-rule",
+    }
