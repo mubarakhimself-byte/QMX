@@ -21,7 +21,13 @@ Reading: speed depends mostly on the edge. Pain depends on the shape. A high-win
 
 High win rates often hide rare large losses: gaps, slippage, a stop that does not fill. The model assumes every loss stops at the full risk. An 80% scalper whose worst losses are 3 times the risk is a different animal. So the benchmark has to include the worst loss.
 
-## The benchmark (proposed)
+## The benchmark (proposed, NOT agreed)
+
+He did not agree to one set of numbers (M70): each kind of trading needs its own benchmark, set per methodology and measured in QMB. The list below is the shape-independent core; per-type values come next session.
+
+- **Scalper:** a high win rate is the point (he leans towards about 70%), with small wins and a tight worst loss.
+- **ORB:** a lower win rate is normal; it needs larger wins, and is sized smaller because its results are rougher.
+
 
 1. **Net edge per trade after costs: at least 0.2 of the risk** (0.1 still works, but takes about twice as many trades).
 2. **Smoothness: edge divided by the spread of trade results (the per-trade Sharpe), at least 0.2.** About 0.33 for the 80% shape, 0.20 for 60/1:1, 0.14 for 40/2:1.
