@@ -3,7 +3,8 @@
 The node reads its rate from the feed's own record of the conversion market and QMB from the
 run folder's bars; both hand the one converter the same exact ``Fraction``, so the four markets
 of RC-05 lose 500 USD at the stop from equity 100000 at fraction 0.005, and the two hosts'
-quantities are equal. K9 test 16.
+quantities are equal. K9 test 16: the four markets through QMB's handler, then the unit the
+node's runtime hosts on the conformance venue.
 """
 
 # pyright: reportPrivateUsage=false
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from decimal import Decimal
@@ -19,15 +21,18 @@ from fractions import Fraction
 from pathlib import Path
 from typing import TypeVar, cast
 
+import test_app_runtime as base
 from qmb.execution.fill import BarExecution
 from qmb.host.facts import ReplayRates
 from qmb.host.replay import BarWindow, window_size
 from qmb.host.unit_handler import ListJournal, UnitSliceHandler
 from qmb.host.unit_runner import LoadedUnit, load_unit_folder
 from qmb.runloop import RestingIntent
+from qmf.core import Account as VenueAccount
 from qmf.core.chrono import Instant
 from qmf.core.identity import AccountRole, VenueId
 from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.data.journal_writer import JournalWriter
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import UNIT_INTENT_FORMAT_VERSION
 from qml.blocks.api import EntryFace, parse_entry
@@ -56,6 +61,9 @@ from qmn.app.feed_keeper import (
     RecordedSource,
     Recording,
 )
+from qmn.app.runtime import ConformanceAccount, NodeUnit, Phase, Runtime, Venue
+from qmn.app.server import open_node
+from qmn.app.store import Json
 
 REPO = Path(__file__).resolve().parents[2]
 STDLIB = REPO / "qml" / "src" / "qml" / "blocks" / "stdlib"
@@ -127,6 +135,16 @@ def _flat(bid: str, ask: str, count: int = 3) -> list[Prices]:
     return [((bid, bid, bid, bid), (ask, ask, ask, ask)) for _ in range(count)]
 
 
+def _records() -> dict[str, dict[str, object]]:
+    """The four markets' records, the two JPY ones converting through the USDJPY market."""
+    return {
+        "fx.eurusd": _fixture("eurusd"),
+        "metal.xauusd": _fixture("xauusd"),
+        "fx.usdjpy": _jpy_record("USDJPY", "usdjpy"),
+        "fx.eurjpy": _jpy_record("EURJPY", "eurjpy"),
+    }
+
+
 def _folder(root: Path) -> Path:
     """A run folder over the four markets, their records and three bars each."""
     folder = root / "run"
@@ -149,12 +167,7 @@ def _folder(root: Path) -> Path:
             shutil.copyfile(entry_path.with_name(name), target / name)
     document["pins"] = pins
     (folder / "unit.json").write_text(json.dumps(document), "utf-8")
-    records = {
-        "fx.eurusd": _fixture("eurusd"),
-        "metal.xauusd": _fixture("xauusd"),
-        "fx.usdjpy": _jpy_record("USDJPY", "usdjpy"),
-        "fx.eurjpy": _jpy_record("EURJPY", "eurjpy"),
-    }
+    records = _records()
     for market, record in records.items():
         (folder / "records" / f"{market}.json").write_text(json.dumps(record), "utf-8")
     for market, (bid, ask) in (
@@ -293,6 +306,79 @@ def _rate_of(account: Account, record: InstrumentRecord) -> Fraction:
     return Fraction(fact.value)
 
 
+NODE_ACCOUNT = "demo-1"
+
+
+def _node_rig(root: Path) -> base.Rig:
+    """A node on a throwaway folder, one conformance binding over the four markets."""
+    now = [START_NS]
+    source = RecordedSource([])
+    account = VenueAccount(NODE_ACCOUNT, VenueId(QUOTES), AccountRole.DEMO)
+    made: dict[str, object] = {}
+
+    def venues(journal: JournalWriter, epoch: str) -> Mapping[str, Venue]:
+        del journal, epoch
+        client = ConformanceAccount.open(account, EQUITY)
+        assert not is_refusal(client), client
+        feed = FeedKeeper(
+            "ctrader",
+            "demo",
+            source,
+            tuple(market for market, _ in MARKETS),
+            lambda: now[0],
+            Recording(None),
+        )
+        feed.listen(client.value.on_bar)
+        made.update(client=client.value, feed=feed)
+        return {NODE_ACCOUNT: Venue(client.value, feed)}
+
+    data = root / "data"
+    node = open_node(
+        data,
+        here="fp-rc-07",
+        machine="pc",
+        clock_ns=lambda: now[0],
+        random_bytes=lambda size: b"\x07" * size,
+        venues=venues,
+    )
+    return base.Rig(
+        node,
+        cast("Runtime", node.runtime),
+        cast("ConformanceAccount", made["client"]),
+        cast("FeedKeeper", made["feed"]),
+        source,
+        now,
+        data,
+    )
+
+
+def _node_deployment(data: Path, loaded: LoadedUnit, folder: Path) -> dict[str, Json]:
+    """The four markets staged as the node link stages them, over the run folder's unit."""
+    document = base.deployment(data, compiled=loaded.compiled.compiled_fingerprint.value)
+    document["unit_document"] = cast(
+        "Json", json.loads((folder / "unit.json").read_text("utf-8"))
+    )
+    document["markets"] = [
+        {"market_id": market, "instrument": {"id": symbol, "version": 1}}
+        for market, symbol in MARKETS
+    ]
+    document["snapshots"] = [cast("Json", record) for record in _records().values()]
+    return document
+
+
+def _hosted_unit(rig: base.Rig) -> NodeUnit:
+    """Tick until the deployment is hosted, and answer the unit it trades."""
+    deadline = time.monotonic() + 120
+    while True:
+        rig.runtime.tick()
+        hosted = rig.runtime.hosted.get("dep-1")
+        if hosted is not None and hosted.phase not in (Phase.COMPILING, Phase.WAITING):
+            assert hosted.unit is not None, (hosted.phase.value, hosted.detail)
+            return hosted.unit
+        assert time.monotonic() < deadline, "the deployment did not settle in 120 s"
+        time.sleep(0.02)
+
+
 def test_k9_16_currency(tmp_path: Path) -> None:
     loaded = _ok(load_unit_folder(_folder(tmp_path)))
     proposals = [
@@ -324,6 +410,43 @@ def test_k9_16_currency(tmp_path: Path) -> None:
             * rate
         )
         assert loss == 500, market
+
+
+def test_the_node_sizes_the_four_markets_at_qmbs_quantities(tmp_path: Path) -> None:
+    """The unit the node hosts reads its rate from the runtime's feed and sizes the same four."""
+    folder = _folder(tmp_path / "qmb")
+    loaded = _ok(load_unit_folder(folder))
+    proposals = [
+        _proposal(loaded.compiled, loaded.records[market], market, entry, stop)
+        for market, entry, stop, _, _ in CASES
+    ]
+    qmb_sizes, qmb_account = _sizes(
+        loaded, ReplayRates(CURRENCY, loaded.conversions, loaded.rate_feeds), proposals
+    )
+
+    rig = _node_rig(tmp_path / "node")
+    for bar in cast("Sequence[QuoteBar]", tuple(loaded.rate_feeds["usdjpy"]())):
+        rig.feed.recording.keep("fx.usdjpy", bar)
+    assert base.deploy(rig, _node_deployment(rig.data, loaded, folder))["ok"] is True
+    unit = _hosted_unit(rig)
+    handler, hosted_unit = unit.handler, unit.hosted_unit
+    assert handler is not None and hosted_unit is not None
+    assert unit.traded == tuple(market for market, _ in MARKETS)
+    instant = _instant(2)
+    account = cast("Account", handler.read_surfaces()["account"].at(instant))
+
+    node_sizes: dict[str, str] = {}
+    for proposal in proposals:
+        priced = hosted_unit.price(proposal, account)
+        assert priced.intent is not None, (proposal.market_id, priced.code, priced.row.reason)
+        node_sizes[proposal.market_id] = cast("str", priced.intent.to_wire()["quantity"])
+
+    assert provided(tuple(loaded.records.values()), CURRENCY) == ("market.rate:JPY",)
+    assert node_sizes == qmb_sizes == {market: expected for market, _, _, expected, _ in CASES}
+    assert account.equity == qmb_account.equity == EQUITY
+    for market, _, _, _, rate in CASES:
+        assert _rate_of(account, loaded.records[market]) == rate
+    rig.runtime.stop()
 
 
 def test_the_feed_keeps_a_conversion_market_beside_the_traded_ones() -> None:
