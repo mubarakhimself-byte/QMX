@@ -34,6 +34,7 @@ from typing import Final, Protocol, cast
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
+from qmf.risk.controls import Verb
 from qmf.risk.facts import Fact
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
@@ -66,6 +67,7 @@ from qml.environment import current_environment
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
+from qml.protocol.controls import Runner, own_facts
 from qml.protocol.exits import (
     ExitAnswer,
     ExitSlot,
@@ -92,6 +94,7 @@ __all__ = [
     "Account",
     "AdmitPort",
     "CalibrationRow",
+    "ControlEvent",
     "DecisionRow",
     "Fault",
     "FaultPhase",
@@ -301,6 +304,25 @@ class StateEvent:
     reason: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class ControlEvent:
+    """One brake row's answer this step (AD-12).
+
+    ``kind`` is ``fired`` for a live row, ``would_fire`` for a row in shadow, and ``cold`` for a
+    row whose declared facts are not there yet. ``code`` is the row's own word on its risk-event
+    row (the block's entry id), or ``cold``. A host writes the row; the unit only answers it.
+    """
+
+    row: str
+    pin: str
+    scope: str
+    kind: str
+    verb: Verb
+    factor: Decimal | None
+    code: str
+    reason: str
+
+
 class FaultPhase(StrEnum):
     """The phase of one step that raised. ``exit`` and ``host`` are raised by later PRs: a raising
     exit block is the exit step's, and a raise past ``_Run.step`` is the host's (AD-23, AD-13)."""
@@ -310,6 +332,7 @@ class FaultPhase(StrEnum):
     PRICE = "price"
     MOTION = "motion"
     EXIT = "exit"
+    CONTROLS = "controls"
     HOST = "host"
 
 
@@ -336,6 +359,8 @@ class UnitStep:
     state_events: tuple[StateEvent, ...]
     proposals: tuple[Proposal, ...] = ()
     """The entries whose slots held, with no size yet: the host prices each one in pass two."""
+    controls: tuple[ControlEvent, ...] = ()
+    """Each brake row's answer this step: fired, would fire, or cold (AD-12)."""
     faults: tuple[Fault, ...] = ()
     """Each block that raised, with the phase it raised in. That unit's entries stop until
     ``fault_clean_bars`` clean bars have passed; its exits keep running."""
@@ -611,6 +636,17 @@ class _Core:
             s.number.name: SlowState(value=calibrated[s.number.name]) for s in self.plan.slow
         }
         self.slow_rules = {s.number.name: s.block.make(s.params, {}) for s in self.plan.slow}
+        self.halt_instances: dict[str, Instance] = {}
+        """Each brake row's one instance, by run key: a brake lives on the unit, not a market."""
+        settled = self.settled()
+        for halt in self.plan.halts:
+            self.halt_instances[halt.control.key] = halt.binding.block.make(
+                self.params(halt.binding, settled), halt.binding.inputs
+            )
+        self.control_runner = Runner(
+            [halt.control for halt in self.plan.halts], self.halt_instances
+        )
+        """The unit's brakes, and the scopes a raise stands down (AD-12)."""
         self.pending: list[StateEvent] = []
         self.pending_faults: list[Fault] = []
         """A fault made outside a step, waiting for the next answer to carry it."""
@@ -977,6 +1013,9 @@ class _Run:
         unit.pending.clear()
         self.faults: list[Fault] = list(unit.pending_faults)
         unit.pending_faults.clear()
+        self.controls_out: list[ControlEvent] = []
+        self.halt_reason: str | None = None
+        """Why this step's entries are refused: a brake's own words, or None."""
         self.raised = False
         self.ordinal = 0
 
@@ -1040,6 +1079,7 @@ class _Run:
                 results[m.market_id] = self.update(m, bar)
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.UPDATE)
+        self.halt_reason = self.controls(journal)
         for m in self.unit.markets:
             self.exits(m, positions[m.market_id], fresh.get(m.market_id))
         for m in self.unit.markets:
@@ -1070,9 +1110,59 @@ class _Run:
                 calibrations=tuple(self.calibrations),
                 state_events=tuple(self.events),
                 proposals=tuple(self.proposals),
+                controls=tuple(self.controls_out),
                 faults=tuple(self.faults),
             )
         )
+
+    # --- controls --------------------------------------------------------------------
+
+    def controls(self, journal: object) -> str | None:
+        """Run the unit's brakes once this step, before exits and entries (AD-12).
+
+        Each row is fed the facts it declares: the unit's own statistics from its journal, and the
+        account's equity. A row that raises records a ``Fault`` with its ``link_fault`` code and
+        stands its scope down. It is a plain ``try`` around one block call, so a raise never
+        benches an exit and never reaches one (AD-9). The words this step's entries are refused
+        by come back, or None.
+        """
+        if not self.unit.halt_instances:
+            return None
+        trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
+        facts: dict[str, object] = own_facts(trades, self.instant)
+        equity = getattr(self.surface("account"), "equity", None)
+        if isinstance(equity, Decimal):
+            facts["account.equity"] = equity
+        run = self.unit.control_runner.run(facts)
+        for raised in run.raised:
+            self.faults.append(Fault(raised.row.pin, FaultPhase.CONTROLS, raised.code))
+        for fired in run.fired:
+            self.controls_out.append(
+                ControlEvent(
+                    row=fired.row.name,
+                    pin=fired.row.pin,
+                    scope=fired.row.scope,
+                    kind="would_fire" if fired.shadowed else "fired",
+                    verb=fired.answer.verb,
+                    factor=fired.answer.factor,
+                    code=fired.answer.code,
+                    reason=fired.answer.reason,
+                )
+            )
+        for cold in run.cold:
+            self.controls_out.append(
+                ControlEvent(
+                    row=cold.row.name,
+                    pin=cold.row.pin,
+                    scope=cold.row.scope,
+                    kind="cold",
+                    verb=cold.row.verb,
+                    factor=None,
+                    code="cold",
+                    reason=f"no {', '.join(cold.missing)} yet",
+                )
+            )
+        return run.refusal_reason
 
     # --- blocks ------------------------------------------------------------------
 
@@ -1335,6 +1425,9 @@ class _Run:
                     self.decision(m, side, "no_signal", result.trail, f"near miss, {result.reason}")
                 elif self.unit.trace is TraceLevel.EVERY_BAR:
                     self.decision(m, side, "no_signal", result.trail, result.reason)
+                continue
+            if self.halt_reason is not None:
+                self.decision(m, side, "suppressed", result.trail, self.halt_reason)
                 continue
             if m.bars < self.unit.warm_up:
                 self.decision(m, side, "suppressed_warming", result.trail, "warming up")

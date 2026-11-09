@@ -17,6 +17,7 @@ compile until their executor lands, and ``none`` fires without refusing anything
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
@@ -115,7 +116,7 @@ def refuses_entries(row: ControlRow, *, shadowed: bool) -> bool:
     return not shadowed and row.verb is Verb.NO_NEW_ENTRIES and row.scope in ENTRY_SCOPES
 
 
-def gate_open(row: ControlRow, facts: dict[str, object]) -> bool:
+def gate_open(row: ControlRow, facts: Mapping[str, object]) -> bool:
     """Whether the row's ``enabled`` gate lets it run: a bool, or the fact it names is true."""
     if isinstance(row.enabled, bool):
         return row.enabled

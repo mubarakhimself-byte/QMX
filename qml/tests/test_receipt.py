@@ -25,7 +25,7 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:b9de56d0870de845375e499f25a7f2a58443d3965f5fbecc2c2c003a84c82321"
+_STORED_HASH = "fp1:sha256:ffd80038c9cac3cb83592e5a95302d410c01be9ce97ae37bdc49ad93cefe7ced"
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
