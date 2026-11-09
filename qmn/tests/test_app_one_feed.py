@@ -225,6 +225,11 @@ def seen(unit: object, stream: str, market: str) -> list[int]:
     return list(windows[(stream, market)])
 
 
+def orders(unit: object) -> dict[str, object]:
+    """Every intent the unit's order path has answered, placed or blocked."""
+    return dict(cast("Mapping[str, object]", getattr(unit, "_orders")))
+
+
 def test_one_feed_hosts_1m_and_15m(tmp_path: Path) -> None:
     rig = binding.bound_rig(tmp_path)
     rig.door.bar_ns = MINUTE_NS
@@ -238,12 +243,16 @@ def test_one_feed_hosts_1m_and_15m(tmp_path: Path) -> None:
     assert deploy(rig, deployment(rig, "m1", "op-1m"), "op-1m")["ok"] is True
     assert deploy(rig, deployment(rig, "m15", "op-15m"), "op-15m")["ok"] is True
     phases = {stream: settle(rig, f"dep-{stream}") for stream in MARKETS}
-    prime(rig)
-    play_minutes(rig)
-
     hosted = {stream: binding.runtime(rig).hosted[f"dep-{stream}"].unit for stream in MARKETS}
     assert phases == {"m1": Phase.TRADING, "m15": Phase.TRADING}
     assert all(unit is not None for unit in hosted.values())
+    replay = {stream: orders(hosted[stream]) for stream in MARKETS}
+    assert replay == {"m1": {}, "m15": {}}, (
+        "warm-up placed no order from the bars it replayed. A live venue has quotes, so an"
+        f" entry minted from a replayed bar would be sent. The live hour starts at {live_start()}"
+    )
+    prime(rig)
+    play_minutes(rig)
 
     opened = live_start()
     assert seen(hosted["m1"], "m1", MARKETS["m1"])[-LIVE_BARS:] == [
