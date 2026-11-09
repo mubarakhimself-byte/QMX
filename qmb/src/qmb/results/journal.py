@@ -74,6 +74,7 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("could not be built", "health_stop"),
     ("no unit holds", "health_stop"),
     ("does not hold this order's stop", "health_stop"),
+    ("does not read", "health_stop"),
 )
 """The reason code of each reason text QML's hosted unit, the handler and the trading node's
 order path write, first match wins."""
