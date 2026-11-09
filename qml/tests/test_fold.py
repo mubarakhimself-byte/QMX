@@ -55,23 +55,25 @@ def _fire(
     }
 
 
+def _account(index: int) -> dict[str, object]:
+    """One row of another scope, which a unit's fold must not read."""
+    return {
+        "kind": "risk_event",
+        "scope": "account:demo-1",
+        "at": _FIRST_NS + index * 60_000_000_000,
+        "id": f"account-{index}",
+        "code": "equity-drawdown-halt",
+        "verb": "no_new_entries",
+    }
+
+
 def _forty_rows() -> list[dict[str, object]]:
     """The journal one benched unit holds: thirty fresh reads, eight rows of another scope, one
     brake that fired without refusing anything, and the session-loss brake that benched it."""
     rows: list[dict[str, object]] = [
         _fact(_FIRST_NS + index * 60_000_000_000, index) for index in range(30)
     ]
-    rows += [
-        {
-            "kind": "risk_event",
-            "scope": "account:demo-1",
-            "at": _FIRST_NS + index * 60_000_000_000,
-            "id": f"account-{index}",
-            "code": "equity-drawdown-halt",
-            "verb": "no_new_entries",
-        }
-        for index in range(8)
-    ]
+    rows += [_account(index) for index in range(8)]
     rows.append(_fire(_FIRE_NS - 1_800_000_000_000, "none", "session-fill-limit-halt"))
     rows.append(_fire(_FIRE_NS))
     return rows

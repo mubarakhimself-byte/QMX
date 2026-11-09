@@ -147,7 +147,7 @@ class Fold:
             made._reason = str(body.get("reason", ""))
             facts = body.get("facts", {})
             made._facts = {
-                str(name): (int(cast("int", pair[0])), int(cast("int", pair[1])))
+                str(name): (int(pair[0]), int(pair[1]))
                 for name, pair in cast("Mapping[str, list[int]]", facts).items()
             }
             made._word = word
