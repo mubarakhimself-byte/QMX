@@ -10,6 +10,10 @@ supervisor (``Runtime.step``) so a heal is what a counting test can see.
 
 The second test is the last fall-through: with every per-bar exit raising, the node's
 ``close_scope`` port closes the position and the close it sends says why.
+
+The third hosts the shipped two-market dummy, holds one ``metal.xauusd`` position and steps the
+unit once per market's bar, so a step of ``fx.eurusd`` alone falls between the failing bars of the
+position's own market.
 """
 
 # pyright: reportPrivateUsage=false
@@ -26,8 +30,11 @@ from typing import cast
 import test_app_binding as b
 import test_app_runtime as base
 from qmb.host.unit_handler import UnitSliceHandler
+from qmf.core.chrono import Instant
+from qmf.core.refusal import is_refusal
 from qml.blocks.api import EntryOrder, Signal
-from qml.protocol.unit import HostedUnit
+from qml.protocol.unit import HostedUnit, OwnPosition, QuoteBar
+from qml.unit.model import Side
 from qmn.app.feed_keeper import Bar
 from qmn.app.runtime import NodeUnit, Phase, Runtime, _Hosted
 
@@ -35,6 +42,8 @@ BAR = b.BAR
 DEPLOYMENTS = ("dep-1", "dep-2", "dep-3", "dep-4")
 WINDOW_BARS = 12
 MARKET = "fx.eurusd"
+METAL = "metal.xauusd"
+"""The second market the shipped dummy names, so a step can be its bar alone."""
 EXIT_FAULT_BARS = 3
 """The pinned ``exit_fault_bars``: three bars with no exit able to run close the position."""
 EXIT_FAULT = "exit_fault"
@@ -120,6 +129,17 @@ class _Ordering:
 
     def import_state(self, state: Mapping[str, object]) -> None:
         del state
+
+
+class _Port:
+    """A host's last fall-through, recording every ask in the order it came."""
+
+    def __init__(self) -> None:
+        self.asks: list[str] = []
+
+    def close_scope(self, unit: object, why: str) -> None:
+        del unit
+        self.asks.append(why)
 
 
 def four_units(root: Path) -> tuple[b.Bound, Runtime, int]:
@@ -337,3 +357,75 @@ def test_close_scope_is_the_last_fall_through(tmp_path: Path) -> None:
     ]
     assert held == [], "the venue closed the position the port asked about"
     assert heals == []
+
+
+def test_the_exit_fault_streak_survives_a_step_of_the_other_markets_bar(tmp_path: Path) -> None:
+    """Three failing bars of one market still ask the port when the other market steps between.
+
+    The shipped dummy names two markets and the node steps the unit once per closed-bar instant,
+    so a step can carry the other market's bar alone. That step must leave the held position's
+    streak alone: its third failing bar still asks ``close_scope`` for ``exit_fault``.
+    """
+    node = base.rig(tmp_path)
+    base.deploy(node, base.deployment(node.data))
+    assert base.settle(node) == "trading"
+    runtime = node.runtime
+    hosted = hosted_of(runtime, "dep-1")
+    handler = handler_of(runtime, "dep-1")
+    metal = [
+        (bar.knowable_at.value_ns, bar)
+        for _, market, bar in base.month().bars
+        if market == METAL and bar.knowable_at.value_ns >= base.LIVE_FROM
+    ]
+    fx = [
+        (bar.knowable_at.value_ns, bar)
+        for _, market, bar in base.month().bars
+        if market == MARKET and bar.knowable_at.value_ns >= base.LIVE_FROM
+    ]
+    entry = metal[0][1].bid.close
+    position = OwnPosition(
+        "metal-1",
+        Side.SHORT,
+        Decimal("0.50"),
+        entry,
+        hosted.compiled.logic_fingerprint,
+        Instant(metal[0][0]),
+    )
+    adopted = handler.adopt(
+        METAL,
+        position,
+        stop=entry + Decimal("10"),
+        entry_stop=entry + Decimal("10"),
+        target=None,
+        decision_row_id="row-metal",
+    )
+    assert not is_refusal(adopted), adopted
+    port = _Port()
+    hosted.attach_port(port)
+    metal_market = next(one for one in hosted._core.markets if one.market_id == METAL)
+
+    def serve(market_id: str, bar: QuoteBar) -> None:
+        handler._latest[market_id] = bar
+
+    def step(at: int) -> None:
+        answer = hosted.on_instant(Instant(at))
+        assert not is_refusal(answer), answer
+
+    serve(METAL, metal[0][1])
+    step(metal[0][0])  # the first bar builds the per-bar exit's timer
+    metal_market.timers[position.position_id] = _Raising()
+    serve(METAL, metal[1][1])
+    step(metal[1][0])
+    serve(MARKET, fx[0][1])
+    step(metal[1][0] + 1_000_000_000)  # only the other market's bar is new here
+    serve(METAL, metal[2][1])
+    step(metal[2][0])
+    serve(MARKET, fx[1][1])
+    step(metal[2][0] + 1_000_000_000)
+    serve(METAL, metal[3][1])
+    step(metal[3][0])
+
+    asks = port.asks
+    runtime.stop()
+
+    assert asks == [EXIT_FAULT], "three failing bars in a row ask the port once"

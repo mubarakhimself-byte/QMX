@@ -1185,7 +1185,8 @@ class _Run:
         stamps (AD-3). Either names this unit version, so another version's position is never
         closed. A raising exit block is skipped with a ``Fault`` and the next exit still runs; no
         exit able to run for ``exit_fault_bars`` bars asks the host's ``close_scope`` port to
-        close the position (AD-13, AD-23 step 4).
+        close the position (AD-13, AD-23 step 4). A step where this market has no new bar leaves
+        that count alone, so a step of the other market's bar never resets it.
         """
         version = self.unit.compiled
         mine = position is not None and position.opened_by in (
@@ -1195,9 +1196,10 @@ class _Run:
         for gone in [pid for pid in m.timers if position is None or pid != position.position_id]:
             del m.timers[gone]
             m.exited.discard(gone)
-        if position is None or not mine or not new_bar or position.position_id in m.exited:
-            if position is not None:
-                self.unit.exit_faults.pop(position.position_id, None)
+        if position is None or not new_bar:
+            return
+        if not mine or position.position_id in m.exited:
+            self.unit.exit_faults.pop(position.position_id, None)
             return
         timer = m.timers.get(position.position_id)
         if timer is None:
