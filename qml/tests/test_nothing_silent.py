@@ -242,10 +242,13 @@ def test_every_stdlib_block_acts_or_refuses() -> None:
     assert [name for name, found in triggers.items() if found == _READ] == READ_NEVER_FIRED
     assert sorted(name for name, found in exits.items() if found != _REFUSED) == [
         "swing-stop-buffer@1",
+        "swing-stop-buffer@2",
         "target-r-multiple@1",
+        "target-r-multiple@2",
         "time-exit-bars@1",
+        "time-exit-bars@2",
     ]
-    assert len(faces) == 125
+    assert len(faces) == 128
     assert {pin: triggers[pin] for pin in _HOLDS_ON_ITS_CLOCK} == dict.fromkeys(
         _HOLDS_ON_ITS_CLOCK, _FIRED
     )
@@ -278,7 +281,7 @@ def test_every_block_fed_the_other_shape_refuses_and_none_fed_the_right_shape_do
 
     assert wrong == [f["entry_id"] for f in fed]
     assert right == []
-    assert len(wrong) == 90
+    assert len(wrong) == 91
     assert set(_SESSION_BLOCKS) - {"vwap-session-anchored"} <= set(wrong)
 
 
