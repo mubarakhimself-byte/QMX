@@ -1,0 +1,6 @@
+EURUSD busy 13-16 UTC: 1m TR mean 2.49 pips (median 2.20, n=540); 5m range mean 5.73 pips; mean spread 0.293 pips, median 0.300 (ticks 87842)
+EURUSD quiet 02 UTC: 1m TR mean 1.67 pips (median 1.30, n=180); 5m range mean 3.91 pips; mean spread 0.319 pips, median 0.300 (ticks 15389)
+GBPUSD busy 13-16 UTC: 1m TR mean 2.85 pips (median 2.55, n=540); 5m range mean 6.66 pips; mean spread 0.552 pips, median 0.500 (ticks 91624)
+GBPUSD quiet 02 UTC: 1m TR mean 1.59 pips (median 1.30, n=180); 5m range mean 3.65 pips; mean spread 0.629 pips, median 0.600 (ticks 16477)
+USDJPY busy 13-16 UTC: 1m TR mean 3.21 pips (median 2.85, n=60); 5m range mean 7.46 pips; mean spread 0.472 pips, median 0.500 (ticks 10947)
+USDJPY quiet 02 UTC: 1m TR mean 4.53 pips (median 4.33, n=60); 5m range mean 10.61 pips; mean spread 0.492 pips, median 0.500 (ticks 10663)
