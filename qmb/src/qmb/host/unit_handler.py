@@ -513,15 +513,16 @@ class UnitSliceHandler:
         for event in step.controls:
             if event.kind == "cold" or not _would_refuse(event):
                 continue
+            answered = f"{event.scope}.{event.row}"
             if event.kind == "fired":
-                key = f"risk:{event.pin}:{event.row}"
+                key = f"risk:{answered}"
                 if key not in self._noted:
                     self._noted.add(key)
                     self._journal.append(
                         ControlFire(
                             event.code,
                             event.pin,
-                            f"{event.scope}.{event.row}",
+                            answered,
                             event.pin,
                             event.verb.value,
                             event.reason,
@@ -529,14 +530,14 @@ class UnitSliceHandler:
                     )
             refused: Sequence[DecisionRow] = taken if event.kind == "would_fire" else suppressed
             for row in refused:
-                key = f"would:{event.row}:{row.row_id}"
+                key = f"would:{answered}:{row.row_id}"
                 if key in self._noted:
                     continue
                 self._noted.add(key)
                 self._journal.append(
                     WouldHave(
                         row.market_id,
-                        f"{event.scope}.{event.row}",
+                        answered,
                         row.row_id,
                         event.code,
                         event.reason,
