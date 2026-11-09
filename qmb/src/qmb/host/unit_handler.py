@@ -108,7 +108,8 @@ class HeldPosition:
     """How far the price has gone for the position since its entry, in R of its entry stop."""
     rate: Fraction | None = None
     """The account-currency rate the entry was sized at, stamped on its close (AD-10). A position
-    adopted after a restart carries none, and its money is summed as the quote figure it has."""
+    adopted after a restart carries none; the account converts its money by the rate that call
+    holds for its quote."""
     rate_ts: Instant | None = None
     """When that rate was read, so the close can stamp its age without reading a rate again."""
 
@@ -251,7 +252,7 @@ def _exact(value: Decimal | Fraction) -> Fraction:
 
 
 def _converted(money: Decimal, rate: Fraction | None) -> Fraction:
-    """One row's money in the account's currency. A row with no stamped rate keeps its figure."""
+    """One row's money in the account's currency at ``rate``, or the quote figure for no rate."""
     return Fraction(money) if rate is None else Fraction(money) * rate
 
 
@@ -426,22 +427,35 @@ class UnitSliceHandler:
     def _account(self, instant: Instant) -> Account:
         """The account facts at ``instant``: the equity in the account's currency and the rates.
 
-        Each closed trade's money is the quote figure its row kept, so it is converted by the
-        rate that row stamped before the sum; a row with no stamp keeps the figure it has. The
-        rates come from the host's port for every quote the unit reads, and a quote it cannot
-        price is left out, which the converter names ``rate_absent`` on that entry alone.
+        Each closed trade's money is the quote figure its row kept, so it is converted before the
+        sum by the rate that row stamped; a row that carries none, an adopted position's close, is
+        converted by the rate this call holds for its quote. The rates come from the host's port
+        for every quote the unit reads, and a quote it cannot price is left out, which the
+        converter names ``rate_absent`` on that entry alone.
         """
+        rates: dict[str, Fact] = {}
+        if self._rates is not None:
+            for record in self._records.values():
+                fact = self._rates.rate(record, instant)
+                if fact is not None:
+                    rates[record.currency] = fact
         equity = Fraction(self._equity)
-        equity += sum((_converted(t.money, t.rate) for t in self._trades), Fraction(0))
+        equity += sum(
+            (_converted(t.money, self._row_rate(t, rates)) for t in self._trades), Fraction(0)
+        )
         equity += sum((Fraction(c.money) for c in self._cash), Fraction(0))
         if self._rates is None:
             return Account(_amount(equity))
-        rates: dict[str, Fact] = {}
-        for record in self._records.values():
-            fact = self._rates.rate(record, instant)
-            if fact is not None:
-                rates[record.currency] = fact
         return Account(_amount(equity), self._rates.currency, MappingProxyType(rates))
+
+    def _row_rate(self, trade: UnitTrade, rates: Mapping[str, Fact]) -> Fraction | None:
+        """The rate ``trade``'s money converts by: its own stamp, else this call's rate for the
+        row's quote. A quote the call holds no fact for keeps the row's quote figure."""
+        if trade.rate is not None:
+            return trade.rate
+        record = self._records.get(trade.market_id)
+        fact = None if record is None else rates.get(record.currency)
+        return None if fact is None or fact.value is None else _exact(fact.value)
 
     def _position(self, market: str) -> OwnPosition | None:
         held = self._held.get(market)

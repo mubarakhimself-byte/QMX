@@ -1,9 +1,10 @@
 """The rate into the account's currency, read from QMB's own bars (AD-10 "Currency").
 
-Four seams: the fact is the conversion bar's mid as an exact ``Fraction``, a replay with no
+Five seams: the fact is the conversion bar's mid as an exact ``Fraction``, a replay with no
 conversion bars skips by ``rate_absent`` and says so on its run stamp, the G check sizes a
-JPY-quoting unit, and a stale rate never stops an exit. The literals are the section's
-Verify, unit block: 500 USD at the stop from equity 100000 at fraction 0.005.
+JPY-quoting unit, a stale rate never stops an exit, and a close sums in dollars whether its
+entry's rate was stamped at the mint bar or adopted after a restart carried none. The literals
+are the section's Verify, unit block: 500 USD at the stop from equity 100000 at fraction 0.005.
 """
 
 # pyright: reportPrivateUsage=false
@@ -51,6 +52,7 @@ from qml.protocol.unit import (
     Account,
     DecisionRow,
     HostedUnit,
+    OwnPosition,
     Priced,
     Proposal,
     QuoteBar,
@@ -201,6 +203,18 @@ def _four_markets() -> tuple[list[tuple[str, str]], dict[str, dict[str, object]]
 def _flat(bid: str, ask: str, count: int = 3) -> list[Prices]:
     """``count`` bars whose four quotes sit at ``bid`` on the bid side and ``ask`` on the ask."""
     return [((bid, bid, bid, bid), (ask, ask, ask, ask)) for _ in range(count)]
+
+
+def _quote_bars(bars: Sequence[Prices]) -> list[QuoteBar]:
+    """The same bars as the rows the driver pushes, at the instants the folder writes them."""
+    return [
+        QuoteBar(
+            _instant(step),
+            OHLC(*(Decimal(cell) for cell in bid)),
+            OHLC(*(Decimal(cell) for cell in ask)),
+        )
+        for step, (bid, ask) in enumerate(bars)
+    ]
 
 
 def _target() -> ExecutionTarget:
@@ -546,6 +560,98 @@ def test_a_stale_rate_never_stops_an_exit(tmp_path: Path) -> None:
     trades = [record for record in rig.journal.records if isinstance(record, UnitTrade)]
     assert [(t.exit_kind, t.quantity) for t in trades] == [(FillKind.CLOSE, Decimal("1.00"))]
     assert trades[0].rate == Fraction(1)
+
+
+def test_a_stamped_jpy_close_sums_in_dollars(tmp_path: Path) -> None:
+    """The entry's rate is stamped at the mint bar, so the stop one bar later sums at 1/150."""
+    bars: list[Prices] = [
+        (
+            ("149.99", "149.99", "149.99", "149.99"),
+            ("150.01", "150.01", "150.01", "150.01"),
+        ),
+        (
+            ("150.00", "150.00", "149.00", "149.20"),
+            ("150.00", "150.00", "149.50", "149.60"),
+        ),
+    ]
+    folder = _folder(
+        tmp_path,
+        markets=[("fx.usdjpy", "USDJPY")],
+        records={"fx.usdjpy": _jpy_record("USDJPY", "usdjpy")},
+        bars={"fx.usdjpy": bars},
+    )
+    loaded = _ok(load_unit_folder(folder))
+    entry = _proposal(
+        loaded.compiled,
+        loaded.records["fx.usdjpy"],
+        market="fx.usdjpy",
+        instant=_instant(0),
+        entry="150.00",
+        stop="149.50",
+        row="row-usdjpy-entry",
+    )
+    rig = _run_folder(
+        folder,
+        rates=ReplayRates(ACCOUNT_CURRENCY, loaded.conversions, loaded.rate_feeds),
+        queued={_instant(0).value_ns: (entry,)},
+    )
+    _drive(rig, {"fx.usdjpy": _quote_bars(bars)})
+
+    trades = [record for record in rig.journal.records if isinstance(record, UnitTrade)]
+    assert [(t.exit_kind, t.quantity, t.money, t.rate, t.rate_age_s) for t in trades] == [
+        (FillKind.STOP, Decimal("1.50"), Decimal("-75000.00"), Fraction(1, 150), Decimal("900"))
+    ]
+    account = cast("Account", rig.handler.read_surfaces()["account"].at(_instant(1)))
+    assert account.equity == Decimal("99500")
+
+
+def test_an_adopted_jpy_close_sums_at_the_accounts_rate(tmp_path: Path) -> None:
+    """A position adopted after a restart carries no stamp, so the account converts its close."""
+    bars: list[Prices] = [
+        (
+            ("149.00", "149.00", "149.00", "149.00"),
+            ("149.20", "149.20", "149.20", "149.20"),
+        ),
+    ]
+    folder = _folder(
+        tmp_path,
+        markets=[("fx.usdjpy", "USDJPY")],
+        records={"fx.usdjpy": _jpy_record("USDJPY", "usdjpy")},
+        bars={"fx.usdjpy": bars},
+    )
+    loaded = _ok(load_unit_folder(folder))
+    rig = _run_folder(
+        folder,
+        rates=ReplayRates(ACCOUNT_CURRENCY, loaded.conversions, loaded.rate_feeds),
+        queued={},
+    )
+    position = OwnPosition(
+        "adopted-usdjpy",
+        Side.LONG,
+        Decimal("1.5"),
+        Decimal("150.00"),
+        loaded.compiled.compiled_fingerprint,
+        _instant(0),
+    )
+    _ok(
+        rig.handler.adopt(
+            "fx.usdjpy",
+            position,
+            stop=Decimal("149.50"),
+            entry_stop=Decimal("149.50"),
+            target=None,
+            decision_row_id="row-adopted",
+        )
+    )
+    _drive(rig, {"fx.usdjpy": _quote_bars(bars)})
+
+    trades = [record for record in rig.journal.records if isinstance(record, UnitTrade)]
+    assert [(t.exit_kind, t.money, t.rate, t.rate_age_s) for t in trades] == [
+        (FillKind.STOP, Decimal("-150000.00"), None, Decimal(0))
+    ]
+    account = cast("Account", rig.handler.read_surfaces()["account"].at(_instant(0)))
+    assert account.equity == Decimal("98993.96378269617706237424547")
+    assert account.rates["JPY"].value == Fraction(10, 1491)
 
 
 def test_a_replay_with_the_conversion_bars_says_nothing_about_the_rate(tmp_path: Path) -> None:
