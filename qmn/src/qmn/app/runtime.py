@@ -3431,22 +3431,23 @@ class Runtime:
     # --- driving units on closed bars ---
 
     def _recent(self, unit: NodeUnit, venue: Venue, market: str) -> tuple[QuoteBar, ...]:
-        """The feed bars to replay for warm-up: enough base bars for the unit's slowest stream.
+        """The feed bars to replay for warm-up: the primary's ``warm_needed`` buckets, no more.
 
-        A stream ``factor`` base bars long needs ``factor`` bars per one of its own, and up to one
-        bucket more before the first bucket it sees from its start. The slowest stream sets the
-        count, because every stream reaches its own warm-up on the primary's steps.
+        ``warm_needed`` counts the slowest stream's warm-up in the primary's steps, so the read
+        follows the unit's own stepping even when it reads several streams. A stream ``factor``
+        feed bars long needs ``factor`` bars per primary step, and the recording may start part
+        way through a bucket, which ``roll_up`` drops. So the read stops one base bar short of
+        ``warm_needed + 1`` whole primary buckets: a mid-stream start still yields ``warm_needed``
+        whole buckets, and never a bucket past the one that completes warm-up. A unit driven past
+        that bucket would mint from the replay.
         """
         if unit.base_ns is None or unit.base_ns <= 0:
             return venue.feed.recording.recent(market, unit.warm_needed)
-        bars = unit.warm_needed
-        for name in unit.streams:
-            seconds = unit.stream_seconds.get(name)
-            if seconds is None:
-                continue
-            factor = seconds * _NS // unit.base_ns
-            bars = max(bars, (unit.warm_up.get(name, 0) + 2) * factor)
-        return venue.feed.recording.recent(market, bars)
+        seconds = unit.stream_seconds.get(unit.stream)
+        if seconds is None:
+            return venue.feed.recording.recent(market, unit.warm_needed)
+        factor = seconds * _NS // unit.base_ns
+        return venue.feed.recording.recent(market, (unit.warm_needed + 1) * factor - 1)
 
     def _drive(self, venue: Venue, bars: Sequence[Bar]) -> None:
         for hosted in self.hosted.values():
