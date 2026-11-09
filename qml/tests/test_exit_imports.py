@@ -39,7 +39,11 @@ def _reaching(text: str) -> list[str]:
         if isinstance(node, ast.Import):
             names = [alias.name for alias in node.names]
         elif isinstance(node, ast.ImportFrom):
-            names = ["." * node.level + (node.module or "")]
+            module = "." * node.level + (node.module or "")
+            if _FORBIDDEN.intersection(module.split(".")):
+                names = [module]
+            else:
+                names = [f"{module}.{alias.name}" for alias in node.names]
         for name in names:
             if _FORBIDDEN.intersection(name.split(".")):
                 found.append(name)
