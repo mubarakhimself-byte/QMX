@@ -99,7 +99,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 5
+COMPILER_FORMAT_VERSION: Final[int] = 6
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -356,17 +356,23 @@ def _exit_use(face: EntryFace) -> ExitUse | None:
 
 def _exit_gap(face: EntryFace, use: ExitUse | None) -> str | None:
     """Why this format cannot run ``face`` as an exit, by its shape and never by its name, so an
-    agent's block of the same shape refuses too. The host feeds a per-bar exit nothing and reads a
-    stop with nothing at entry."""
+    agent's block of the same shape refuses too. A per-bar exit's ports are the position and the
+    bar the host hands it, and it names none of its own; a stop is read with nothing at entry."""
     if use is None:
         return f"{face.pin} outputs {face.output.type.value}, which no exit use takes"
     if face.component_type != "exit":
         return f"{face.pin} is a {face.component_type} block, so nothing reads its level at entry"
-    reads_position = any(port.stream_kind == "position" for port in face.inputs)
-    if (use is ExitUse.PER_BAR and face.inputs) or (use is ExitUse.STOP and reads_position):
+    if use is ExitUse.PER_BAR and face.inputs:
         return (
-            f"{face.pin} is not built yet: it reads the position or the bar, which no host passes "
-            "an exit until the risk session agrees its socket"
+            f"{face.pin} is not built yet: it names inputs of its own, and this format runs a "
+            "per-bar exit whose ports are the position and the bar it is handed. Which inputs a "
+            "per-bar exit may name is the risk session's"
+        )
+    reads_position = any(port.stream_kind == "position" for port in face.inputs)
+    if use is ExitUse.STOP and reads_position:
+        return (
+            f"{face.pin} is not built yet: it reads the position, and a stop is read before the "
+            "entry it protects"
         )
     return None
 
@@ -469,7 +475,9 @@ class _Wiring:
         return SidePlan(side, tuple(planned))
 
     def exits(self) -> tuple[ExitPlan, ...]:
-        """The exits this format runs: one of each use, and always the stop. A refused stop still
+        """The exits this format runs, in the order the document writes them: one stop, one
+        target, and any number of per-bar exits. The per-bar exits are the stack one bar's
+        decision comes from, so their order is the order they answer in. A refused stop still
         counts as stated, so its own refusal is the one he reads."""
         planned: list[ExitPlan] = []
         stated: set[ExitUse] = set()
@@ -496,7 +504,7 @@ class _Wiring:
             gap = _exit_gap(bound.face, use)
             if gap is not None:
                 self.problems.add("exit_not_built", where, gap)
-            elif use in stated:
+            elif use in stated and use is not ExitUse.PER_BAR:
                 self.problems.add(
                     "exit_not_built", where, f"{_FORMAT} runs one {use} exit, and this is another"
                 )

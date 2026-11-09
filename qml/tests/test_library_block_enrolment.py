@@ -11,7 +11,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from qml.blocks.api import Size
+from qml.blocks.api import Side, Size
 from qml.compile import ExitUse
 
 import test_socket_contracts as contracts
@@ -57,9 +57,9 @@ def test_a_library_sizer_is_enrolled() -> None:
 
 
 def test_the_exit_contract_feeds_only_host_evidence() -> None:
-    """A stop is read with nothing once at entry to get its level, then fed its bar each bar, a
-    target the entry and the stop once, and a per-bar exit nothing, which is exactly what `_Run`
-    builds (`unit.py:756-760`, `:570-577`, `:774-779`, `:686`)."""
+    """A stop is read with nothing once at entry to get its level, then fed its side's bar each
+    bar, a target the entry and the stop once, and a per-bar exit its position's facts, its
+    closing side's bar and that bar's close, which is exactly what `_Run` builds (AD-13)."""
     bar = {
         "open": Decimal("1.0850"),
         "high": Decimal("1.0855"),
@@ -68,12 +68,31 @@ def test_the_exit_contract_feeds_only_host_evidence() -> None:
     }
 
     fed = {
-        use: {frozenset(evidence) for _, evidence in contracts._host_calls(use, [bar], {})}
+        use: {
+            frozenset(evidence)
+            for _, evidence in contracts._host_calls(use, [bar], {}, Side.LONG)
+        }
         for use in ExitUse
     }
 
+    facts = {
+        "position_id",
+        "side",
+        "quantity",
+        "entry_price",
+        "opened_by",
+        "stop",
+        "targets",
+        "bars_held",
+        "mfe_r",
+        "mae_r",
+        "stage",
+        "numbers_at_entry",
+        "series",
+        "clock",
+    }
     assert fed == {
         ExitUse.STOP: {frozenset({"series"}), frozenset()},
         ExitUse.TARGET: {frozenset({"entry_price", "stop_price"})},
-        ExitUse.PER_BAR: {frozenset()},
+        ExitUse.PER_BAR: {frozenset(facts)},
     }

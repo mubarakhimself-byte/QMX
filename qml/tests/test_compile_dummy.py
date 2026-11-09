@@ -369,12 +369,12 @@ def test_a_whole_bar_price_series_compares_the_close() -> None:
     }
 
     assert counts == {
-        "alligator-line": 1592,
-        "heikin-ashi-close": 1154,
+        "alligator-line": 1594,
+        "heikin-ashi-close": 1155,
         "heikin-ashi-open": 1334,
-        "ichimoku-senkou-a": 1595,
-        "moving-average-fractal-adaptive": 1206,
-        "price-channel-midpoint": 1548,
+        "ichimoku-senkou-a": 1598,
+        "moving-average-fractal-adaptive": 1207,
+        "price-channel-midpoint": 1550,
     }
 
 

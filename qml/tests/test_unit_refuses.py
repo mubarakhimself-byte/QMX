@@ -356,7 +356,6 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
     ),
     "two stops": (_exit_at(3, "swing-stop-buffer@1", _BARS), "exit_not_built", "/exit_set/3"),
     "two targets": (_exit_at(3, "target-r-multiple@1"), "exit_not_built", "/exit_set/3"),
-    "two per-bar exits": (_exit_at(3, "time-exit-bars@1"), "exit_not_built", "/exit_set/3"),
     "unrealised-profit-cap": (
         _exit_at(2, "unrealised-profit-cap@1", _BARS),
         "exit_not_built",

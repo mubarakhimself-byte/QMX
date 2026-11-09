@@ -8,7 +8,8 @@ reads the host's surfaces and returns a ``UnitStep``: CT-23 format 3 intents (ad
 The host injects these read surfaces, each an object with ``at(instant)``:
 
 - ``bars:<stream>:<market_id>``: the latest closed ``QuoteBar`` knowable at the instant.
-- ``own_position:<market_id>``: the ``OwnPosition`` open on that market, or ``None`` when flat.
+- ``own_position:<market_id>``: the position open on that market as a ``PositionFacts``, the
+  ``OwnPosition`` a host that tracks none of its protection answers, or ``None`` when flat.
 - ``own_journal``: the ``ClosedTrade`` rows this run or deployment closed.
 - ``account``: the ``Account`` facts the sizer reads.
 
@@ -64,6 +65,15 @@ from qml.environment import current_environment
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
+from qml.protocol.exits import (
+    ExitAnswer,
+    ExitSlot,
+    ExitStack,
+    PositionFacts,
+    answer,
+    chosen,
+    facts_from,
+)
 from qml.receipt import record_stored
 from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
@@ -556,7 +566,8 @@ class _Market:
     """Each side's derived numbers: a number both sides bind moves once per bar per side."""
     last_bar_ns: int | None = None
     bars: int = 0
-    timers: dict[str, Instance] = field(default_factory=dict[str, Instance])
+    timers: dict[str, ExitStack] = field(default_factory=dict[str, ExitStack])
+    """Each held position's per-bar exits, by position id (AD-13)."""
     exited: set[str] = field(default_factory=set[str])
     in_force: dict[Side, dict[str, Decimal]] = field(default_factory=dict[Side, dict[str, Decimal]])
     """Each side's numbers this bar's decisions read, taken before the derived numbers update."""
@@ -703,7 +714,7 @@ class _Core:
             side.side.value: {d.number for d in self.plan.derived if d.side is side.side}
             for side in self.plan.sides
         }
-        made = self.timer()
+        made = self.timer(Side.LONG)
         timer = made.export_state() if made is not None else None
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
@@ -743,10 +754,10 @@ class _Core:
             for key, state in cast("Mapping[str, Mapping[str, object]]", saved["blocks"]).items():
                 m.instances[key].import_state(state)
             for pid, state in cast("Mapping[str, Mapping[str, object]]", saved["timers"]).items():
-                timer = self.timer()
-                if timer is not None:  # shape_gap sent a snapshot with timers and no exit cold
-                    timer.import_state(state)
-                    m.timers[pid] = timer
+                stack = self.timer(Side.LONG)  # shape_gap refused a timers table with no exit cold
+                if stack is not None:
+                    stack.import_state(state)
+                    m.timers[pid] = stack
             m.exited = set(cast("list[str]", saved["exited"]))
         for name, raw in cast("Mapping[str, Mapping[str, object]]", snapshot["slow"]).items():
             mark = raw["watermark"]
@@ -764,21 +775,18 @@ class _Core:
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
             )
 
-    def timer(self) -> Instance | None:
-        """The per-bar exit for one position, or ``None`` for a unit with no time exit, which
-        layer E warns of (UT-18)."""
-        per_bar = next((e for e in self.plan.exits if e.use is ExitUse.PER_BAR), None)
-        if per_bar is None:
-            return None
-        return per_bar.binding.block.make(
-            self.params(per_bar.binding, self.plan.defaults), per_bar.binding.inputs
-        )
-
-    @property
-    def exit_pin(self) -> str:
-        """The per-bar exit's pin, the root-cause key its fault is filed under (AD-13)."""
-        per_bar = next((e for e in self.plan.exits if e.use is ExitUse.PER_BAR), None)
-        return "per-bar-exit" if per_bar is None else per_bar.binding.pin
+    def timer(self, side: Side) -> ExitStack | None:
+        """The per-bar exits for one position on ``side``, in the compiled order, or ``None`` for
+        a unit with no time exit, which layer E warns of (UT-18)."""
+        slots: list[ExitSlot] = []
+        for e in self.plan.exits:
+            if e.use is not ExitUse.PER_BAR:
+                continue
+            instance = e.binding.block.make(
+                self.params(e.binding, self.plan.defaults), e.binding.inputs, side
+            )
+            slots.append(ExitSlot(f"exit.{e.binding.name}", e.binding.pin, instance))
+        return None if not slots else ExitStack(side, slots)
 
 
 class HostedUnit:
@@ -995,11 +1003,17 @@ class _Run:
 
     def step(self) -> Result[UnitStep]:
         journal = self.surface("own_journal")
-        positions: dict[str, OwnPosition | None] = {}
+        positions: dict[str, PositionFacts | None] = {}
         fresh: dict[str, QuoteBar] = {}
         for m in self.unit.markets:
             position = self.surface(f"own_position:{m.market_id}")
-            positions[m.market_id] = position if isinstance(position, OwnPosition) else None
+            if position is not None and not isinstance(position, (OwnPosition, PositionFacts)):
+                return invalid(
+                    "own_position",
+                    "a position surface answers a PositionFacts, an OwnPosition or None",
+                    market=m.market_id,
+                )
+            positions[m.market_id] = None if position is None else facts_from(position)
             bar = self.surface(f"bars:{self.plan.stream}:{m.market_id}")
             if bar is None:
                 continue
@@ -1026,7 +1040,7 @@ class _Run:
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.UPDATE)
         for m in self.unit.markets:
-            self.exits(m, positions[m.market_id], m.market_id in fresh)
+            self.exits(m, positions[m.market_id], fresh.get(m.market_id))
         for m in self.unit.markets:
             bar = fresh.get(m.market_id)
             sides = results.get(m.market_id)
@@ -1073,13 +1087,12 @@ class _Run:
             plan.side: self.side(m, plan, bar, m.in_force[plan.side]) for plan in self.plan.sides
         }
         for side in (Side.LONG, Side.SHORT):
+            series = bar.bid.fields() if side is Side.LONG else bar.ask.fields()
             for e in self.plan.exits:
                 key = f"{side.value}.{e.binding.key}"
                 if e.use is not ExitUse.STOP or key not in m.instances:
                     continue
-                evidence = {"series": bar.bid.fields()} | self.unit.params(
-                    e.binding, m.in_force[side]
-                )
+                evidence = {"series": series} | self.unit.params(e.binding, m.in_force[side])
                 _answered(e.binding.pin, m.instances[key], evidence)
         return sides
 
@@ -1177,16 +1190,19 @@ class _Run:
 
     # --- exits ---------------------------------------------------------------------
 
-    def exits(self, m: _Market, position: OwnPosition | None, new_bar: bool) -> None:
-        """This market's per-bar exits on ``position``.
+    def exits(self, m: _Market, position: PositionFacts | None, bar: QuoteBar | None) -> None:
+        """This market's per-bar exits on ``position``, on the bar of the quote that closes it.
 
         A position is this unit's when its key is this version's logic half, which a risk edit
         leaves alone, or this compile's own fingerprint, which a host that pins one compile
         stamps (AD-3). Either names this unit version, so another version's position is never
-        closed. A raising exit block is skipped with a ``Fault`` and the next exit still runs; no
-        exit able to run for ``exit_fault_bars`` bars asks the host's ``close_scope`` port to
-        close the position (AD-13, AD-23 step 4). A step where this market has no new bar leaves
-        that count alone, so a step of the other market's bar never resets it.
+        closed. Every exit runs on the closing side's bar, the bid for a long and the ask for a
+        short, so a short's stop feels the spread (AD-13). A raising exit block is skipped with a
+        ``Fault`` and the next exit still runs; no exit able to run for ``exit_fault_bars`` bars
+        asks the host's ``close_scope`` port to close the position (AD-13, AD-23 step 4). One
+        action runs: the chosen one, by rank and then by the order the document wrote the exits
+        in. A step where this market has no new bar leaves that count alone, so a step of the
+        other market's bar never resets it.
         """
         version = self.unit.compiled
         mine = position is not None and position.opened_by in (
@@ -1196,28 +1212,57 @@ class _Run:
         for gone in [pid for pid in m.timers if position is None or pid != position.position_id]:
             del m.timers[gone]
             m.exited.discard(gone)
-        if position is None or not new_bar:
+        if position is None or bar is None:
             return
         if not mine or position.position_id in m.exited:
             self.unit.exit_faults.pop(position.position_id, None)
             return
-        timer = m.timers.get(position.position_id)
-        if timer is None:
-            timer = self.unit.timer()
-            if timer is None:
+        stack = m.timers.get(position.position_id)
+        if stack is None or stack.side is not position.side:
+            built = self.unit.timer(position.side)
+            if built is None:
                 return
-            m.timers[position.position_id] = timer
-        try:
-            out = timer.update({})
-        except Exception:  # an exit's raise is this bar's Fault, never a step refusal (AD-13)
-            self.fault(self.unit.exit_pin, FaultPhase.EXIT)
+            if stack is not None:  # a restore built the table before it knew the side
+                built.import_state(stack.export_state())
+            m.timers[position.position_id] = stack = built
+        series = bar.bid.fields() if position.side is Side.LONG else bar.ask.fields()
+        answers: list[ExitAnswer] = []
+        raised: list[str] = []
+        ran = 0
+        for plan in self.plan.exits:
+            if plan.use is not ExitUse.PER_BAR:
+                continue
+            evidence = position.evidence(
+                self.instant,
+                series,
+                self.unit.params(plan.binding, m.in_force.get(position.side, {})),
+            )
+            try:
+                raw = stack.instance(plan.binding.key).update(evidence)
+                action = answer(plan.binding.pin, raw)
+            except Exception:  # an exit's raise is this bar's Fault, never a step refusal (AD-13)
+                raised.append(plan.binding.pin)
+                continue
+            ran += 1
+            if action is not None:
+                answers.append(ExitAnswer(plan.binding.pin, plan.binding.key, action))
+        for pin in raised:
+            self.fault(pin, FaultPhase.EXIT)
+        if raised and not ran:
             self.no_exit_ran(position)
-            return
-        self.unit.exit_faults.pop(position.position_id, None)
-        if not (isinstance(out, Signal) and out.state):
+        else:
+            self.unit.exit_faults.pop(position.position_id, None)
+        winner = chosen(answers)
+        if winner is None or winner.action.kind != "close_full":
             return
         m.exited.add(position.position_id)
-        row = self.decision(m, position.side, "taken", (), f"time exit after {_text(out)} bars")
+        row = self.decision(
+            m,
+            position.side,
+            "taken",
+            (),
+            f"{winner.pin} closes the position: {winner.action.reason_code}",
+        )
         self.intents.append(
             {
                 "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
@@ -1228,12 +1273,12 @@ class _Run:
                     "instrument": {"venue": m.record.venue, "symbol": m.record.symbol},
                     "opened_by": position.opened_by.value,
                 },
-                "reason_code": {"code": "time-exit", "book_family": "unit"},
+                "reason_code": {"code": winner.action.reason_code, "book_family": "unit"},
                 "decision_row_id": row,
             }
         )
 
-    def no_exit_ran(self, position: OwnPosition) -> None:
+    def no_exit_ran(self, position: PositionFacts) -> None:
         """One held position's exits could not run this bar. After ``exit_fault_bars`` in a row
         the host's ``close_scope`` port closes it, once (AD-13, AD-23 step 4)."""
         if position.position_id in self.unit.close_asked:
@@ -1272,7 +1317,7 @@ class _Run:
         m: _Market,
         bar: QuoteBar,
         sides: Mapping[Side, _Side],
-        position: OwnPosition | None,
+        position: PositionFacts | None,
     ) -> None:
         signalled = [s for s, r in sides.items() if r.holds]
         for side, result in sides.items():

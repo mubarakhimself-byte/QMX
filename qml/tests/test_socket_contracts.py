@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from qmf.core.chrono import Instant
+from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import is_refusal
 from qmf.risk.unit_intent import UnitExitIntent, UnitIntent, parse_unit_intent
 from qml.blocks.api import (
@@ -27,6 +29,7 @@ from qml.blocks.api import (
     Block,
     CrossUnitHook,
     EntryFace,
+    ExitAction,
     Halt,
     HaltAction,
     OutputType,
@@ -40,6 +43,7 @@ from qml.blocks.api import (
 from qml.catalogue import Loaded, LockEntry, load
 from qml.compile import ExitUse, compile_unit
 from qml.numbers import InstrumentRecord, lots, parse_record
+from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import OwnPosition
 from qml.unit.model import Scope
 from test_compile_dummy import (
@@ -250,31 +254,57 @@ def _declares(output: OutputType) -> list[str]:
     return [f"exit contract: its entry declares {output.value}, not level or exit_action"]
 
 
+def _acts(answer: object) -> bool:
+    """Whether a per-bar exit's answer is one the unit can run: a holding ``Signal``, or an
+    ``ExitAction`` whose kind a host runs and whose reason code is not empty."""
+    if isinstance(answer, Signal):
+        state = cast("object", answer.state)
+        return isinstance(state, bool)
+    return (
+        isinstance(answer, ExitAction)
+        and answer.kind in ("close_full", "close_partial", "amend_protection")
+        and bool(answer.reason_code)
+    )
+
+
 def _exit_breaks(use: ExitUse, block: Block, params: Mapping[str, Decimal]) -> list[str]:
-    wanted = "a Signal" if use is ExitUse.PER_BAR else "a price level"
+    wanted = "a Signal or an ExitAction" if use is ExitUse.PER_BAR else "a price level"
     breaks: list[str] = []
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
-        for where, evidence in _host_calls(use, _bars(), params):
+        for where, evidence in _host_calls(use, _bars(), params, side):
             answer = instance.update(evidence)
-            state = cast("object", answer.state) if isinstance(answer, Signal) else None
-            if use is ExitUse.PER_BAR:
-                answered = isinstance(state, bool)
-            else:
-                answered = isinstance(answer, Decimal) and answer.is_finite()
+            answered = (
+                _acts(answer)
+                if use is ExitUse.PER_BAR
+                else (isinstance(answer, Decimal) and answer.is_finite())
+            )
             if answer is None or answered:
                 continue
             breaks.append(f"exit contract, {side.value} {where}: {answer!r} is not {wanted}")
     return breaks
 
 
+def _position_fp() -> Fingerprint:
+    made = fingerprint({"contract": "the position a per-bar exit protects"})
+    assert not is_refusal(made), made
+    return made.value
+
+
+_POSITION_FP = _position_fp()
+_POSITION_CLOCK = Instant(1_740_952_800_000_000_000)
+
+
 def _host_calls(
-    use: ExitUse, bars: Sequence[Mapping[str, Decimal]], params: Mapping[str, Decimal]
+    use: ExitUse,
+    bars: Sequence[Mapping[str, Decimal]],
+    params: Mapping[str, Decimal],
+    side: Side,
 ) -> list[tuple[str, Mapping[str, object]]]:
     """The calls the unit host makes to an exit of this use, and the evidence each carries: a stop
-    is read with nothing once at entry to get its level (`unit.py:756-760`), then fed its bar each
-    bar (`unit.py:570-577`); a target is read once at entry with the entry and the stop
-    (`unit.py:774-779`); and a per-bar exit is read with nothing at each new bar (`:686`)."""
+    is read with nothing once at entry to get its level, then fed its side's bar each bar; a target
+    is read once at entry with the entry and the stop; and a per-bar exit is read each new bar with
+    the position's facts, its closing side's bar, and that bar's close under ``clock``."""
     match use:
         case ExitUse.STOP:
             calls: list[tuple[str, Mapping[str, object]]] = [("at entry", {})]
@@ -289,7 +319,18 @@ def _host_calls(
             }
             return [("at entry", entry)]
         case ExitUse.PER_BAR:
-            return [(f"bar {i}", {}) for i in range(len(bars))]
+            facts = PositionFacts(
+                position_id="pos-1",
+                side=side,
+                quantity=Decimal("0.10"),
+                entry_price=Decimal("1.0850"),
+                opened_by=_POSITION_FP,
+                stop=Decimal("1.0820"),
+            )
+            return [
+                (f"bar {i}", facts.evidence(_POSITION_CLOCK, bar, params))
+                for i, bar in enumerate(bars)
+            ]
 
 
 def _run(side: Side) -> list[dict[str, Decimal]]:
@@ -317,10 +358,10 @@ def _never_acts(use: ExitUse, block: Block, params: Mapping[str, Decimal]) -> li
     for side in (Side.LONG, Side.SHORT):
         instance = block.make(params, {"series": "m15"}, side)
         answers = [
-            instance.update(evidence) for _, evidence in _host_calls(use, _run(side), params)
+            instance.update(evidence) for _, evidence in _host_calls(use, _run(side), params, side)
         ]
         acted = (
-            any(isinstance(a, Signal) and a.state for a in answers)
+            any((isinstance(a, Signal) and a.state) or isinstance(a, ExitAction) for a in answers)
             if use is ExitUse.PER_BAR
             else any(isinstance(a, Decimal) for a in answers)
         )
@@ -614,7 +655,7 @@ def test_an_exit_must_answer_what_its_entry_declares() -> None:
         "exit contract, long at entry: Signal(state=True, value=None) is not a price level"
     ]
     assert _exit_breaks(ExitUse.PER_BAR, _Fake(Signal(state=1)), {})[:1] == [  # pyright: ignore[reportArgumentType]
-        "exit contract, long bar 0: Signal(state=1, value=None) is not a Signal"
+        "exit contract, long bar 0: Signal(state=1, value=None) is not a Signal or an ExitAction"
     ]
     assert _declares(OutputType.QUANTITY) == [
         "exit contract: its entry declares quantity, not level or exit_action"

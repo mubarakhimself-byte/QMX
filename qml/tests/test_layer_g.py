@@ -44,7 +44,7 @@ def test_the_dummy_passes_the_safety_half_and_fires_every_exit() -> None:
         "entries_short": 6,
     }
     assert g.report["exits_fired"] == {"swing_stop": 5, "target_2r": 1, "time_out": 2}
-    assert g.report["shuffled_day_control"] == {"decisions_equal_to_real": False, "trades": 85}
+    assert g.report["shuffled_day_control"] == {"decisions_equal_to_real": False, "trades": 84}
     safety = cast("dict[str, object]", g.report["safety"])
     assert safety["verdict"] == "pass"
     assert str(safety["layer2_verdict_fingerprint"]).startswith("fp1:sha256:")

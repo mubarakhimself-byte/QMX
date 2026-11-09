@@ -152,7 +152,7 @@ def _without_cold_start(steps: list[UnitStep]) -> list[UnitStep]:
         ),
         pytest.param(
             _put({"pos-1": {}}, "markets", "fx.eurusd", "timers"),
-            f"{_SHAPE} (markets.fx.eurusd.timers.pos-1 lacks held)",
+            f"{_SHAPE} (markets.fx.eurusd.timers.pos-1 lacks exit.time_out)",
             id="malformed-timer",
         ),
     ],

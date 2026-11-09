@@ -51,6 +51,7 @@ __all__ = [
     "CrossUnitHook",
     "EntryFace",
     "EntryOrder",
+    "ExitAction",
     "ExitInstance",
     "FaceProblem",
     "Factor",
@@ -142,6 +143,23 @@ class Factor:
     reason: str
 
 
+@dataclass(frozen=True, slots=True)
+class ExitAction:
+    """An exit's answer: close the whole position, close part of it, or move its protection.
+
+    ``kind`` is what the unit does with the answer. ``close_full`` closes the position,
+    ``close_partial`` closes ``fraction`` of it, and ``amend_protection`` moves the stop to
+    ``new_stop``, which may only tighten. ``target_position`` is reserved for the venue-resting
+    target and no host runs it yet. ``reason_code`` is the word the close row and the receipt
+    carry, so a close always says why it closed.
+    """
+
+    kind: Literal["close_full", "close_partial", "amend_protection", "target_position"]
+    reason_code: str
+    fraction: Decimal | None = None
+    new_stop: Decimal | None = None
+
+
 class Instance(Protocol):
     """One running block, made for one binding on one side."""
 
@@ -197,10 +215,12 @@ class SizerInstance(Instance, Protocol):
 
 class ExitInstance(Instance, Protocol):
     """An exit slot. A stop reads ``series`` bars and answers its price level; a target reads
-    ``entry_price`` and ``stop_price`` and answers its price level; a per-bar exit answers a
-    ``Signal`` that closes the position while it holds. Levels are exact ``Decimal`` prices."""
+    ``entry_price`` and ``stop_price`` and answers its price level; a per-bar exit reads the
+    position's facts, the bar of the quote that closes it under ``series`` and that bar's close
+    under ``clock``, and answers an ``ExitAction`` or a ``Signal`` that closes the position while
+    it holds. Levels are exact ``Decimal`` prices."""
 
-    def update(self, evidence: Mapping[str, object]) -> Decimal | Signal | None: ...
+    def update(self, evidence: Mapping[str, object]) -> Decimal | Signal | ExitAction | None: ...
 
 
 class HaltAction(StrEnum):

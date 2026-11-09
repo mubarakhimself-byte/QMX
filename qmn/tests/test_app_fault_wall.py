@@ -33,6 +33,8 @@ from qmb.host.unit_handler import UnitSliceHandler
 from qmf.core.chrono import Instant
 from qmf.core.refusal import is_refusal
 from qml.blocks.api import EntryOrder, Signal
+from qml.compile import ExitUse
+from qml.protocol.exits import ExitSlot, ExitStack
 from qml.protocol.unit import HostedUnit, OwnPosition, QuoteBar
 from qml.unit.model import Side
 from qmn.app.feed_keeper import Bar
@@ -200,8 +202,12 @@ def market_of(runtime: Runtime, deployment_id: str):  # noqa: ANN201 - the marke
 def answer_every_exit(runtime: Runtime, deployment_id: str) -> None:
     """Make each held position's per-bar exit answer "close it" on the next bar."""
     market = market_of(runtime, deployment_id)
+    answer = _Answering(Signal(state=True, value=Decimal(3)))
     for position_id in list(market.timers):
-        market.timers[position_id] = _Answering(Signal(state=True, value=Decimal(3)))
+        held = market.timers[position_id]
+        market.timers[position_id] = ExitStack(
+            held.side, tuple(ExitSlot(one.key, one.pin, answer) for one in held.slots)
+        )
 
 
 def force_short_entries(runtime: Runtime, deployment_id: str) -> None:
@@ -214,10 +220,16 @@ def force_short_entries(runtime: Runtime, deployment_id: str) -> None:
 
 def raise_every_exit(runtime: Runtime, deployment_id: str) -> None:
     """Make each held position's per-bar exit raise, so no exit of that unit can run."""
+    hosted = hosted_of(runtime, deployment_id)
+    slots = tuple(
+        ExitSlot(f"exit.{e.binding.name}", e.binding.pin, _Raising())
+        for e in hosted._core.plan.exits
+        if e.use is ExitUse.PER_BAR
+    )
     market = market_of(runtime, deployment_id)
     for position_id in list(market.timers):
-        market.timers[position_id] = _Raising()
-    hosted_of(runtime, deployment_id)._core.timer = _Raising
+        market.timers[position_id] = ExitStack(market.timers[position_id].side, slots)
+    hosted._core.timer = lambda side: ExitStack(side, slots)
 
 
 def aim_at(runtime: Runtime, deployment_id: str, level: Decimal) -> None:
@@ -413,7 +425,10 @@ def test_the_exit_fault_streak_survives_a_step_of_the_other_markets_bar(tmp_path
 
     serve(METAL, metal[0][1])
     step(metal[0][0])  # the first bar builds the per-bar exit's timer
-    metal_market.timers[position.position_id] = _Raising()
+    built = metal_market.timers[position.position_id]
+    metal_market.timers[position.position_id] = ExitStack(
+        built.side, tuple(ExitSlot(one.key, one.pin, _Raising()) for one in built.slots)
+    )
     serve(METAL, metal[1][1])
     step(metal[1][0])
     serve(MARKET, fx[0][1])
