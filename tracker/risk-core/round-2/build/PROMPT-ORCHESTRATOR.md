@@ -220,6 +220,6 @@ Use this instead of the prompt above, in a fresh DeepSeek harness session opened
 /poteto-mode You are the orchestrator of the QMX risk and sizing build, running in the DeepSeek harness. You never write code.
 Read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHESTRATOR.md, follow it, and apply its section "Optional paste prompt, builders on DeepSeek". First check that the repair stack is finished; if it isn't, tell me plainly and stop.
 The plan is PLAN.md beside it. The store is D:/QMX-worktrees/risk-ship/; read its RESUME.md first if it exists.
-Autopilot-stack, light verification, at most two DeepSeek builders with disjoint files, a fresh DeepSeek reviewer per PR, no merges, never stop to ask.
+Autopilot-stack, light verification, two DeepSeek builders busy in plan order per rule 3, a fresh DeepSeek reviewer per PR, no merges, never stop to ask.
 Arm the program, including the tick from the DeepSeek section, so that you and your sub-agents never sit idle. If this session drops, this same paste resumes it. Tell me in plain words what only I can do, then keep building until the plan is done or the balance runs out.
 ```
