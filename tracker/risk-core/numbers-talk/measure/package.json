@@ -1,0 +1,8 @@
+{
+  "name": "n3-measure",
+  "private": true,
+  "description": "N3 which-markets-move measurement scripts",
+  "dependencies": {
+    "dukascopy-node": "1.51.1"
+  }
+}
