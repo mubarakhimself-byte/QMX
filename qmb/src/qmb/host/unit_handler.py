@@ -328,7 +328,7 @@ class UnitSliceHandler:
         *,
         stream: str,
         records: Mapping[str, InstrumentRecord],
-        bars: Mapping[str, Mapping[int, QuoteBar]],
+        bars: Mapping[str, Mapping[int, QuoteBar]] | Mapping[tuple[str, str], Mapping[int, QuoteBar]],
         opened_by: Fingerprint,
         equity: Decimal,
         execution: ExecutionPort,
@@ -337,12 +337,13 @@ class UnitSliceHandler:
         cash: CashPort | None = None,
         rates: RatePort | None = None,
         port: HostPort | None = None,
+        streams: Sequence[str] | None = None,
     ) -> None:
-        self._stream = stream
+        self._streams = tuple(dict.fromkeys((stream, *(streams or ()))))
+        """The unit's streams, the primary first: the stream a slice closes on and steps for."""
+        self._stream = self._streams[0]
         self._records = records
-        self._bars: dict[tuple[str, str], Mapping[int, QuoteBar]] = {
-            (stream, market): window for market, window in bars.items()
-        }
+        self._bars: dict[tuple[str, str], Mapping[int, QuoteBar]] = self._windows(bars)
         self._opened_by = opened_by
         self._equity = equity
         self._execution = execution
@@ -369,6 +370,20 @@ class UnitSliceHandler:
         """The held markets the unit asked its host's last fall-through to close at their next
         bar's open, each with the reason it asked (AD-13); a market drops out once its bar comes."""
 
+    def _windows(
+        self,
+        bars: (
+            Mapping[str, Mapping[int, QuoteBar]]
+            | Mapping[tuple[str, str], Mapping[int, QuoteBar]]
+        ),
+    ) -> dict[tuple[str, str], Mapping[int, QuoteBar]]:
+        """The windows by ``(stream, market)``. A host that reads one stream may key them by
+        market alone, and its bars land on that stream."""
+        found: dict[tuple[str, str], Mapping[int, QuoteBar]] = {}
+        for key, window in bars.items():
+            found[key if isinstance(key, tuple) else (self._stream, key)] = window
+        return found
+
     @classmethod
     def start(
         cls,
@@ -376,7 +391,7 @@ class UnitSliceHandler:
         *,
         stream: str,
         records: Mapping[str, InstrumentRecord],
-        bars: Mapping[str, Mapping[int, QuoteBar]],
+        bars: Mapping[str, Mapping[int, QuoteBar]] | Mapping[tuple[str, str], Mapping[int, QuoteBar]],
         opened_by: Fingerprint,
         equity: Decimal,
         execution: ExecutionPort,
@@ -385,6 +400,7 @@ class UnitSliceHandler:
         cash: CashPort | None = None,
         rates: RatePort | None = None,
         port: HostPort | None = None,
+        streams: Sequence[str] | None = None,
     ) -> Result[UnitSliceHandler]:
         """A handler whose unit ``host`` built from this handler's read surfaces.
 
@@ -394,7 +410,9 @@ class UnitSliceHandler:
         half so a size edit keeps a held position's exits (AD-3). ``rates`` is where the host
         supplies ``market.rate:<quote>``; a host with none sizes only its own currency's quotes.
         ``port`` is the host's last fall-through when a held position's exits cannot run; QMB
-        leaves it out and closes at the next bar's open itself (AD-13).
+        leaves it out and closes at the next bar's open itself (AD-13). ``streams`` is every
+        stream the unit reads: ``stream`` is the primary, the one a slice closes on, and a
+        host that reads one stream leaves it out.
         """
         handler = cls(
             stream=stream,
@@ -408,6 +426,7 @@ class UnitSliceHandler:
             cash=cash,
             rates=rates,
             port=port,
+            streams=streams,
         )
         unit = host(handler.read_surfaces())
         if is_refusal(unit):
@@ -426,8 +445,8 @@ class UnitSliceHandler:
         if (self._stream, stream_id) in self._bars:
             return (self._stream, stream_id)
         head, _, market = stream_id.partition(":")
-        if head == self._stream and (self._stream, market) in self._bars:
-            return (self._stream, market)
+        if head in self._streams and (head, market) in self._bars:
+            return (head, market)
         return None
 
     def market_of(self, stream_id: str) -> str | None:
@@ -490,11 +509,31 @@ class UnitSliceHandler:
             "account": _At(self._account),
             "own_journal": _At(lambda _i: tuple(self._closed)),
         }
+        for stream in self._streams:
+            for market in self._records:
+                key = (stream, market)
+                surfaces[f"bars:{stream}:{market}"] = _At(
+                    lambda instant, k=key: self._bar(k, instant)
+                )
         for market in self._records:
-            key = (self._stream, market)
-            surfaces[f"bars:{self._stream}:{market}"] = _At(lambda _i, k=key: self._latest.get(k))
             surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: self._facts(m))
         return surfaces
+
+    def _bar(self, key: tuple[str, str], instant: Instant) -> QuoteBar | None:
+        """The latest closed bar of ``key`` knowable at ``instant``.
+
+        The stream a slice closes on records its bar as it arrives. A slower stream's bar is read
+        from its window, whole the first time, so the unit reads it at its last closed bar and the
+        step that reads it never sees a bucket that has not closed.
+        """
+        latest = self._latest.get(key)
+        if latest is not None:
+            return latest
+        window = self._bars.get(key)
+        if window is None:
+            return None
+        found = max((ns for ns in window if ns <= instant.value_ns), default=None)
+        return None if found is None else window[found]
 
     def _account(self, instant: Instant) -> Account:
         """The account facts at ``instant``: the equity in the account's currency and the rates.

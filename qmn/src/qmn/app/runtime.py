@@ -611,6 +611,25 @@ class _Roll:
         return rolled
 
 
+def warm_slices(compiled: CompiledUnit) -> int:
+    """The primary bars a unit's slowest stream needs before it reaches its own warm-up.
+
+    A unit steps on its primary, so a stream ``factor`` primary bars long needs ``factor`` steps
+    per one of its own bars. The slowest stream sets the count; a stream the node cannot name in
+    seconds cannot be rolled, and the primary's own warm-up is the answer.
+    """
+    primary = stream_seconds(compiled.plan.stream)
+    needed = max(1, compiled.warm_up.get(compiled.plan.stream, 0))
+    if primary is None or primary <= 0:
+        return needed
+    for stream in compiled.plan.streams:
+        seconds = stream_seconds(stream)
+        if seconds is None:
+            continue
+        needed = max(needed, -(-(compiled.warm_up.get(stream, 0) * seconds) // primary))
+    return needed
+
+
 def staged_path(folder: Path, path: str) -> Path | None:
     """``path`` inside the staging folder, or None when it resolves outside it: an absolute
     path, ``..``, a link out, or on Windows a rooted ``/x`` or a drive-relative ``C:x``."""
@@ -1680,8 +1699,12 @@ class NodeUnit:
         self.assignment = assignment
         self.traded = deployment.markets
         self.compiled = compiled
+        self.streams = compiled.plan.streams
+        """The unit's streams, the primary first: the stream a step is taken on."""
         self.stream = compiled.plan.stream
-        self.stream_seconds = stream_seconds(self.stream)
+        self.stream_seconds = {name: stream_seconds(name) for name in self.streams}
+        self.warm_up = dict(compiled.warm_up)
+        """The bars each stream needs before entries."""
         self.base_ns: int | None = None
         """The account feed's base bar, or None when the feed's bars are the unit's own."""
         self.records = records
@@ -1695,11 +1718,17 @@ class NodeUnit:
         self.guard = guard
         self.rates = rates
         self.windows = {
-            (self.stream, market): BarWindow(window_size(compiled)) for market in records
+            (stream, market): BarWindow(
+                window_size(compiled)
+                if stream == self.stream
+                else max(1, compiled.warm_up.get(stream, 0))
+            )
+            for stream in self.streams
+            for market in records
         }
-        self.rolling: dict[str, _Roll] = {}
-        """One roll per traded market, made when the feed's base bar arrives."""
-        self.warm_needed = window_size(compiled)
+        self.rolling: dict[tuple[str, str], _Roll] = {}
+        """One roll per stream and market, made when the feed's base bar arrives."""
+        self.warm_needed = warm_slices(compiled)
         self.warm_seen = 0
         self.warming = True
         self.venue_ids: dict[str, str] = {}
@@ -1741,19 +1770,31 @@ class NodeUnit:
         """The stream id that names this unit's stream and ``market`` (AD-25)."""
         return f"{self.stream}:{market}"
 
-    def roll(self, market: str, base: QuoteBar) -> tuple[QuoteBar, ...]:
-        """The stream bars ``market``'s base bar closes; none while its bucket is open.
+    def roll(self, market: str, base: QuoteBar) -> Mapping[str, QuoteBar]:
+        """The stream bars ``market``'s base bar closes, by stream; none while a bucket is open.
 
-        A feed whose bars are the unit's own, or a stream this node cannot name in seconds, passes
-        the bar through: the parent's behaviour, kept for a venue that builds the unit's bars.
+        A feed whose bars are the unit's own passes the bar through as the primary's, the parent's
+        behaviour, kept for a venue that builds the unit's bars. A stream this node cannot name in
+        seconds is passed through the same way, and ``_host`` refuses a second stream there,
+        because it could not be rolled.
         """
-        if self.base_ns is None or self.stream_seconds is None:
-            return (base,)
-        state = self.rolling.get(market)
-        if state is None:
-            state = self.rolling[market] = _Roll(self.stream_seconds, self.base_ns)
-        rolled = state.add(base)
-        return () if rolled is None else (rolled,)
+        if self.base_ns is None:
+            return {self.stream: base}
+        closed: dict[str, QuoteBar] = {}
+        for name in self.streams:
+            seconds = self.stream_seconds.get(name)
+            if seconds is None:
+                if name == self.stream:
+                    closed[name] = base
+                continue
+            key = (name, market)
+            state = self.rolling.get(key)
+            if state is None:
+                state = self.rolling[key] = _Roll(seconds, self.base_ns)
+            rolled = state.add(base)
+            if rolled is not None:
+                closed[name] = rolled
+        return closed
 
     def start(
         self,
@@ -1794,9 +1835,14 @@ class NodeUnit:
 
         started = UnitSliceHandler.start(
             host,
-            stream=self.compiled.plan.stream,
+            stream=self.stream,
+            streams=self.streams,
             records=self.records,
-            bars={market: self.windows[(self.stream, market)] for market in self.records},
+            bars={
+                (stream, market): self.windows[(stream, market)]
+                for stream in self.streams
+                for market in self.records
+            },
             opened_by=self.compiled.logic_fingerprint,
             equity=equity,
             execution=self._execution,
@@ -3109,12 +3155,30 @@ class Runtime:
             hosted.phase = Phase.REFUSED
             hosted.detail = "a live lane trades only on a demo binding until a live one is bound"
             return
-        seconds, account_bar = stream_seconds(compiled.plan.stream), venue.client.bar_size_ns()
-        if seconds is not None and account_bar is not None and (seconds * _NS) % account_bar:
+        account_bar = venue.client.bar_size_ns()
+        for stream in compiled.plan.streams:
+            seconds = stream_seconds(stream)
+            if seconds is None:
+                if len(compiled.plan.streams) > 1:
+                    hosted.phase = Phase.REFUSED
+                    hosted.detail = (
+                        f"the unit reads {stream} bars this node cannot name in seconds, so they"
+                        " cannot be rolled from another stream"
+                    )
+                    return
+                continue
+            if account_bar is not None and (seconds * _NS) % account_bar:
+                hosted.phase = Phase.REFUSED
+                hosted.detail = (
+                    f"the unit reads {stream} bars and this account's feed builds"
+                    f" {_bar_name(account_bar)} bars that do not divide it"
+                )
+                return
+        if len(compiled.plan.streams) > 1 and account_bar is None:
             hosted.phase = Phase.REFUSED
             hosted.detail = (
-                f"the unit reads {compiled.plan.stream} bars and this account's feed builds"
-                f" {_bar_name(account_bar)} bars that do not divide it"
+                f"the unit reads {compiled.plan.streams[-1]} bars and this account's feed does not"
+                " say its bar size, so they cannot be rolled"
             )
             return
         if self._widen(venue, deployment):
@@ -3367,15 +3431,22 @@ class Runtime:
     # --- driving units on closed bars ---
 
     def _recent(self, unit: NodeUnit, venue: Venue, market: str) -> tuple[QuoteBar, ...]:
-        """The feed bars to replay for warm-up: enough base bars for the unit's own stream.
+        """The feed bars to replay for warm-up: enough base bars for the unit's slowest stream.
 
-        A unit whose stream is ``factor`` base bars long needs ``factor`` bars per warm-up bar,
-        and up to one bucket more before the first bucket it sees from its start.
+        A stream ``factor`` base bars long needs ``factor`` bars per one of its own, and up to one
+        bucket more before the first bucket it sees from its start. The slowest stream sets the
+        count, because every stream reaches its own warm-up on the primary's steps.
         """
-        if unit.base_ns is None or unit.stream_seconds is None:
+        if unit.base_ns is None or unit.base_ns <= 0:
             return venue.feed.recording.recent(market, unit.warm_needed)
-        factor = unit.stream_seconds * _NS // unit.base_ns
-        return venue.feed.recording.recent(market, (unit.warm_needed + 1) * factor + factor)
+        bars = unit.warm_needed
+        for name in unit.streams:
+            seconds = unit.stream_seconds.get(name)
+            if seconds is None:
+                continue
+            factor = seconds * _NS // unit.base_ns
+            bars = max(bars, (unit.warm_up.get(name, 0) + 2) * factor)
+        return venue.feed.recording.recent(market, bars)
 
     def _drive(self, venue: Venue, bars: Sequence[Bar]) -> None:
         for hosted in self.hosted.values():
@@ -3413,9 +3484,10 @@ class Runtime:
         for at in sorted(by_at):
             closes: dict[int, list[str]] = {}
             for event in by_at[at]:
-                for closed in unit.roll(event.market_id, event.bar):
-                    unit.windows[(unit.stream, event.market_id)].push(closed)
-                    closes.setdefault(closed.knowable_at.value_ns, []).append(event.market_id)
+                for stream, closed in unit.roll(event.market_id, event.bar).items():
+                    unit.windows[(stream, event.market_id)].push(closed)
+                    if stream == unit.stream:
+                        closes.setdefault(closed.knowable_at.value_ns, []).append(event.market_id)
             for ns in sorted(closes):
                 for market in closes[ns]:
                     pushed = loop.accumulator.push(
