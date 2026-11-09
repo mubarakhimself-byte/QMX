@@ -28,3 +28,14 @@ Net edge per trade (in R, after costs) is μ = p·w − (1 − p). Kelly's risk 
 ## Correction on the record
 
 My first table quoted "half Kelly: 12% chance of halving". That figure is the chance of falling to half of the **starting** balance. The drop that matters is from the **running peak**, and the simulation puts it near 50% at half Kelly on the way to 10x. Assumptions: independent trades, fixed win and loss sizes, no gaps, no brakes.
+
+## Speed against drawdown, no brakes (2026-11-09)
+
+Model: 60% win, 1:1, edge 0.2, about 8 trades a day, 3,000 paths each. "Drop" is measured from a running peak.
+
+| Risk per trade | Median trades to 10x | About this many trading days | P(drop >= 20%) | P(drop >= 30%) | P(drop >= 50%) |
+|---|---|---|---|---|---|
+| 2.5% | 481 | 60 | 58% | 11% | 0% |
+| 5% | 251 | 31 | 93% | 66% | 9% |
+| 7.5% | 174 | 22 | 99% | 83% | 30% |
+| 10% | 136 | 17 | 99% | 90% | 51% |
