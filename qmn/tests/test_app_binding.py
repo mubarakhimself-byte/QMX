@@ -932,9 +932,9 @@ FIRST_ENTRY_ROW: dict[str, Json] = {
     "side": "short",
     "quantity": "0.04",
     "fill_price": "1.06858",
-    "venue_stop": "1.08022",
-    "unit_stop": "1.08022",
-    "stop_distance": "0.01164",
+    "venue_stop": "1.08034",
+    "unit_stop": "1.08034",
+    "stop_distance": "0.01176",
     "node_price": "1.06858",
     "slippage": "0.00000",
 }
@@ -1109,19 +1109,19 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
     ]
 
     assert [(o["tradeSide"], o["volume"], o["relativeStopLoss"]) for o in orders] == [
-        ("SELL", "400000", "1164"),
-        ("SELL", "17200000", "29"),
+        ("SELL", "400000", "1176"),
+        ("SELL", "16100000", "31"),
     ]
     assert {str(o["label"]) for o in orders} == {"qmx:a4dqobyh:dummy-trend-pullback"}
     assert [len(str(o["clientOrderId"])) for o in orders] == [36, 36]
     assert [(t["exit_kind"], t["quantity"]) for t in trades] == [
         ("close", "0.04"),
-        ("target", "1.72"),
+        ("target", "1.61"),
     ]
     assert [t["trade_id"] for t in trades] == [o["clientOrderId"] for o in orders]
     assert closes(rig) == [
         {"ctidTraderAccountId": "4401", "positionId": "9001", "volume": "400000"},
-        {"ctidTraderAccountId": "4401", "positionId": "9005", "volume": "17200000"},
+        {"ctidTraderAccountId": "4401", "positionId": "9005", "volume": "16100000"},
     ]
     assert runtime.alarms == []
     assert venue.held() == {}
@@ -1170,7 +1170,7 @@ def test_a_unit_trailing_its_stop_moves_the_ctrader_stop_on_the_first_try(
     assert (held.side, held.entry_price, first) == (
         Side.SHORT,
         Decimal("1.06858"),
-        Decimal("1.08022"),
+        Decimal("1.08034"),
     )
     assert placed == [Placed(level) for level in trail]
     assert [body["stopLoss"] for body in amends] == [1.08012, 1.08002, 1.07992]

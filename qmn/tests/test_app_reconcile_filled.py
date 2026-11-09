@@ -72,7 +72,7 @@ def test_a_filled_entry_the_read_back_does_not_list_is_found_by_its_label_and_ki
     ]
     positions = cast("list[dict[str, object]]", reconciled[1]["positions"])
     assert [(p["position"], p["claim"], p["quantity"]) for p in positions] == [
-        (name, "mine", "1.72")
+        (name, "mine", "1.61")
     ]
     assert value(killed) == {"level_in_force": "RED"}
     assert [(t.position, t.market_id) for t in closes] == [(name, "fx.eurusd")]

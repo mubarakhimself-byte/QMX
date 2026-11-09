@@ -174,9 +174,9 @@ def test_a_refused_exit_keeps_going_and_books_the_trade(tmp_path: Path) -> None:
     assert len(closes) == 2
     assert node.account.positions() == {}
     assert [(t["exit_kind"], t["quantity"]) for t in base.unit_rows(node, "trade")] == [
-        ("stop", "1.72"),
-        ("stop", "1.08"),
-        ("close", "0.75"),
+        ("stop", "1.61"),
+        ("stop", "1.03"),
+        ("close", "0.72"),
     ]
     assert [t.reference for t in closes] == [Decimal("1.06856"), Decimal("1.06856")]
     node.runtime.stop()
@@ -232,9 +232,9 @@ def test_a_restart_puts_a_missing_stop_back_before_any_entry(tmp_path: Path) -> 
     b.tick_quotes(again, 2, bid=str(held.price), ask=str(held.price + Decimal("0.00012")))
     sent = [name for name, _ in rig.fake.received[before:]]
 
-    assert wanted == Decimal("1.08022")
-    assert held.stop == Decimal("1.08022")
-    assert rig.fake.amended == [{"stopLoss": Decimal("1.08022")}]
+    assert wanted == Decimal("1.08034")
+    assert held.stop == Decimal("1.08034")
+    assert rig.fake.amended == [{"stopLoss": Decimal("1.08034")}]
     assert "ProtoOANewOrderReq" not in sent
     assert "ProtoOAClosePositionReq" not in sent
     assert b.runtime(again).alarms == []
@@ -279,10 +279,10 @@ def test_a_stop_lost_across_a_reconnect_is_put_back(tmp_path: Path) -> None:
     held.stop = None
     b.play_spots(rig, at, at + 2 * BAR)
 
-    assert held.stop == Decimal("1.08022")
-    assert rig.fake.amended == [{"stopLoss": Decimal("1.08022")}]
+    assert held.stop == Decimal("1.08034")
+    assert rig.fake.amended == [{"stopLoss": Decimal("1.08034")}]
     assert list(rig.fake.held) == [held.position_id]
-    assert unit_of(rig).orders.venue.client.stop_of(name) == Decimal("1.08022")
+    assert unit_of(rig).orders.venue.client.stop_of(name) == Decimal("1.08034")
     assert runtime.alarms == []
     runtime.stop()
 
@@ -314,7 +314,7 @@ def test_amend_answers_the_brokers_stop_and_a_past_entry_stop_is_blocked_with_it
     fake.landing = Decimal("1.06900")
     moved = unit.orders.amend(name, market, side, Decimal("1.06880"), entry, start, record)
 
-    assert (side, entry, start) == (Side.SHORT, Decimal("1.06858"), Decimal("1.08022"))
+    assert (side, entry, start) == (Side.SHORT, Decimal("1.06858"), Decimal("1.08034"))
     assert rounded == Placed(Decimal("1.06916"))
     assert quiet == []
     assert moved == Placed(Decimal("1.06900"))

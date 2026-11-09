@@ -54,7 +54,7 @@ def test_a_lost_answer_is_unknown_never_resent_and_leaves_one_position(tmp_path:
     assert [t.tags.client_order_id for t in entries if t.tags is not None].count(name) == 1
     assert held_while_unknown == held_after_reconnect
     assert held_after_reconnect == {
-        name: ("fx.eurusd", "short", Decimal("1.72"), Decimal("1.06887"))
+        name: ("fx.eurusd", "short", Decimal("1.61"), Decimal("1.06889"))
     }
     assert node.feed.reconnects == 1
     assert [(r["why"], r["session"], r["resolved"]) for r in reconciled] == [
@@ -68,22 +68,22 @@ def test_a_lost_answer_is_unknown_never_resent_and_leaves_one_position(tmp_path:
             "tags": ["a4dqobyh"],
             "market_id": "fx.eurusd",
             "side": "short",
-            "quantity": "1.72",
+            "quantity": "1.61",
             "fill_price": "1.06858",
-            "venue_stop": "1.06887",
-            "unit_stop": "1.06887",
-            "stop_distance": "0.00029",
+            "venue_stop": "1.06889",
+            "unit_stop": "1.06889",
+            "stop_distance": "0.00031",
             "node_price": "1.06858",
             "slippage": "0.00000",
         }
     ]
     names = [t.tags.client_order_id for t in entries if t.tags is not None]
     trades = unit_rows(node, "trade")
-    assert [t.quantity for t in entries] == [Decimal("1.72"), Decimal("1.08"), Decimal("0.75")]
+    assert [t.quantity for t in entries] == [Decimal("1.61"), Decimal("1.03"), Decimal("0.72")]
     assert [(t["trade_id"], t["exit_kind"], t["quantity"]) for t in trades] == [
-        (name, "stop", "1.72"),
-        (names[1], "stop", "1.08"),
-        (names[2], "close", "0.75"),
+        (name, "stop", "1.61"),
+        (names[1], "stop", "1.03"),
+        (names[2], "close", "0.72"),
     ]
 
 
@@ -137,4 +137,4 @@ def test_each_reconnect_runs_one_reconcile_before_entries_go_again(tmp_path: Pat
         ("reconnect", 2),
         ("reconnect", 3),
     ]
-    assert [t.quantity for t in node.account.received] == [Decimal("1.72")]
+    assert [t.quantity for t in node.account.received] == [Decimal("1.61")]

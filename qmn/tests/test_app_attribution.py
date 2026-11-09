@@ -143,7 +143,7 @@ def test_an_untagged_position_is_protected_flagged_and_never_adopted(tmp_path: P
     positions = value(node.node.call("positions", {}))
     entries = [t for t in node.account.received if t.command.kind is CommandKind.PLACE_ORDER]
 
-    assert [t.quantity for t in entries] == [Decimal("1.72"), Decimal("1.08"), Decimal("0.75")]
+    assert [t.quantity for t in entries] == [Decimal("1.61"), Decimal("1.03"), Decimal("0.72")]
     assert all(t.position != "manual-1" for t in node.account.received)
     assert node.account.positions() == {"manual-1": ("fx.eurusd", "long", Decimal("0.50"), None)}
     assert positions == [

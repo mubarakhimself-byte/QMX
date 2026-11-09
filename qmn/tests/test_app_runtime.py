@@ -327,9 +327,9 @@ def test_the_dummy_opens_and_closes_at_the_venue_with_its_stop_there(tmp_path: P
     assert phase == "trading"
     assert value(node.node.call("status", {}))["headline"] == "Trading, 1 unit"
     assert [(t.command.kind, t.market_id, t.side.value, t.quantity) for t in tickets] == [
-        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.72")),
-        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.08")),
-        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("0.75")),
+        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.61")),
+        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.03")),
+        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("0.72")),
         (CommandKind.CLOSE_POSITION, "fx.eurusd", "short", None),
     ]
     entries = [t for t in tickets if t.tags is not None]
@@ -349,15 +349,15 @@ def test_the_dummy_opens_and_closes_at_the_venue_with_its_stop_there(tmp_path: P
     assert tickets[3].position == names[2]
     trades = unit_rows(node, "trade")
     assert [(t["trade_id"], t["exit_kind"], t["quantity"]) for t in trades] == [
-        (names[0], "stop", "1.72"),
-        (names[1], "stop", "1.08"),
-        (names[2], "close", "0.75"),
+        (names[0], "stop", "1.61"),
+        (names[1], "stop", "1.03"),
+        (names[2], "close", "0.72"),
     ]
     fills = unit_rows(node, "fill")
     assert [(f["kind"], f.get("receipt_quantity")) for f in fills if f["kind"] == "entry"] == [
-        ("entry", "1.72"),
-        ("entry", "1.08"),
-        ("entry", "0.75"),
+        ("entry", "1.61"),
+        ("entry", "1.03"),
+        ("entry", "0.72"),
     ]
     node.runtime.stop()
 
@@ -565,4 +565,4 @@ def test_a_slice_driven_again_sends_nothing_and_fills_nothing_twice(tmp_path: Pa
 
     assert all(not isinstance(outcome, TypedRefusal) for outcome in driven)
     assert [t.command.kind for t in node.account.received] == [CommandKind.PLACE_ORDER]
-    assert [(f.kind.value, f.quantity) for f in unit.handler.fills] == [("entry", Decimal("1.72"))]
+    assert [(f.kind.value, f.quantity) for f in unit.handler.fills] == [("entry", Decimal("1.61"))]

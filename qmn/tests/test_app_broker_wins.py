@@ -84,9 +84,9 @@ def test_a_stop_fired_while_down_books_at_the_brokers_price(tmp_path: Path) -> N
     safe = safe_to_restart(rig)
     b.play_spots(rig, at + 8 * BAR, at + ENTRY_WINDOW)
 
-    assert closed == VenueClose(FillKind.STOP, Decimal("1.08032"), gap=True)
+    assert closed == VenueClose(FillKind.STOP, Decimal("1.08044"), gap=True)
     assert [(t["trade_id"], t["exit_kind"], t["exit_price"]) for t in trades] == [
-        (name, "stop", "1.08032")
+        (name, "stop", "1.08044")
     ]
     assert safe is True
     assert entries(rig) - before == 2
@@ -103,7 +103,7 @@ def test_the_brokers_rate_limit_waits_for_the_true_price(tmp_path: Path) -> None
     fire_the_stop(rig)
     b.play_spots(rig, at, at + 5 * BAR)
 
-    assert venue_of(runtime).closed(name) == VenueClose(FillKind.STOP, Decimal("1.08032"), gap=True)
+    assert venue_of(runtime).closed(name) == VenueClose(FillKind.STOP, Decimal("1.08044"), gap=True)
     assert fake.requests().count("ProtoOADealListByPositionIdReq") == 2
     assert runtime.alarms == []
     runtime.stop()
@@ -150,8 +150,8 @@ def test_a_stop_moved_by_hand_is_read(tmp_path: Path) -> None:
     assert moved == Decimal("1.08122")
     assert [p["stop_at_venue"] for p in shown] == ["1.08122"]
     assert kept == Decimal("1.08122")
-    assert cleared == Decimal("1.08022")
-    assert rig.fake.amended == [{"stopLoss": Decimal("1.08022")}]
+    assert cleared == Decimal("1.08034")
+    assert rig.fake.amended == [{"stopLoss": Decimal("1.08034")}]
     assert "venue_stop" not in row
     assert runtime.alarms == []
     runtime.stop()
@@ -161,7 +161,7 @@ def test_a_stop_on_a_later_event_protects_with_no_amend(tmp_path: Path) -> None:
     rig, runtime, _ = trading(tmp_path, b.FakeCTrader(b.codec(), stop_on_later_event=True))
     name = b.sent_entries(rig)[0]
 
-    assert venue_of(runtime).stop_of(name) == Decimal("1.08022")
+    assert venue_of(runtime).stop_of(name) == Decimal("1.08034")
     assert rig.fake.requests().count("ProtoOAAmendPositionSLTPReq") == 0
     assert b.closes(rig) == []
     assert runtime.alarms == []
@@ -196,21 +196,21 @@ def test_a_stop_fired_while_the_process_was_down_writes_the_missing_close(tmp_pa
             "position": name,
             "market_id": "fx.eurusd",
             "exit": "stop",
-            "price": "1.08032",
+            "price": "1.08044",
             "guessed": False,
             "why": "the broker closed this position while the node was not running",
         }
     ]
     assert [
         (r["client_order_id"], r["price"], r["exit"], r["gap"], r["guessed"]) for r in rows
-    ] == [(name, "1.08032", "stop", True, False)]
+    ] == [(name, "1.08044", "stop", True, False)]
     assert body == {"ctidTraderAccountId": "4401", "positionId": "9001"}
     assert asked == 1
     assert second_alarms == []
     assert again.fake.requests().count("ProtoOADealListByPositionIdReq") == 1
     assert closed_rows(again) == rows
     assert [(t["trade_id"], t["exit_kind"], t["exit_price"]) for t in trades] == [
-        (name, "stop", "1.08032")
+        (name, "stop", "1.08044")
     ]
     assert safe is True
     b.runtime(again).stop()
@@ -237,10 +237,10 @@ def test_a_resolved_unknown_finds_its_close_over_the_sends_window(tmp_path: Path
     assert filled == []
     assert "ProtoOADealListReq" in again.fake.requests()
     assert [(a["alarm"], a["price"], a["guessed"]) for a in b.runtime(again).alarms] == [
-        ("closed_while_down", "1.08022", False)
+        ("closed_while_down", "1.08034", False)
     ]
     assert [(t["trade_id"], t["exit_kind"], t["exit_price"]) for t in trades] == [
-        (name, "stop", "1.08022")
+        (name, "stop", "1.08034")
     ]
     b.runtime(again).stop()
 
@@ -322,7 +322,7 @@ def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Pat
         "alarm": "close_price_guess",
         "position": name,
         "market_id": "fx.eurusd",
-        "price": "1.08022",
+        "price": "1.08034",
         "why": "the broker no longer lists this position and its history named no closing deal,"
         " so the node reads it closed at the stop it held, and that price is a guess",
     }
@@ -347,8 +347,8 @@ def test_history_silent_closes_at_the_held_stop_with_a_guess_alarm(tmp_path: Pat
 
     assert alarms == [guess]
     assert asked == ["ProtoOAReconcileReq", "ProtoOADealListByPositionIdReq", "ProtoOAReconcileReq"]
-    assert closed == VenueClose(FillKind.STOP, Decimal("1.08022"), guessed=True)
-    assert [t["exit_price"] for t in trades] == ["1.08022"]
+    assert closed == VenueClose(FillKind.STOP, Decimal("1.08034"), guessed=True)
+    assert [t["exit_price"] for t in trades] == ["1.08034"]
     assert listed_closed is None
     assert venue_of(runtime).held()[name][1] == held.position_id
     assert runtime.alarms == [

@@ -91,9 +91,9 @@ def test_every_entry_reaches_the_venue_with_its_stop_after_its_journal_row(
 
     assert journalled == [True, True, True]
     assert [(r["stop_form"], r["quantity"], r["receipt_quantity"]) for r in sends] == [
-        ("entry-relative", "1.72", "1.72"),
-        ("entry-relative", "1.08", "1.08"),
-        ("entry-relative", "0.75", "0.75"),
+        ("entry-relative", "1.61", "1.61"),
+        ("entry-relative", "1.03", "1.03"),
+        ("entry-relative", "0.72", "0.72"),
     ]
     assert all(
         t.command.order_parameters is not None
@@ -161,7 +161,7 @@ def test_an_unprotected_position_whose_close_is_refused_is_alarmed_and_closed_on
     name = position.client_order_id
     closes = [t for t in node.account.received if t.command.kind is CommandKind.CLOSE_POSITION]
 
-    assert held == {name: ("fx.eurusd", "short", Decimal("1.72"), None)}
+    assert held == {name: ("fx.eurusd", "short", Decimal("1.61"), None)}
     assert node_rows(node, "protection") == [
         {
             "alarm": "protection_escalation",

@@ -249,11 +249,11 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     assert cleared_first == []
     assert kept_back == []
     assert stops[:5] == [
-        ("stop", "1.72"),
-        ("stop", "1.08"),
-        ("close", "0.75"),
-        ("close", "0.91"),
-        ("stop", "1.60"),
+        ("stop", "1.61"),
+        ("stop", "1.03"),
+        ("close", "0.72"),
+        ("close", "0.88"),
+        ("stop", "1.50"),
     ]
     assert guards == [case.detail]
     assert cleared_second == []

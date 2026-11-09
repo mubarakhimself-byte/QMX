@@ -46,16 +46,16 @@ def test_a_paper_deployment_sends_no_order_and_journals_its_trades_with_world_pa
     assert value(node.node.call("status", {}))["headline"] == "Trading, 1 unit"
     assert node.account.received == []
     assert [(t.command.kind, t.market_id, t.side.value, t.quantity) for t in paper.simulated] == [
-        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.72")),
-        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.08")),
-        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("0.75")),
+        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.61")),
+        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("1.03")),
+        (CommandKind.PLACE_ORDER, "fx.eurusd", "short", Decimal("0.72")),
         (CommandKind.CLOSE_POSITION, "fx.eurusd", "short", None),
     ]
     assert [
         (row["world"], body["exit_kind"], body["quantity"])
         for row in trades
         for body in [cast("dict[str, object]", row["body"])]
-    ] == [("paper", "stop", "1.72"), ("paper", "stop", "1.08"), ("paper", "close", "0.75")]
+    ] == [("paper", "stop", "1.61"), ("paper", "stop", "1.03"), ("paper", "close", "0.72")]
     assert {row["world"] for row in orders} == {"paper"}
     assert [
         cast("dict[str, object]", row["body"])["step"]

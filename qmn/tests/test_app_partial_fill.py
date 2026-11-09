@@ -26,7 +26,7 @@ from test_protection_every_order import FIRST_SEND, node_rows, trading
 BAR = 900_000_000_000
 DAY = 86_400_000_000_000
 FILLED = Decimal("1.00")
-"""What the conformance venue fills of the dummy's first entry, a 1.72 lot order."""
+"""What the conformance venue fills of the dummy's first entry, a 1.61 lot order."""
 
 
 def first_entry(node: Rig) -> str:
@@ -51,13 +51,13 @@ def test_a_partly_filled_entry_is_held_and_stopped_out_at_the_filled_size(
     play(node, LIVE_FROM + 2 * DAY, start=FIRST_SEND + BAR + 1)
     fills = [f for f in unit_rows(node, "fill") if f["position_id"] == name]
 
-    assert node.account.received[0].quantity == Decimal("1.72")
-    assert booked == {name: ("fx.eurusd", "short", FILLED, Decimal("1.06887"))}
+    assert node.account.received[0].quantity == Decimal("1.61")
+    assert booked == {name: ("fx.eurusd", "short", FILLED, Decimal("1.06889"))}
     assert [(row["position"], row["quantity"]) for row in shown] == [(name, "1.00")]
     filled = [r for r in node_rows(node, "order") if r["step"] == "filled"]
     assert [(r["client_order_id"], r["quantity"]) for r in filled][:1] == [(name, "1.00")]
     assert [(f["kind"], f["quantity"], f.get("receipt_quantity")) for f in fills] == [
-        ("entry", "1.00", "1.72"),
+        ("entry", "1.00", "1.61"),
         ("stop", "1.00", None),
     ]
     assert trades(node)[0] == (name, "stop", "1.00")
@@ -92,7 +92,7 @@ def test_a_partial_fill_whose_answer_was_lost_books_the_size_the_venue_holds(
     play(node, LIVE_FROM + 2 * DAY, start=FIRST_SEND + 2 * BAR + 1)
     resolved = [r["resolved"] for r in node_rows(node, "reconcile")]
 
-    assert held == {name: ("fx.eurusd", "short", FILLED, Decimal("1.06887"))}
+    assert held == {name: ("fx.eurusd", "short", FILLED, Decimal("1.06889"))}
     assert resolved[:2] == [
         [],
         [

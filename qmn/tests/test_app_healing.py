@@ -119,9 +119,9 @@ def test_an_exception_restarts_the_runtime_with_back_off_and_it_trades_as_before
     assert [r["why"] for r in node_rows(node, "reconcile")] == ["start", "start"]
     assert [r for r in unit_rows(node, "state") if r["event"] == "cold_start"] == []
     assert [(t.command.kind, t.quantity) for t in node.account.received] == [
-        (CommandKind.PLACE_ORDER, Decimal("1.72")),
-        (CommandKind.PLACE_ORDER, Decimal("1.08")),
-        (CommandKind.PLACE_ORDER, Decimal("0.75")),
+        (CommandKind.PLACE_ORDER, Decimal("1.61")),
+        (CommandKind.PLACE_ORDER, Decimal("1.03")),
+        (CommandKind.PLACE_ORDER, Decimal("0.72")),
         (CommandKind.CLOSE_POSITION, None),
     ]
     assert len(open_at_fault) == (0 if moment < FIRST_SEND else 1)
@@ -163,7 +163,7 @@ def test_five_heals_in_ten_minutes_stand_the_node_down_alive_until_his_resume(
     assert still["word"] == "Stopped by a health check"
     assert cleared["word"] == "Trading"
     assert node.node.context.store.observed("healing.boots") == []
-    assert entries(node) == [("fx.eurusd", Decimal("0.92"))]
+    assert entries(node) == [("fx.eurusd", Decimal("0.89"))]
     node.runtime.stop()
 
 
@@ -429,7 +429,7 @@ def test_five_stuck_exits_in_ten_minutes_stand_the_next_start_down_until_his_res
     assert held_a_day == []
     assert cleared["word"] == "Trading"
     assert again.node.context.store.observed("healing.boots") == []
-    assert entries(again) == [("fx.eurusd", Decimal("0.92"))]
+    assert entries(again) == [("fx.eurusd", Decimal("0.89"))]
     again.runtime.stop()
 
 
@@ -469,9 +469,9 @@ def test_a_process_restart_with_a_position_open_manages_it_and_sends_what_an_unh
 
     assert again.account is venue
     assert [(t.command.kind, t.quantity) for t in venue.received] == [
-        (CommandKind.PLACE_ORDER, Decimal("1.72")),
-        (CommandKind.PLACE_ORDER, Decimal("1.08")),
-        (CommandKind.PLACE_ORDER, Decimal("0.75")),
+        (CommandKind.PLACE_ORDER, Decimal("1.61")),
+        (CommandKind.PLACE_ORDER, Decimal("1.03")),
+        (CommandKind.PLACE_ORDER, Decimal("0.73")),
         (CommandKind.CLOSE_POSITION, None),
     ]
     assert opened == names[1]
@@ -479,9 +479,9 @@ def test_a_process_restart_with_a_position_open_manages_it_and_sends_what_an_unh
     assert managed == [opened]
     assert while_open == {"ok": False, "reasons": [f"position {opened} is open at the venue"]}
     assert [(t["trade_id"], t["exit_kind"], t["quantity"]) for t in unit_rows(again, "trade")] == [
-        (names[0], "stop", "1.72"),
-        (names[1], "stop", "1.08"),
-        (names[2], "close", "0.75"),
+        (names[0], "stop", "1.61"),
+        (names[1], "stop", "1.03"),
+        (names[2], "close", "0.73"),
     ]
     assert venue.positions() == {}
     assert cast("dict[str, object]", status(again)["safe_to_restart"]) == {"ok": True, "reasons": []}
