@@ -9,7 +9,7 @@ Updated 2026-11-09. The aim: one game plan for $500 → $5,000, written as a pod
 3. **Instruments** (N2): indices and gold first, micro futures where size fits. Crypto is off for 1-minute scalping (fees are about twice the move). FX only at 5 minutes and up. Order flow: read it on CME futures, trade the matching CFD.
 4. **Structure**: one pot with no fixed split; an ORB unit and an order-flow scalper share it under one cap on total risk. One trade per correlated cluster, the strongest one: move since the open divided by its normal move.
 5. **Breadth**: across world sessions (Asia, Europe, the London-New York overlap, US open and close), not by stacking correlated markets. Top-down entry (slower chart for direction, 1-minute for the entry) goes in if the test shows it helps.
-6. **Prop firms**: a separate $100 track, later. The $500 is his own book.
+6. **Prop firms**: not discussed. He may skip them for now; the $500 is his own book first (M64).
 7. **Christmas week**: no trading.
 
 ## Next, in order
