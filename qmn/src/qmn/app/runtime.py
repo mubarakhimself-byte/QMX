@@ -3224,12 +3224,14 @@ class Runtime:
     ) -> tuple[Mapping[str, object], ...] | None:
         """The folding rows this deployment's unit journal holds, sorted by ``(at, id)``.
 
-        A brake's journal row carries the code its control row was compiled with, and the verb is
-        that row's, because the journal writes what fired and not what it was allowed to do. A row
+        A brake's journal row carries the code its control row was compiled with, the verb the row
+        ran and the row's own name, so the fold reads what fired and not what it was allowed to do.
+        A row that states its verb needs no compiled row to read it, so a row whose block left the
+        document still folds; the compiled plan answers only for a row that states no verb. A row
         of another deployment's unit is not ours; a code no compiled row names is not a control
         word (AD-23's unit fault is the unit's own bench, not a brake's). None when the volume
         refuses a read, so a unit keeps the state its snapshot cached rather than read a bench as
-        absent.
+        absent. A document that runs no brake reads no row: the snapshot's cache is its answer.
         """
         verbs = {halt.control.code: halt.control.verb.value for halt in compiled.plan.halts}
         if not verbs:
@@ -3250,8 +3252,12 @@ class Runtime:
                 body = record.get("body")
                 if not isinstance(body, Mapping):
                     continue
-                code = cast("Mapping[str, object]", body).get("code")
-                verb = verbs.get(code) if isinstance(code, str) else None
+                stated = cast("Mapping[str, object]", body)
+                code = stated.get("code")
+                if not isinstance(code, str):
+                    continue
+                verb = stated.get("verb")
+                verb = verb if isinstance(verb, str) else verbs.get(code)
                 if verb is None:
                     continue
                 ident = record.get("record_id")

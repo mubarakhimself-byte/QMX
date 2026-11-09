@@ -25,6 +25,7 @@ card's record.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -34,19 +35,36 @@ from typing import Final
 from qmf.core.chrono import Instant
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
+from qmf.data.journal_kinds.unit import BLOCK_CODE, BLOCK_REASON_FAMILY
 from qmf.data.journal_writer import AppendOutcome, JournalWriter, WriterScope
-from qmf.risk.journal import RiskEvent
+from qmf.risk.journal import UNIT_FAULT, RiskEvent
 from qml.compile import CompiledUnit
 from qml.protocol.unit import CalibrationRow, DecisionRow, StateEvent
 from qml.receipt import stored_row
 
 from qmb._refuse import invalid
 from qmb.execution.financing import CashEvent
-from qmb.host.unit_handler import Fill, JournalRecord, Skip, UnitTrade
+from qmb.host.unit_handler import ControlFire, Fill, JournalRecord, Skip, UnitTrade, WouldHave
 
-__all__ = ["JournalPart", "JournalReport", "RunJournal"]
+__all__ = [
+    "BLOCK_REASON_FAMILY",
+    "BRAKE_REASON_HEADS",
+    "JournalPart",
+    "JournalReport",
+    "RunJournal",
+]
 
 WRITER_ROLE: Final[str] = "qmb"
+
+BRAKE_REASON_HEADS: Final[tuple[str, ...]] = (
+    "R this session, at or past the",
+    "losing days in a row, at or past the limit of",
+    "fills this session, above the limit of",
+    "the account is down ",
+    " drawdown limit",
+)
+"""The words each shipped halt answers with, as the head or tail that survives its numbers. A brake
+publishes its own words, so a new one needs a code here or the row files as ``unlisted``."""
 
 _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("minimum lot", "below_min_lot"),
@@ -74,6 +92,10 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("could not be built", "health_stop"),
     ("no unit holds", "health_stop"),
     ("does not hold this order's stop", "health_stop"),
+    # A brake's own words: the row a live one suppresses names the slot, and each shipped halt's
+    # words name the slot too, because which brake it was rides the row's code.
+    ("halt slot: ", "halt_slot"),
+    *((head, "halt_slot") for head in BRAKE_REASON_HEADS),
 )
 """The reason code of each reason text QML's hosted unit, the handler and the trading node's
 order path write, first match wins."""
@@ -89,11 +111,47 @@ _OUTCOME_CODES: Final[Mapping[str, str]] = MappingProxyType(
     }
 )
 
+_BLOCK_WORD: Final[re.Pattern[str]] = re.compile(
+    f"{re.escape(BLOCK_REASON_FAMILY)}[a-z0-9][a-z0-9._-]*"
+)
+
+
+def _family_code(text: str) -> str | None:
+    """A user block's own code, where its words carry one in the family it owns."""
+    found = _BLOCK_WORD.search(text)
+    if found is None:
+        return None
+    code = found.group(0)
+    return code if BLOCK_CODE.match(code) is not None else None
+
+
+def _fire_body(code: str, root: str) -> dict[str, object]:
+    """A risk event's body: what fired, the incident it belongs to, and the alert he reads.
+
+    ``event_id`` names the incident and not the row, so the same brake firing again after a restart
+    files under one incident. ``actionable`` is true because only his hand resumes a brake, and a
+    row carries no deadline because nothing about it expires.
+    """
+    return {
+        "code": code,
+        "root": root,
+        "event_id": f"{code}:{root}",
+        "action": (
+            "look at the block, then resume the unit when it is fixed"
+            if code == UNIT_FAULT
+            else "look at the brake, then resume it when its cause is gone"
+        ),
+        "actionable": True,
+    }
+
 
 def _reason_code(outcome: str, text: str) -> str | None:
-    """The closed-list code for a decision's reason text, or None when the list has none."""
-    return next((code for words, code in _REASON_WORDS if words in text), None) or (
-        _OUTCOME_CODES.get(outcome)
+    """The closed-list code for a decision's reason text, or None when the list has none. A block
+    that names its own code in ``BLOCK_REASON_FAMILY`` answers here without a table row."""
+    return (
+        next((code for words, code in _REASON_WORDS if words in text), None)
+        or _family_code(text)
+        or _OUTCOME_CODES.get(outcome)
     )
 
 
@@ -233,6 +291,10 @@ class RunJournal:
                 self._cash(record)
             case RiskEvent():
                 self._risk_event(record)
+            case ControlFire():
+                self._control_fire(record)
+            case WouldHave():
+                self._would_have(record)
 
     def data_gap(self, market_id: str, after: Instant, before: Instant, bars_missing: int) -> None:
         """Bars the unit's stream did not hold between two bars it did (QB-18)."""
@@ -427,9 +489,41 @@ class RunJournal:
         self._write("guard", guard, self._facts(skip.market_id))
 
     def _risk_event(self, event: RiskEvent) -> None:
-        """The code that fired and the root cause its one card is filed under (AD-23)."""
-        body: dict[str, object] = {"code": event.code, "root": event.root}
+        """The code that fired and the root cause its one card is filed under (AD-23).
+
+        The alert fields are derived here rather than carried, so every producer of the kind files
+        the same shape: a fault's row and a brake's row both say what happened, what he does about
+        it, and that it is his to act on. A fault names no deadline, because nothing expires.
+        """
+        self._write("risk_event", _fire_body(event.code, event.root), self._facts(None))
+
+    def _control_fire(self, fire: ControlFire) -> None:
+        """A brake that fired for real: which row, which block, what it ran and why (AD-12)."""
+        body = _fire_body(fire.code, fire.root)
+        body |= {"row": fire.row, "pin": fire.pin, "verb": fire.verb, "detail": fire.reason}
         self._write("risk_event", body, self._facts(None))
+
+    def _would_have(self, row: WouldHave) -> None:
+        """The entry a brake would have refused, or did, with the share of them recorded (R1)."""
+        code = _reason_code("blocked", row.reason) or self._unlisted(
+            row.decision_row_id, row.reason
+        )
+        if code is None:
+            return
+        body: dict[str, object] = {
+            "row": row.row,
+            "decision_row_id": row.decision_row_id,
+            "code": row.code,
+            "reason": code,
+            "propensity": f"{row.propensity.numerator}/{row.propensity.denominator}",
+            "verb": row.verb,
+            "detail": row.reason,
+        }
+        if row.market_id is not None:
+            body["market_id"] = row.market_id
+        if row.side is not None:
+            body["side"] = row.side
+        self._write("would_have", body, self._facts(row.market_id))
 
     def _trade(self, trade: UnitTrade) -> None:
         deal = self._deals.get(
