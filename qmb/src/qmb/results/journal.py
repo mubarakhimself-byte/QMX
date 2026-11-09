@@ -125,17 +125,19 @@ def _family_code(text: str) -> str | None:
     return code if BLOCK_CODE.match(code) is not None else None
 
 
-def _fire_body(code: str, root: str) -> dict[str, object]:
+def _fire_body(code: str, root: str, incident: str | None = None) -> dict[str, object]:
     """A risk event's body: what fired, the incident it belongs to, and the alert he reads.
 
-    ``event_id`` names the incident and not the row, so the same brake firing again after a restart
-    files under one incident. ``actionable`` is true because only his hand resumes a brake, and a
-    row carries no deadline because nothing about it expires.
+    ``root`` is the root-cause key the one card is filed under, so two rows of one broken block make
+    one card. ``event_id`` names the incident and not the row, so the same brake firing again after a
+    restart files under one incident; a brake passes its own row, because two brakes can run one
+    block. ``actionable`` is true because only his hand resumes a brake, and a row carries no
+    deadline because nothing about it expires.
     """
     return {
         "code": code,
         "root": root,
-        "event_id": f"{code}:{root}",
+        "event_id": f"{code}:{root if incident is None else incident}",
         "action": (
             "look at the block, then resume the unit when it is fixed"
             if code == UNIT_FAULT
@@ -499,7 +501,7 @@ class RunJournal:
 
     def _control_fire(self, fire: ControlFire) -> None:
         """A brake that fired for real: which row, which block, what it ran and why (AD-12)."""
-        body = _fire_body(fire.code, fire.root)
+        body = _fire_body(fire.code, fire.root, fire.row)
         body |= {"row": fire.row, "pin": fire.pin, "verb": fire.verb, "detail": fire.reason}
         self._write("risk_event", body, self._facts(None))
 
