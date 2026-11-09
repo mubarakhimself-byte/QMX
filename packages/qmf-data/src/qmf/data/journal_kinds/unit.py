@@ -78,10 +78,10 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
 """Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
 READING_SOURCES: Final[frozenset[str]] = frozenset({"unit", "node", "mis"})
 STATE_EVENTS: Final[frozenset[str]] = frozenset({"warming", "ready", "cold_start", "seam_flag"})
-RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({"unit_fault"})
-"""What a risk event happened: ``unit_fault`` first, when a block raised in one of its unit's
-phases (AD-23). Closed and appendable; ``qmf-risk`` carries the same family for the code the hosts
-write."""
+RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({"unit_fault", "link_fault"})
+"""What a risk event happened: ``unit_fault`` when a block raised in one of its unit's phases
+(AD-23), ``link_fault`` when a chain link or a control row raised and its scope stood down (AD-9).
+Closed and appendable; ``qmf-risk`` carries the same family for the code the hosts write."""
 LIFECYCLE_SCHEMA: Final[str] = "qmx.lifecycle/1"
 LIFECYCLE_STATES: Final[frozenset[str]] = frozenset(
     {"draft", "tested", "parked", "paper", "live", "stopped", "retired"}
