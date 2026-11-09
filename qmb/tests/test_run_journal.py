@@ -343,9 +343,11 @@ def test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi(
     assert changed == 2168
 
 
-def test_a_fill_the_host_refuses_is_a_blocked_signal_and_its_guard(
+def test_a_fill_the_host_refuses_is_a_blocked_guard_beside_its_decision(
     loaded: LoadedUnit, tmp_path: Path
 ) -> None:
+    """AD-9's one row is written before any order leaves and is never rewritten, so a refusal at
+    the fill is the ``guard`` row's to state and the ``signal`` row keeps the decision."""
     journal = _journal(loaded, tmp_path)
     at = Instant(1_736_000_000_000_000_000)
     journal.at(at)
@@ -357,7 +359,8 @@ def test_a_fill_the_host_refuses_is_a_blocked_signal_and_its_guard(
     signal = cast("dict[str, object]", _records(report, "signal")[0]["body"])
     guard = cast("dict[str, object]", _records(report, "guard")[0]["body"])
 
-    assert (signal["outcome"], signal["reason"]) == ("blocked", "max_positions")
+    assert (signal["outcome"], signal.get("reason")) == ("taken", None)
+    assert signal["written_before_send"] is True
     assert (guard["decision_row_id"], guard["verdict"], guard["reason"]) == (
         row.row_id,
         "blocked",

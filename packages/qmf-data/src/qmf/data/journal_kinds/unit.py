@@ -8,6 +8,7 @@ only the fields their record id needs.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Final, cast
 
@@ -82,6 +83,8 @@ LIFECYCLE_STATES: Final[frozenset[str]] = frozenset(
 )
 BY_KINDS: Final[frozenset[str]] = frozenset({"judge", "his_click", "risk_rule", "system"})
 _NEEDS_REASON: Final[frozenset[str]] = frozenset({"skipped", "blocked"})
+_RATIONAL: Final[re.Pattern[str]] = re.compile(r"\A-?\d+/\d+\Z")
+"""An exact rational as text: a rate reads ``1/1`` or ``1/150``, never a rounded decimal."""
 
 
 def _signal(body: Mapping[str, object]) -> str | None:
@@ -104,6 +107,53 @@ def _signal(body: Mapping[str, object]) -> str | None:
         )
         if wrong is not None:
             return f"a reading used: {wrong}"
+    return _receipt(body)
+
+
+def _receipt(body: Mapping[str, object]) -> str | None:
+    """The decision row's size trail, where the row carries one: the sizer that answered, the
+    facts it read, the positions of the size, each link's verdict and the two fingerprints.
+    Each field is checked only when it is there, so a row from before the receipt stays
+    readable and a row that carries it is typed."""
+    for name in ("binding", "logic_fp", "risk_fp"):
+        value = body.get(name)
+        if value is not None and not isinstance(value, str):
+            return f"{name} is a string"
+    written = body.get("written_before_send")
+    if written is not None and not isinstance(written, bool):
+        return "written_before_send is true or false"
+    for name in ("verdicts", "placeholders"):
+        words = body.get(name)
+        if words is not None and (
+            not isinstance(words, list)
+            or not all(isinstance(word, str) for word in cast("list[object]", words))
+        ):
+            return f"{name} is a list of words"
+    inputs = body.get("inputs")
+    if inputs is not None and not isinstance(inputs, Mapping):
+        return "inputs is an object of the facts the size read"
+    steps = body.get("steps")
+    if steps is not None:
+        if not isinstance(steps, Mapping):
+            return "steps is an object of the positions of the size"
+        for name, step in cast("Mapping[object, object]", steps).items():
+            if not isinstance(step, Mapping):
+                return f"the step {name} is an object of kind, value and basis"
+            wrong = missing(cast("Mapping[str, object]", step), ("kind", "value", "basis"))
+            if wrong is not None:
+                return f"the step {name}: {wrong}"
+    return None
+
+
+def _trade(body: Mapping[str, object]) -> str | None:
+    """A close's two rate stamps, where it carries them: the account-currency rate its money
+    converts by, exact as ``n/d``, and how old that read was in seconds."""
+    rate = body.get("rate")
+    if rate is not None and (not isinstance(rate, str) or _RATIONAL.fullmatch(rate) is None):
+        return "rate is an exact rational, n/d"
+    age = body.get("rate_age_s")
+    if age is not None and not isinstance(age, str):
+        return "rate_age_s is a decimal string"
     return None
 
 
@@ -175,7 +225,7 @@ SPECS: Final[tuple[KindSpec, ...]] = (
     ),
     KindSpec(JournalStream.UNIT, "order", IdRule.SEQUENCE),
     KindSpec(JournalStream.UNIT, "fill", IdRule.FILL, ("deal_id",)),
-    KindSpec(JournalStream.UNIT, "trade", IdRule.TRADE, ("closing_deal_id",)),
+    KindSpec(JournalStream.UNIT, "trade", IdRule.TRADE, ("closing_deal_id",), _trade),
     KindSpec(JournalStream.UNIT, "guard", IdRule.SEQUENCE),
     KindSpec(JournalStream.UNIT, "risk_event", IdRule.SEQUENCE),
     KindSpec(JournalStream.UNIT, "would_have", IdRule.SEQUENCE),

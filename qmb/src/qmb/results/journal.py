@@ -23,7 +23,7 @@ would not fill (a position already open, a size below the minimum lot) is writte
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final
@@ -34,6 +34,7 @@ from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import AppendOutcome, JournalWriter, WriterScope
 from qml.compile import CompiledUnit
 from qml.protocol.unit import CalibrationRow, DecisionRow, StateEvent
+from qml.receipt import stored_row
 
 from qmb._refuse import invalid
 from qmb.execution.financing import CashEvent
@@ -114,12 +115,6 @@ class JournalReport:
 
 
 @dataclass
-class _Pending:
-    body: dict[str, object]
-    facts: RowFacts
-
-
-@dataclass
 class _ReplayClock:
     """The writer's clock in a replay: the slice instant, so rows partition by bar month."""
 
@@ -154,7 +149,6 @@ class RunJournal:
             for binding in slot.bindings
         }
         self._ordinal = 0
-        self._pending: dict[str, _Pending] = {}
         self._deals: dict[tuple[str, int, str], str] = {}
         self._once: set[str] = set()
         self._rows: dict[str, int] = {}
@@ -220,7 +214,7 @@ class RunJournal:
     def append(self, record: JournalRecord, /) -> None:
         match record:
             case DecisionRow():
-                self._decision(record)
+                self._decision(replace(record, written_before_send=True))
             case CalibrationRow():
                 self._calibration(record)
             case StateEvent():
@@ -251,10 +245,7 @@ class RunJournal:
         self._write("data_event", body, self._facts(market_id))
 
     def close(self) -> Result[JournalReport]:
-        """Write decisions still waiting for a fill as taken, then finish the partition files."""
-        for row_id in list(self._pending):
-            pending = self._pending.pop(row_id)
-            self._write("signal", pending.body, pending.facts)
+        """Finish the partition files, or the refusal a row met on the way."""
         files = self._writer.close()
         if self._refused is not None:
             return self._refused
@@ -294,6 +285,14 @@ class RunJournal:
                 self._warnings.append(receipt.value.warning or {})
 
     def _decision(self, row: DecisionRow) -> None:
+        """One decision row, written once, here, before any order it names can leave.
+
+        AD-9's "One row": both chains append to one trail, and the row is journalled after the
+        last link and before any order leaves, with every input stored so it replays alone. The
+        row therefore lands now and not at its fill: a send that raises must leave the row that
+        would have explained the size, and the ``fill`` row that follows is what says what the
+        venue took.
+        """
         side = row.side.value
         readings: list[object] = [r for r in row.readings_used if isinstance(r, Mapping)]
         for out in row.slot_trail:
@@ -312,14 +311,9 @@ class RunJournal:
                 }
             )
         body: dict[str, object] = {
-            "row_id": row.row_id,
-            "instant": row.instant.value_ns,
-            "market_id": row.market_id,
-            "side": side,
-            "outcome": row.outcome,
             "detail": row.reason,
             "readings_used": readings,
-            "numbers_in_force": {name: str(v) for name, v in row.numbers_in_force.items()},
+            **stored_row(row),
         }
         code = _reason_code(row.outcome, row.reason)
         if code is None and row.outcome == "skipped":
@@ -328,11 +322,7 @@ class RunJournal:
                 return
         if code is not None:
             body["reason"] = code
-        facts = self._facts(row.market_id)
-        if row.outcome == "taken":
-            self._pending[row.row_id] = _Pending(body, facts)
-            return
-        self._write("signal", body, facts)
+        self._write("signal", body, self._facts(row.market_id))
 
     def _unlisted(self, row_id: str, text: str) -> str | None:
         """The code of a text the table has none for. A live journal answers ``unlisted``. A
@@ -379,9 +369,6 @@ class RunJournal:
         self._write("state", body, self._facts(event.market_id))
 
     def _fill(self, fill: Fill) -> None:
-        pending = self._pending.pop(fill.decision_row_id, None)
-        if pending is not None:
-            self._write("signal", pending.body, pending.facts)
         deal = f"{fill.decision_row_id}.{fill.kind.value}"
         self._deals[(fill.position_id, fill.instant.value_ns, fill.kind.value)] = deal
         body: dict[str, object] = {
@@ -400,15 +387,13 @@ class RunJournal:
         self._write("fill", body, self._facts(fill.market_id))
 
     def _skip(self, skip: Skip) -> None:
+        """The guard row that says why a decided entry never filled. The decision's own row is
+        already written and stays as the unit decided it; this row is what refused it."""
         code = _reason_code("blocked", skip.reason) or self._unlisted(
             skip.decision_row_id, skip.reason
         )
         if code is None:
             return
-        pending = self._pending.pop(skip.decision_row_id, None)
-        if pending is not None:
-            body = pending.body | {"outcome": "blocked", "reason": code, "detail": skip.reason}
-            self._write("signal", body, pending.facts)
         key = f"guard:{skip.decision_row_id}"
         if key in self._once:
             self._repeats += 1
@@ -445,6 +430,13 @@ class RunJournal:
         }
         if trade.gap_through_stop:
             body["gap_through_stop"] = True
+        # The two stamps RC-07 put on the close: the account-currency rate this row's money
+        # converts by, exact as ``n/d``, and how old that read was in seconds. Labelled, so a
+        # reader converts money without reading a rate. A position adopted after a restart
+        # carries no rate, and the row omits the key rather than claim one.
+        if trade.rate is not None:
+            body["rate"] = f"{trade.rate.numerator}/{trade.rate.denominator}"
+        body["rate_age_s"] = f"{trade.rate_age_s:f}"
         self._write("trade", body, self._facts(trade.market_id))
 
     def _cash(self, event: CashEvent) -> None:
