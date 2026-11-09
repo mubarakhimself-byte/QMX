@@ -53,8 +53,8 @@ from qml.protocol.unit import (
     CalibrationRow,
     DecisionRow,
     Fault,
-    HostPort,
     HostedUnit,
+    HostPort,
     OwnPosition,
     Priced,
     Proposal,
@@ -355,9 +355,9 @@ class UnitSliceHandler:
         self._entries = 0
         self._fault_roots: set[str] = set()
         """Each root-cause key a fault already landed a ``risk_event`` row, and so a card, for."""
-        self._scope_close: str | None = None
-        """The unit asked its host's last fall-through to close a position, at the next bar's
-        open (AD-13); cleared when that close is made."""
+        self._close_pending: dict[str, str] = {}
+        """The held markets the unit asked its host's last fall-through to close at their next
+        bar's open, each with the reason it asked (AD-13); a market drops out once its bar comes."""
 
     @classmethod
     def start(
@@ -408,14 +408,16 @@ class UnitSliceHandler:
         return Ok(handler)
 
     def close_scope(self, unit: object, why: str) -> None:
-        """The host's last fall-through in QMB: close the held position at the next bar's open,
-        the side's closing quote (AD-13). The node's own port closes through its scope close."""
+        """The host's last fall-through in QMB: close every held position at its market's next
+        bar's open, the side's closing quote (AD-13). The node's own port closes through its
+        scope close."""
         del unit
-        self._scope_close = why
+        self._close_pending = dict.fromkeys(self._held, why)
 
     def _close_at_open(self, market: str, bar: QuoteBar, frontier: Instant) -> None:
-        """Close the position the unit's exits could not, at this bar's open, once."""
-        why, self._scope_close = self._scope_close, None
+        """Close the position the unit's exits could not, at this bar's open: one close per held
+        market the port was asked for."""
+        why = self._close_pending.pop(market, None)
         held = self._held.get(market)
         if held is None or why is None:
             return

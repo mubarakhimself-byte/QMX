@@ -37,6 +37,7 @@ from qmf.risk.unit_intent import UnitIntent
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, parse_record
 from qml.protocol.unit import (
+    EXIT_FAULT,
     OHLC,
     DecisionRow,
     OwnPosition,
@@ -139,12 +140,11 @@ def _at_start(wire: Mapping[str, object]) -> Script:
     return {_T0: ([wire], ())}
 
 
-def _drive(
+def _start(
     script: Script,
-    bars: Mapping[str, Mapping[int, QuoteBar]] | None = None,
+    bars: Mapping[str, Mapping[int, QuoteBar]],
     seeded: Mapping[str, OwnPosition] | None = None,
-) -> tuple[UnitSliceHandler, ListJournal, Sequence[Result[SliceOutcome]]]:
-    bars = bars or {_M: {_T0: _bar(_T0, "1.08500"), _T1: _bar(_T1, "1.08520")}}
+) -> tuple[UnitSliceHandler, ListJournal]:
     records: dict[str, InstrumentRecord] = {}
     for market in bars:
         record = parse_record(json.loads((_RECORDS / _RECORD_FILE[market]).read_text("utf-8")))
@@ -163,6 +163,16 @@ def _drive(
         seeded=seeded,
     )
     assert not isinstance(started, TypedRefusal), started
+    return started.value, journal
+
+
+def _drive(
+    script: Script,
+    bars: Mapping[str, Mapping[int, QuoteBar]] | None = None,
+    seeded: Mapping[str, OwnPosition] | None = None,
+) -> tuple[UnitSliceHandler, ListJournal, Sequence[Result[SliceOutcome]]]:
+    bars = bars or {_M: {_T0: _bar(_T0, "1.08500"), _T1: _bar(_T1, "1.08520")}}
+    handler, journal = _start(script, bars, seeded)
     streams = StreamSet(tuple(DeclaredStream(m, m) for m in bars))
     resting: tuple[RestingIntent, ...] = ()
     outcomes: list[Result[SliceOutcome]] = []
@@ -172,14 +182,14 @@ def _drive(
             [SliceObservation(m, Instant(at)) for m in bars if at in bars[m]],
             stream_set=streams,
             current_frontier=frontier,
-            handler=started.value,
+            handler=handler,
             resting=resting,
         )
         outcomes.append(outcome)
         if is_refusal(outcome):
             break
         frontier, resting = outcome.value.frontier, outcome.value.resting
-    return started.value, journal, outcomes
+    return handler, journal, outcomes
 
 
 def test_a_receipt_of_0_037_lots_fills_0_03_and_journals_the_0_007_residue_in_r() -> None:
@@ -309,6 +319,49 @@ def test_an_amendment_that_widens_the_stop_is_refused_and_the_position_stays_ope
     assert "from 1.08000 to 1.07900" in str(refused.context["reason"])
     assert [(f.kind, f.quantity) for f in handler.fills] == [(FillKind.ENTRY, Decimal("0.50"))]
     assert handler.open_positions[_M].quantity == Decimal("0.50")
+
+
+def test_the_close_scope_port_closes_every_held_market_at_its_next_bar() -> None:
+    bars = {
+        _M: {_T0: _bar(_T0, "1.08500"), _T1: _bar(_T1, "1.08520")},
+        _X: {_T0: _bar(_T0, "2900.00"), _T1: _bar(_T1, "2901.00")},
+    }
+    handler, _ = _start({}, bars)
+    for market, entry, stop, row_id in (
+        (_M, "1.08500", "1.09500", "row-1"),
+        (_X, "2900.00", "2950.00", "row-2"),
+    ):
+        adopted = handler.adopt(
+            market,
+            OwnPosition(
+                f"{market}-short",
+                Side.SHORT,
+                Decimal("0.50"),
+                Decimal(entry),
+                _MINE,
+                Instant(_T0),
+            ),
+            stop=Decimal(stop),
+            entry_stop=Decimal(stop),
+            target=None,
+            decision_row_id=row_id,
+        )
+        assert not is_refusal(adopted), adopted
+
+    handler.close_scope(object(), EXIT_FAULT)
+    outcome = run_slice(
+        [SliceObservation(m, Instant(_T1)) for m in bars],
+        stream_set=StreamSet(tuple(DeclaredStream(m, m) for m in bars)),
+        current_frontier=Instant(_T0),
+        handler=handler,
+    )
+
+    assert not is_refusal(outcome), outcome
+    assert sorted((f.market_id, f.kind, f.price) for f in handler.fills) == [
+        (_M, FillKind.CLOSE, Decimal("1.08530")),
+        (_X, FillKind.CLOSE, Decimal("2901.00010")),
+    ]
+    assert handler.open_positions == {}
 
 
 def test_the_dummy_never_closes_a_seeded_position_it_did_not_open(tmp_path: Path) -> None:
