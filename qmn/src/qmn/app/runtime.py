@@ -51,6 +51,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
 from typing import Final, Protocol, cast
 
@@ -90,6 +91,7 @@ from qmf.core import (
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qmf.data.journal_writer import JournalWriter, WriterScope
+from qmf.risk.facts import AccountFacts, Fact, Stake
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     AmendProtection,
@@ -103,19 +105,24 @@ from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import (
     ACCOUNT_CURRENCY,
+    DecisionRow,
     HostedUnit,
     OwnPosition,
     QuoteBar,
     RatePort,
     Surface,
     construct_unit,
+    rate_used,
     restore_unit,
+)
+from qml.protocol.unit import (
+    Account as UnitAccount,
 )
 from qml.unit.model import Side
 
 from qmn.app import paper_lane
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
-from qmn.app.facts import FeedRates
+from qmn.app.facts import FeedRates, LiveAccount
 from qmn.app.facts import refs as rate_refs
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
@@ -152,6 +159,7 @@ from qmn.venue import (
 )
 
 __all__ = [
+    "BUDGET_SHARE",
     "CLOSE_REFUSALS_ALARM",
     "PROTECT_CONFIRM_NS",
     "PROTECT_RETRY_MAX",
@@ -174,6 +182,11 @@ __all__ = [
 
 RECONCILE_TICK_S: Final = 0.2
 """`[node] reconcile_tick_ms`, starting at 200 (NODE.md section 9)."""
+BUDGET_SHARE: Final[Decimal] = Decimal(1)
+"""`[node] budget_share`, starting at 1: the share of one account a deployment may keep at risk.
+At 1 a deployment may use the whole account, so only a share above that (a bug, not a choice) is
+not a budget. Labelled placeholder, owner numbers talk; a deployment document names none yet, so
+every deployment starts from this one. Range: above zero, at most one."""
 HOST_FACTS: Final = Path("road") / "host" / "facts.json"
 """The host's facts in the node's volume (C-05c, AD-307): the machine, the trading profile, the
 holdout, and the newest clock probe."""
@@ -794,6 +807,10 @@ class ConformanceAccount:
     """The quantity each coming entry fills, first entry first; an entry past the list fills
     whole. The rest of a partly filled entry is never filled."""
     received: list[Ticket] = field(default_factory=list[Ticket])
+    stated_balance: Decimal | None = None
+    """The cash the venue states when a case moves it; None answers the starting balance."""
+    balance_reads: int = 0
+    """How many times the node asked for the cash again: the record the exit-path fact reads."""
     _orders: list[VenueOrder] = field(default_factory=list[VenueOrder])
     _positions: dict[str, _Held] = field(default_factory=dict[str, _Held])
     _closed: dict[str, VenueClose] = field(default_factory=dict[str, VenueClose])
@@ -898,6 +915,15 @@ class ConformanceAccount:
         """The account's balance as the venue states it. The conformance venue keeps its
         starting balance; it models fills and stops, not money."""
         return self.starting_equity
+
+    def read_balance(self) -> Result[Decimal]:
+        """The cash the venue states, asked for again as the node's timed read asks it.
+
+        The conformance venue states ``starting_equity`` unless a case moved it, and counts the
+        reads, so the exit-path fact can prove a read did or did not happen on a pass.
+        """
+        self.balance_reads += 1
+        return Ok(self.starting_equity if self.stated_balance is None else self.stated_balance)
 
     def read_back(self) -> Result[ReadBack]:
         positions = tuple(
@@ -1549,6 +1575,10 @@ class _Journal:
                 record = replace(record, position_id=self._unit.venue_name(record.position_id))
             case UnitTrade():
                 record = replace(record, trade_id=self._unit.venue_name(record.trade_id))
+            case DecisionRow():
+                facts = self._unit.account_inputs()
+                if facts:
+                    record = replace(record, inputs={**record.inputs, **facts})
             case _:
                 pass
         self._journal.append(record)
@@ -1623,9 +1653,20 @@ class NodeUnit:
         self.handler: UnitSliceHandler | None = None
         self.hosted_unit: HostedUnit | None = None
         self.target: ExecutionTarget | None = None
+        self.account: Callable[[], Mapping[str, Fact]] | None = None
+        """The account's facts as the node last read them, for the rows this unit writes. The
+        runtime sets it at the host; a unit hosted without one stamps no account fact."""
         self.kept_values: dict[str, Decimal] = {}
         """The slow numbers the deployment's saved snapshot already holds, so a write happens
         only when one of them moves."""
+
+    def account_inputs(self) -> Mapping[str, Fact]:
+        """The account's facts beside the size trail, so a row says what the account read.
+
+        The sizer's own ``equity`` input is left exactly as the sizer read it, so a replayed row
+        still reaches its quantity; the live account facts ride beside it under ``account.*``.
+        """
+        return {} if self.account is None else self.account()
 
     def start(
         self,
@@ -2171,6 +2212,9 @@ class Runtime:
         self.hosted: dict[str, _Hosted] = {}
         self.alarms: list[Mapping[str, object]] = []
         self.applied: dict[str, KsaLevel] = {}
+        self._accounts: dict[str, LiveAccount] = {}
+        self._facts: dict[str, AccountFacts] = {}
+        """Each account's facts as the last refresh read them, by account id."""
         self._resumes_seen = journalled_resumes(context.journal_root)
         self._flattened: set[str] | None = None
         """Every flatten op journalled done; None until the journal could be read."""
@@ -2413,7 +2457,115 @@ class Runtime:
             self._reconcile(account, venue)
             if bars:
                 self._drive(venue, bars)
+        self._refresh_accounts()
         self._observe()
+
+    # --- the account's facts: a timed re-read, and the surface it leaves ---------------------
+
+    def _account_source(self, account: str, venue: Venue) -> LiveAccount:
+        """The account's fact surface, built once per binding.
+
+        The currency is the labelled default until a real account is bound: cTrader states its
+        deposit asset by id, and nothing on this node turns that id into a name (G-DEMO reads it
+        from the demo account). The binding is asked for at every refresh, so the client under
+        the venue is the one read, never a copy taken here.
+        """
+        source = self._accounts.get(account)
+        if source is None:
+            source = LiveAccount(
+                lambda venue=venue: venue.client,
+                currency=ACCOUNT_CURRENCY,
+                budget_share=BUDGET_SHARE,
+            )
+            self._accounts[account] = source
+        return source
+
+    def _refresh_accounts(self) -> None:
+        """The one place the timed balance re-read runs: after the pass that drove every unit.
+
+        A row written inside that pass reads what this left, so no exit and no row write can start
+        a venue round trip. The account's facts are re-stated only when the read's timer is due, so
+        the stops they carry are asked of the unit's own binding at the read's cadence, not on
+        every tick.
+        """
+        now = Instant(self.clock_ns())
+        for account, venue in self.venues.items():
+            source = self._account_source(account, venue)
+            if source.refresh(now) or account not in self._facts:
+                self._facts[account] = source.read(
+                    now,
+                    stakes=self._stakes(account, now),
+                    realised_since=self._realised(account, now),
+                )
+
+    def account_facts(self, account: str) -> AccountFacts | None:
+        """The account's facts as the last refresh left them, or None before the first read."""
+        return self._facts.get(account)
+
+    def _account_inputs(self, account: str) -> Mapping[str, Fact]:
+        """The account's facts by their names, for a decision row the units of ``account`` write."""
+        facts = self._facts.get(account)
+        return {} if facts is None else facts.facts()
+
+    def _stakes(self, account: str, instant: Instant) -> tuple[Stake, ...]:
+        """Every position a unit on ``account`` holds, at the money it loses if its stop fills.
+
+        The stop is the one the unit's own binding carries: the venue's for a live lane, the paper
+        lane's own for a paper one. A stake with no stop is kept, so open risk reads absent rather
+        than short.
+        """
+        stakes: list[Stake] = []
+        for hosted in self.hosted.values():
+            unit = hosted.unit
+            if unit is None or hosted.deployment.account_id != account:
+                continue
+            sized = _unit_account(unit, instant)
+            handler = unit.handler
+            held: Mapping[str, OwnPosition] = {} if handler is None else handler.open_positions
+            for market, position in held.items():
+                record = unit.records.get(market)
+                if record is None or sized is None:
+                    continue
+                stop = unit.orders.venue.client.stop_of(unit.venue_name(position.position_id))
+                stakes.append(
+                    Stake(
+                        position.entry_price,
+                        stop,
+                        position.quantity,
+                        record.value_per_point,
+                        rate_used(record, sized, instant),
+                    )
+                )
+        return tuple(stakes)
+
+    def _realised(self, account: str, instant: Instant) -> Decimal | None:
+        """The money the units on ``account`` have closed since this node hosted them.
+
+        Each closed trade's quote figure at the rate the row stamped, as the handler's own equity
+        sum converts it; a trade with no rate takes the current fact for its quote, and a quote
+        this node cannot price makes the figure absent rather than short. A restart re-anchors
+        it: these are the trades the handler holds, and the unit's journal keeps the record.
+        """
+        total = Fraction(0)
+        for hosted in self.hosted.values():
+            unit = hosted.unit
+            if unit is None or hosted.deployment.account_id != account or unit.handler is None:
+                continue
+            sized = _unit_account(unit, instant)
+            for trade in unit.handler.trades:
+                rate = trade.rate
+                if rate is None:
+                    record = unit.records.get(trade.market_id)
+                    fact = (
+                        None
+                        if record is None or sized is None
+                        else rate_used(record, sized, instant)
+                    )
+                    if fact is None or fact.value is None:
+                        return None
+                    rate = Fraction(fact.value)
+                total += Fraction(trade.money) * rate
+        return Decimal(total.numerator) / Decimal(total.denominator)
 
     def _reconcile(self, account: str, venue: Venue) -> None:
         """Reconcile once per venue session and after an UNKNOWN, before any bar is driven."""
@@ -2920,6 +3072,7 @@ class Runtime:
             FeedRates(venue.feed.recording, rate_refs(records, ACCOUNT_CURRENCY), ACCOUNT_CURRENCY),
         )
         unit.journal_world = world
+        unit.account = lambda account=deployment.account_id: self._account_inputs(account)
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
         if is_refusal(target):
@@ -3204,6 +3357,10 @@ class Runtime:
             ("runtime.board", boards),
             ("runtime.kill", kill),
             ("runtime.venues", venues),
+            (
+                "runtime.accounts",
+                {account: facts.document() for account, facts in self._facts.items()},
+            ),
             ("runtime.alarms", list(self.alarms)),
             ("runtime.stand_downs", self.stand_downs.document()),
             ("runtime.safe_to_restart", self.safe_to_restart()),
@@ -3248,6 +3405,14 @@ def clock_offset(facts: Path, now_ns: int) -> int | None:
 
 def _why(refusal: TypedRefusal) -> str:
     return f"{refusal.category.value}: {refusal.context.get('reason', '')}"
+
+
+def _unit_account(unit: NodeUnit, instant: Instant) -> UnitAccount | None:
+    """The account facts the unit sizes against, as its handler answers them for this instant."""
+    handler = unit.handler
+    if handler is None:
+        return None
+    return cast("UnitAccount", handler.read_surfaces()["account"].at(instant))
 
 
 def _placeholder(deployment_id: str) -> Deployment:

@@ -37,6 +37,11 @@ def _usd() -> Fact:
     return Fact(Decimal(1), OPEN, "open", "the account is in the record's quote currency")
 
 
+def _at(ns: int) -> Instant:
+    """``ns`` nanoseconds past the first read."""
+    return Instant(OPEN.value_ns + ns)
+
+
 def _stakes() -> tuple[Stake, ...]:
     """Two EURUSD positions risking 500 and 250 USD: five and half a figure at 100,000 a point."""
     point = _record().value_per_point
@@ -94,9 +99,9 @@ def test_a_stale_balance_is_stale() -> None:
         lambda: venue, currency=CURRENCY, budget_share=Decimal(1), stale_s=BALANCE_STALE_S
     )
     account.refresh(OPEN)
-    account.refresh(OPEN + int(BALANCE_READ_S) * SECOND)
-    inside = account.read(OPEN + 44 * SECOND, stakes=(), realised_since=Decimal(0))
-    after = account.read(OPEN + 45 * SECOND + 1, stakes=(), realised_since=Decimal(0))
+    account.refresh(_at(int(BALANCE_READ_S) * SECOND))
+    inside = account.read(_at(44 * SECOND), stakes=(), realised_since=Decimal(0))
+    after = account.read(_at(45 * SECOND + 1), stakes=(), realised_since=Decimal(0))
 
     assert venue.reads == 2
     assert (inside.balance.state, inside.balance.value) == ("ok", BALANCE)

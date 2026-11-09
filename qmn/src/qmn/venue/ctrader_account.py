@@ -706,6 +706,32 @@ class CTraderVenue:
     def equity(self) -> Decimal:
         return self.balance
 
+    def read_balance(self) -> Result[Decimal]:
+        """Ask cTrader for the account's cash again: the node's timed account read (AD-15).
+
+        The same ``ProtoOATraderReq`` the session opened with and the same parse, so a re-read can
+        never read the cash under other money digits than the first one. A session that is not
+        open answers a refusal and leaves the last balance in place, which the fact's own age then
+        marks stale; nothing here sends an order.
+        """
+        with self._lock:
+            if self.api is None or not self._pump():
+                return submit_not_ready_refusal()
+            answer = self.api.ask("ProtoOATraderReq", {"ctidTraderAccountId": self.ctid})
+            if is_refusal(answer):
+                return answer
+            return Ok(self._took(_map(answer.value.body.get("trader"))))
+
+    def _took(self, found: Mapping[str, object]) -> Decimal:
+        """The cash and money digits a trader answer states, for the open and every re-read."""
+        digits = _int(found.get("moneyDigits"))
+        if digits is None:
+            # Open API answers without moneyDigits are in cents.
+            digits = 2
+        self.money_digits = digits
+        self.balance = Decimal(_int(found.get("balance")) or 0).scaleb(-digits)
+        return self.balance
+
     def read_back(self) -> Result[ReadBack]:
         """The account's open positions and orders as cTrader reconciles them, each position
         named by its entry's client order id. Fills that already arrived are read first. The
@@ -1062,12 +1088,7 @@ class CTraderVenue:
         if is_refusal(trader):
             return trader
         found = _map(trader.value.body.get("trader"))
-        digits = _int(found.get("moneyDigits"))
-        if digits is None:
-            # Open API answers without moneyDigits are in cents.
-            digits = 2
-        self.money_digits = digits
-        self.balance = Decimal(_int(found.get("balance")) or 0).scaleb(-digits)
+        self._took(found)
         self.position_model = "netting" if found.get("accountType") == "NETTED" else "hedging"
         listed = api.ask("ProtoOASymbolsListReq", {"ctidTraderAccountId": self.ctid})
         if is_refusal(listed):
