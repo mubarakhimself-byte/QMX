@@ -15,7 +15,10 @@ it; below the minimum lot the entry is skipped with its reason. The handler clos
 positions keyed by the fingerprint its host passed, and the node passes the logic half, so a size
 edit leaves a held position's exits running. An exit acts by its kind: ``close_full`` closes the
 position, ``close_partial`` closes its lot-rounded quantity and keeps the rest held, and
-``amend_protection`` moves the held stop and target, tightening only.
+``amend_protection`` moves the held stop and target, tightening only. The ``own_position`` surface
+answers each held position as a ``PositionFacts``: its live protection, the bars held, its
+excursions in R and the numbers its entry recorded, so a per-bar exit reads the position and
+never a venue.
 
 Cash that moves with no fill (swap, financing, funding, dividends, commission) comes from the
 host's cash port as ``CashEvent`` rows and changes the account the unit reads. The node passes
@@ -48,6 +51,7 @@ from qmf.risk.unit_intent import (
 )
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots
+from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import (
     Account,
     CalibrationRow,
@@ -110,6 +114,8 @@ class HeldPosition:
     """How far the price has gone against the position since its entry, in R of its entry stop."""
     mfe_r: Decimal = Decimal(0)
     """How far the price has gone for the position since its entry, in R of its entry stop."""
+    bars_held: int = 0
+    """The bars this market has closed while the position was held, its entry's bar counted."""
     rate: Fraction | None = None
     """The account-currency rate the entry was sized at, stamped on its close (AD-10). A position
     adopted after a restart carries none; the account converts its money by the rate that call
@@ -291,16 +297,18 @@ def _decimal(value: int, scale: int) -> Decimal:
 
 
 def _with_excursion(held: HeldPosition, bar: QuoteBar) -> HeldPosition:
-    """The position with this bar's reach against and for it, on the side it would close at."""
+    """The position with this bar's reach against and for it, on the side it would close at, and
+    the bar added to its count."""
     entry, distance = held.position.entry_price, abs(held.position.entry_price - held.entry_stop)
     if not distance:
-        return held
+        return replace(held, bars_held=held.bars_held + 1)
     if held.position.side is Side.LONG:
         against, away = entry - bar.bid.low, bar.bid.high - entry
     else:
         against, away = bar.ask.high - entry, entry - bar.ask.low
     return replace(
         held,
+        bars_held=held.bars_held + 1,
         mae_r=max(held.mae_r, (against / distance).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)),
         mfe_r=max(held.mfe_r, (away / distance).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)),
     )
@@ -466,7 +474,7 @@ class UnitSliceHandler:
             surfaces[f"bars:{self._stream}:{market}"] = _At(
                 lambda _i, m=market: self._latest.get(m)
             )
-            surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: self._position(m))
+            surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: self._facts(m))
         return surfaces
 
     def _account(self, instant: Instant) -> Account:
@@ -505,6 +513,39 @@ class UnitSliceHandler:
     def _position(self, market: str) -> OwnPosition | None:
         held = self._held.get(market)
         return held.position if held is not None else self._foreign.get(market)
+
+    def _facts(self, market: str) -> PositionFacts | None:
+        """The position on ``market`` as its exits read it (AD-13, SWAP E15): its live stop and
+        target, the bars held, its excursions in R and the numbers its entry's row recorded. A
+        seeded position is another unit's, so it carries its identity alone."""
+        held = self._held.get(market)
+        if held is None:
+            foreign = self._foreign.get(market)
+            return (
+                None
+                if foreign is None
+                else PositionFacts(
+                    position_id=foreign.position_id,
+                    side=foreign.side,
+                    quantity=foreign.quantity,
+                    entry_price=foreign.entry_price,
+                    opened_by=foreign.opened_by,
+                )
+            )
+        position = held.position
+        return PositionFacts(
+            position_id=position.position_id,
+            side=position.side,
+            quantity=position.quantity,
+            entry_price=position.entry_price,
+            opened_by=position.opened_by,
+            stop=held.stop,
+            targets=() if held.target is None else (held.target,),
+            bars_held=held.bars_held,
+            mfe_r=held.mfe_r,
+            mae_r=held.mae_r,
+            numbers_at_entry=held.entry_stamps,
+        )
 
     @property
     def trades(self) -> tuple[UnitTrade, ...]:

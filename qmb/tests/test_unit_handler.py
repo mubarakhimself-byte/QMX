@@ -36,6 +36,7 @@ from qmf.core.refusal import Ok, RefusalCategory, Result, TypedRefusal, is_refus
 from qmf.risk.unit_intent import UnitIntent
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, parse_record
+from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import (
     EXIT_FAULT,
     OHLC,
@@ -201,6 +202,25 @@ def test_a_receipt_of_0_037_lots_fills_0_03_and_journals_the_0_007_residue_in_r(
         (FillKind.ENTRY, Decimal("0.03"), Decimal("0.037"), Decimal("0.1892"), Decimal("1.08530"))
     ]
     assert [r for r in journal.records if isinstance(r, Fill)] == list(handler.fills)
+
+
+def test_the_own_position_surface_answers_the_facts_an_exit_reads() -> None:
+    """SWAP E15: a held position reaches the unit as its facts, not its identity alone, so a
+    per-bar exit reads its stop, the bars held and its excursions in R from one surface."""
+    handler, _, _ = _drive(_at_start(_entry("0.037")))
+
+    facts = handler.read_surfaces()[f"own_position:{_M}"].at(Instant(_T1))
+
+    assert isinstance(facts, PositionFacts), facts
+    assert (facts.position_id, facts.side, facts.quantity, facts.entry_price) == (
+        _OWN,
+        Side.LONG,
+        Decimal("0.03"),
+        Decimal("1.08530"),
+    )
+    assert (facts.stop, facts.targets, facts.bars_held) == (Decimal("1.08000"), (), 1)
+    assert (facts.mae_r, facts.mfe_r) == (Decimal("0.0377"), Decimal(0))
+    assert facts.opened_by == _MINE
 
 
 def test_a_receipt_of_0_004_lots_is_below_the_minimum_lot_and_skips() -> None:
