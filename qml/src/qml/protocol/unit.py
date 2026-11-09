@@ -63,6 +63,7 @@ from qml.environment import current_environment
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
+from qml.receipt import record_stored
 from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
 __all__ = [
@@ -206,6 +207,14 @@ class SlotOutput:
 
 @dataclass(frozen=True, slots=True)
 class DecisionRow:
+    """One decision, with every input the size read, so one row answers "why this size?".
+
+    ``price`` fills the trail on the row it prices: the sizer that answered, the facts it read
+    with their sources and ages, the steps from the sizer's amount to the venue's quantity, each
+    link's verdict, and the two fingerprints the row was made under. A host journals the row
+    before any order leaves (AD-9's "One row"), and ``qml/receipt.py`` reads it back.
+    """
+
     row_id: str
     instant: Instant
     market_id: str
@@ -215,6 +224,27 @@ class DecisionRow:
     numbers_in_force: Mapping[str, Decimal]
     reason: str
     readings_used: tuple[object, ...] = ()
+    binding: str = ""
+    """The sizer binding that answered the amount, ``block@version``. A row replays alone, so it
+    names the block it came from even when the amount, not the block, is what replays."""
+    inputs: Mapping[str, object] = MappingProxyType({})
+    """Every input the size read, in the row's own stored form: each a ``Fact`` with its value,
+    read time, source and state, and ``record``, the instrument record's own facts in the form
+    ``parse_record`` reads back."""
+    steps: Mapping[str, Amount] = MappingProxyType({})
+    """The positions of the size side by side (FUNNEL D42): ``wanted`` is the sizer's answer,
+    ``approved`` the quantity the one converter and the admit row allowed. ``filled`` is not
+    here, because the row is journalled before any order leaves and only the ``fill`` row knows
+    what the venue took."""
+    verdicts: tuple[str, ...] = ()
+    """Each link's verdict in the order it ran, in AD-9's words: ``none`` when it passed,
+    ``refuse`` (or the code it refused by) when it stopped the entry."""
+    logic_fp: str = ""
+    risk_fp: str = ""
+    placeholders: tuple[str, ...] = ()
+    written_before_send: bool = False
+    """True on a row a host's journal wrote before the send it names. A unit mints false: it
+    writes nothing, and a flag the unit set could not be true."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,9 +386,28 @@ def _skip_text(code: str, detail: str) -> str:
     return f"sizer: {code}" + (f" ({detail})" if detail and detail != code else "")
 
 
-def _priced_skip(proposal: Proposal, code: str, detail: str) -> Priced:
-    row = replace(proposal.row, outcome="skipped", reason=_skip_text(code, detail))
-    return Priced(row, None, code)
+def _priced_skip(row: DecisionRow, code: str, detail: str) -> Priced:
+    return Priced(replace(row, outcome="skipped", reason=_skip_text(code, detail)), None, code)
+
+
+def _sizing_inputs(proposal: Proposal, facts: Account) -> dict[str, object]:
+    """Every input the size reads, each as a fact with the instant it was read at, so the row
+    carries its own evidence and a replay never looks one up."""
+    instant = proposal.row.instant
+    inputs: dict[str, object] = {
+        "equity": Fact(
+            facts.equity, instant, "open", "the account's equity at the pricing instant"
+        ),
+        "entry_price": Fact(
+            proposal.entry_price, instant, "open", "the entry bar's close on the side's own quote"
+        ),
+        "stop_price": Fact(proposal.stop, instant, "open", "the stop exit's level"),
+        "record": record_stored(proposal.record),
+    }
+    rate = _rate(proposal.record, facts, instant)
+    if rate is not None:
+        inputs[f"market.rate:{proposal.record.currency}"] = rate
+    return inputs
 
 
 def _rate(record: InstrumentRecord, facts: Account, now: Instant) -> Fact | None:
@@ -662,13 +711,47 @@ class HostedUnit:
         The one call that sizes an entry: the sizer answers an amount from this evidence, the one
         converter spells the venue's quantity and the residue from the record and the rate, and
         the admit row catches an absurd size after it. The row comes back either way, so the
-        caller writes it before any order leaves. No account fact is read here by the exits.
+        caller writes it before any order leaves, carrying the whole trail: the sizer that
+        answered, every fact it read with its source and age, the steps it took and each link's
+        verdict. No account fact is read here by the exits.
         """
         core = self._core
+        compiled = core.compiled
+        inputs = _sizing_inputs(proposal, facts)
+
+        def receipt(
+            row: DecisionRow, steps: Mapping[str, Amount], verdicts: tuple[str, ...]
+        ) -> DecisionRow:
+            """The row with its size trail on it, whatever the sizing answered."""
+            return replace(
+                row,
+                binding=compiled.plan.sizer.pin,
+                inputs=inputs,
+                steps=steps,
+                verdicts=verdicts,
+                logic_fp=compiled.logic_fingerprint.value,
+                risk_fp=compiled.risk_fingerprint.value,
+                placeholders=compiled.placeholders,
+            )
+
+        def ended(
+            row: DecisionRow,
+            steps: Mapping[str, Amount],
+            verdicts: tuple[str, ...],
+            code: str,
+            detail: str,
+        ) -> Priced:
+            """A skip whose trail ends at the link that refused it."""
+            return _priced_skip(receipt(row, steps, verdicts), code, detail)
+
         market = next((m for m in core.markets if m.market_id == proposal.market_id), None)
         if market is None:
-            return _priced_skip(
-                proposal, "sizer_skip", "the proposal names no market this unit runs"
+            return ended(
+                proposal.row,
+                {},
+                ("sizer: refuse",),
+                "sizer_skip",
+                "the proposal names no market this unit runs",
             )
         answer = market.instances["sizer"].update(
             {
@@ -681,7 +764,7 @@ class HostedUnit:
         )
         amount = _amount(answer)
         if isinstance(amount, _Skip):
-            return _priced_skip(proposal, amount.code, amount.detail)
+            return ended(proposal.row, {}, ("sizer: refuse",), amount.code, amount.detail)
         converted = to_quantity(
             amount,
             proposal.entry_price,
@@ -691,7 +774,17 @@ class HostedUnit:
             RoundRule(now=proposal.row.instant),
         )
         if converted.skipped is not None or converted.quantity is None:
-            return _priced_skip(proposal, converted.skipped or "kind_unknown", "")
+            return ended(
+                proposal.row,
+                {"wanted": amount},
+                ("sizer: none", "converter: refuse"),
+                converted.skipped or "kind_unknown",
+                "",
+            )
+        steps: dict[str, Amount] = {
+            "wanted": amount,
+            "approved": Amount(kind="quantity", value=converted.quantity, basis=amount.basis),
+        }
         entry = PricedEntry(
             amount=amount,
             quantity=converted.quantity,
@@ -701,7 +794,13 @@ class HostedUnit:
         )
         code = admit.admit(proposal, entry)
         if code is not None:
-            return _priced_skip(proposal, code, "")
+            return ended(
+                proposal.row,
+                steps,
+                ("sizer: none", "converter: none", f"size_band: refuse ({code})"),
+                code,
+                "",
+            )
         wire = dict(proposal.wire) | {
             "quantity": f"{converted.quantity:f}",
             "sizer_receipt": {
@@ -712,8 +811,15 @@ class HostedUnit:
         admitted = accept_unit_intents((wire,))
         if is_refusal(admitted):
             reason = admitted.context.get("reason")
-            return _priced_skip(proposal, "sizer_skip", str(reason) if reason else "")
-        return Priced(proposal.row, admitted.value[0], None)
+            return ended(
+                proposal.row,
+                steps,
+                ("sizer: none", "converter: none", "size_band: none", "intent: refuse"),
+                "sizer_skip",
+                str(reason) if reason else "",
+            )
+        row = receipt(proposal.row, steps, ("sizer: none", "converter: none", "size_band: none"))
+        return Priced(row, admitted.value[0], None)
 
     @property
     def calibrated_values(self) -> Mapping[str, Decimal]:
