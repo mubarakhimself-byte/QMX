@@ -3212,7 +3212,7 @@ class Runtime:
         recorded = [
             Bar(market, bar) for market in unit.traded for bar in self._recent(unit, venue, market)
         ]
-        self._drive_one(hosted, recorded)
+        self._drive_one(hosted, recorded, replay=True)
         self._settle_warm(hosted)
 
     def _widen(self, venue: Venue, deployment: Deployment) -> bool:
@@ -3372,8 +3372,9 @@ class Runtime:
         A unit whose stream is ``factor`` base bars long needs ``factor`` bars per warm-up bar,
         and the recording may start part way through a bucket, which ``roll_up`` drops. So the
         read stops one base bar short of ``warm_needed + 1`` whole buckets: a mid-stream start
-        still yields ``warm_needed`` whole buckets, and never a bucket past the one that
-        completes warm-up. A unit driven past that bucket would mint from the replay.
+        still yields ``warm_needed`` whole buckets. This bounds the bars read, not the buckets
+        that close: a recording missing a base bar inside a bucket closes more buckets than it
+        reads whole, so the replay stops at the warming flip in ``_drive_one``.
         """
         if unit.base_ns is None or unit.stream_seconds is None:
             return venue.feed.recording.recent(market, unit.warm_needed)
@@ -3405,7 +3406,10 @@ class Runtime:
                 unit.journal.append(RiskEvent(UNIT_FAULT, key))
         hosted.detail = f"a fault: {why}"
 
-    def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar]) -> None:
+    def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar], replay: bool = False) -> None:
+        """Step the unit over ``bars``. ``replay`` marks the warm-up bars read from the recording,
+        which stop at the close that warms the unit: a replayed bar past that flip would mint an
+        order from the past, and the live batch keeps stepping."""
         unit, loop = hosted.unit, hosted.loop
         if unit is None or loop is None:
             return
@@ -3446,6 +3450,9 @@ class Runtime:
                     unit.warm_seen += 1
                     if unit.warm_seen >= unit.warm_needed:
                         unit.warming = False
+                        if replay:
+                            self._write_snapshot(hosted)
+                            return
         self._write_snapshot(hosted)
 
     # --- what he sees ---
