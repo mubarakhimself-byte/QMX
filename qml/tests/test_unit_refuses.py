@@ -251,23 +251,6 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
         "plain_python_not_built",
         "/plain_python",
     ),
-    "a halt verb with no executor": (
-        _put(
-            "halts/unit",
-            [
-                {
-                    "name": "probe",
-                    "scope": "unit",
-                    "block": "equity-drawdown-halt@1",
-                    "params": {"max_drawdown": {"value": "0.05"}, "trailing": {"value": "0"}},
-                    "inputs": {},
-                    "verb": "flatten",
-                }
-            ],
-        ),
-        "verb_not_built",
-        "/halts/unit/0/verb",
-    ),
     "an exit's scope": (
         _put("exit_set/0/scope", "account"),
         "exit_not_built",

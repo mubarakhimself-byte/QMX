@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import is_refusal
-from qmf.risk.controls import ControlRow, Verb
+from qmf.risk.controls import ControlRow
 
 from qml.blocks.api import (
     PORT_QUANTUM_SIGNIFICANT_DIGITS,
@@ -102,7 +102,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 7
+COMPILER_FORMAT_VERSION: Final[int] = 8
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -996,14 +996,6 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
         problems.add("streams_not_built", "/streams", f"{_FORMAT} runs one stream")
     if unit.reads:
         problems.add("reads_not_built", "/reads", f"{_FORMAT} reads no readings")
-    for scope in ("position", "unit", "account"):
-        for index, binding in enumerate(getattr(unit.halts, scope)):
-            if binding.verb in (Verb.REDUCE, Verb.FLATTEN):
-                problems.add(
-                    "verb_not_built",
-                    f"/halts/{scope}/{index}/verb",
-                    f"{_FORMAT} runs no {binding.verb.value} verb, so this row would refuse",
-                )
     if unit.sessions:
         problems.add(
             "sessions_not_built",

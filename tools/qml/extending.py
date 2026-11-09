@@ -101,17 +101,6 @@ def _motion(**motion: object) -> _Edit:
     return _put("numbers/ema_period/motion", {"mode": "fixed", **motion})
 
 
-_HALT: Final = {
-    "name": "probe",
-    "scope": "unit",
-    "block": "equity-drawdown-halt@1",
-    "params": {"max_drawdown": {"value": "0.05"}, "trailing": {"value": "0"}},
-    "inputs": {},
-    "verb": "flatten",
-}
-"""One halt row whose verb has no executor, so the compiler refuses the field."""
-
-
 _SESSION: Final = [
     {
         "name": "london",
@@ -149,11 +138,6 @@ _RECIPE: Final = {"pod_id": "trend-pullback", "version": 1, "hash": "fp1:sha256:
 _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.streams", "/streams", _two_streams),
     _Probe("Unit.reads", "/reads", _put("reads", _READ)),
-    _Probe(
-        "ControlBinding.verb",
-        "/halts/unit/0/verb",
-        _put("halts", {"position": [], "unit": [_HALT], "account": []}),
-    ),
     _Probe("Unit.sessions", "/sessions", _put("sessions", _SESSION)),
     _Probe(
         "Unit.context_needs", "/context_needs", _put("context_needs", {"block": [{"word": "fomc"}]})
