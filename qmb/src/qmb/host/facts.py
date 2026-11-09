@@ -1,10 +1,14 @@
-"""One rate fact from one price, and the two ways QMB reads it back (AD-10 "Currency", AD-15).
+"""One rate fact from one price, the account's facts, and the ways QMB reads them back.
 
 The rate into the account's currency is the mid of the conversion market's two sides, read as an
 exact ``Fraction``. It has to be exact: the converter floors at the lot step, and a ``Decimal``
 1/150 in between floors a 1.50-lot USDJPY entry to 1.49. QMB reads the fact from the run folder's
 conversion-market bars; the node reads it from its feed, and both compute it here, so one fact is
 never spelled two ways.
+
+The account surface is the second host fact here: ``ReplayAccount`` states the run's own cash and
+the risk its positions carry, through the same :func:`~qmf.risk.facts.account_facts` the node's
+adapter uses, so one host cannot report an account the other would not.
 
 A run streams its bars, so ``ReplayRates`` walks one feed forward per conversion market and holds
 one bar each however long the run. The G check's slice is bounded and is driven five times over,
@@ -19,18 +23,29 @@ from __future__ import annotations
 
 import bisect
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from decimal import Decimal
 from fractions import Fraction
 from typing import Final
 
 from qmf.core.chrono import Instant
 from qmf.core.refusal import TypedRefusal
-from qmf.risk.facts import Fact, rate_name
+from qmf.risk.facts import (
+    AccountFacts,
+    AccountReading,
+    Fact,
+    Stake,
+    account_facts,
+    open_risk,
+    rate_name,
+)
 from qml.numbers import ConversionRef, InstrumentRecord
 from qml.protocol.unit import QuoteBar
 
 __all__ = [
     "RATE_ABSENT",
     "BarFeed",
+    "ReplayAccount",
     "ReplayRates",
     "SliceRates",
     "conversions",
@@ -68,6 +83,43 @@ def provided(records: Iterable[InstrumentRecord], currency: str) -> tuple[str, .
     """The ``market.rate:<quote>`` fact names a host supplies for these records. One list for both
     hosts: the node imports this function rather than spelling a second one."""
     return tuple(rate_name(quote) for quote in sorted(conversions(records, currency)))
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayAccount:
+    """QMB's account facts: the run's own book, read at the instant the run asks (AD-15).
+
+    A replay has no venue to re-read, so its balance is its own cash book and it reads as fresh as
+    the question; the margin and the stop-out price are the venue's, and a replay states neither,
+    so they read absent rather than guessed. Open risk is the positions the run holds at their
+    stops, priced by the same :class:`~qmf.risk.facts.Stake` arithmetic the node's adapter uses.
+    """
+
+    currency: str
+    balance: Decimal
+    budget_share: Decimal
+    holds: str = "the positions this run holds"
+    """Whose positions ``account.open_risk`` counts, as ``basis`` says it."""
+
+    def read(
+        self, instant: Instant, *, stakes: Iterable[Stake], realised_since: Decimal | None
+    ) -> AccountFacts:
+        """The account's facts at ``instant``: no venue stands behind a run's book."""
+        return account_facts(
+            AccountReading(
+                currency=self.currency,
+                source="qmb:replay",
+                equity_words="the run's own balance, with no open profit marked",
+                holds=self.holds,
+                read_at=instant,
+                balance=self.balance,
+                open_risk=open_risk(stakes),
+                budget_share=self.budget_share,
+                realised_since=realised_since,
+            ),
+            now=instant,
+            stale_s=Decimal(0),
+        )
 
 
 class ReplayRates:
