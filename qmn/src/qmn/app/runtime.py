@@ -3367,15 +3367,18 @@ class Runtime:
     # --- driving units on closed bars ---
 
     def _recent(self, unit: NodeUnit, venue: Venue, market: str) -> tuple[QuoteBar, ...]:
-        """The feed bars to replay for warm-up: enough base bars for the unit's own stream.
+        """The feed bars to replay for warm-up: the unit's own stream's ``warm_needed`` buckets.
 
         A unit whose stream is ``factor`` base bars long needs ``factor`` bars per warm-up bar,
-        and up to one bucket more before the first bucket it sees from its start.
+        and the recording may start part way through a bucket, which ``roll_up`` drops. So the
+        read stops one base bar short of ``warm_needed + 1`` whole buckets: a mid-stream start
+        still yields ``warm_needed`` whole buckets, and never a bucket past the one that
+        completes warm-up. A unit driven past that bucket would mint from the replay.
         """
         if unit.base_ns is None or unit.stream_seconds is None:
             return venue.feed.recording.recent(market, unit.warm_needed)
         factor = unit.stream_seconds * _NS // unit.base_ns
-        return venue.feed.recording.recent(market, (unit.warm_needed + 1) * factor + factor)
+        return venue.feed.recording.recent(market, (unit.warm_needed + 1) * factor - 1)
 
     def _drive(self, venue: Venue, bars: Sequence[Bar]) -> None:
         for hosted in self.hosted.values():
