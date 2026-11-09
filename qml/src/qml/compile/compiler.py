@@ -544,13 +544,22 @@ class _Wiring:
         its block does not read. The five shipped halts read account and trades facts, which the
         unit supplies from its account surface and its own journal. A block that is not a halt,
         or that declares a port the runner cannot feed, is refused by name here rather than
-        answering nothing forever.
+        answering nothing forever. The list a row sits in decides where it runs, so a row whose
+        own ``scope`` disagrees with that list is refused rather than re-scoped in silence.
         """
         planned: list[HaltPlan] = []
         for scope in (Scope.POSITION, Scope.UNIT, Scope.ACCOUNT):
             seen: set[str] = set()
             for index, binding in enumerate(getattr(self.unit.halts, scope.value)):
                 where = f"/halts/{scope.value}/{index}"
+                if binding.scope is not scope:
+                    self.problems.add(
+                        "halt_scope",
+                        f"{where}/scope",
+                        f"{_FORMAT} runs a row in the {scope.value} list, and this row's scope "
+                        f"says {binding.scope.value}",
+                    )
+                    continue
                 if binding.name in seen:
                     self.problems.add(
                         "duplicate_name", f"{where}/name", "two halt rows at one scope share a name"

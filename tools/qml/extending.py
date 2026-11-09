@@ -111,6 +111,15 @@ _HALT: Final = {
 }
 """One halt row whose verb has no executor, so the compiler refuses the field."""
 
+_MISFILED_HALT: Final = {
+    "name": "probe",
+    "scope": "position",
+    "block": "equity-drawdown-halt@1",
+    "params": {"max_drawdown": {"value": "0.05"}, "trailing": {"value": "0"}},
+    "inputs": {},
+}
+"""One halt row in the unit list whose own scope says position, so the two disagree."""
+
 
 _SESSION: Final = [
     {
@@ -149,6 +158,11 @@ _RECIPE: Final = {"pod_id": "trend-pullback", "version": 1, "hash": "fp1:sha256:
 _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.streams", "/streams", _two_streams),
     _Probe("Unit.reads", "/reads", _put("reads", _READ)),
+    _Probe(
+        "ControlBinding.scope",
+        "/halts/unit/0/scope",
+        _put("halts", {"position": [], "unit": [_MISFILED_HALT], "account": []}),
+    ),
     _Probe(
         "ControlBinding.verb",
         "/halts/unit/0/verb",
@@ -223,7 +237,7 @@ _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.home_markets", "/home_markets", _put("home_markets", ["fx.eurusd"])),
     _Probe("Unit.tags", "/tags", _put("tags", ["trend"])),
 )
-"""One probe per ``_shape_problems`` branch, labelled with the field it proves."""
+"""One probe per refusal the guide lists, labelled with the field it proves."""
 
 _SLOTS: Final = (
     ("sizer", SizerInstance),

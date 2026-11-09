@@ -117,8 +117,8 @@ or the census labels it.
 | `ControlBinding.block` | - | - | - |
 | `ControlBinding.params` | - | - | - |
 | `ControlBinding.inputs` | - | - | - |
-| `ControlBinding.scope` | - | - | - |
-| `ControlBinding.verb` | `/halts/unit/0/verb` | `verb_not_built` | compiler format 7 runs no flatten verb, so this row would refuse nothing |
+| `ControlBinding.scope` | `/halts/unit/0/scope` | `halt_scope` | compiler format 7 runs a row in the unit list, and this row's scope says position |
+| `ControlBinding.verb` | `/halts/unit/0/verb` | `verb_not_built` | compiler format 7 runs no flatten verb, so this row would refuse |
 | `ControlBinding.shadow` | - | - | - |
 | `Read.reading` | - | - | - |
 | `Read.market` | - | - | - |
