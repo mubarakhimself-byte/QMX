@@ -7,7 +7,7 @@
    "case": "motion-on",
    "request": {
     "schema_version": 1,
-    "compiled_fp": "fp1:sha256:308d7a8169e76e61218ad9d5abd36a61e09f46c0515c57be741d33f2aa2bab90",
+    "compiled_fp": "fp1:sha256:a72cf2cd71ed13595051e2686aa900eff91be18801c971fbea0031add70701f3",
     "equity": "10000.00",
     "execution_target": {
      "role": "paper-validation",
@@ -33,7 +33,7 @@
    "case": "motion-off",
    "request": {
     "schema_version": 1,
-    "compiled_fp": "fp1:sha256:308d7a8169e76e61218ad9d5abd36a61e09f46c0515c57be741d33f2aa2bab90",
+    "compiled_fp": "fp1:sha256:a72cf2cd71ed13595051e2686aa900eff91be18801c971fbea0031add70701f3",
     "equity": "10000.00",
     "execution_target": {
      "role": "paper-validation",
