@@ -410,7 +410,16 @@ class Promoter:
             return _done(again.event_id, _shown(self._deployed(deployment)), ask)
         event = self._event(click, digest, current, compiled.compiled_fingerprint.value, report)
         deployment = self._deployment(
-            click, click.node, ask, document, compiled, lane, report, tested, account, event.event_id
+            click,
+            click.node,
+            ask,
+            document,
+            compiled,
+            lane,
+            report,
+            tested,
+            account,
+            event.event_id,
         )
         answer = _shown(self._deployed(deployment))
         try:
