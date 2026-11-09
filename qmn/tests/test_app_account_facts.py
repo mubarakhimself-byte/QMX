@@ -43,7 +43,7 @@ def _at(ns: int) -> Instant:
 
 
 def _stakes() -> tuple[Stake, ...]:
-    """Two EURUSD positions risking 500 and 250 USD: five and half a figure at 100,000 a point."""
+    """Two EURUSD positions risking 500 and 250 USD: 0.005 and 0.0025 of a figure at 100,000 a point."""
     point = _record().value_per_point
     return (
         Stake(Decimal("1.10000"), Decimal("1.09500"), Decimal("1"), point, _usd()),
@@ -98,10 +98,11 @@ def test_a_stale_balance_is_stale() -> None:
     account = LiveAccount(
         lambda: venue, currency=CURRENCY, budget_share=Decimal(1), stale_s=BALANCE_STALE_S
     )
+    limit = int(BALANCE_STALE_S)
     account.refresh(OPEN)
     account.refresh(_at(int(BALANCE_READ_S) * SECOND))
-    inside = account.read(_at(44 * SECOND), stakes=(), realised_since=Decimal(0))
-    after = account.read(_at(45 * SECOND + 1), stakes=(), realised_since=Decimal(0))
+    inside = account.read(_at((limit - 1) * SECOND), stakes=(), realised_since=Decimal(0))
+    after = account.read(_at(limit * SECOND + 1), stakes=(), realised_since=Decimal(0))
 
     assert venue.reads == 2
     assert (inside.balance.state, inside.balance.value) == ("ok", BALANCE)
