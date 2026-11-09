@@ -1680,6 +1680,9 @@ class NodeUnit:
         self.kept_values: dict[str, Decimal] = {}
         """The slow numbers the deployment's saved snapshot already holds, so a write happens
         only when one of them moves."""
+        self.kept_risk: tuple[str, str, int | None] | None = None
+        """The risk word the saved snapshot already holds, with its reason and the instant it
+        began, so a brake firing writes a snapshot even though no calibrated number moved."""
 
     def account_inputs(self) -> Mapping[str, object]:
         """The account's facts and basis beside the size trail, so a row says what the account
@@ -1695,9 +1698,13 @@ class NodeUnit:
         equity: Decimal,
         target: ExecutionTarget,
         snapshot: Mapping[str, object] | None = None,
+        risk_rows: Sequence[Mapping[str, object]] | None = None,
     ) -> Result[None]:
         """Host the unit: fresh through ``construct_unit``, or from ``snapshot`` through
-        ``restore_unit``, which resumes it warm or starts it cold with the reason (A10)."""
+        ``restore_unit``, which resumes it warm or starts it cold with the reason (A10).
+
+        ``risk_rows`` are the folding rows this deployment's unit journal holds; they are the truth
+        for the unit's state, and the snapshot's cache answers only when none are handed."""
 
         def host(surfaces: Mapping[str, Surface]) -> Result[HostedUnit]:
             own = _OwnJournal(self, surfaces["own_journal"])
@@ -1710,6 +1717,7 @@ class NodeUnit:
                     scope_id=scope,
                     execution_target=target,
                     assignment=self.assignment,
+                    risk_rows=risk_rows,
                 )
                 if snapshot is None
                 else restore_unit(
@@ -1719,6 +1727,7 @@ class NodeUnit:
                     scope_id=scope,
                     execution_target=target,
                     assignment=self.assignment,
+                    risk_rows=risk_rows,
                 )
             )
             if not is_refusal(built):
@@ -3120,13 +3129,19 @@ class Runtime:
         if is_refusal(target):
             hosted.phase, hosted.detail = Phase.REFUSED, "the account is not a trading target"
             return
-        started = unit.start(venue.client.equity(), target.value, self._saved_snapshot(deployment))
+        started = unit.start(
+            venue.client.equity(),
+            target.value,
+            self._saved_snapshot(deployment),
+            self._risk_rows(deployment, compiled),
+        )
         if is_refusal(started):
             hosted.phase = Phase.REFUSED
             hosted.detail = f"the unit would not start: {_why(started)}"
             return
         if unit.hosted_unit is not None:
             unit.kept_values = dict(unit.hosted_unit.calibrated_values)
+            unit.kept_risk = self._risk_key(unit)
         loop = self._loop(unit, account)
         if is_refusal(loop):
             hosted.phase, hosted.detail = Phase.REFUSED, "the loop driver refused the unit"
@@ -3204,15 +3219,82 @@ class Runtime:
             return None
         return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else None
 
+    def _risk_rows(
+        self, deployment: Deployment, compiled: CompiledUnit
+    ) -> tuple[Mapping[str, object], ...] | None:
+        """The folding rows this deployment's unit journal holds, sorted by ``(at, id)``.
+
+        A brake's journal row carries the code its control row was compiled with, and the verb is
+        that row's, because the journal writes what fired and not what it was allowed to do. A row
+        of another deployment's unit is not ours; a code no compiled row names is not a control
+        word (AD-23's unit fault is the unit's own bench, not a brake's). None when the volume
+        refuses a read, so a unit keeps the state its snapshot cached rather than read a bench as
+        absent.
+        """
+        verbs = {halt.control.code: halt.control.verb.value for halt in compiled.plan.halts}
+        if not verbs:
+            return ()
+        found: list[tuple[int, str, Mapping[str, object]]] = []
+        for folder in stream_folders(self.context.journal_root):
+            if not folder.name.startswith(f"{JournalStream.UNIT.source}.risk_event."):
+                continue
+            lines = read_committed(folder)
+            if is_refusal(lines):
+                return None
+            for line in lines.value:
+                if not isinstance(line, JournalLine):
+                    continue
+                record = line.record
+                if record.get("run_id") != deployment.deployment_id:
+                    continue
+                body = record.get("body")
+                if not isinstance(body, Mapping):
+                    continue
+                code = cast("Mapping[str, object]", body).get("code")
+                verb = verbs.get(code) if isinstance(code, str) else None
+                if verb is None:
+                    continue
+                ident = record.get("record_id")
+                name = str(ident) if isinstance(ident, str) else f"{line.t}:{line.seq}"
+                at = line.t * 1_000_000
+                found.append(
+                    (
+                        at,
+                        name,
+                        {
+                            "kind": "risk_event",
+                            "scope": f"unit:{deployment.deployment_id}",
+                            "at": at,
+                            "id": name,
+                            "code": code,
+                            "verb": verb,
+                        },
+                    )
+                )
+        found.sort(key=lambda row: (row[0], row[1]))
+        return tuple(row[2] for row in found)
+
+    def _risk_key(self, unit: NodeUnit) -> tuple[str, str, int | None] | None:
+        """The word, its reason and the instant it began, as the unit's fold answers them now."""
+        if unit.hosted_unit is None:
+            return None
+        state = unit.hosted_unit.risk_state(Instant(self.clock_ns()))
+        return (
+            state.word.value,
+            state.reason,
+            None if state.since is None else state.since.value_ns,
+        )
+
     def _write_snapshot(self, hosted: _Hosted) -> None:
-        """Save the unit's own state when one of its slow numbers moved, written whole and
-        replaced, so a stop halfway leaves the last good one. The next start hands it back to
-        ``unit.start``, which resumes the unit or writes the ``cold_start`` reason."""
+        """Save the unit's own state when one of its slow numbers or its risk word moved, written
+        whole and replaced, so a stop halfway leaves the last good one. The next start hands it
+        back to ``unit.start``, which resumes the unit or writes the ``cold_start`` reason."""
         unit = hosted.unit
         if unit is None or unit.hosted_unit is None:
             return
         values = dict(unit.hosted_unit.calibrated_values)
-        if values == unit.kept_values:
+        risk = self._risk_key(unit)
+        if values == unit.kept_values and risk == unit.kept_risk:
             return
         path = snapshot_path(self.context.data, hosted.deployment.deployment_id)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -3220,6 +3302,7 @@ class Runtime:
         temporary.write_text(json.dumps(unit.hosted_unit.snapshot(), sort_keys=True), "utf-8")
         os.replace(temporary, path)
         unit.kept_values = values
+        unit.kept_risk = risk
 
     def _paper_path(self, hosted: _Hosted, venue: Venue) -> OrderPath | None:
         """A paper deployment's own order path: every step a live order takes, ending at its
