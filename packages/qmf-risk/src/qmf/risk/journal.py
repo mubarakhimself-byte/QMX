@@ -57,6 +57,8 @@ __all__ = [
     "LEGACY_PROJECTION_NAMES",
     "RECORDS_STREAM_MAPPING",
     "RISK_AUTHORED_EVENT_TYPES",
+    "RISK_EVENT_CODES",
+    "UNIT_FAULT",
     "VENUE_AUTHORED_EVENT_TYPES",
     "CommandFingerprintJoin",
     "DecisionOutcome",
@@ -68,6 +70,7 @@ __all__ = [
     "LegacyProjectionName",
     "ProjectedJournalRow",
     "RiskAuthoredEvent",
+    "RiskEvent",
     "RiskWriterUnit",
     "VenueAuthoredEvent",
     "WriterScopedStream",
@@ -85,6 +88,27 @@ __all__ = [
 CT25_CONTRACT_FORMAT_VERSION: Final[int] = 1
 CT25_MAPPING_TABLE_VERSION: Final[int] = 1
 CT25_COMMAND_FINGERPRINT_JOIN_VERSION: Final[int] = 1
+
+UNIT_FAULT: Final[str] = "unit_fault"
+"""The first risk-event code: a block raised in one of its unit's phases, so that unit's entries
+stop until its clean bars pass (AD-23). Appendable, never redefined."""
+RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({UNIT_FAULT})
+"""Every code a ``risk_event`` row may carry. Closed and appendable: a brake's own code joins this
+family where its control row lands (AD-12), and a chain link's ``link_fault`` joins it with the
+node chain."""
+
+
+@dataclass(frozen=True, slots=True)
+class RiskEvent:
+    """One ``risk_event`` journal row: the code that fired and the root cause it is filed under.
+
+    ``root`` is the root-cause key. One card is raised per key, so the same broken block raising
+    every bar lands one card, not one per bar. A host writes the row; the unit only answers the
+    ``Fault`` that becomes it (AD-23).
+    """
+
+    code: str
+    root: str
 
 
 # --- closed vocabularies -----------------------------------------------------

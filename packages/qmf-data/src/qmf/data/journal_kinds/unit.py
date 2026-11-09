@@ -21,6 +21,7 @@ __all__ = [
     "LIFECYCLE_STATES",
     "READING_SOURCES",
     "REASON_CODES",
+    "RISK_EVENT_CODES",
     "SIGNAL_OUTCOMES",
     "SPECS",
     "STATE_EVENTS",
@@ -77,6 +78,10 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
 """Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
 READING_SOURCES: Final[frozenset[str]] = frozenset({"unit", "node", "mis"})
 STATE_EVENTS: Final[frozenset[str]] = frozenset({"warming", "ready", "cold_start", "seam_flag"})
+RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({"unit_fault"})
+"""What a risk event happened: ``unit_fault`` first, when a block raised in one of its unit's
+phases (AD-23). Closed and appendable; ``qmf-risk`` carries the same family for the code the hosts
+write."""
 LIFECYCLE_SCHEMA: Final[str] = "qmx.lifecycle/1"
 LIFECYCLE_STATES: Final[frozenset[str]] = frozenset(
     {"draft", "tested", "parked", "paper", "live", "stopped", "retired"}
@@ -170,6 +175,17 @@ def _state(body: Mapping[str, object]) -> str | None:
             return None
 
 
+def _risk_event(body: Mapping[str, object]) -> str | None:
+    """The code that fired, and the root cause the one card is filed under (AD-23)."""
+    wrong = one_of(body, "code", RISK_EVENT_CODES)
+    if wrong is not None:
+        return wrong
+    root = body["root"]
+    if not isinstance(root, str) or not root.strip():
+        return "root is a root-cause key, a non-blank string"
+    return None
+
+
 def _lifecycle(body: Mapping[str, object]) -> str | None:
     if body.get("schema") != LIFECYCLE_SCHEMA:
         return f"schema is {LIFECYCLE_SCHEMA}"
@@ -227,7 +243,7 @@ SPECS: Final[tuple[KindSpec, ...]] = (
     KindSpec(JournalStream.UNIT, "fill", IdRule.FILL, ("deal_id",)),
     KindSpec(JournalStream.UNIT, "trade", IdRule.TRADE, ("closing_deal_id",), _trade),
     KindSpec(JournalStream.UNIT, "guard", IdRule.SEQUENCE),
-    KindSpec(JournalStream.UNIT, "risk_event", IdRule.SEQUENCE),
+    KindSpec(JournalStream.UNIT, "risk_event", IdRule.SEQUENCE, ("code", "root"), _risk_event),
     KindSpec(JournalStream.UNIT, "would_have", IdRule.SEQUENCE),
     KindSpec(JournalStream.UNIT, "data_event", IdRule.SEQUENCE),
     # A replay's swap, financing, funding, dividend or commission line (B10, QB-04, QB-03).
