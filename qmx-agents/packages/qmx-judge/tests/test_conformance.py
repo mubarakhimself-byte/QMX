@@ -66,7 +66,7 @@ SLICES = REPO / "qml" / "tests" / "fixtures" / "slices"
 PACK_DIR = REPO / "qmx-agents" / "packages" / "qmx-judge" / "src" / "qmx_judge" / "conformance_pack"
 OPERATOR = Principal("operator")
 MARCH: dict[str, Any] = {"start": "2025-03-01", "end": "2025-04-01"}
-TRADES_FP = "fp1:sha256:f1f83b30c09bd87ab9ae502b22bb69b3197ab5fd47945bffa8ef481941ebf995"
+TRADES_FP = "fp1:sha256:628e355f4bc447738bfe72c0ff709d6f44f3923a8637266dd3e663c1decff2be"
 """The dummy's golden trade list on the pack, made by the shipped tester (golden.json)."""
 
 
