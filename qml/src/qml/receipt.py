@@ -278,6 +278,17 @@ def _seen(name: str, reading: object, row_instant: int) -> FactSeen:
     )
 
 
+_STEP_ORDER: Final[tuple[str, ...]] = ("wanted", "approved", "filled")
+"""The size's own order. A stored body's keys are canonicalised alphabetically on the way in
+(CT-05), so the trail reads the order from here and never from the mapping."""
+
+
+def _ordered(steps: Mapping[str, object]) -> list[tuple[str, object]]:
+    """The steps in the order the size took them, then any the reader does not know."""
+    known = [(name, steps[name]) for name in _STEP_ORDER if name in steps]
+    return known + [(name, step) for name, step in steps.items() if name not in _STEP_ORDER]
+
+
 def explain_size(row: Mapping[str, object], fill: Mapping[str, object] | None = None) -> Trail:
     """One entry's size trail: every fact with its source and age, the numbers in force, the base
     amount and its basis, each link's verdict, the converter's residue, and the fill with its gap
@@ -291,7 +302,7 @@ def explain_size(row: Mapping[str, object], fill: Mapping[str, object] | None = 
             str(_map(step).get("value", "")),
             str(_map(step).get("basis", "")),
         )
-        for name, step in _map(row.get("steps")).items()
+        for name, step in _ordered(_map(row.get("steps")))
     )
     if fill is not None:
         steps += (Step("filled", "quantity", str(fill.get("quantity", "")), "the venue's fill"),)
