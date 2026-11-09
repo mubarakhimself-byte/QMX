@@ -1604,7 +1604,8 @@ class _OwnJournal:
 
 class _ScopeClose:
     """A unit's last fall-through: the node closes every position of the deployment whose own
-    exits could not run for ``exit_fault_bars`` bars, with the reason it gives (AD-13)."""
+    exits could not run for ``exit_fault_bars`` bars, with the reason it gives (AD-13). It is also
+    the door a row that waits for his hand calls for the one automatic stop (AD-12)."""
 
     def __init__(self, runtime: Runtime, deployment_id: str) -> None:
         self._runtime = runtime
@@ -1613,6 +1614,17 @@ class _ScopeClose:
     def close_scope(self, unit: object, why: str) -> None:
         del unit
         self._runtime.close_scope(self._deployment_id, why)
+
+    def risk_stop(self, rule: str, reason: str) -> None:
+        """Stop each market this deployment trades, by the rule that fired.
+
+        The lifecycle is per market, so one unit-scope row stops every market the unit runs.
+        """
+        hosted = self._runtime.hosted.get(self._deployment_id)
+        if hosted is None:
+            return
+        for market in hosted.deployment.markets:
+            self._runtime.risk_stop(self._deployment_id, market, rule, reason)
 
 
 class NodeUnit:
@@ -1751,6 +1763,8 @@ class NodeUnit:
         if is_refusal(started):
             return started
         self.handler = started.value
+        if self.hosted_unit is not None and isinstance(self.port, _ScopeClose):
+            self.hosted_unit.attach_stop_port(self.port)
         return Ok(None)
 
     @property

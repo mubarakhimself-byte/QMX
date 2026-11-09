@@ -3,7 +3,9 @@
 The runner is one loop over the compiled rows. Each row is fed the facts its block declares. A row
 whose facts are absent answers its cold rule: warn, or run in shadow. A row whose block raises
 writes ``link_fault`` and stands its scope down for the rest of the run. A row that fires answers
-its verb. Nothing here reads a chain, a fold, a reading or an exit: one plain ``try`` around one
+its verb: ``no_new_entries``, ``reduce`` by the block's factor, or ``flatten``. A row that fired
+comes back by its own rule, or not at all when it waits for his hand, and only his resume lifts
+that one. Nothing here reads a chain, a fold, a reading or an exit: one plain ``try`` around one
 block call is the whole fault wall, so a raise can never become a refusal into ``close_frontier``.
 
 ``own_facts`` computes the unit's own statistics from its journal here, in QML, so both hosts feed
@@ -24,6 +26,8 @@ from qmf.risk.controls import (
     Answer,
     ColdRule,
     ControlRow,
+    Restore,
+    Verb,
     gate_open,
     refuses_entries,
 )
@@ -33,6 +37,7 @@ from qml.blocks.api import Halt, Instance
 from qml.motion.engine import ClosedTrade
 
 __all__ = [
+    "CONTROL_FLATTEN",
     "Cold",
     "ControlRun",
     "Fired",
@@ -40,6 +45,9 @@ __all__ = [
     "Runner",
     "own_facts",
 ]
+
+CONTROL_FLATTEN: Final[str] = "control_flatten"
+"""The reason code a ``flatten`` row's close row carries: the brake closed it, not an exit block."""
 
 _NS_PER_DAY: Final[int] = 86_400_000_000_000
 """One UTC day in nanoseconds: the session boundary until sessions compile (RC-33)."""
@@ -79,6 +87,9 @@ class ControlRun:
     cold: tuple[Cold, ...] = ()
     stood_down: tuple[str, ...] = ()
     """The scopes a raise stood down this step, each named once."""
+    restored: tuple[ControlRow, ...] = ()
+    """The rows whose own rule let them come back this step. A row that waits for his hand is
+    never here: only his resume lifts it, so a rule answers no change."""
 
     @property
     def refusal(self) -> Fired | None:
@@ -108,17 +119,27 @@ class Runner:
 
     def __init__(self, rows: Sequence[ControlRow], instances: Mapping[str, Instance]) -> None:
         self._rows = tuple(rows)
+        self._by_key = {row.key: row for row in self._rows}
         self._instances = instances
         self._down: set[str] = set()
         self._down_scopes: set[str] = set()
         self._cold: set[str] = set()
+        self._fired: set[str] = set()
+        """The rows firing last step, so a rule that fired can answer its own restore."""
 
     def run(self, facts: Mapping[str, object]) -> ControlRun:
-        """Run every row that is not stood down, feeding each the facts it declares."""
+        """Run every row that is not stood down, feeding each the facts it declares.
+
+        A row that fired and whose block now answers no halt comes back by its own rule, or not
+        at all when it says ``wait for hand``: only his resume lifts that row, so the runner
+        answers no change for it.
+        """
         fired: list[Fired] = []
         raised: list[Raised] = []
         cold: list[Cold] = []
         down: list[str] = []
+        ran: set[str] = set()
+        live: set[str] = set()
         for row in self._rows:
             if row.key in self._down or not gate_open(row, facts):
                 continue
@@ -131,6 +152,7 @@ class Runner:
             evidence: dict[str, object] = {
                 read.partition(".")[2]: facts[read] for read in row.reads if read in facts
             }
+            ran.add(row.key)
             try:
                 raw = self._instances[row.key].update(evidence)
             except Exception:  # a row's raise is link_fault, and its scope stands down
@@ -143,8 +165,20 @@ class Runner:
             if not isinstance(raw, Halt):
                 continue
             shadowed = row.shadow or (bool(missing) and row.until_n is ColdRule.SHADOW)
-            fired.append(Fired(row, Answer(row.verb, None, raw.reason, row.code), shadowed))
-        return ControlRun(tuple(fired), tuple(raised), tuple(cold), tuple(down))
+            factor = raw.factor if row.verb is Verb.REDUCE else None
+            fired.append(Fired(row, Answer(row.verb, factor, raw.reason, row.code), shadowed))
+            if not shadowed:
+                live.add(row.key)
+        restored: list[ControlRow] = []
+        for key in sorted(self._fired):
+            row = self._by_key[key]
+            if key in live or key not in ran or key in self._down:
+                continue
+            if row.restore is Restore.RULE:
+                restored.append(row)
+                self._fired.discard(key)
+        self._fired |= live
+        return ControlRun(tuple(fired), tuple(raised), tuple(cold), tuple(down), tuple(restored))
 
 
 def own_facts(trades: Sequence[ClosedTrade], instant: Instant) -> dict[str, object]:

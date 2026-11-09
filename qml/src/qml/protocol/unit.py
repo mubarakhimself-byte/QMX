@@ -34,7 +34,7 @@ from typing import Final, Protocol, cast
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-from qmf.risk.controls import RiskState, Verb
+from qmf.risk.controls import ENTRY_SCOPES, Restore, RiskState, Verb
 from qmf.risk.facts import Fact
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
@@ -68,7 +68,7 @@ from qml.fold import Fold
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
-from qml.protocol.controls import Runner, own_facts
+from qml.protocol.controls import CONTROL_FLATTEN, Runner, own_facts
 from qml.protocol.exits import (
     ExitAnswer,
     ExitSlot,
@@ -112,6 +112,7 @@ __all__ = [
     "SizeBand",
     "SlotOutput",
     "StateEvent",
+    "StopPort",
     "TraceLevel",
     "UnitFactory",
     "UnitIntent",
@@ -414,6 +415,18 @@ class HostPort(Protocol):
     def close_scope(self, unit: object, why: str) -> None: ...
 
 
+class StopPort(Protocol):
+    """The host's door for the one brake that waits for a person (AD-12).
+
+    A control row whose restore is ``hand`` stops entries until his resume. The unit asks its
+    host for that stop when the row fires, and the node answers by calls to
+    ``Runtime.risk_stop``: one ``lifecycle`` row by ``risk_rule`` and a stand-down held at the
+    unit's scopes. QMB attaches no stop port, because a replay has no person to wait for.
+    """
+
+    def risk_stop(self, rule: str, reason: str) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class SizeBand:
     """The one row that catches an absurd size after the converter (AD-10, PH E8): a ceiling on
@@ -629,6 +642,11 @@ class _Core:
         self.exit_fault_bars = exit_fault_bars
         self.port = port
         """The host's last fall-through, attached by the host after the unit is built (AD-13)."""
+        self.stop_port: StopPort | None = None
+        """The host's door to ``Runtime.risk_stop``, attached by the node after it hosts the
+        unit (AD-12). A unit with none, as in a replay, asks nobody."""
+        self.reduce = Decimal(1)
+        """The share this step's ``reduce`` rows cut the next entry by, reset every step (AD-12)."""
         self.exit_faults: dict[str, int] = {}
         """Each held position's consecutive bars with no exit able to run (AD-13)."""
         self.close_asked: set[str] = set()
@@ -861,6 +879,11 @@ class HostedUnit:
         unit is built, because the port lives on the handler that builds its surfaces."""
         self._core.port = port
 
+    def attach_stop_port(self, port: StopPort) -> None:
+        """Hand this unit the door its wait-for-hand rows call (AD-12). Only the node attaches
+        one, because only the node has a person to wait for."""
+        self._core.stop_port = port
+
     def bench(self) -> None:
         """Stop this unit's entries until its clean bars pass: the host's own fault wall
         (AD-23)."""
@@ -933,9 +956,15 @@ class HostedUnit:
                 }
                 | dict(proposal.params)
             )
-            amount = _amount(answer)
-            if isinstance(amount, _Skip):
-                return ended(proposal.row, {}, ("sizer: refuse",), amount.code, amount.detail)
+            wanted = _amount(answer)
+            if isinstance(wanted, _Skip):
+                return ended(proposal.row, {}, ("sizer: refuse",), wanted.code, wanted.detail)
+            factor = core.reduce
+            amount = (
+                wanted
+                if factor == 1
+                else Amount(kind=wanted.kind, value=wanted.value * factor, basis=wanted.basis)
+            )
             converted = to_quantity(
                 amount,
                 proposal.entry_price,
@@ -956,10 +985,10 @@ class HostedUnit:
                 converted.skipped or "kind_unknown",
                 "",
             )
-        steps: dict[str, Amount] = {
-            "wanted": amount,
-            "approved": Amount(kind="quantity", value=converted.quantity, basis=amount.basis),
-        }
+        steps: dict[str, Amount] = {"wanted": wanted}
+        if factor != 1:
+            steps["reduced"] = amount
+        steps["approved"] = Amount(kind="quantity", value=converted.quantity, basis=wanted.basis)
         entry = PricedEntry(
             amount=amount,
             quantity=converted.quantity,
@@ -1111,7 +1140,7 @@ class _Run:
                 results[m.market_id] = self.update(m, bar)
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.UPDATE)
-        self.halt_reason = self.controls(journal)
+        self.halt_reason = self.controls(journal, positions)
         for m in self.unit.markets:
             self.exits(m, positions[m.market_id], fresh.get(m.market_id))
         for m in self.unit.markets:
@@ -1149,15 +1178,23 @@ class _Run:
 
     # --- controls --------------------------------------------------------------------
 
-    def controls(self, journal: object) -> str | None:
+    def controls(
+        self, journal: object, positions: Mapping[str, PositionFacts | None]
+    ) -> str | None:
         """Run the unit's brakes once this step, before exits and entries (AD-12).
 
         Each row is fed the facts it declares: the unit's own statistics from its journal, and the
         account's equity. A row that raises records a ``Fault`` with its ``link_fault`` code and
         stands its scope down. It is a plain ``try`` around one block call, so a raise never
-        benches an exit and never reaches one (AD-9). The words this step's entries are refused
-        by come back, or None.
+        benches an exit and never reaches one (AD-9). A row that fires acts by its own verb:
+        ``flatten`` mints one close per held position through the same path the exits use,
+        ``reduce`` cuts the size of the entries this step prices, and ``no_new_entries`` refuses
+        them. A ``no_new_entries`` row that waits for his hand also asks the host's stop port for
+        the one automatic stop. A row whose own rule lets it come back writes a ``restore`` row;
+        a row that waits for his hand answers no change. The words this step's entries are
+        refused by come back, or None.
         """
+        self.unit.reduce = Decimal(1)
         if not self.unit.halt_instances:
             return None
         trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
@@ -1182,8 +1219,18 @@ class _Run:
                     reason=fired.answer.reason,
                 )
             )
-            if not fired.shadowed:  # a would-have refuses nothing, so the scope stays as it is
-                self._fold(fired.row.key, fired.answer.code, fired.answer.verb, fired.answer.reason)
+            if fired.shadowed:  # a would-have refuses nothing, so the scope stays as it is
+                continue
+            self._fold(fired.row.key, fired.answer.code, fired.answer.verb, fired.answer.reason)
+            match fired.answer.verb:
+                case Verb.FLATTEN:
+                    self.flatten(fired.row.pin, fired.answer.reason, positions)
+                case Verb.REDUCE:
+                    if fired.answer.factor is not None:
+                        self.unit.reduce *= fired.answer.factor
+                case _:
+                    if fired.row.restore is Restore.HAND and fired.row.scope in ENTRY_SCOPES:
+                        self.stop(fired.row.pin, fired.answer.reason)
         for cold in run.cold:
             self.controls_out.append(
                 ControlEvent(
@@ -1197,7 +1244,69 @@ class _Run:
                     reason=f"no {', '.join(cold.missing)} yet",
                 )
             )
+        for row in run.restored:
+            self.unit.risk.add(
+                {
+                    "kind": "restore",
+                    "scope": self.unit.risk.scope,
+                    "at": self.instant.value_ns,
+                    "id": f"{self.instant.value_ns}:{row.key}:restore",
+                    "code": row.code,
+                }
+            )
         return run.refusal_reason
+
+    def flatten(
+        self,
+        pin: str,
+        reason: str,
+        positions: Mapping[str, PositionFacts | None],
+    ) -> None:
+        """Close every position this unit opened, through its own exit path (AD-12).
+
+        The close is minted by the same helper a per-bar exit uses, so it carries the unit's
+        decision row and its ``control_flatten`` reason, and the exits pass this step sees the
+        position already closed. Nothing refuses it: this is the unit's exit path.
+        """
+        why = f"{pin} flattens the position: {reason}"
+        for m in self.unit.markets:
+            position = positions.get(m.market_id)
+            if position is None or not self.mine(position) or position.position_id in m.exited:
+                continue
+            self.close_position(m, position, CONTROL_FLATTEN, why)
+
+    def stop(self, pin: str, reason: str) -> None:
+        """Ask the host for the stop a row that waits for his hand fires (AD-12)."""
+        port = self.unit.stop_port
+        if port is not None:
+            port.risk_stop(pin, reason)
+
+    def mine(self, position: PositionFacts) -> bool:
+        """Whether this unit version opened the position (AD-3)."""
+        version = self.unit.compiled
+        return position.opened_by in (
+            version.logic_fingerprint,
+            version.compiled_fingerprint,
+        )
+
+    def close_position(self, m: _Market, position: PositionFacts, code: str, why: str) -> None:
+        """Mint one full close through the unit's own exit path, and mark it closed this step."""
+        m.exited.add(position.position_id)
+        row = self.decision(m, position.side, "taken", (), why)
+        self.intents.append(
+            {
+                "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
+                "intent_family": "exit",
+                "kind": "close_full",
+                "position_ref": {
+                    "position_id": position.position_id,
+                    "instrument": {"venue": m.record.venue, "symbol": m.record.symbol},
+                    "opened_by": position.opened_by.value,
+                },
+                "reason_code": {"code": code, "book_family": "unit"},
+                "decision_row_id": row,
+            }
+        )
 
     def _fold(self, key: str, code: str, verb: Verb, reason: str) -> None:
         """Hand the fold the row this step's brake answer becomes (AD-12, AD-18).
@@ -1348,11 +1457,7 @@ class _Run:
         in. A step where this market has no new bar leaves that count alone, so a step of the
         other market's bar never resets it.
         """
-        version = self.unit.compiled
-        mine = position is not None and position.opened_by in (
-            version.logic_fingerprint,
-            version.compiled_fingerprint,
-        )
+        mine = position is not None and self.mine(position)
         for gone in [pid for pid in m.timers if position is None or pid != position.position_id]:
             del m.timers[gone]
             m.exited.discard(gone)
@@ -1406,22 +1511,7 @@ class _Run:
         winner = chosen(answers)
         if winner is None or winner.action.kind != "close_full":
             return
-        m.exited.add(position.position_id)
-        row = self.decision(m, position.side, "taken", (), winner.detail)
-        self.intents.append(
-            {
-                "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
-                "intent_family": "exit",
-                "kind": "close_full",
-                "position_ref": {
-                    "position_id": position.position_id,
-                    "instrument": {"venue": m.record.venue, "symbol": m.record.symbol},
-                    "opened_by": position.opened_by.value,
-                },
-                "reason_code": {"code": winner.action.reason_code, "book_family": "unit"},
-                "decision_row_id": row,
-            }
-        )
+        self.close_position(m, position, winner.action.reason_code, winner.detail)
 
     def close_words(self, pin: str, raw: object, action: ExitAction) -> str:
         """The one sentence a close row carries. A per-bar exit that answers the old way keeps

@@ -501,17 +501,17 @@ class UnitSliceHandler:
     def _note_controls(self, step: UnitStep) -> None:
         """What each brake left this step: a fire for real, or the entry it would have refused.
 
-        A row that fires for real lands one ``risk_event`` row per root cause, so a brake that
-        holds for an hour lands one card. A row in shadow lands one ``would_have`` row for each
-        entry this step took, because a shadow row refuses nothing and those entries went ahead. A
-        row that refused for real lands one ``would_have`` row for each decision the step marked
-        ``suppressed``, which only a brake writes. Neither row can reach an exit: nothing here
-        builds or blocks one (AD-12, AD-13).
+        Every live fire lands one ``risk_event`` row per root cause, so a brake that holds for an
+        hour lands one card and a flatten or reduce fire is on the record too. A row in shadow
+        lands one ``would_have`` row for each entry this step took, because a shadow row refuses
+        nothing and those entries went ahead. A row that refused for real lands one ``would_have``
+        row for each decision the step marked ``suppressed``, which only a brake writes. Neither
+        row can reach an exit: nothing here builds or blocks one (AD-12, AD-13).
         """
         taken = [row for row in step.decisions if row.outcome == "taken"]
         suppressed = [row for row in step.decisions if row.outcome == "suppressed"]
         for event in step.controls:
-            if event.kind == "cold" or not _would_refuse(event):
+            if event.kind == "cold":
                 continue
             answered = f"{event.scope}.{event.row}"
             if event.kind == "fired":
@@ -528,6 +528,8 @@ class UnitSliceHandler:
                             event.reason,
                         )
                     )
+            if not _would_refuse(event):
+                continue
             refused: Sequence[DecisionRow] = taken if event.kind == "would_fire" else suppressed
             for row in refused:
                 key = f"would:{answered}:{row.row_id}"

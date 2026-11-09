@@ -233,11 +233,16 @@ class HaltAction(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Halt:
-    """A halt that holds: what it does, at which scope, and why."""
+    """A halt that holds: what it does, at which scope, and why.
+
+    ``factor`` is the share a ``reduce`` halt cuts the next entry by, as ``0.5`` for half. A
+    halt of any other action leaves it out, and the row's own verb decides what runs.
+    """
 
     action: HaltAction
     scope: Scope
     reason: str
+    factor: Decimal | None = None
 
 
 class HaltInstance(Instance, Protocol):
