@@ -57,8 +57,10 @@ from qml.check.layers import TRADED_SIDES, check_layers
 from qml.motion.engine import MIN_TRADES, SHRINK_K, SLOW_CADENCE_TRADES, SlowNumber
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import (
+    Authority,
     BarKind,
     Binding,
+    Cautious,
     Combiner,
     CombinerKind,
     Market,
@@ -1164,6 +1166,60 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
                 f"/numbers/{name}/motion/cadence",
                 f"{_FORMAT} moves a number every so many closed trades, not at {cadence.at.value}",
             )
+        _number_fields(name, spec, problems)
+
+
+def _number_fields(name: str, spec: NumberSpec, problems: _Problems) -> None:
+    """The number's own declarations this format runs nothing behind.
+
+    Each names a mechanism the compiled unit does not have, so accepting it in silence would
+    promise a behaviour nobody runs. ``owner``, ``reason`` and ``origin`` stay out: they label the
+    value and decide nothing.
+    """
+    where = f"/numbers/{name}"
+    if spec.derivation is not None:
+        problems.add(
+            "derivation_not_built",
+            f"{where}/derivation",
+            f"{_FORMAT} runs no derivation, so {name}'s value would come from no rule it reads",
+        )
+    if spec.guard is not None:
+        problems.add(
+            "guard_not_built",
+            f"{where}/guard",
+            f"{_FORMAT} reverts and freezes no number, so {name} would keep moving after a trip",
+        )
+    if spec.cautious is not Cautious.HOLD:
+        problems.add(
+            "cautious_not_built",
+            f"{where}/cautious",
+            f"{_FORMAT} moves a number by its rule, never toward {spec.cautious.value}",
+        )
+    if spec.never_self_tune:
+        problems.add(
+            "never_self_tune_not_built",
+            f"{where}/never_self_tune",
+            f"{_FORMAT} tunes a calibrated number by its own rule and reads no never_self_tune",
+        )
+    if spec.stage_values:
+        problems.add(
+            "stage_values_not_built",
+            f"{where}/stage_values",
+            f"{_FORMAT} runs one set of number values, not a value per stage",
+        )
+    if spec.authority is Authority.AT_ANCHOR:
+        problems.add(
+            "authority_not_built",
+            f"{where}/authority",
+            f"{_FORMAT} moves no number at an anchor, so {name} would move on its count alone",
+        )
+    elif spec.authority is Authority.OFF and spec.motion.mode is not MotionMode.FIXED:
+        problems.add(
+            "authority_not_built",
+            f"{where}/authority",
+            f"{_FORMAT} moves {name} by its {spec.motion.mode.value} rule, and no authority "
+            "holds a value its own rule moves",
+        )
 
 
 def compile_unit(

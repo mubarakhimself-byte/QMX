@@ -678,7 +678,8 @@ def _complete(unit: Unit, bound: Sequence[tuple[_Use, EntryFace]], found: Found)
                 "E",
                 ProblemKind.PLACEHOLDER,
                 _at("/numbers", name, "origin"),
-                f"this number's value is a {_PLACEHOLDER}",
+                f"this number's value is a {_PLACEHOLDER} that {spec.owner or 'its owner'} "
+                "replaces",
                 "replace it with a value from a source",
             )
     if not (unit.halts.position or unit.halts.unit or unit.halts.account):

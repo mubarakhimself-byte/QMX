@@ -128,8 +128,15 @@ or the census labels it.
 | `NumberSpec.measure` | - | - | - |
 | `NumberSpec.default` | - | - | - |
 | `NumberSpec.motion` | - | - | - |
-| `NumberSpec.authority` | - | - | - |
+| `NumberSpec.authority` | `/numbers/stop_buffer/authority` | `authority_not_built` | compiler format 8 moves no number at an anchor, so stop_buffer would move on its count alone |
 | `NumberSpec.origin` | - | - | - |
+| `NumberSpec.derivation` | `/numbers/stop_buffer/derivation` | `derivation_not_built` | compiler format 8 runs no derivation, so stop_buffer's value would come from no rule it reads |
+| `NumberSpec.owner` | - | - | - |
+| `NumberSpec.reason` | - | - | - |
+| `NumberSpec.cautious` | `/numbers/stop_buffer/cautious` | `cautious_not_built` | compiler format 8 moves a number by its rule, never toward down |
+| `NumberSpec.guard` | `/numbers/stop_buffer/guard` | `guard_not_built` | compiler format 8 reverts and freezes no number, so stop_buffer would keep moving after a trip |
+| `NumberSpec.never_self_tune` | `/numbers/min_trend_strength/never_self_tune` | `never_self_tune_not_built` | compiler format 8 tunes a calibrated number by its own rule and reads no never_self_tune |
+| `NumberSpec.stage_values` | `/numbers/stop_buffer/stage_values` | `stage_values_not_built` | compiler format 8 runs one set of number values, not a value per stage |
 | `NumberSpec.range` | - | - | - |
 | `NumberSpec.applies_to_open_positions` | `/numbers/stop_buffer/applies_to_open_positions` | `open_positions_not_built` | compiler format 8 moves no open position by a number, so stop_buffer would not reach one |
 | `Motion.mode` | - | - | - |
@@ -142,6 +149,8 @@ or the census labels it.
 | `Motion.rule_params` | `/numbers/ema_period/motion/rule_params` | `motion_not_built` | compiler format 8 reads no rule_params on a fixed number |
 | `Cadence.every_closed_trades` | `/numbers/rsi_low/motion/cadence` | `motion_not_built` | compiler format 8 reads no cadence on a derived number |
 | `Cadence.at` | `/numbers/min_trend_strength/motion/cadence` | `cadence_not_built` | compiler format 8 moves a number every so many closed trades, not at market_day_close |
+| `Guard.revert_after` | - | - | - |
+| `Guard.freeze_after` | - | - | - |
 | `Range.min` | - | - | - |
 | `Range.max` | - | - | - |
 | `Range.step` | - | - | - |

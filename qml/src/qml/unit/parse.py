@@ -51,7 +51,8 @@ class ProblemKind(StrEnum):
     # Layer C, the numbers (qml.numbers.check)
     MOTION_NOT_ALLOWED = "motion_not_allowed"
     MOTION_INCOMPLETE = "motion_incomplete"
-    RANGE_MISSING = "range_missing"
+    NUMBER_NO_REASON = "number_no_reason"
+    NUMBER_NO_RANGE = "number_no_range"
     RANGE_NOT_ALLOWED = "range_not_allowed"
     BAD_RANGE = "bad_range"
     OUTSIDE_RANGE = "outside_range"
