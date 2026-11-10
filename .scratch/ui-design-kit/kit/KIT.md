@@ -51,7 +51,7 @@ Installed in `~/.claude/skills/` and they load. None has been run on a QMX scree
 
 - **Branch:** `ui-redesign`, worktree `C:/Users/Mubarak/Desktop/QMX-worktrees/ui-redesign`, cut from engine/base `3ae41ffc`. Nothing is merged until he says so.
 - **Design code:** where the new UI lives is the team's first call. `apps/qmx-ui` on this branch is a stale stub from 2026-10-01; replacing it is fine. Grounding 05 judges the October code "worth keeping", but **his ruling overrides it**: the October code was a proposal and was never meant as the product.
-- **Kit files** are not committed yet; ask him before committing.
+- **This kit** is committed on `ui-redesign`. Commit new work there; never push or merge without his word.
 - **Stack:** SvelteKit + shadcn-svelte, unless the team finds a strong reason to change it.
 - **Reference UI:** the October UI runs from `.claude/launch.json` (`qmx-ui-design`, port 5173) in the main QMX checkout; details in `SOURCES.md`. Look at it, click it, and borrow ideas, but don't inherit its layout.
 - **Inspiration:** his Chrome stays signed in to Refero (use its research chat), Pinterest and X. Mobbin is free tier only; he will not pay. Dribbble also counts as a source.
