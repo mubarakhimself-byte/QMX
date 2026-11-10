@@ -191,7 +191,7 @@ A block answers with one of these shapes. A block's face declares one output typ
 |---|---|---|
 | `Signal` | `state: bool`; `value: Decimal or None` | a context, trigger, confirmation, filter, veto or per-bar exit slot |
 | `Size` | `lots: Decimal or None`; `skip_reason: str or None` | a sizer slot |
-| `Halt` | `action: HaltAction`; `scope: Scope`; `reason: str` | a halt slot |
+| `Halt` | `action: HaltAction`; `scope: Scope`; `reason: str`; `factor: Decimal or None` | a halt slot |
 | `Refuse` | `reason: str` | the cross-unit hook |
 | `EntryOrder` | `kind: str`; `at: str` | an entry-order slot |
 
