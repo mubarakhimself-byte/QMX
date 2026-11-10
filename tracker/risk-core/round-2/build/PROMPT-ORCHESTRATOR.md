@@ -240,3 +240,15 @@ The plan is PLAN.md beside it. The store is D:/QMX-worktrees/risk-ship/; read it
 Autopilot-stack, light verification, three DeepSeek builders by dependency per speed order 2, a fresh DeepSeek reviewer per PR, no merges, never stop to ask.
 Arm the program, including the tick from the DeepSeek section, so that you and your sub-agents never sit idle. If this session drops, this same paste resumes it. Tell me in plain words what only I can do, then keep building until the plan is done or the balance runs out.
 ```
+
+### Paste prompt for a fresh DeepSeek window taking over a stopped one
+
+Use this when an earlier DeepSeek window has stopped. Paste into one fresh window only, and leave the old one closed.
+
+```text
+/poteto-mode You are the orchestrator of the QMX risk and sizing build, running in the DeepSeek harness, taking over from an earlier DeepSeek window that I have stopped. You never write code.
+Read D:/QMX-worktrees/risk-plan/tracker/risk-core/round-2/build/PROMPT-ORCHESTRATOR.md and follow it, applying its section "Optional paste prompt, builders on DeepSeek", its "Speed orders, 10 November", and its section "Taking over the store". First check that the repair stack is finished.
+The store is D:/QMX-worktrees/risk-ship/; read its RESUME.md, STACK-LIST.md and the end of decisions.tsv, then verify with git, including commits that are local but not pushed. Git wins over every file.
+Take the store, arm your 600-second tick, account for every row in flight, then close the gate hole (speed order 0) while three builders work by dependency. A fresh reviewer per row, no FAIL line ever stacked, the stack one line, no merges to any shared branch, never stop to ask. I am away.
+Tell me in a few plain lines what only I can do, then keep building until the plan is done or the balance runs out. If this session drops, this same paste resumes it.
+```
