@@ -4,7 +4,8 @@ section 8, standing order 7).
 His clicks, the judge's verdicts and risk stops are events written by three writers on their own
 partitions. ``fold`` orders them by ``(at, writer, sequence)`` and applies each through one
 transition table. A move it refuses is kept as a rejected event with a typed reason, never
-dropped. Only his click with principal ``operator`` moves toward paper or live.
+dropped. Only his click with principal ``operator`` promotes a unit toward paper or live; a risk
+rule may send a stopped member back to paper, and never anywhere else.
 """
 
 from __future__ import annotations
@@ -105,11 +106,13 @@ def _rows() -> tuple[Transition, ...]:
     named = (
         Transition(s.DRAFT, s.TESTED, judge),
         Transition(s.DRAFT, s.PARKED, judge),
+        Transition(s.DRAFT, s.PAPER, click),
         Transition(s.TESTED, s.PAPER, click),
         Transition(s.PAPER, s.LIVE, click),
         Transition(s.PAPER, s.STOPPED, risk),
         Transition(s.LIVE, s.STOPPED, risk),
         Transition(s.STOPPED, s.STOPPED, risk),
+        Transition(s.STOPPED, s.PAPER, risk),
         Transition(s.STOPPED, s.PAPER, click),
         Transition(s.STOPPED, s.LIVE, click),
         Transition(s.LIVE, s.PARKED, click),
@@ -120,8 +123,11 @@ def _rows() -> tuple[Transition, ...]:
 
 
 TRANSITIONS: Final = _rows()
-"""Who may cause each move. A stop on a stopped market records the newer stop. Paper to parked
-is his click, so admitting a new version can park the one on paper in the same click (UT-23)."""
+"""Who may cause each move. A draft reaches paper on his click when the move names a passing G
+safety record, with no judge pass; a stop on a stopped market records the newer stop. Paper to
+parked is his click, so admitting a new version can park the one on paper in the same click
+(UT-23). A stopped market moves to paper by the rule that stopped it or by his click; only his
+click takes it to live."""
 
 
 class Refusal(StrEnum):
@@ -131,6 +137,9 @@ class Refusal(StrEnum):
     FROM_MISMATCH = "from_mismatch"
     STOP_NOT_CLEARED = "stop_not_cleared"
     SECOND_VERSION = "second_version"
+    G_RECORD_MISSING = "g_record_missing"
+    """A draft's move to paper with no G safety record named. Paper from a tested unit needs no
+    record here: the judge's pass is the record that unit already carries."""
 
 
 @dataclass(frozen=True)
@@ -166,13 +175,21 @@ def _refusal(
     to, actor = event.to_state, event.by
     if actor.kind is ActorKind.HIS_CLICK and actor.principal != OPERATOR:
         return Refusal.NOT_OPERATOR, f"a click by {actor.principal!r} is not his click"
-    if to in TRADING and actor.principal != OPERATOR:
-        return Refusal.NOT_OPERATOR, f"only his click moves a unit to {to}"
+    if (
+        to in TRADING
+        and actor.principal != OPERATOR
+        and not (to is State.PAPER and actor.kind is ActorKind.RISK_RULE)
+    ):
+        return Refusal.NOT_OPERATOR, (
+            f"only his click promotes a unit to {to}; a risk rule may only send it to paper"
+        )
     is_stop = actor.kind is ActorKind.RISK_RULE and to is State.STOPPED
     if not is_stop and event.from_state is not current:
         return Refusal.FROM_MISMATCH, f"the market is {current}, not {event.from_state}"
     if (current, to, actor.kind) not in _MOVES:
         return Refusal.NOT_IN_TABLE, f"{actor.kind} cannot move {current} to {to}"
+    if current is State.DRAFT and to is State.PAPER and event.evidence_ref is None:
+        return Refusal.G_RECORD_MISSING, ("a draft reaches paper only on a passing G safety record")
     if current is State.STOPPED and to is not State.STOPPED and event.clears != latest_stop:
         return Refusal.STOP_NOT_CLEARED, f"the latest stop is {latest_stop}, not {event.clears}"
     if to in TRADING:

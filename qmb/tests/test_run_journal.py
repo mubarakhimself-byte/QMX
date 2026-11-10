@@ -329,7 +329,8 @@ def test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi(
         for r in _records(report, "signal")
         if r["market_id"] == "fx.eurusd"
         and cast("dict[str, str]", r["body"])["side"] == "long"
-        and not cast("dict[str, str]", r["body"])["detail"].startswith("time exit")
+        # RC-11's time exit says "closes the position"; an exit row is not a bar's entry row.
+        and "closes the position" not in cast("dict[str, str]", r["body"])["detail"]
     ]
     levels = [cast("dict[str, str]", b["numbers_in_force"])["rsi_low"] for b in long_rows]
     held = loaded.bars()

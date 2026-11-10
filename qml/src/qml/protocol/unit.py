@@ -34,6 +34,7 @@ from typing import Final, Protocol, cast
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
+from qmf.risk.controls import ENTRY_SCOPES, Restore, RiskState, Verb
 from qmf.risk.facts import Fact
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
@@ -63,9 +64,11 @@ from qml.compile.compiler import (
     SlotPlan,
 )
 from qml.environment import current_environment
+from qml.fold import Fold
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
+from qml.protocol.controls import CONTROL_FLATTEN, Runner, own_facts
 from qml.protocol.exits import (
     ExitAnswer,
     ExitSlot,
@@ -92,6 +95,7 @@ __all__ = [
     "Account",
     "AdmitPort",
     "CalibrationRow",
+    "ControlEvent",
     "DecisionRow",
     "Fault",
     "FaultPhase",
@@ -108,6 +112,7 @@ __all__ = [
     "SizeBand",
     "SlotOutput",
     "StateEvent",
+    "StopPort",
     "TraceLevel",
     "UnitFactory",
     "UnitIntent",
@@ -301,6 +306,25 @@ class StateEvent:
     reason: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class ControlEvent:
+    """One brake row's answer this step (AD-12).
+
+    ``kind`` is ``fired`` for a live row, ``would_fire`` for a row in shadow, and ``cold`` for a
+    row whose declared facts are not there yet. ``code`` is the row's own word on its risk-event
+    row (the block's entry id), or ``cold``. A host writes the row; the unit only answers it.
+    """
+
+    row: str
+    pin: str
+    scope: str
+    kind: str
+    verb: Verb
+    factor: Decimal | None
+    code: str
+    reason: str
+
+
 class FaultPhase(StrEnum):
     """The phase of one step that raised. ``exit`` and ``host`` are raised by later PRs: a raising
     exit block is the exit step's, and a raise past ``_Run.step`` is the host's (AD-23, AD-13)."""
@@ -310,6 +334,7 @@ class FaultPhase(StrEnum):
     PRICE = "price"
     MOTION = "motion"
     EXIT = "exit"
+    CONTROLS = "controls"
     HOST = "host"
 
 
@@ -336,6 +361,8 @@ class UnitStep:
     state_events: tuple[StateEvent, ...]
     proposals: tuple[Proposal, ...] = ()
     """The entries whose slots held, with no size yet: the host prices each one in pass two."""
+    controls: tuple[ControlEvent, ...] = ()
+    """Each brake row's answer this step: fired, would fire, or cold (AD-12)."""
     faults: tuple[Fault, ...] = ()
     """Each block that raised, with the phase it raised in. That unit's entries stop until
     ``fault_clean_bars`` clean bars have passed; its exits keep running."""
@@ -386,6 +413,18 @@ class HostPort(Protocol):
     """
 
     def close_scope(self, unit: object, why: str) -> None: ...
+
+
+class StopPort(Protocol):
+    """The host's door for the one brake that waits for a person (AD-12).
+
+    A control row whose restore is ``hand`` stops entries until his resume. The unit asks its
+    host for that stop when the row fires, and the node answers by calls to
+    ``Runtime.risk_stop``: one ``lifecycle`` row by ``risk_rule`` and a stand-down held at the
+    unit's scopes. QMB attaches no stop port, because a replay has no person to wait for.
+    """
+
+    def risk_stop(self, rule: str, reason: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,6 +629,7 @@ class _Core:
         fault_clean_bars: int,
         exit_fault_bars: int = EXIT_FAULT_BARS,
         port: HostPort | None = None,
+        risk_rows: Sequence[Mapping[str, object]] | None = None,
     ) -> None:
         self.compiled = compiled
         self.plan = compiled.plan
@@ -602,6 +642,11 @@ class _Core:
         self.exit_fault_bars = exit_fault_bars
         self.port = port
         """The host's last fall-through, attached by the host after the unit is built (AD-13)."""
+        self.stop_port: StopPort | None = None
+        """The host's door to ``Runtime.risk_stop``, attached by the node after it hosts the
+        unit (AD-12). A unit with none, as in a replay, asks nobody."""
+        self.reduce = Decimal(1)
+        """The share this step's ``reduce`` rows cut the next entry by, reset every step (AD-12)."""
         self.exit_faults: dict[str, int] = {}
         """Each held position's consecutive bars with no exit able to run (AD-13)."""
         self.close_asked: set[str] = set()
@@ -611,6 +656,25 @@ class _Core:
             s.number.name: SlowState(value=calibrated[s.number.name]) for s in self.plan.slow
         }
         self.slow_rules = {s.number.name: s.block.make(s.params, {}) for s in self.plan.slow}
+        self.halt_instances: dict[str, Instance] = {}
+        """Each brake row's one instance, by run key: a brake lives on the unit, not a market."""
+        settled = self.settled()
+        for halt in self.plan.halts:
+            self.halt_instances[halt.control.key] = halt.binding.block.make(
+                self.params(halt.binding, settled), halt.binding.inputs
+            )
+        self.control_runner = Runner(
+            [halt.control for halt in self.plan.halts], self.halt_instances
+        )
+        """The unit's brakes, and the scopes a raise stands down (AD-12)."""
+        self.risk = Fold(f"unit:{scope_id}")
+        """What this unit's brakes say it is doing (AD-18): one fold, fed by the rows its own
+        control path answers and by the journal rows a host hands on a restart."""
+        self.risk_seeded = bool(risk_rows)
+        """Whether a host handed rows to seed the fold. An empty sequence is a reader that found
+        none, not the truth that the scope is up, so the snapshot's cache answers instead."""
+        if risk_rows:
+            self.risk.extend(risk_rows)
         self.pending: list[StateEvent] = []
         self.pending_faults: list[Fault] = []
         """A fault made outside a step, waiting for the next answer to carry it."""
@@ -700,6 +764,7 @@ class _Core:
             "environment": {"python": current_environment().python},
             "markets": markets,
             "slow": slow,
+            "risk": self.risk.cached(),
         }
 
     def shape_gap(self, snapshot: Mapping[str, object]) -> str | None:
@@ -740,6 +805,7 @@ class _Core:
         return None
 
     def load(self, snapshot: Mapping[str, object]) -> None:
+        self._load_risk(snapshot)
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
             saved = markets[m.market_id]
@@ -776,6 +842,18 @@ class _Core:
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
             )
 
+    def _load_risk(self, snapshot: Mapping[str, object]) -> None:
+        """Read the fold's cache back when the host handed no rows.
+
+        A cache that does not read as this unit's scope is ignored: the rows are the truth, and a
+        cache is a cache.
+        """
+        if self.risk_seeded:
+            return
+        cached = Fold.from_cache(snapshot.get("risk"))
+        if cached.scope == self.risk.scope:
+            self.risk = cached
+
     def timer(self, side: Side) -> ExitStack | None:
         """The per-bar exits for one position on ``side``, in the compiled order, or ``None`` for
         a unit with no time exit, which layer E warns of (UT-18)."""
@@ -800,6 +878,11 @@ class HostedUnit:
         """Hand this unit its host's last fall-through (AD-13). The host attaches it after the
         unit is built, because the port lives on the handler that builds its surfaces."""
         self._core.port = port
+
+    def attach_stop_port(self, port: StopPort) -> None:
+        """Hand this unit the door its wait-for-hand rows call (AD-12). Only the node attaches
+        one, because only the node has a person to wait for."""
+        self._core.stop_port = port
 
     def bench(self) -> None:
         """Stop this unit's entries until its clean bars pass: the host's own fault wall
@@ -873,9 +956,15 @@ class HostedUnit:
                 }
                 | dict(proposal.params)
             )
-            amount = _amount(answer)
-            if isinstance(amount, _Skip):
-                return ended(proposal.row, {}, ("sizer: refuse",), amount.code, amount.detail)
+            wanted = _amount(answer)
+            if isinstance(wanted, _Skip):
+                return ended(proposal.row, {}, ("sizer: refuse",), wanted.code, wanted.detail)
+            factor = core.reduce
+            amount = (
+                wanted
+                if factor == 1
+                else Amount(kind=wanted.kind, value=wanted.value * factor, basis=wanted.basis)
+            )
             converted = to_quantity(
                 amount,
                 proposal.entry_price,
@@ -896,10 +985,10 @@ class HostedUnit:
                 converted.skipped or "kind_unknown",
                 "",
             )
-        steps: dict[str, Amount] = {
-            "wanted": amount,
-            "approved": Amount(kind="quantity", value=converted.quantity, basis=amount.basis),
-        }
+        steps: dict[str, Amount] = {"wanted": wanted}
+        if factor != 1:
+            steps["reduced"] = amount
+        steps["approved"] = Amount(kind="quantity", value=converted.quantity, basis=wanted.basis)
         entry = PricedEntry(
             amount=amount,
             quantity=converted.quantity,
@@ -944,6 +1033,14 @@ class HostedUnit:
         """Every instance's state, the motion state and the fingerprint it belongs to (UT-09)."""
         return self._core.snapshot_state()
 
+    def risk_state(self, at: Instant) -> RiskState:
+        """What this unit's brakes say it is doing at ``at`` (AD-18).
+
+        One answer for every reader: the fold this unit keeps, read at the clock asked. A fact past
+        its limit makes the word UNKNOWN rather than let the fold answer for what it cannot see.
+        """
+        return self._core.risk.state(at)
+
 
 class _Fault(Exception):
     """A block's own exception, carried to its phase's wall with the block named."""
@@ -977,6 +1074,9 @@ class _Run:
         unit.pending.clear()
         self.faults: list[Fault] = list(unit.pending_faults)
         unit.pending_faults.clear()
+        self.controls_out: list[ControlEvent] = []
+        self.halt_reason: str | None = None
+        """Why this step's entries are refused: a brake's own words, or None."""
         self.raised = False
         self.ordinal = 0
 
@@ -1040,6 +1140,7 @@ class _Run:
                 results[m.market_id] = self.update(m, bar)
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.UPDATE)
+        self.halt_reason = self.controls(journal, positions)
         for m in self.unit.markets:
             self.exits(m, positions[m.market_id], fresh.get(m.market_id))
         for m in self.unit.markets:
@@ -1070,8 +1171,159 @@ class _Run:
                 calibrations=tuple(self.calibrations),
                 state_events=tuple(self.events),
                 proposals=tuple(self.proposals),
+                controls=tuple(self.controls_out),
                 faults=tuple(self.faults),
             )
+        )
+
+    # --- controls --------------------------------------------------------------------
+
+    def controls(
+        self, journal: object, positions: Mapping[str, PositionFacts | None]
+    ) -> str | None:
+        """Run the unit's brakes once this step, before exits and entries (AD-12).
+
+        Each row is fed the facts it declares: the unit's own statistics from its journal, and the
+        account's equity. A row that raises records a ``Fault`` with its ``link_fault`` code and
+        stands its scope down. It is a plain ``try`` around one block call, so a raise never
+        benches an exit and never reaches one (AD-9). A row that fires acts by its own verb:
+        ``flatten`` mints one close per held position through the same path the exits use,
+        ``reduce`` cuts the size of the entries this step prices, and ``no_new_entries`` refuses
+        them. A ``no_new_entries`` row that waits for his hand also asks the host's stop port for
+        the one automatic stop. A row whose own rule lets it come back writes a ``restore`` row;
+        a row that waits for his hand answers no change. The words this step's entries are
+        refused by come back, or None.
+        """
+        self.unit.reduce = Decimal(1)
+        if not self.unit.halt_instances:
+            return None
+        trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
+        facts: dict[str, object] = own_facts(trades, self.instant)
+        equity = getattr(self.surface("account"), "equity", None)
+        if isinstance(equity, Decimal):
+            facts["account.equity"] = equity
+        run = self.unit.control_runner.run(facts)
+        for raised in run.raised:
+            # a raise is a fault, not a brake: it moves no risk word, and no restore row lifts one
+            self.faults.append(Fault(raised.row.pin, FaultPhase.CONTROLS, raised.code))
+        for fired in run.fired:
+            self.controls_out.append(
+                ControlEvent(
+                    row=fired.row.name,
+                    pin=fired.row.pin,
+                    scope=fired.row.scope,
+                    kind="would_fire" if fired.shadowed else "fired",
+                    verb=fired.answer.verb,
+                    factor=fired.answer.factor,
+                    code=fired.answer.code,
+                    reason=fired.answer.reason,
+                )
+            )
+            if fired.shadowed:  # a would-have refuses nothing, so the scope stays as it is
+                continue
+            self._fold(fired.row.key, fired.answer.code, fired.answer.verb, fired.answer.reason)
+            match fired.answer.verb:
+                case Verb.FLATTEN:
+                    self.flatten(fired.row.pin, fired.answer.reason, positions)
+                case Verb.REDUCE:
+                    if fired.answer.factor is not None:
+                        self.unit.reduce *= fired.answer.factor
+                case _:
+                    if fired.row.restore is Restore.HAND and fired.row.scope in ENTRY_SCOPES:
+                        self.stop(fired.row.pin, fired.answer.reason)
+        for cold in run.cold:
+            self.controls_out.append(
+                ControlEvent(
+                    row=cold.row.name,
+                    pin=cold.row.pin,
+                    scope=cold.row.scope,
+                    kind="cold",
+                    verb=cold.row.verb,
+                    factor=None,
+                    code="cold",
+                    reason=f"no {', '.join(cold.missing)} yet",
+                )
+            )
+        for row in run.restored:
+            self.unit.risk.add(
+                {
+                    "kind": "restore",
+                    "scope": self.unit.risk.scope,
+                    "at": self.instant.value_ns,
+                    "id": f"{self.instant.value_ns}:{row.key}:restore",
+                    "code": row.code,
+                }
+            )
+        return run.refusal_reason
+
+    def flatten(
+        self,
+        pin: str,
+        reason: str,
+        positions: Mapping[str, PositionFacts | None],
+    ) -> None:
+        """Close every position this unit opened, through its own exit path (AD-12).
+
+        The close is minted by the same helper a per-bar exit uses, so it carries the unit's
+        decision row and its ``control_flatten`` reason, and the exits pass this step sees the
+        position already closed. Nothing refuses it: this is the unit's exit path.
+        """
+        why = f"{pin} flattens the position: {reason}"
+        for m in self.unit.markets:
+            position = positions.get(m.market_id)
+            if position is None or not self.mine(position) or position.position_id in m.exited:
+                continue
+            self.close_position(m, position, CONTROL_FLATTEN, why)
+
+    def stop(self, pin: str, reason: str) -> None:
+        """Ask the host for the stop a row that waits for his hand fires (AD-12)."""
+        port = self.unit.stop_port
+        if port is not None:
+            port.risk_stop(pin, reason)
+
+    def mine(self, position: PositionFacts) -> bool:
+        """Whether this unit version opened the position (AD-3)."""
+        version = self.unit.compiled
+        return position.opened_by in (
+            version.logic_fingerprint,
+            version.compiled_fingerprint,
+        )
+
+    def close_position(self, m: _Market, position: PositionFacts, code: str, why: str) -> None:
+        """Mint one full close through the unit's own exit path, and mark it closed this step."""
+        m.exited.add(position.position_id)
+        row = self.decision(m, position.side, "taken", (), why)
+        self.intents.append(
+            {
+                "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
+                "intent_family": "exit",
+                "kind": "close_full",
+                "position_ref": {
+                    "position_id": position.position_id,
+                    "instrument": {"venue": m.record.venue, "symbol": m.record.symbol},
+                    "opened_by": position.opened_by.value,
+                },
+                "reason_code": {"code": code, "book_family": "unit"},
+                "decision_row_id": row,
+            }
+        )
+
+    def _fold(self, key: str, code: str, verb: Verb, reason: str) -> None:
+        """Hand the fold the row this step's brake answer becomes (AD-12, AD-18).
+
+        The row is the same shape a host's journal writes, so the unit's own answer and a restart's
+        reader give the fold the same thing.
+        """
+        self.unit.risk.add(
+            {
+                "kind": "risk_event",
+                "scope": self.unit.risk.scope,
+                "at": self.instant.value_ns,
+                "id": f"{self.instant.value_ns}:{key}:{code}",
+                "code": code,
+                "verb": verb.value,
+                "reason": reason,
+            }
         )
 
     # --- blocks ------------------------------------------------------------------
@@ -1205,11 +1457,7 @@ class _Run:
         in. A step where this market has no new bar leaves that count alone, so a step of the
         other market's bar never resets it.
         """
-        version = self.unit.compiled
-        mine = position is not None and position.opened_by in (
-            version.logic_fingerprint,
-            version.compiled_fingerprint,
-        )
+        mine = position is not None and self.mine(position)
         for gone in [pid for pid in m.timers if position is None or pid != position.position_id]:
             del m.timers[gone]
             m.exited.discard(gone)
@@ -1263,22 +1511,7 @@ class _Run:
         winner = chosen(answers)
         if winner is None or winner.action.kind != "close_full":
             return
-        m.exited.add(position.position_id)
-        row = self.decision(m, position.side, "taken", (), winner.detail)
-        self.intents.append(
-            {
-                "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
-                "intent_family": "exit",
-                "kind": "close_full",
-                "position_ref": {
-                    "position_id": position.position_id,
-                    "instrument": {"venue": m.record.venue, "symbol": m.record.symbol},
-                    "opened_by": position.opened_by.value,
-                },
-                "reason_code": {"code": winner.action.reason_code, "book_family": "unit"},
-                "decision_row_id": row,
-            }
-        )
+        self.close_position(m, position, winner.action.reason_code, winner.detail)
 
     def close_words(self, pin: str, raw: object, action: ExitAction) -> str:
         """The one sentence a close row carries. A per-bar exit that answers the old way keeps
@@ -1335,6 +1568,9 @@ class _Run:
                     self.decision(m, side, "no_signal", result.trail, f"near miss, {result.reason}")
                 elif self.unit.trace is TraceLevel.EVERY_BAR:
                     self.decision(m, side, "no_signal", result.trail, result.reason)
+                continue
+            if self.halt_reason is not None:
+                self.decision(m, side, "suppressed", result.trail, self.halt_reason)
                 continue
             if m.bars < self.unit.warm_up:
                 self.decision(m, side, "suppressed_warming", result.trail, "warming up")
@@ -1519,6 +1755,7 @@ def _core(
     fault_clean_bars: int,
     exit_fault_bars: int,
     port: HostPort | None,
+    risk_rows: Sequence[Mapping[str, object]] | None,
 ) -> Result[_Core]:
     needed = _required_keys(compiled)
     missing, extra = sorted(needed - set(read_surfaces)), sorted(set(read_surfaces) - needed)
@@ -1558,6 +1795,7 @@ def _core(
             fault_clean_bars=fault_clean_bars,
             exit_fault_bars=exit_fault_bars,
             port=port,
+            risk_rows=risk_rows,
         )
     )
 
@@ -1574,11 +1812,13 @@ def construct_unit(
     fault_clean_bars: int = FAULT_CLEAN_BARS,
     exit_fault_bars: int = EXIT_FAULT_BARS,
     port: HostPort | None = None,
+    risk_rows: Sequence[Mapping[str, object]] | None = (),
 ) -> Result[HostedUnit]:
     """Host a compiled unit. ``assignment`` holds the calibrated values the run starts from
     (the unit's defaults when ``None``); ``scope_id`` is the QMB run id or the deployment id;
     ``fault_clean_bars`` is the clean bars a faulted unit waits before its entries return;
-    ``exit_fault_bars`` is the bars its exits may fail to run before ``port`` closes a position."""
+    ``exit_fault_bars`` is the bars its exits may fail to run before ``port`` closes a position;
+    ``risk_rows`` are the journal rows the host already holds, which seed the fold."""
     core = _core(
         compiled,
         read_surfaces,
@@ -1590,6 +1830,7 @@ def construct_unit(
         fault_clean_bars,
         exit_fault_bars,
         port,
+        risk_rows,
     )
     if is_refusal(core):
         return core
@@ -1609,12 +1850,16 @@ def restore_unit(
     fault_clean_bars: int = FAULT_CLEAN_BARS,
     exit_fault_bars: int = EXIT_FAULT_BARS,
     port: HostPort | None = None,
+    risk_rows: Sequence[Mapping[str, object]] | None = None,
 ) -> Result[HostedUnit]:
     """Resume from ``snapshot``. A snapshot of another state schema, compiled fingerprint or
     interpreter, or one whose markets, blocks, slow numbers or fields differ in shape from
     this unit's own snapshot, starts the unit cold, and its first step carries a
     ``cold_start`` event with the reason, so a restart never silently changes what the unit
-    does. A block's ``export_state`` keeps the same keys for the whole run."""
+    does. A block's ``export_state`` keeps the same keys for the whole run.
+
+    ``risk_rows`` are the journal rows the host read back, which are the truth for the fold; when
+    the host hands none, the snapshot's cache answers instead."""
     built = _core(
         compiled,
         read_surfaces,
@@ -1626,6 +1871,7 @@ def restore_unit(
         fault_clean_bars,
         exit_fault_bars,
         port,
+        risk_rows,
     )
     if is_refusal(built):
         return built

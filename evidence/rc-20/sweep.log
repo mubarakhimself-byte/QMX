@@ -1,0 +1,2327 @@
+=== RC-20 sweep. head ed174c73e10c6777b6f580265de733e11c0ed8f2 at 2026-11-10T15:41:22.2001698+03:00. Runs were made from this worktree; each block names cwd, command, output and exit code.
+
+=== A before | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest tools/tests/test_dictionary_port.py -q
+bringing up nodes...
+bringing up nodes...
+
+.F.F.F.                                                                  [100%]
+================================== FAILURES ===================================
+________ test_a_slug_two_families_share_is_scoped_by_family_and_linked ________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+    def test_a_slug_two_families_share_is_scoped_by_family_and_linked() -> None:
+        faces = _by_id()
+        scoped = sorted(i for i in faces if "." in i)
+    
+        assert (len(faces), len(scoped)) == (239, 21)
+>       assert [faces[i].get("same_word_as") for i in ("locations.vwap", "exits.time-stop")] == [
+            ["context.vwap@1"],
+            ["time-exit-bars@1"],
+        ]
+E       AssertionError: assert [['context.vw...exit-bars@2']] == [['context.vw...exit-bars@1']]
+E         
+E         At index 1 diff: ['time-exit-bars@2'] != ['time-exit-bars@1']
+E         Use -v to get more diff
+
+tools\tests\test_dictionary_port.py:157: AssertionError
+__________ test_the_dry_run_ports_239_into_239_drafts_and_loses_none __________
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+capsys = <_pytest.capture.CaptureFixture object at 0x0000020529B60440>
+
+    def test_the_dry_run_ports_239_into_239_drafts_and_loses_none(
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        code = SCRIPT.main(["--dry-run"])
+    
+        lines = capsys.readouterr().out.splitlines()
+>       assert (code, lines[:7], lines[-1]) == (
+            0,
+            [
+                "parsed 239",
+                "drafts 239",
+                "lost 0",
+                "refused 0",
+                "checker problems 0",
+                "status named 239",
+                "unmapped role strings 27",
+            ],
+            "current SOURCES.json, port.json",
+        )
+E       AssertionError: assert (1, ['parsed ... run --write') == (0, ['parsed ...n, port.json')
+E         
+E         At index 0 diff: 1 != 0
+E         Use -v to get more diff
+
+tools\tests\test_dictionary_port.py:74: AssertionError
+____________ test_a_rerun_changes_nothing_even_on_a_crlf_checkout _____________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-299/popen-gw1/test_a_rerun_changes_nothing_e0')
+
+    def test_a_rerun_changes_nothing_even_on_a_crlf_checkout(tmp_path: Path) -> None:
+        again: Callable[[], _Port] = SCRIPT.port
+        seed = _crlf_copy(tmp_path)
+        for name in ("SOURCES.json", "port.json"):
+            shutil.copyfile(SCRIPT.SEED / name, seed / name)
+    
+        assert (again().document() == MADE.document(), SCRIPT.port(seed).document()) == (
+            True,
+            MADE.document(),
+        )
+>       assert (SCRIPT.stale(MADE), SCRIPT.stale(SCRIPT.port(seed), seed)) == ([], [])
+E       AssertionError: assert (['port.json'], ['port.json']) == ([], [])
+E         
+E         At index 0 diff: ['port.json'] != []
+E         Use -v to get more diff
+
+tools\tests\test_dictionary_port.py:206: AssertionError
+=========================== short test summary info ===========================
+FAILED tools/tests/test_dictionary_port.py::test_a_slug_two_families_share_is_scoped_by_family_and_linked
+FAILED tools/tests/test_dictionary_port.py::test_the_dry_run_ports_239_into_239_drafts_and_loses_none
+FAILED tools/tests/test_dictionary_port.py::test_a_rerun_changes_nothing_even_on_a_crlf_checkout
+3 failed, 4 passed in 17.46s
+EXIT=1
+
+
+=== A diagnosis | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python tools/dictionary/port_stats.py --dry-run
+parsed 239
+drafts 239
+lost 0
+refused 0
+checker problems 0
+status named 239
+unmapped role strings 27
+  unmapped 'confirmation prerequisite': triggers.liquidity-sweep
+  unmapped 'entry lifecycle; risk control; sequencing': one-shot-signal
+  unmapped 'entry lifecycle; signal cancellation; timing constraint': pending-order-expiry
+  unmapped 'entry; execution management; sequencing': re-entry
+  unmapped 'execution constraint; management risk input; evidence annotation': adverse-gap-slippage
+  unmapped 'execution management; evidence/provenance; risk control': execution-state-reconciliation
+  unmapped 'execution management; signal cancellation; risk control': pending-order-cancellation
+  unmapped 'execution-quality modifier': news-event-window
+  unmapped 'execution-quality warning': spread-widening-condition
+  unmapped 'exit trigger; management; risk control': exits.time-stop
+  unmapped 'exit; entry; management; sequencing': reversal-entry-after-exit
+  unmapped 'exposure guard': intermarket-risk-regime
+  unmapped 'management modifier': volatility-expansion
+  unmapped 'market/data constraint; execution provenance; entry/exit constraint': crypto-spot-execution-context
+  unmapped 'mean-reversion reference': context.vwap
+  unmapped 'ordered event primitive': mother-bar-break
+  unmapped 'post-hoc filter': slippage
+  unmapped 're-entry control; entry filter; management sequencing': no-new-entry-after-exit
+  unmapped 'reference': triangle-wedge-object, flag-pennant-object, reversal-pattern-object, cup-handle-object
+  unmapped 'reversal warning': indicator-divergence
+  unmapped 'sequence primitive': nrn-resolution
+  unmapped 'sequencing primitive': contraction-resolution-break, threshold-reclaim, sweep-reclaim, break-retest, break-retest-hold
+  unmapped 'signal cancellation; entry lifecycle; risk control': signal-cancellation
+  unmapped 'stop/target sanity check': average-daily-range
+  unmapped 'timing refinement': footprint-order-flow, absorption
+  unmapped 'transition descriptor': displacement
+  unmapped 'universe selection': currency-strength
+aliases held back 56
+transfer fx direct 46, not_assessed 187, not_transferable 6
+transfer metal not_assessed 239
+transfer index_cfd not_assessed 239
+transfer commodity_cfd not_assessed 239
+transfer stock_cfd not_assessed 239
+transfer future not_assessed 239
+transfer perp not_assessed 239
+transfer spot_crypto direct 46, not_assessed 193
+transfer stock not_assessed 239
+  not an entry: context-regime-and-intermarket/context-filters-confirmations.md: ## Coverage table
+  not an entry: context-regime-and-intermarket/context-filters-confirmations.md: ## Deduplication notes
+  not an entry: context-regime-and-intermarket/context-filters-confirmations.md: ## Unresolved taxonomy questions
+  not an entry: invalidation-exits-and-management/exits-execution-management.md: ## Deduplication notes
+  not an entry: invalidation-exits-and-management/exits-execution-management.md: ## Unresolved taxonomy questions
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Coverage table
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Deduplication notes
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Unresolved taxonomy questions
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Evidence provenance note
+  not an entry: price-action-and-patterns/triggers-patterns-transitions.md: ## Deduplication notes
+  not an entry: price-action-and-patterns/triggers-patterns-transitions.md: ## Unresolved taxonomy questions
+stale port.json: run --write
+EXIT=1
+
+
+=== A regenerate | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python tools/dictionary/port_stats.py --write
+parsed 239
+drafts 239
+lost 0
+refused 0
+checker problems 0
+status named 239
+unmapped role strings 27
+  unmapped 'confirmation prerequisite': triggers.liquidity-sweep
+  unmapped 'entry lifecycle; risk control; sequencing': one-shot-signal
+  unmapped 'entry lifecycle; signal cancellation; timing constraint': pending-order-expiry
+  unmapped 'entry; execution management; sequencing': re-entry
+  unmapped 'execution constraint; management risk input; evidence annotation': adverse-gap-slippage
+  unmapped 'execution management; evidence/provenance; risk control': execution-state-reconciliation
+  unmapped 'execution management; signal cancellation; risk control': pending-order-cancellation
+  unmapped 'execution-quality modifier': news-event-window
+  unmapped 'execution-quality warning': spread-widening-condition
+  unmapped 'exit trigger; management; risk control': exits.time-stop
+  unmapped 'exit; entry; management; sequencing': reversal-entry-after-exit
+  unmapped 'exposure guard': intermarket-risk-regime
+  unmapped 'management modifier': volatility-expansion
+  unmapped 'market/data constraint; execution provenance; entry/exit constraint': crypto-spot-execution-context
+  unmapped 'mean-reversion reference': context.vwap
+  unmapped 'ordered event primitive': mother-bar-break
+  unmapped 'post-hoc filter': slippage
+  unmapped 're-entry control; entry filter; management sequencing': no-new-entry-after-exit
+  unmapped 'reference': triangle-wedge-object, flag-pennant-object, reversal-pattern-object, cup-handle-object
+  unmapped 'reversal warning': indicator-divergence
+  unmapped 'sequence primitive': nrn-resolution
+  unmapped 'sequencing primitive': contraction-resolution-break, threshold-reclaim, sweep-reclaim, break-retest, break-retest-hold
+  unmapped 'signal cancellation; entry lifecycle; risk control': signal-cancellation
+  unmapped 'stop/target sanity check': average-daily-range
+  unmapped 'timing refinement': footprint-order-flow, absorption
+  unmapped 'transition descriptor': displacement
+  unmapped 'universe selection': currency-strength
+aliases held back 56
+transfer fx direct 46, not_assessed 187, not_transferable 6
+transfer metal not_assessed 239
+transfer index_cfd not_assessed 239
+transfer commodity_cfd not_assessed 239
+transfer stock_cfd not_assessed 239
+transfer future not_assessed 239
+transfer perp not_assessed 239
+transfer spot_crypto direct 46, not_assessed 193
+transfer stock not_assessed 239
+  not an entry: context-regime-and-intermarket/context-filters-confirmations.md: ## Coverage table
+  not an entry: context-regime-and-intermarket/context-filters-confirmations.md: ## Deduplication notes
+  not an entry: context-regime-and-intermarket/context-filters-confirmations.md: ## Unresolved taxonomy questions
+  not an entry: invalidation-exits-and-management/exits-execution-management.md: ## Deduplication notes
+  not an entry: invalidation-exits-and-management/exits-execution-management.md: ## Unresolved taxonomy questions
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Coverage table
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Deduplication notes
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Unresolved taxonomy questions
+  not an entry: market-structure-and-location/locations-and-structure.md: ## Evidence provenance note
+  not an entry: price-action-and-patterns/triggers-patterns-transitions.md: ## Deduplication notes
+  not an entry: price-action-and-patterns/triggers-patterns-transitions.md: ## Unresolved taxonomy questions
+current SOURCES.json, port.json
+EXIT=0
+
+
+=== A after | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest tools/tests/test_dictionary_port.py -q
+bringing up nodes...
+bringing up nodes...
+
+....F..                                                                  [100%]
+================================== FAILURES ===================================
+________ test_a_slug_two_families_share_is_scoped_by_family_and_linked ________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+    def test_a_slug_two_families_share_is_scoped_by_family_and_linked() -> None:
+        faces = _by_id()
+        scoped = sorted(i for i in faces if "." in i)
+    
+        assert (len(faces), len(scoped)) == (239, 21)
+>       assert [faces[i].get("same_word_as") for i in ("locations.vwap", "exits.time-stop")] == [
+            ["context.vwap@1"],
+            ["time-exit-bars@1"],
+        ]
+E       AssertionError: assert [['context.vw...exit-bars@2']] == [['context.vw...exit-bars@1']]
+E         
+E         At index 1 diff: ['time-exit-bars@2'] != ['time-exit-bars@1']
+E         Use -v to get more diff
+
+tools\tests\test_dictionary_port.py:157: AssertionError
+=========================== short test summary info ===========================
+FAILED tools/tests/test_dictionary_port.py::test_a_slug_two_families_share_is_scoped_by_family_and_linked
+1 failed, 6 passed in 9.68s
+EXIT=1
+
+
+=== A after pin | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest tools/tests/test_dictionary_port.py -q
+bringing up nodes...
+bringing up nodes...
+
+.......                                                                  [100%]
+7 passed in 8.29s
+EXIT=0
+
+
+=== B derive-bars before | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest packages/qmx-tools/tests/test_derive_bars.py -q
+   Building qmb @ file:///D:/QMX-worktrees/bld-rc-20/qmb
+   Building qml @ file:///D:/QMX-worktrees/bld-rc-20/qml
+   Building qmf-indicators @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-indicators
+   Building qmf-structure @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-structure
+      Built qmb @ file:///D:/QMX-worktrees/bld-rc-20/qmb
+      Built qml @ file:///D:/QMX-worktrees/bld-rc-20/qml
+      Built qmf-indicators @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-indicators
+      Built qmf-structure @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-structure
+Uninstalled 10 packages in 123ms
+Installed 10 packages in 113ms
+bringing up nodes...
+bringing up nodes...
+
+..F                                                                      [100%]
+================================== FAILURES ===================================
+________ test_derived_pairs_give_the_same_bars_and_trades_as_the_ticks ________
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-303/popen-gw0/test_derived_pairs_give_the_sa0')
+
+    def test_derived_pairs_give_the_same_bars_and_trades_as_the_ticks(tmp_path: Path) -> None:
+        door = door_with_ticks(tmp_path)
+    
+        landed = derive_month(door, TICKS, 2025, 3, staging=tmp_path / "staging")
+    
+        assert is_ok(landed)
+        csv_bars, csv_trades, csv_r = trades_and_bars(by_csv(tmp_path / "csv"))
+        tick_bars, tick_trades, _ = trades_and_bars(
+            by_store(tmp_path / "ticks", door, "ticks", {"ticks": TICKS})
+        )
+        pair_bars, pair_trades, pair_r = trades_and_bars(
+            by_store(
+                tmp_path / "pairs",
+                door,
+                "bar-m1",
+                {"bid": "dukascopy/EURUSD/bar-m1/bid", "ask": "dukascopy/EURUSD/bar-m1/ask"},
+            )
+        )
+        assert len(pair_bars) == 1920
+        assert pair_bars == tick_bars == csv_bars
+>       assert (len(pair_trades), pair_r) == (6, Decimal("-3.2610"))
+E       AssertionError: assert (6, Decimal('-3.2846')) == (6, Decimal('-3.2610'))
+E         
+E         At index 1 diff: Decimal('-3.2846') != Decimal('-3.2610')
+E         Use -v to get more diff
+
+packages\qmx-tools\tests\test_derive_bars.py:160: AssertionError
+=========================== short test summary info ===========================
+FAILED packages\qmx-tools\tests\test_derive_bars.py::test_derived_pairs_give_the_same_bars_and_trades_as_the_ticks
+1 failed, 2 passed in 35.73s
+EXIT=1
+
+
+=== B derive-bars probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_derive.py
+landed Ok(value=(CommitReceipt(key=SeriesKey(source='dukascopy', subject='EURUSD', kind='bar-m1', year=2025, month=3, variant='bid'), fingerprint='7a948c5be1a3c11622cdb38ba5ba6c87033a3377b77b4b2d6de30793d4418918', rows=7680, bytes=88278, path=WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/derive-probe-n8fs3g05/market/series/dukascopy/EURUSD/bar-m1/bid/2025-03/open.parquet'), frozen=False, gaps=(), attempts=1, correction=False, idempotent=False), CommitReceipt(key=SeriesKey(source='dukascopy', subject='EURUSD', kind='bar-m1', year=2025, month=3, variant='ask'), fingerprint='513298c8eca25009226a3e6ac9bb08f3d10a6be0a798493f6ec7a813d2efdd5d', rows=7680, bytes=88338, path=WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/derive-probe-n8fs3g05/market/series/dukascopy/EURUSD/bar-m1/ask/2025-03/open.parquet'), frozen=False, gaps=(), attempts=1, correction=False, idempotent=False)))
+{'bars': (1920, 1920, 1920), 'trades': (6, 6, 6), 'r': {'csv': '-3.2846', 'tick': '-3.2846', 'pair': '-3.2846'}, 'bars_equal': True, 'trades_equal': True}
+EXIT=0
+
+
+=== B qmb app before | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest apps/qmb/tests/test_qmb_run_kinds.py apps/qmb/tests/test_run_honesty.py -q
+bringing up nodes...
+bringing up nodes...
+
+FF.FFF..F.........................                                       [100%]
+================================== FAILURES ===================================
+_____________ test_a_stated_cost_profile_changes_money_and_not_r ______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x000001CC4252C1A0>, store=<qmx_library.store.Store object...6A3530>}, 'readings': {'readings_query': <function readings_functions.<locals>.readings_query at 0x000001CC426A3690>}})
+
+    def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
+        profile = a_stated_profile(world, "3.50")
+    
+        plain = landed_of(world, job(world, unit=world.dummy, **GAPS))
+        costed = landed_of(world, job(world, unit=world.dummy, **GAPS, cost_profile=profile))
+    
+        rows = report(world.store, costed["id"])
+        laid = run_folder(world, costed["run_id"]) / "in"
+>       assert (plain["measures"]["total_r"], costed["measures"]["total_r"]) == ("-2.2597", "-2.2597")
+E       AssertionError: assert ('-2.2833', '-2.2833') == ('-2.2597', '-2.2597')
+E         
+E         At index 0 diff: '-2.2833' != '-2.2597'
+E         Use -v to get more diff
+
+apps\qmb\tests\test_run_honesty.py:130: AssertionError
+__________ test_a_six_cell_sweep_lands_six_tries_in_the_units_family __________
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x0000023BE635C1A0>, store=<qmx_library.store.Store object...000023BE64D1170>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x0000023BE64D12D0>})
+
+    def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> None:
+        grid = {
+            "markets": ["fx.eurusd", "metal.xauusd"],
+            "numbers": {"ema_period": ["50", "100", "150"]},
+        }
+    
+        result, landed = job(world, "sweep", grid=grid)
+    
+        run_id = landed["run_id"]
+        [opened] = [
+            i
+            for i in world.store.with_field("try", "run_id", run_id)
+            if fields(world.store, i)["state"] == "opened"
+        ]
+        family = fields(world.store, opened)["family"]
+        rows = counted(world, run_id)
+        assert (landed["status"], landed["kind"]) == ("finished", "sweep")
+        assert [(r["kind"], r["state"], r["market"]) for r in rows] == [
+            ("run", "recorded", "fx.eurusd"),
+            ("run", "recorded", "fx.eurusd"),
+            ("run", "recorded", "fx.eurusd"),
+            ("run", "recorded", "metal.xauusd"),
+            ("run", "recorded", "metal.xauusd"),
+            ("run", "recorded", "metal.xauusd"),
+        ]
+        assert {(r["family"], r["principal"], tuple(r["links"])) for r in rows} == {
+            (family, CHAT, (opened, result))
+        }
+        cells = report(world, result)["cells"]
+        assert "trades" not in report(world, result)
+        assert [(c["markets"], c["numbers"], c["status"]) for c in cells][:2] == [
+            (["fx.eurusd"], {"ema_period": "50"}, "finished"),
+            (["fx.eurusd"], {"ema_period": "100"}, "finished"),
+        ]
+        assert len({c["compiled_fp"] for c in cells}) == 6
+>       assert [(c["trades"], c["total_r"]) for c in cells] == [
+            (3, "-1.6852"),
+            (6, "-3.2610"),
+            (4, "-1.8102"),
+            (3, "0.0013"),
+            (2, "1.0013"),
+            (3, "-1.0258"),
+        ]
+E       AssertionError: assert [(3, '-1.6964...3, '-1.0258')] == [(3, '-1.6852...3, '-1.0258')]
+E         
+E         At index 0 diff: (3, '-1.6964') != (3, '-1.6852')
+E         Use -v to get more diff
+
+apps\qmb\tests\test_qmb_run_kinds.py:183: AssertionError
+_______ test_a_block_that_raises_lands_a_failed_result_with_its_reason ________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x000001CC4252C1A0>, store=<qmx_library.store.Store object...6A3530>}, 'readings': {'readings_query': <function readings_functions.<locals>.readings_query at 0x000001CC426A3690>}})
+
+    def test_a_block_that_raises_lands_a_failed_result_with_its_reason(world: World) -> None:
+        entry = json.loads((STDLIB / "rsi-cross-back" / "1" / "entry.json").read_text("utf-8"))
+        source = (STDLIB / "rsi-cross-back" / "1" / "block.py").read_bytes().replace(b"\r\n", b"\n")
+        update = b"    def update(self, evidence: Mapping[str, object]) -> Signal | None:\n"
+        assert update in source
+        raising = source.replace(update, update + b"        return 1 / 0\n")
+        fingerprint = block_fingerprint(raising).value
+        kind = entry.pop("component_type")
+        face = {
+            **entry,
+            "entry_id": "rsi-raises",
+            "aliases": ["RSI raises back over a level"],
+            "fingerprint": fingerprint,
+        }
+        world.store.put(
+            OPERATOR,
+            Draft(
+                "component",
+                "rsi-raises",
+                fields=cast("Any", {"component_type": kind, "entry": face}),
+                blobs={"code": raising},
+            ),
+            on=drafts_ref("rsi-raises"),
+            expected_head=None,
+        )
+        document = template(DUMMY)
+        text = json.dumps(document).replace("rsi-cross-back", "rsi-raises")
+        pinned = json.loads(text)
+        for pin in pinned["pins"]:
+            if pin["entry_id"] == "rsi-raises":
+                pin["fingerprint"] = fingerprint
+        draft = Draft("unit", "unit-raises", "raises", fields=cast("Any", pinned))
+        unit = world.store.put(
+            OPERATOR, draft, on=drafts_ref("unit-raises"), expected_head=None
+        ).object_id
+        compiled = LanderLibrary(world.store).compiled_fingerprint(unit)
+        assert compiled is not None
+        passing = {
+            "check": "qml-g/1",
+            "run_id": "qmbr-g-raises",
+            "status": "finished",
+            "compiled_fingerprint": compiled,
+            "behaviour": {"slice": {"market_ids": ["fx.eurusd", "metal.xauusd"]}},
+            "safety": {"verdict": "pass"},
+        }
+        world.store.put(
+            OPERATOR,
+            Draft("test-report", "g-raises", "g", fields=cast("Any", passing)),
+            on="main",
+            expected_head=None,
+        )
+        errors = cast("dict[str, Any]", world.runtime.status("qmb")["metrics"])["errors"]
+    
+        landed = landed_of(world, job(world, unit=unit, **GAPS))
+    
+>       assert (landed["status"], landed["reason"]) == (
+                                  ^^^^^^^^^^^^^^^^
+            "failed",
+            "ZeroDivisionError: division by zero",
+        )
+E       KeyError: 'reason'
+
+apps\qmb\tests\test_run_honesty.py:205: KeyError
+____ test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason _____
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x0000023BE635C1A0>, store=<qmx_library.store.Store object...000023BE64D1170>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x0000023BE64D12D0>})
+
+    def test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason(world: World) -> None:
+        improves = [{"name": "cost_shock", "params": {"extra_r": "-0.5"}}]
+    
+        with pytest.raises(ControlError) as refused:
+            world.control.app_job(
+                "qmb",
+                "jobs/whatif.py",
+                inputs=cast("Any", {"unit": world.dummy, **MARCH, "scenarios": improves}),
+                principal=CHAT,
+            )
+    
+        failed = [
+            fields(world.store, i)
+            for i in world.store.with_field("backtest-result", "kind", "whatif")
+            if fields(world.store, i)["status"] == "failed"
+        ]
+        assert refused.value.code == "result_refused"
+>       assert str(refused.value) == WORSEN_REFUSAL
+E       AssertionError: assert 'scenario 1-c...counted rerun' == 'scenario 1-c...counted rerun'
+E         
+E         Skipping 72 identical leading characters in diff, use -v to show
+E         Skipping 50 identical trailing characters in diff, use -v to show
+E         - from -0.2824625 to 0.2175375; a sce
+E         ?           ^ ^          ^ ^
+E         + from -0.2854125 to 0.2145875; a sce
+E         ?           ^ ^          ^ ^
+
+apps\qmb\tests\test_qmb_run_kinds.py:222: AssertionError
+____ test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not ____
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x0000023BE635C1A0>, store=<qmx_library.store.Store object...000023BE64D1170>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x0000023BE64D12D0>})
+
+    def test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not(
+        world: World,
+    ) -> None:
+        scenarios = [
+            {"name": "skip_weekdays", "params": {"days": ["monday"]}},
+            {"name": "skip_weekdays", "params": {"days": ["friday"]}},
+            {"name": "drop_top_trades", "params": {"fraction": "0.25"}},
+            {"name": "drop_top_trades", "params": {"fraction": "1"}},
+        ]
+    
+        _, landed = job(world, "whatif", scenarios=scenarios)
+    
+        rows = counted(world, landed["run_id"])
+        assert landed["status"] == "finished"
+        assert [(r["kind"], r["run_id"].rsplit("/", 1)[1]) for r in rows] == [
+            ("whatif_rerun", "1-skip_weekdays"),
+            ("whatif_rerun", "2-skip_weekdays"),
+        ]
+>       assert [
+            (s["name"], s["direction"], s["answer"], s["value"])
+            for s in landed["measures"]["scenarios"]
+        ] == [
+            ("1-skip_weekdays", "may_improve", "measured", "-0.04328333333333333333333333333"),
+            ("2-skip_weekdays", "may_improve", "measured", "-0.3834142857142857142857142857"),
+            ("3-drop_top_trades", "worsen_only", "measured", "-0.7808666666666666666666666667"),
+            ("4-drop_top_trades", "worsen_only", "no_trades", None),
+        ]
+E       AssertionError: assert [('1-skip_wee...rades', None)] == [('1-skip_wee...rades', None)]
+E         
+E         At index 0 diff: ('1-skip_weekdays', 'may_improve', 'measured', '-0.04721666666666666666666666667') != ('1-skip_weekdays', 'may_improve', 'measured', '-0.04328333333333333333333333333')
+E         Use -v to get more diff
+
+apps\qmb\tests\test_qmb_run_kinds.py:251: AssertionError
+__________ test_the_judge_reads_each_check_from_the_run_of_that_kind __________
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x0000023BE635C1A0>, store=<qmx_library.store.Store object...000023BE64D1170>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x0000023BE64D12D0>})
+
+    def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> None:
+        backtest = world.tools["backtest_run"](unit=world.dummy, **MARCH)["result"]["result_id"]
+        walked, walk = job(world, "walk_forward", split={"folds": 3}, ranges=EMA_RANGE)
+        stressed, robust = job(world, "robustness", resamples=50)
+    
+        verdict = world.tools["backtest_judge_run"](results=[backtest, walked, stressed])
+    
+        folds = counted(world, walk["run_id"])
+        assert [r["run_id"].rsplit("/", 1)[1] for r in folds] == ["fold-1", "fold-2", "fold-3"]
+        assert {m: row["efficiency"] for m, row in walk["measures"]["walk_forward"].items()} == {
+            "fx.eurusd": "0.0000"
+        }
+        assert [(f["pick"], f["out_of_sample_trades"]) for f in report(world, walked)["folds"]] == [
+            (None, 0),
+            (None, 0),
+            ("cell-03", 5),
+        ]
+        assert report(world, walked)["walk_forward_unmeasured"] == (
+            "no fold had a candidate with an in-sample Sharpe to pick on metal.xauusd"
+        )
+>       assert robust["measures"]["random_entries"] == {
+            "fx.eurusd": {
+                "edge_ratio": "0.4048",
+                "p": "0.7059",
+                "trades": 6,
+                "horizon_bars": 20,
+                "resamples": 50,
+                "window": MARCH["window"],
+            },
+            "metal.xauusd": {
+                "edge_ratio": "1.0572",
+                "p": "0.7255",
+                "trades": 2,
+                "horizon_bars": 20,
+                "resamples": 50,
+                "window": MARCH["window"],
+            },
+        }
+E       AssertionError: assert {'fx.eurusd':...rs': 20, ...}} == {'fx.eurusd':...rs': 20, ...}}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'fx.eurusd': {'edge_ratio': '0.4037', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, ...}} != {'fx.eurusd': {'edge_ratio': '0.4048', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, ...}}
+E         Use -v to get more diff
+
+apps\qmb\tests\test_qmb_run_kinds.py:304: AssertionError
+=========================== short test summary info ===========================
+FAILED apps/qmb/tests/test_run_honesty.py::test_a_stated_cost_profile_changes_money_and_not_r
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_six_cell_sweep_lands_six_tries_in_the_units_family
+FAILED apps/qmb/tests/test_run_honesty.py::test_a_block_that_raises_lands_a_failed_result_with_its_reason
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_the_judge_reads_each_check_from_the_run_of_that_kind
+6 failed, 28 passed in 273.24s (0:04:33)
+EXIT=1
+
+
+=== B qmb raises probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_qmb_raises.py
+raised ProgrammingError Cannot operate on a closed database.
+Traceback (most recent call last):
+  File "D:\QMX-worktrees\bld-rc-20\evidence\rc-20\probe_qmb_raises.py", line 39, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "D:\QMX-worktrees\bld-rc-20\evidence\rc-20\probe_qmb_raises.py", line 30, in main
+    for object_id in world.store.with_field("backtest-result", "status", "failed"):
+                     ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-library\src\qmx_library\store.py", line 2042, in with_field
+    rows = self.catalog.db.execute(
+        "SELECT o.object_id FROM objects o JOIN moves m ON m.new_head = o.object_id "
+    ...<2 lines>...
+        (kind_name, key, value),
+    )
+sqlite3.ProgrammingError: Cannot operate on a closed database.
+EXIT=1
+
+
+=== B qmb raises probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_qmb_raises.py
+raised KindRefused checker_unavailable: component: no checker 'qml.entry/1' is registered on this host
+EXIT=1
+
+
+=== B qmb raises probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_qmb_raises.py
+raised KeyError 'reason'
+finished result fp1:sha256:30db28fa17d4caa13a1e5ee2991fac6f45c9a9dcf588ad6fbd88dcb097a19851 {'run_id': 'qmbr-pc-01M72RC3RVEJ1TJTC0XWC3X8PZ', 'kind': 'backtest'}
+EXIT=1
+
+
+=== B qmb raises probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_qmb_raises.py
+ran {'app_id': 'qmb', 'instance_id': '1d37e87deab242839c165019a5322342', 'job': 'jobs/backtest.py', 'version': '1.0.10', 'profile': None, 'result': {'output': 'backtest-result', 'data': {'schema_version': 1, 'run_id': 'qmbr-pc-01M72RFWSZEGGSKVDZEC5XX4YH', 'status': 'finished', 'tester': {'app': 'qmb', 'version': '1.0.10', 'contract': 'qmb/1'}, 'files': [{'slot': 'report', 'path': 'out/report.json', 'fp': 'fp1:sha256:9f3cb064d28f1420f31300c877b9fc28fd4acdcb170baa7e0d27ac4247d92362', 'bytes': 617}, {'slot': 'journal/data_event/2025-03', 'path': 'out/journal/journal-unit/dummy-trend-pullback/data_event/backtest.pc/2025-03.parquet', 'fp': 'fp1:sha256:00f1e57c51ff26654aa5290b45a7ac30ff02b84c20fa78f74c94c58d195cacd3', 'bytes': 4251, 'rows': 6}, {'slot': 'journal/risk_event/2025-03', 'path': 'out/journal/journal-unit/dummy-trend-pullback/risk_event/backtest.pc/2025-03.parquet', 'fp': 'fp1:sha256:375e79c7f356809f3349dc1a12286c3b52149d14d0de1f6af396a37ce2934d76', 'bytes': 4083, 'rows': 1}, {'slot': 'journal/state/2025-03', 'path': 'out/journal/journal-unit/dummy-trend-pullback/state/backtest.pc/2025-03.parquet', 'fp': 'fp1:sha256:30e67db5d90e4b21d42392fbba7fe42c59fea90eb06513d417ec779311122b67', 'bytes': 4739, 'rows': 4}], 'measures': {'trades': 0, 'net_money': '0', 'total_r': '0', 'expectancy_r': '0', 'win_rate': '0', 'trade_list_fp': 'fp1:sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945', 'max_drawdown_r': '0', 'money': {'net_profit': '0.00', 'net_profit_ratio': '0', 'cagr': '0', 'start_equity': '10000.00', 'end_equity': '10000.00', 'sharpe_ratio': {'undefined': 'insufficient-sample'}, 'sortino_ratio': {'undefined': 'insufficient-sample'}, 'calmar_ratio': {'undefined': 'undefined'}, 'max_drawdown': '0', 'max_drawdown_recovery': '0', 'total_trades': '0', 'winning_trades': '0', 'losing_trades': '0', 'win_rate': {'undefined': 'undefined'}, 'long_win_rate': {'undefined': 'undefined'}, 'short_win_rate': {'undefined': 'undefined'}, 'profit_factor': {'undefined': 'undefined'}, 'expectancy': {'undefined': 'insufficient-sample'}, 'average_win': {'undefined': 'insufficient-sample'}, 'average_loss': {'undefined': 'insufficient-sample'}, 'largest_win': {'undefined': 'insufficient-sample'}, 'largest_loss': {'undefined': 'insufficient-sample'}, 'gross_profit': '0.00', 'gross_loss': '0.00', 'fees': '0.00', 'winning_streak': '0', 'losing_streak': '0'}}, 'labels': {'zero_trades': True, 'costs_uncalibrated': True, 'holes_unchecked': False, 'fixture_records': ["no Library record for this market, so it reads QML's test fixture: fx.eurusd reads eurusd.json", "no Library record for this market, so it reads QML's test fixture: metal.xauusd reads xauusd.json"], 'placeholders': ['swing_stop', 'target_2r', 'time_out', 'fixed_fraction'], 'data_short': [{'market_id': 'fx.eurusd', 'before_first': 0, 'after_last': 108}, {'market_id': 'metal.xauusd', 'before_first': 0, 'after_last': 100}], 'fidelity': 'quotes', 'motion': 'on'}, 'versions': {'qmb': '1.0.10'}}}, 'artifact_ref': {'producer_app': 'qmb', 'definition_hash': '4abfc7e42379097e5e8ae2375872df6ab4f78c324933c2530d0136c09f12ff64', 'output': 'backtest-result', 'sha256': '252e1fd6fa52d16c22344510548540698bbcfee42d1d8702b56118823c5f6200'}, 'run_id': 'qmbr-pc-01M72RFWSZEGGSKVDZEC5XX4YH'}
+landed {'id': 'fp1:sha256:b0ccb8dde28740ebfc12730f452a876b150f3ad8ff5796dbeb97395e86a5f478', 'run_id': 'qmbr-pc-01M72RFWSZEGGSKVDZEC5XX4YH', 'status': 'finished', 'kind': 'backtest', 'tester': {'app': 'qmb', 'version': '1.0.10'}, 'unit': 'fp1:sha256:c4dc5cf267463fcc1bdaa771388068eab5e5292738f122fe2c1a8d8be91f2d85', 'principal': 'agent:chat-7', 'world': 'backtest', 'compiled_fp': 'fp1:sha256:5882a261751396669b04b61be1f66a2e9712c4e601d8190b8e9476e8db50f35c', 'window': {'start': '2025-03-01', 'end': '2025-04-01'}, 'labels': {'zero_trades': True, 'costs_uncalibrated': True, 'holes_unchecked': False, 'fixture_records': ["no Library record for this market, so it reads QML's test fixture: fx.eurusd reads eurusd.json", "no Library record for this market, so it reads QML's test fixture: metal.xauusd reads xauusd.json"], 'placeholders': ['swing_stop', 'target_2r', 'time_out', 'fixed_fraction'], 'data_short': [{'market_id': 'fx.eurusd', 'before_first': 0, 'after_last': 108}, {'market_id': 'metal.xauusd', 'before_first': 0, 'after_last': 100}], 'fidelity': 'quotes', 'motion': 'on'}, 'fidelity': 'quotes', 'measures': {'trades': 0, 'net_money': '0', 'total_r': '0', 'expectancy_r': '0', 'win_rate': '0', 'trade_list_fp': 'fp1:sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945', 'max_drawdown_r': '0', 'money': {'net_profit': '0.00', 'net_profit_ratio': '0', 'cagr': '0', 'start_equity': '10000.00', 'end_equity': '10000.00', 'sharpe_ratio': {'undefined': 'insufficient-sample'}, 'sortino_ratio': {'undefined': 'insufficient-sample'}, 'calmar_ratio': {'undefined': 'undefined'}, 'max_drawdown': '0', 'max_drawdown_recovery': '0', 'total_trades': '0', 'winning_trades': '0', 'losing_trades': '0', 'win_rate': {'undefined': 'undefined'}, 'long_win_rate': {'undefined': 'undefined'}, 'short_win_rate': {'undefined': 'undefined'}, 'profit_factor': {'undefined': 'undefined'}, 'expectancy': {'undefined': 'insufficient-sample'}, 'average_win': {'undefined': 'insufficient-sample'}, 'average_loss': {'undefined': 'insufficient-sample'}, 'largest_win': {'undefined': 'insufficient-sample'}, 'largest_loss': {'undefined': 'insufficient-sample'}, 'gross_profit': '0.00', 'gross_loss': '0.00', 'fees': '0.00', 'winning_streak': '0', 'losing_streak': '0'}}, 'versions': {'qmb': '1.0.10'}}
+kind row fp1:sha256:b0ccb8dde28740ebfc12730f452a876b150f3ad8ff5796dbeb97395e86a5f478 {'run_id': 'qmbr-pc-01M72RFWSZEGGSKVDZEC5XX4YH', 'status': 'finished', 'kind': 'backtest', 'tester': {'app': 'qmb', 'version': '1.0.10'}, 'unit': 'fp1:sha256:c4dc5cf267463fcc1bdaa771388068eab5e5292738f122fe2c1a8d8be91f2d85', 'principal': 'agent:chat-7', 'world': 'backtest', 'compiled_fp': 'fp1:sha256:5882a261751396669b04b61be1f66a2e9712c4e601d8190b8e9476e8db50f35c', 'window': {'start': '2025-03-01', 'end': '2025-04-01'}, 'labels': {'zero_trades': True, 'costs_uncalibrated': True, 'holes_unchecked': False, 'fixture_records': ["no Library record for this market, so it reads QML's test fixture: fx.eurusd reads eurusd.json", "no Library record for this market, so it reads QML's test fixture: metal.xauusd reads xauusd.json"], 'placeholders': ['swing_stop', 'target_2r', 'time_out', 'fixed_fraction'], 'data_short': [{'market_id': 'fx.eurusd', 'before_first': 0, 'after_last': 108}, {'market_id': 'metal.xauusd', 'before_first': 0, 'after_last': 100}], 'fidelity': 'quotes', 'motion': 'on'}, 'fidelity': 'quotes', 'measures': {'trades': 0, 'net_money': '0', 'total_r': '0', 'expectancy_r': '0', 'win_rate': '0', 'trade_list_fp': 'fp1:sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945', 'max_drawdown_r': '0', 'money': {'net_profit': '0.00', 'net_profit_ratio': '0', 'cagr': '0', 'start_equity': '10000.00', 'end_equity': '10000.00', 'sharpe_ratio': {'undefined': 'insufficient-sample'}, 'sortino_ratio': {'undefined': 'insufficient-sample'}, 'calmar_ratio': {'undefined': 'undefined'}, 'max_drawdown': '0', 'max_drawdown_recovery': '0', 'total_trades': '0', 'winning_trades': '0', 'losing_trades': '0', 'win_rate': {'undefined': 'undefined'}, 'long_win_rate': {'undefined': 'undefined'}, 'short_win_rate': {'undefined': 'undefined'}, 'profit_factor': {'undefined': 'undefined'}, 'expectancy': {'undefined': 'insufficient-sample'}, 'average_win': {'undefined': 'insufficient-sample'}, 'average_loss': {'undefined': 'insufficient-sample'}, 'largest_win': {'undefined': 'insufficient-sample'}, 'largest_loss': {'undefined': 'insufficient-sample'}, 'gross_profit': '0.00', 'gross_loss': '0.00', 'fees': '0.00', 'winning_streak': '0', 'losing_streak': '0'}}, 'versions': {'qmb': '1.0.10'}}
+raised KeyError 'reason'
+EXIT=1
+
+
+=== B qmb raises probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_qmb_raises.py
+run_id qmbr-pc-01M72RNAF5EZ3TZQ1XGZTM0H3P status finished trades 0
+report keys ['cash_events', 'compiled_fp', 'fills', 'holes', 'holes_unchecked', 'journal', 'open_positions', 'run_id', 'trades']
+journal {
+ "repeats": 0,
+ "rows": {
+  "data_event": 6,
+  "risk_event": 1,
+  "state": 4
+ },
+ "warnings": []
+}
+raised KeyError 'reason'
+finished fp1:sha256:212a700886db7c17b2b0e7566f57bb23f2dd75de9d69c2a8f9dfad77da87650e qmbr-pc-01M72RNAF5EZ3TZQ1XGZTM0H3P
+EXIT=1
+
+
+=== B qmb raises probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_qmb_raises.py
+slots ['journal/data_event/2025-03', 'journal/risk_event/2025-03', 'journal/state/2025-03', 'report']
+risk row {'backfilled': False, 'body': {'action': 'look at the block, then resume the unit when it is fixed', 'actionable': True, 'code': 'unit_fault', 'event_id': 'unit_fault:rsi-raises@1', 'root': 'rsi-raises@1'}, 'build': 'qmb-app 1.0.10', 'clock_ok': True, 'kind': 'risk_event', 'links': [], 'machine': 'pc', 'record_id': 'qmb@pc/0', 'run_id': 'qmbr-pc-01M72RX64NEET9WAG187FQ4BTD', 'schema': 'qmx.journal.envelope/1', 'schema_version': 1, 'seq': 0, 'stream': 'unit', 'ts_recv': 1740953700000000000, 'ts_write': 1740953700000000000, 'unit_id': 'dummy-trend-pullback', 'unit_version': 'fp1:sha256:64f40c5df91aa2f07ea7bd8a8737256e420834a56f8d83b192035619005d671d', 'world': 'backtest', 'writer_id': 'qmb@pc'}
+raised KeyError 'reason'
+EXIT=1
+
+
+=== B qmb five values before (-vv) | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest <five failing node ids> -vv
+============================= test session starts =============================
+platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+rootdir: D:\QMX-worktrees\bld-rc-20\qmx-agents
+configfile: pyproject.toml
+plugins: anyio-4.15.1, platformdirs-4.12.4, cov-7.1.0, xdist-3.8.0
+created: 2/2 workers
+2 workers [5 items]
+
+scheduling tests via WorkStealingScheduling
+
+apps/qmb/tests/test_qmb_run_kinds.py::test_a_six_cell_sweep_lands_six_tries_in_the_units_family 
+apps/qmb/tests/test_qmb_run_kinds.py::test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not 
+[gw1] [ 20%] FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not 
+apps/qmb/tests/test_qmb_run_kinds.py::test_the_judge_reads_each_check_from_the_run_of_that_kind 
+[gw0] [ 40%] FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_six_cell_sweep_lands_six_tries_in_the_units_family 
+apps/qmb/tests/test_qmb_run_kinds.py::test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason 
+[gw0] [ 60%] FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason 
+[gw1] [ 80%] FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_the_judge_reads_each_check_from_the_run_of_that_kind 
+apps/qmb/tests/test_run_honesty.py::test_a_stated_cost_profile_changes_money_and_not_r 
+[gw1] [100%] FAILED apps/qmb/tests/test_run_honesty.py::test_a_stated_cost_profile_changes_money_and_not_r 
+
+================================== FAILURES ===================================
+____ test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not ____
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x00000247B7AF2660>, store=<qmx_library.store.Store object...0000247D9EE5220>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x00000247D9EE5380>})
+
+    def test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not(
+        world: World,
+    ) -> None:
+        scenarios = [
+            {"name": "skip_weekdays", "params": {"days": ["monday"]}},
+            {"name": "skip_weekdays", "params": {"days": ["friday"]}},
+            {"name": "drop_top_trades", "params": {"fraction": "0.25"}},
+            {"name": "drop_top_trades", "params": {"fraction": "1"}},
+        ]
+    
+        _, landed = job(world, "whatif", scenarios=scenarios)
+    
+        rows = counted(world, landed["run_id"])
+        assert landed["status"] == "finished"
+        assert [(r["kind"], r["run_id"].rsplit("/", 1)[1]) for r in rows] == [
+            ("whatif_rerun", "1-skip_weekdays"),
+            ("whatif_rerun", "2-skip_weekdays"),
+        ]
+>       assert [
+            (s["name"], s["direction"], s["answer"], s["value"])
+            for s in landed["measures"]["scenarios"]
+        ] == [
+            ("1-skip_weekdays", "may_improve", "measured", "-0.04328333333333333333333333333"),
+            ("2-skip_weekdays", "may_improve", "measured", "-0.3834142857142857142857142857"),
+            ("3-drop_top_trades", "worsen_only", "measured", "-0.7808666666666666666666666667"),
+            ("4-drop_top_trades", "worsen_only", "no_trades", None),
+        ]
+E       AssertionError: assert [('1-skip_weekdays', 'may_improve', 'measured', '-0.04721666666666666666666666667'), ('2-skip_weekdays', 'may_improve', 'measured', '-0.3850142857142857142857142857'), ('3-drop_top_trades', 'worsen_only', 'measured', '-0.7827333333333333333333333333'), ('4-drop_top_trades', 'worsen_only', 'no_trades', None)] == [('1-skip_weekdays', 'may_improve', 'measured', '-0.04328333333333333333333333333'), ('2-skip_weekdays', 'may_improve', 'measured', '-0.3834142857142857142857142857'), ('3-drop_top_trades', 'worsen_only', 'measured', '-0.7808666666666666666666666667'), ('4-drop_top_trades', 'worsen_only', 'no_trades', None)]
+E         
+E         At index 0 diff: ('1-skip_weekdays', 'may_improve', 'measured', '-0.04721666666666666666666666667') != ('1-skip_weekdays', 'may_improve', 'measured', '-0.04328333333333333333333333333')
+E         
+E         Full diff:
+E           [
+E               (
+E                   '1-skip_weekdays',
+E                   'may_improve',
+E                   'measured',
+E         -         '-0.04328333333333333333333333333',
+E         +         '-0.04721666666666666666666666667',
+E               ),
+E               (
+E                   '2-skip_weekdays',
+E                   'may_improve',
+E                   'measured',
+E         -         '-0.3834142857142857142857142857',
+E         ?               ^^
+E         +         '-0.3850142857142857142857142857',
+E         ?               ^^
+E               ),
+E               (
+E                   '3-drop_top_trades',
+E                   'worsen_only',
+E                   'measured',
+E         -         '-0.7808666666666666666666666667',
+E         +         '-0.7827333333333333333333333333',
+E               ),
+E               (
+E                   '4-drop_top_trades',
+E                   'worsen_only',
+E                   'no_trades',
+E                   None,
+E               ),
+E           ]
+
+apps\qmb\tests\test_qmb_run_kinds.py:251: AssertionError
+__________ test_a_six_cell_sweep_lands_six_tries_in_the_units_family __________
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x00000126690F2660>, store=<qmx_library.store.Store object...00001260B4C9220>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x000001260B4C9380>})
+
+    def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> None:
+        grid = {
+            "markets": ["fx.eurusd", "metal.xauusd"],
+            "numbers": {"ema_period": ["50", "100", "150"]},
+        }
+    
+        result, landed = job(world, "sweep", grid=grid)
+    
+        run_id = landed["run_id"]
+        [opened] = [
+            i
+            for i in world.store.with_field("try", "run_id", run_id)
+            if fields(world.store, i)["state"] == "opened"
+        ]
+        family = fields(world.store, opened)["family"]
+        rows = counted(world, run_id)
+        assert (landed["status"], landed["kind"]) == ("finished", "sweep")
+        assert [(r["kind"], r["state"], r["market"]) for r in rows] == [
+            ("run", "recorded", "fx.eurusd"),
+            ("run", "recorded", "fx.eurusd"),
+            ("run", "recorded", "fx.eurusd"),
+            ("run", "recorded", "metal.xauusd"),
+            ("run", "recorded", "metal.xauusd"),
+            ("run", "recorded", "metal.xauusd"),
+        ]
+        assert {(r["family"], r["principal"], tuple(r["links"])) for r in rows} == {
+            (family, CHAT, (opened, result))
+        }
+        cells = report(world, result)["cells"]
+        assert "trades" not in report(world, result)
+        assert [(c["markets"], c["numbers"], c["status"]) for c in cells][:2] == [
+            (["fx.eurusd"], {"ema_period": "50"}, "finished"),
+            (["fx.eurusd"], {"ema_period": "100"}, "finished"),
+        ]
+        assert len({c["compiled_fp"] for c in cells}) == 6
+>       assert [(c["trades"], c["total_r"]) for c in cells] == [
+            (3, "-1.6852"),
+            (6, "-3.2610"),
+            (4, "-1.8102"),
+            (3, "0.0013"),
+            (2, "1.0013"),
+            (3, "-1.0258"),
+        ]
+E       AssertionError: assert [(3, '-1.6964'), (6, '-3.2846'), (4, '-1.8180'), (3, '0.0013'), (2, '1.0013'), (3, '-1.0258')] == [(3, '-1.6852'), (6, '-3.2610'), (4, '-1.8102'), (3, '0.0013'), (2, '1.0013'), (3, '-1.0258')]
+E         
+E         At index 0 diff: (3, '-1.6964') != (3, '-1.6852')
+E         
+E         Full diff:
+E           [
+E               (
+E                   3,
+E         -         '-1.6852',
+E         ?              ^^^
+E         +         '-1.6964',
+E         ?              ^^^
+E               ),
+E               (
+E                   6,
+E         -         '-3.2610',
+E         ?               --
+E         +         '-3.2846',
+E         ?              ++
+E               ),
+E               (
+E                   4,
+E         -         '-1.8102',
+E         ?                -
+E         +         '-1.8180',
+E         ?               +
+E               ),
+E               (
+E                   3,
+E                   '0.0013',
+E               ),
+E               (
+E                   2,
+E                   '1.0013',
+E               ),
+E               (
+E                   3,
+E                   '-1.0258',
+E               ),
+E           ]
+
+apps\qmb\tests\test_qmb_run_kinds.py:183: AssertionError
+____ test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason _____
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x00000126690F2660>, store=<qmx_library.store.Store object...00001260B4C9220>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x000001260B4C9380>})
+
+    def test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason(world: World) -> None:
+        improves = [{"name": "cost_shock", "params": {"extra_r": "-0.5"}}]
+    
+        with pytest.raises(ControlError) as refused:
+            world.control.app_job(
+                "qmb",
+                "jobs/whatif.py",
+                inputs=cast("Any", {"unit": world.dummy, **MARCH, "scenarios": improves}),
+                principal=CHAT,
+            )
+    
+        failed = [
+            fields(world.store, i)
+            for i in world.store.with_field("backtest-result", "kind", "whatif")
+            if fields(world.store, i)["status"] == "failed"
+        ]
+        assert refused.value.code == "result_refused"
+>       assert str(refused.value) == WORSEN_REFUSAL
+E       AssertionError: assert 'scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2854125 to 0.2145875; a scenario that can improve a result is a counted rerun' == 'scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2824625 to 0.2175375; a scenario that can improve a result is a counted rerun'
+E         
+E         - scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2824625 to 0.2175375; a scenario that can improve a result is a counted rerun
+E         ?                                                                                   ^ ^          ^ ^
+E         + scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2854125 to 0.2145875; a scenario that can improve a result is a counted rerun
+E         ?                                                                                   ^ ^          ^ ^
+
+apps\qmb\tests\test_qmb_run_kinds.py:222: AssertionError
+__________ test_the_judge_reads_each_check_from_the_run_of_that_kind __________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x00000247B7AF2660>, store=<qmx_library.store.Store object...0000247D9EE5220>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x00000247D9EE5380>})
+
+    def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> None:
+        backtest = world.tools["backtest_run"](unit=world.dummy, **MARCH)["result"]["result_id"]
+        walked, walk = job(world, "walk_forward", split={"folds": 3}, ranges=EMA_RANGE)
+        stressed, robust = job(world, "robustness", resamples=50)
+    
+        verdict = world.tools["backtest_judge_run"](results=[backtest, walked, stressed])
+    
+        folds = counted(world, walk["run_id"])
+        assert [r["run_id"].rsplit("/", 1)[1] for r in folds] == ["fold-1", "fold-2", "fold-3"]
+        assert {m: row["efficiency"] for m, row in walk["measures"]["walk_forward"].items()} == {
+            "fx.eurusd": "0.0000"
+        }
+        assert [(f["pick"], f["out_of_sample_trades"]) for f in report(world, walked)["folds"]] == [
+            (None, 0),
+            (None, 0),
+            ("cell-03", 5),
+        ]
+        assert report(world, walked)["walk_forward_unmeasured"] == (
+            "no fold had a candidate with an in-sample Sharpe to pick on metal.xauusd"
+        )
+>       assert robust["measures"]["random_entries"] == {
+            "fx.eurusd": {
+                "edge_ratio": "0.4048",
+                "p": "0.7059",
+                "trades": 6,
+                "horizon_bars": 20,
+                "resamples": 50,
+                "window": MARCH["window"],
+            },
+            "metal.xauusd": {
+                "edge_ratio": "1.0572",
+                "p": "0.7255",
+                "trades": 2,
+                "horizon_bars": 20,
+                "resamples": 50,
+                "window": MARCH["window"],
+            },
+        }
+E       AssertionError: assert {'fx.eurusd': {'edge_ratio': '0.4037', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}, 'metal.xauusd': {'edge_ratio': '1.0572', 'p': '0.7255', 'trades': 2, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}} == {'fx.eurusd': {'edge_ratio': '0.4048', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}, 'metal.xauusd': {'edge_ratio': '1.0572', 'p': '0.7255', 'trades': 2, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}}
+E         
+E         Common items:
+E         {'metal.xauusd': {'edge_ratio': '1.0572',
+E                           'horizon_bars': 20,
+E                           'p': '0.7255',
+E                           'resamples': 50,
+E                           'trades': 2,
+E                           'window': {'end': '2025-04-01', 'start': '2025-03-01'}}}
+E         Differing items:
+E         {'fx.eurusd': {'edge_ratio': '0.4037', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, ...}} != {'fx.eurusd': {'edge_ratio': '0.4048', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, ...}}
+E         
+E         Full diff:
+E           {
+E               'fx.eurusd': {
+E         -         'edge_ratio': '0.4048',
+E         ?                            ^^
+E         +         'edge_ratio': '0.4037',
+E         ?                            ^^
+E                   'p': '0.7059',
+E                   'trades': 6,
+E                   'horizon_bars': 20,
+E                   'resamples': 50,
+E                   'window': {
+E                       'start': '2025-03-01',
+E                       'end': '2025-04-01',
+E                   },
+E               },
+E               'metal.xauusd': {
+E                   'edge_ratio': '1.0572',
+E                   'p': '0.7255',
+E                   'trades': 2,
+E                   'horizon_bars': 20,
+E                   'resamples': 50,
+E                   'window': {
+E                       'start': '2025-03-01',
+E                       'end': '2025-04-01',
+E                   },
+E               },
+E           }
+
+apps\qmb\tests\test_qmb_run_kinds.py:304: AssertionError
+_____________ test_a_stated_cost_profile_changes_money_and_not_r ______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x00000247D9DEF750>, store=<qmx_library.store.Store object...04D170>}, 'readings': {'readings_query': <function readings_functions.<locals>.readings_query at 0x00000247DA04D2D0>}})
+
+    def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
+        profile = a_stated_profile(world, "3.50")
+    
+        plain = landed_of(world, job(world, unit=world.dummy, **GAPS))
+        costed = landed_of(world, job(world, unit=world.dummy, **GAPS, cost_profile=profile))
+    
+        rows = report(world.store, costed["id"])
+        laid = run_folder(world, costed["run_id"]) / "in"
+>       assert (plain["measures"]["total_r"], costed["measures"]["total_r"]) == ("-2.2597", "-2.2597")
+E       AssertionError: assert ('-2.2833', '-2.2833') == ('-2.2597', '-2.2597')
+E         
+E         At index 0 diff: '-2.2833' != '-2.2597'
+E         
+E         Full diff:
+E           (
+E         -     '-2.2597',
+E         ?          ^^^
+E         +     '-2.2833',
+E         ?          ^^^
+E         -     '-2.2597',
+E         ?          ^^^
+E         +     '-2.2833',
+E         ?          ^^^
+E           )
+
+apps\qmb\tests\test_run_honesty.py:130: AssertionError
+=========================== short test summary info ===========================
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not - AssertionError: assert [('1-skip_weekdays', 'may_improve', 'measured', '-0.04721666666666666666666666667'), ('2-skip_weekdays', 'may_improve', 'measured', '-0.3850142857142857142857142857'), ('3-drop_top_trades', 'worsen_only', 'measured', '-0.7827333333333333333333333333'), ('4-drop_top_trades', 'worsen_only', 'no_trades', None)] == [('1-skip_weekdays', 'may_improve', 'measured', '-0.04328333333333333333333333333'), ('2-skip_weekdays', 'may_improve', 'measured', '-0.3834142857142857142857142857'), ('3-drop_top_trades', 'worsen_only', 'measured', '-0.7808666666666666666666666667'), ('4-drop_top_trades', 'worsen_only', 'no_trades', None)]
+  
+  At index 0 diff: ('1-skip_weekdays', 'may_improve', 'measured', '-0.04721666666666666666666666667') != ('1-skip_weekdays', 'may_improve', 'measured', '-0.04328333333333333333333333333')
+  
+  Full diff:
+    [
+        (
+            '1-skip_weekdays',
+            'may_improve',
+            'measured',
+  -         '-0.04328333333333333333333333333',
+  +         '-0.04721666666666666666666666667',
+        ),
+        (
+            '2-skip_weekdays',
+            'may_improve',
+            'measured',
+  -         '-0.3834142857142857142857142857',
+  ?               ^^
+  +         '-0.3850142857142857142857142857',
+  ?               ^^
+        ),
+        (
+            '3-drop_top_trades',
+            'worsen_only',
+            'measured',
+  -         '-0.7808666666666666666666666667',
+  +         '-0.7827333333333333333333333333',
+        ),
+        (
+            '4-drop_top_trades',
+            'worsen_only',
+            'no_trades',
+            None,
+        ),
+    ]
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_six_cell_sweep_lands_six_tries_in_the_units_family - AssertionError: assert [(3, '-1.6964'), (6, '-3.2846'), (4, '-1.8180'), (3, '0.0013'), (2, '1.0013'), (3, '-1.0258')] == [(3, '-1.6852'), (6, '-3.2610'), (4, '-1.8102'), (3, '0.0013'), (2, '1.0013'), (3, '-1.0258')]
+  
+  At index 0 diff: (3, '-1.6964') != (3, '-1.6852')
+  
+  Full diff:
+    [
+        (
+            3,
+  -         '-1.6852',
+  ?              ^^^
+  +         '-1.6964',
+  ?              ^^^
+        ),
+        (
+            6,
+  -         '-3.2610',
+  ?               --
+  +         '-3.2846',
+  ?              ++
+        ),
+        (
+            4,
+  -         '-1.8102',
+  ?                -
+  +         '-1.8180',
+  ?               +
+        ),
+        (
+            3,
+            '0.0013',
+        ),
+        (
+            2,
+            '1.0013',
+        ),
+        (
+            3,
+            '-1.0258',
+        ),
+    ]
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason - AssertionError: assert 'scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2854125 to 0.2145875; a scenario that can improve a result is a counted rerun' == 'scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2824625 to 0.2175375; a scenario that can improve a result is a counted rerun'
+  
+  - scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2824625 to 0.2175375; a scenario that can improve a result is a counted rerun
+  ?                                                                                   ^ ^          ^ ^
+  + scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2854125 to 0.2145875; a scenario that can improve a result is a counted rerun
+  ?                                                                                   ^ ^          ^ ^
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_the_judge_reads_each_check_from_the_run_of_that_kind - AssertionError: assert {'fx.eurusd': {'edge_ratio': '0.4037', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}, 'metal.xauusd': {'edge_ratio': '1.0572', 'p': '0.7255', 'trades': 2, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}} == {'fx.eurusd': {'edge_ratio': '0.4048', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}, 'metal.xauusd': {'edge_ratio': '1.0572', 'p': '0.7255', 'trades': 2, 'horizon_bars': 20, 'resamples': 50, 'window': {'start': '2025-03-01', 'end': '2025-04-01'}}}
+  
+  Common items:
+  {'metal.xauusd': {'edge_ratio': '1.0572',
+                    'horizon_bars': 20,
+                    'p': '0.7255',
+                    'resamples': 50,
+                    'trades': 2,
+                    'window': {'end': '2025-04-01', 'start': '2025-03-01'}}}
+  Differing items:
+  {'fx.eurusd': {'edge_ratio': '0.4037', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, ...}} != {'fx.eurusd': {'edge_ratio': '0.4048', 'p': '0.7059', 'trades': 6, 'horizon_bars': 20, ...}}
+  
+  Full diff:
+    {
+        'fx.eurusd': {
+  -         'edge_ratio': '0.4048',
+  ?                            ^^
+  +         'edge_ratio': '0.4037',
+  ?                            ^^
+            'p': '0.7059',
+            'trades': 6,
+            'horizon_bars': 20,
+            'resamples': 50,
+            'window': {
+                'start': '2025-03-01',
+                'end': '2025-04-01',
+            },
+        },
+        'metal.xauusd': {
+            'edge_ratio': '1.0572',
+            'p': '0.7255',
+            'trades': 2,
+            'horizon_bars': 20,
+            'resamples': 50,
+            'window': {
+                'start': '2025-03-01',
+                'end': '2025-04-01',
+            },
+        },
+    }
+FAILED apps/qmb/tests/test_run_honesty.py::test_a_stated_cost_profile_changes_money_and_not_r - AssertionError: assert ('-2.2833', '-2.2833') == ('-2.2597', '-2.2597')
+  
+  At index 0 diff: '-2.2833' != '-2.2597'
+  
+  Full diff:
+    (
+  -     '-2.2597',
+  ?          ^^^
+  +     '-2.2833',
+  ?          ^^^
+  -     '-2.2597',
+  ?          ^^^
+  +     '-2.2833',
+  ?          ^^^
+    )
+======================== 5 failed in 315.22s (0:05:15) ========================
+EXIT=1
+
+
+=== B derive-bars after | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest packages/qmx-tools/tests/test_derive_bars.py -q
+bringing up nodes...
+bringing up nodes...
+
+...                                                                      [100%]
+3 passed in 46.79s
+EXIT=0
+
+
+=== B qmb app after pins | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest apps/qmb/tests/test_qmb_run_kinds.py apps/qmb/tests/test_run_honesty.py -q
+bringing up nodes...
+bringing up nodes...
+
+.....FF...........................                                       [100%]
+================================== FAILURES ===================================
+_____________ test_a_stated_cost_profile_changes_money_and_not_r ______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x000002543651CD70>, store=<qmx_library.store.Store object...6738A0>}, 'readings': {'readings_query': <function readings_functions.<locals>.readings_query at 0x0000025436673A00>}})
+
+    def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
+        profile = a_stated_profile(world, "3.50")
+    
+        plain = landed_of(world, job(world, unit=world.dummy, **GAPS))
+        costed = landed_of(world, job(world, unit=world.dummy, **GAPS, cost_profile=profile))
+    
+        rows = report(world.store, costed["id"])
+        laid = run_folder(world, costed["run_id"]) / "in"
+        assert (plain["measures"]["total_r"], costed["measures"]["total_r"]) == ("-2.2833", "-2.2833")
+>       assert (plain["measures"]["net_money"], costed["measures"]["net_money"]) == (
+            "-114.97",
+            "-161.39",
+        )
+E       AssertionError: assert ('-116.12', '-160.39') == ('-114.97', '-161.39')
+E         
+E         At index 0 diff: '-116.12' != '-114.97'
+E         Use -v to get more diff
+
+apps\qmb\tests\test_run_honesty.py:144: AssertionError
+__________ test_the_judge_reads_each_check_from_the_run_of_that_kind __________
+[gw0] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+world = World(control=<qmx_control.service.ControlService object at 0x000001A3CA67CD70>, store=<qmx_library.store.Store object...00001A3CA83D590>, 'backtest_judge_run': <function domain_functions.<locals>.backtest_judge_run at 0x000001A3CA83D6F0>})
+
+    def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> None:
+        backtest = world.tools["backtest_run"](unit=world.dummy, **MARCH)["result"]["result_id"]
+        walked, walk = job(world, "walk_forward", split={"folds": 3}, ranges=EMA_RANGE)
+        stressed, robust = job(world, "robustness", resamples=50)
+    
+        verdict = world.tools["backtest_judge_run"](results=[backtest, walked, stressed])
+    
+        folds = counted(world, walk["run_id"])
+        assert [r["run_id"].rsplit("/", 1)[1] for r in folds] == ["fold-1", "fold-2", "fold-3"]
+        assert {m: row["efficiency"] for m, row in walk["measures"]["walk_forward"].items()} == {
+            "fx.eurusd": "0.0000"
+        }
+        assert [(f["pick"], f["out_of_sample_trades"]) for f in report(world, walked)["folds"]] == [
+            (None, 0),
+            (None, 0),
+            ("cell-03", 5),
+        ]
+        assert report(world, walked)["walk_forward_unmeasured"] == (
+            "no fold had a candidate with an in-sample Sharpe to pick on metal.xauusd"
+        )
+        assert robust["measures"]["random_entries"] == {
+            "fx.eurusd": {
+                "edge_ratio": "0.4037",
+                "p": "0.7059",
+                "trades": 6,
+                "horizon_bars": 20,
+                "resamples": 50,
+                "window": MARCH["window"],
+            },
+            "metal.xauusd": {
+                "edge_ratio": "1.0572",
+                "p": "0.7255",
+                "trades": 2,
+                "horizon_bars": 20,
+                "resamples": 50,
+                "window": MARCH["window"],
+            },
+        }
+>       assert robust["measures"]["cost_stress"] == {
+            "fx.eurusd": {
+                "multiplier": "1.5",
+                "expectancy_r": "-0.5657",
+                "base_expectancy_r": "-0.5435",
+                "trades": 6,
+                "window": MARCH["window"],
+            },
+            "metal.xauusd": {
+                "multiplier": "1.5",
+                "expectancy_r": "0.4733",
+                "base_expectancy_r": "0.5006",
+                "trades": 2,
+                "window": MARCH["window"],
+            },
+        }
+E       AssertionError: assert {'fx.eurusd':...des': 2, ...}} == {'fx.eurusd':...des': 2, ...}}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'fx.eurusd': {'multiplier': '1.5', 'expectancy_r': '-0.5685', 'base_expectancy_r': '-0.5474', 'trades': 6, ...}} != {'fx.eurusd': {'multiplier': '1.5', 'expectancy_r': '-0.5657', 'base_expectancy_r': '-0.5435', 'trades': 6, ...}}
+E         Use -v to get more diff
+
+apps\qmb\tests\test_qmb_run_kinds.py:322: AssertionError
+=========================== short test summary info ===========================
+FAILED apps/qmb/tests/test_run_honesty.py::test_a_stated_cost_profile_changes_money_and_not_r
+FAILED apps/qmb/tests/test_qmb_run_kinds.py::test_the_judge_reads_each_check_from_the_run_of_that_kind
+2 failed, 32 passed in 348.22s (0:05:48)
+EXIT=1
+
+
+=== B cost-profile probe | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python evidence/rc-20/probe_cost.py
+total_r -2.2833 -2.2833
+net_money -116.12 -160.39
+trades_r_equal True
+cash_events 16
+trades_cash -45.22
+costs_uncalibrated True
+cost_profile True
+cost_fills {
+  "account_type": "raw",
+  "broker": "ic",
+  "fills": 0,
+  "hours": [
+    {
+  
+EXIT=0
+
+
+=== B qmb app after all pins | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest apps/qmb/tests/test_qmb_run_kinds.py apps/qmb/tests/test_run_honesty.py -q
+bringing up nodes...
+bringing up nodes...
+
+..................................                                       [100%]
+34 passed in 281.48s (0:04:41)
+EXIT=0
+
+
+=== B fmt/lint qmx-agents | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --no-sync python -m poethepoet fmt-check ; lint
+Poe => ruff format --check packages examples
+13 files already formatted
+EXIT=0
+Poe => ruff check packages examples
+All checks passed!
+warning: No Python files found under the given path(s)
+EXIT=0
+
+
+=== C lifecycle before | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______ test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing ________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+store = <qmx_host.host.HostStore object at 0x0000022797C4A510>
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-309/popen-gw1/test_the_writer_refuses_a_move0')
+
+    def test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing(
+        store: HostStore, tmp_path: Path
+    ) -> None:
+        writer = cast(LifecycleWriter, store.lifecycle)
+        unit = cast(str, land_dummy(store))
+        judge_to_paper = move(unit, State.PAPER, Actor(ActorKind.JUDGE, "agent:chat"))
+    
+        with pytest.raises(MoveRefused) as refused:
+            writer.record_move(judge_to_paper)
+    
+>       assert (refused.value.refusal, str(refused.value)) == (
+            Refusal.NOT_OPERATOR,
+            "only his click moves a unit to paper",
+        )
+E       AssertionError: assert (<Refusal.NOT... it to paper') == (<Refusal.NOT...nit to paper')
+E         
+E         At index 1 diff: 'only his click promotes a unit to paper; a risk rule may only send it to paper' != 'only his click moves a unit to paper'
+E         Use -v to get more diff
+
+tests\test_lifecycle.py:179: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing
+1 failed in 24.70s
+EXIT=1
+
+
+=== C lifecycle after | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 31.78s
+EXIT=0
+
+
+=== D types-root | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== D fmt-check-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+unformatted: File would be reformatted
+   --> tests\test_k7_rehearsal.py:92:67
+   |
+91 |     }
+   -     assert (card["venue"], card["world"], card["venue_kind"]) == (SHIPPED_VENUE, "paper", "practice")
+92 +     assert (card["venue"], card["world"], card["venue_kind"]) == (
+93 +         SHIPPED_VENUE,
+94 +         "paper",
+95 +         "practice",
+96 +     )
+97 |     assert (unit_card["world"], unit_card["venue_kind"]) == ("paper", "practice")
+   |
+
+1 file would be reformatted, 104 files already formatted
+EXIT=1
+
+
+=== D lint-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests\k7_rehearsal.py:38:1
+   |
+36 |       sys.path.insert(0, str(QMN_TESTS))
+37 |
+38 | / import test_app_binding as broker  # noqa: E402 - qmn's fake broker lives with qmn's rig
+39 | |
+40 | | from qmx_control.service import ControlService, WorkflowEngine  # noqa: E402
+41 | | from qmx_engine.ledger import redact  # noqa: E402
+42 | | from qmx_host.host import LanderLibrary, landers, register_checkers  # noqa: E402
+43 | | from qmx_host.lifecycle import LifecycleWriter  # noqa: E402
+44 | | from qmx_host.node_link import NodeLink  # noqa: E402
+45 | | from qmx_host.practice_start import practice_start  # noqa: E402
+46 | | from qmx_host.promote import (  # noqa: E402
+47 | |     AccountRef,
+48 | |     Click,
+49 | |     NodeRef,
+50 | |     Promoter,
+51 | |     UnitRef,
+52 | |     harvested_calibrations,
+53 | | )
+54 | | from qmx_host.venue_records import Stated, land, stated  # noqa: E402
+55 | | from qmx_library.store import Store  # noqa: E402
+56 | | from qmx_tools.functions import domain_functions  # noqa: E402
+57 | | from qmx_tools.service import DomainContext  # noqa: E402
+58 | |
+59 | | from qmn.app.practice import ACCOUNT as PRACTICE_ACCOUNT  # noqa: E402
+60 | | from qmn.app.practice import PRACTICE  # noqa: E402
+61 | | from qmn.app.runtime import Phase  # noqa: E402
+   | |_________________________________^
+62 |
+63 |   APP = REPO / "qmx-agents" / "apps" / "qmb"
+   |
+help: Organize imports
+   |
+38 | import test_app_binding as broker  # noqa: E402 - qmn's fake broker lives with qmn's rig
+   -
+39 + from qmn.app.practice import ACCOUNT as PRACTICE_ACCOUNT  # noqa: E402
+40 + from qmn.app.practice import PRACTICE  # noqa: E402
+41 + from qmn.app.runtime import Phase  # noqa: E402
+42 | from qmx_control.service import ControlService, WorkflowEngine  # noqa: E402
+43 | from qmx_engine.ledger import redact  # noqa: E402
+44 + from qmx_library.store import Store  # noqa: E402
+45 + from qmx_tools.functions import domain_functions  # noqa: E402
+46 + from qmx_tools.service import DomainContext  # noqa: E402
+47 +
+48 | from qmx_host.host import LanderLibrary, landers, register_checkers  # noqa: E402
+--------------------------------------------------------------------------------
+60 | from qmx_host.venue_records import Stated, land, stated  # noqa: E402
+   - from qmx_library.store import Store  # noqa: E402
+   - from qmx_tools.functions import domain_functions  # noqa: E402
+   - from qmx_tools.service import DomainContext  # noqa: E402
+   -
+   - from qmn.app.practice import ACCOUNT as PRACTICE_ACCOUNT  # noqa: E402
+   - from qmn.app.practice import PRACTICE  # noqa: E402
+   - from qmn.app.runtime import Phase  # noqa: E402
+61 |
+   |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests\test_k7_rehearsal.py:8:1
+   |
+ 6 |   """
+ 7 |
+ 8 | / from __future__ import annotations
+ 9 | |
+10 | | import time
+11 | | from collections.abc import Mapping
+12 | | from decimal import Decimal
+13 | | from pathlib import Path
+14 | | from typing import Any, cast
+15 | |
+16 | | import pytest
+17 | | import test_feed_relay as relay
+18 | | from qmf.core import is_refusal
+19 | | from qmn.app.feed_keeper import FeedKeeper
+20 | | from qmn.app.practice import ACCOUNT, PRACTICE, SHIPPED_VENUE, Month, stated, venue
+21 | | from qmn.app.runtime import Phase, Runtime
+22 | | from qmn.app.server import Node, open_node
+23 | |
+24 | | import k7_rehearsal
+25 | | from k7_rehearsal import DAY, LIVE_FROM
+   | |_______________________________________^
+26 |
+27 |   STEPS = [
+   |
+help: Organize imports
+   |
+15 |
+16 + import k7_rehearsal
+17 | import pytest
+18 | import test_feed_relay as relay
+19 + from k7_rehearsal import DAY, LIVE_FROM
+20 | from qmf.core import is_refusal
+--------------------------------------------------------------------------------
+24 | from qmn.app.server import Node, open_node
+   -
+   - import k7_rehearsal
+   - from k7_rehearsal import DAY, LIVE_FROM
+25 |
+   |
+
+E501 Line too long (101 > 100)
+  --> tests\test_k7_rehearsal.py:92:101
+   |
+90 |         "practice"
+91 |     }
+92 |     assert (card["venue"], card["world"], card["venue_kind"]) == (SHIPPED_VENUE, "paper", "practice")
+   |                                                                                                     ^
+93 |     assert (unit_card["world"], unit_card["venue_kind"]) == ("paper", "practice")
+94 |     assert stated(object()) == {}
+   |
+
+Found 3 errors.
+[*] 2 fixable with the `--fix` option.
+EXIT=1
+
+
+=== D types-qmx-judge | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-judge | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-judge\tests\test_conformance.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-judge\tests\test_conformance.py:430:28 - error: "_lighten" is private and used outside of the module in which it is declared (reportPrivateUsage)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-judge\tests\test_conformance.py:431:21 - error: "_lighten" is private and used outside of the module in which it is declared (reportPrivateUsage)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-judge\tests\test_conformance.py:440:25 - error: "_lighten" is private and used outside of the module in which it is declared (reportPrivateUsage)
+3 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=1
+
+
+=== D qmx-host fix | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=ruff check --fix + ruff format on the two k7 files
+E501 Line too long (101 > 100)
+  --> tests\test_k7_rehearsal.py:91:101
+   |
+89 |         "practice"
+90 |     }
+91 |     assert (card["venue"], card["world"], card["venue_kind"]) == (SHIPPED_VENUE, "paper", "practice")
+   |                                                                                                     ^
+92 |     assert (unit_card["world"], unit_card["venue_kind"]) == ("paper", "practice")
+93 |     assert stated(object()) == {}
+   |
+
+Found 3 errors (2 fixed, 1 remaining).
+EXIT=1
+1 file reformatted, 1 file left unchanged
+EXIT=0
+
+
+=== D fmt-check-qmx-host after fix | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+105 files already formatted
+EXIT=0
+
+
+=== D lint-qmx-host after fix | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+EXIT=0
+
+
+=== D types-qmx-judge after fix | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-judge | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== D types-qmx-host after fix | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\app_logs.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\app_logs.py:102:37 - error: Argument of type "dict[str, JsonValue] | dict[str, str]" cannot be assigned to parameter "fields" of type "dict[str, JsonValue]" in function "_read_event"
+    Type "dict[str, JsonValue] | dict[str, str]" is not assignable to type "dict[str, JsonValue]"
+      "dict[str, str]" is not assignable to "dict[str, JsonValue]"
+        Type parameter "_VT@dict" is invariant, but "str" is not the same as "JsonValue"
+        Consider switching from "dict" to "Mapping" which is covariant in the value type (reportArgumentType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:9 - error: Type of "profiles" is partially unknown
+    Type of "profiles" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:19 - error: Type of "funding" is partially unknown
+    Type of "funding" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:26 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:55 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2203:52 - error: Operator "not in" not supported for types "str" and "Any | object | dict[Unknown, Unknown]"
+    Operator "not in" not supported for types "str" and "object" (reportOperatorIssue)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2206:33 - error: Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "profiles" of type "Mapping[str, JsonObject]" in function "__init__"
+    Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, JsonObject]"
+      "object" is not assignable to "Mapping[str, JsonObject]" (reportArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2206:43 - error: Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "funding" of type "Mapping[str, str]" in function "__init__"
+    Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, str]"
+      "object" is not assignable to "Mapping[str, str]" (reportArgumentType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:38:8 - error: Import "test_app_binding" could not be resolved (reportMissingImports)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:191:5 - error: Type of "rig" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:192:49 - error: Argument type is unknown
+    Argument corresponds to parameter "rig" in function "_click" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:193:13 - error: Type of "data" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:193:13 - error: Argument type is unknown
+    Argument corresponds to parameter "data" in function "_staged" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:194:11 - error: Argument type is unknown
+    Argument corresponds to parameter "rig" in function "_warm" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:195:31 - error: Argument type is unknown
+    Argument corresponds to parameter "rig" in function "_filled" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:205:5 - error: Return type, "tuple[Unknown, int]", is partially unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:205:34 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:207:5 - error: Type of "made" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:207:12 - error: Type of "bound_rig" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:208:48 - error: Type of "FakeCTrader" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:208:67 - error: Type of "codec" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:210:5 - error: Type of "signed_in" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:211:5 - error: Type of "bind" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:5 - error: Type of "feed" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:12 - error: Type of "runtime" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:12 - error: Type of "venues" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:12 - error: Type of "feed" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:9 - error: Type of "at" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:13 - error: Type of "market" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:21 - error: Type of "bar" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:28 - error: Type of "base" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:28 - error: Type of "month" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:28 - error: Type of "bars" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:215:13 - error: Type of "recording" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:215:13 - error: Type of "keep" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:216:5 - error: Type of "tick_quotes" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:217:12 - error: Type of "ready" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:217:24 - error: Type of "reason" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:12 - error: Return type, "tuple[Unknown, int]", is partially unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:22 - error: Type of "recording" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:22 - error: Type of "recent" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:22 - error: Argument type is unknown
+    Argument corresponds to parameter "obj" in function "len" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:229:31 - error: Type of parameter "rig" is unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:229:36 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:234:39 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:234:39 - error: Type of "call" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:236:11 - error: Cannot assign to attribute "lifecycle" for class "Store"
+    Attribute "lifecycle" is unknown (reportAttributeAccessIssue)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:243:41 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:246:27 - error: Type of "now" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:246:27 - error: Return type of lambda is unknown (reportUnknownLambdaType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:286:11 - error: Type of parameter "rig" is unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:286:16 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:288:5 - error: Type of "runtime" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:288:15 - error: Type of "runtime" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:291:9 - error: Type of "tick" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:292:9 - error: Type of "hosted" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:292:18 - error: Type of "hosted" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:292:18 - error: Type of "get" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:293:35 - error: Type of "phase" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:294:13 - error: Type of "unit" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:294:20 - error: Type of "unit" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:33 - error: Type of "warm_seen" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:33 - error: Argument type is unknown
+    Argument corresponds to parameter "arg1" in function "min" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:49 - error: Type of "warm_needed" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:49 - error: Argument type is unknown
+    Argument corresponds to parameter "arg2" in function "min" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:69 - error: Type of "warm_needed" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:309:5 - error: Type of parameter "rig" is unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:309:10 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:312:5 - error: Type of "runtime" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:312:15 - error: Type of "runtime" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:313:14 - error: Type of "now" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:313:14 - error: Argument type is unknown
+    Argument corresponds to parameter "arg1" in function "max" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:317:9 - error: Type of "play_spots" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:320:37 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:330:30 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:340:5 - error: Type of "stop" is unknown (reportUnknownMemberType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_app_logs.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_app_logs.py:47:2 - error: The function "contextmanager" is deprecated
+    Annotating the return type as `-> Iterator[Foo]` with `@contextmanager` is deprecated. Use `-> Generator[Foo]` instead. (reportDeprecated)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:190:45 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "setattr"
+    Argument type is "(_settings: Unknown) -> ClockFacts" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:190:52 - error: Type of parameter "_settings" is unknown (reportUnknownLambdaType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:199:17 - error: Unnecessary "cast" call; type is already "Any" (reportUnnecessaryCast)
+80 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=1
+
+
+=== D types-qmx-host with sync | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run python -m poethepoet types
+Poe => python -m pyright
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\app_logs.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\app_logs.py:102:37 - error: Argument of type "dict[str, JsonValue] | dict[str, str]" cannot be assigned to parameter "fields" of type "dict[str, JsonValue]" in function "_read_event"
+    Type "dict[str, JsonValue] | dict[str, str]" is not assignable to type "dict[str, JsonValue]"
+      "dict[str, str]" is not assignable to "dict[str, JsonValue]"
+        Type parameter "_VT@dict" is invariant, but "str" is not the same as "JsonValue"
+        Consider switching from "dict" to "Mapping" which is covariant in the value type (reportArgumentType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:9 - error: Type of "profiles" is partially unknown
+    Type of "profiles" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:19 - error: Type of "funding" is partially unknown
+    Type of "funding" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:26 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:55 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2203:52 - error: Operator "not in" not supported for types "str" and "Any | object | dict[Unknown, Unknown]"
+    Operator "not in" not supported for types "str" and "object" (reportOperatorIssue)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2206:33 - error: Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "profiles" of type "Mapping[str, JsonObject]" in function "__init__"
+    Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, JsonObject]"
+      "object" is not assignable to "Mapping[str, JsonObject]" (reportArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2206:43 - error: Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "funding" of type "Mapping[str, str]" in function "__init__"
+    Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, str]"
+      "object" is not assignable to "Mapping[str, str]" (reportArgumentType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:38:8 - error: Import "test_app_binding" could not be resolved (reportMissingImports)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:191:5 - error: Type of "rig" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:192:49 - error: Argument type is unknown
+    Argument corresponds to parameter "rig" in function "_click" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:193:13 - error: Type of "data" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:193:13 - error: Argument type is unknown
+    Argument corresponds to parameter "data" in function "_staged" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:194:11 - error: Argument type is unknown
+    Argument corresponds to parameter "rig" in function "_warm" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:195:31 - error: Argument type is unknown
+    Argument corresponds to parameter "rig" in function "_filled" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:205:5 - error: Return type, "tuple[Unknown, int]", is partially unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:205:34 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:207:5 - error: Type of "made" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:207:12 - error: Type of "bound_rig" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:208:48 - error: Type of "FakeCTrader" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:208:67 - error: Type of "codec" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:210:5 - error: Type of "signed_in" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:211:5 - error: Type of "bind" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:5 - error: Type of "feed" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:12 - error: Type of "runtime" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:12 - error: Type of "venues" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:212:12 - error: Type of "feed" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:9 - error: Type of "at" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:13 - error: Type of "market" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:21 - error: Type of "bar" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:28 - error: Type of "base" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:28 - error: Type of "month" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:213:28 - error: Type of "bars" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:215:13 - error: Type of "recording" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:215:13 - error: Type of "keep" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:216:5 - error: Type of "tick_quotes" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:217:12 - error: Type of "ready" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:217:24 - error: Type of "reason" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:12 - error: Return type, "tuple[Unknown, int]", is partially unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:22 - error: Type of "recording" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:22 - error: Type of "recent" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:218:22 - error: Argument type is unknown
+    Argument corresponds to parameter "obj" in function "len" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:229:31 - error: Type of parameter "rig" is unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:229:36 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:234:39 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:234:39 - error: Type of "call" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:236:11 - error: Cannot assign to attribute "lifecycle" for class "Store"
+    Attribute "lifecycle" is unknown (reportAttributeAccessIssue)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:243:41 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:246:27 - error: Type of "now" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:246:27 - error: Return type of lambda is unknown (reportUnknownLambdaType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:286:11 - error: Type of parameter "rig" is unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:286:16 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:288:5 - error: Type of "runtime" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:288:15 - error: Type of "runtime" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:291:9 - error: Type of "tick" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:292:9 - error: Type of "hosted" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:292:18 - error: Type of "hosted" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:292:18 - error: Type of "get" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:293:35 - error: Type of "phase" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:294:13 - error: Type of "unit" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:294:20 - error: Type of "unit" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:33 - error: Type of "warm_seen" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:33 - error: Argument type is unknown
+    Argument corresponds to parameter "arg1" in function "min" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:49 - error: Type of "warm_needed" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:49 - error: Argument type is unknown
+    Argument corresponds to parameter "arg2" in function "min" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:300:69 - error: Type of "warm_needed" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:309:5 - error: Type of parameter "rig" is unknown (reportUnknownParameterType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:309:10 - error: Type of "Bound" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:312:5 - error: Type of "runtime" is unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:312:15 - error: Type of "runtime" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:313:14 - error: Type of "now" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:313:14 - error: Argument type is unknown
+    Argument corresponds to parameter "arg1" in function "max" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:317:9 - error: Type of "play_spots" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:320:37 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:330:30 - error: Type of "node" is unknown (reportUnknownMemberType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:340:5 - error: Type of "stop" is unknown (reportUnknownMemberType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_app_logs.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_app_logs.py:47:2 - error: The function "contextmanager" is deprecated
+    Annotating the return type as `-> Iterator[Foo]` with `@contextmanager` is deprecated. Use `-> Generator[Foo]` instead. (reportDeprecated)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:190:45 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "setattr"
+    Argument type is "(_settings: Unknown) -> ClockFacts" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:190:52 - error: Type of parameter "_settings" is unknown (reportUnknownLambdaType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:199:17 - error: Unnecessary "cast" call; type is already "Any" (reportUnnecessaryCast)
+80 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=1
+
+
+=== D types-qmx-host with qmn extraPath | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+   Building qmx-host @ file:///D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host
+      Built qmx-host @ file:///D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host
+Uninstalled 1 package in 11ms
+Installed 1 package in 11ms
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\app_logs.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\app_logs.py:102:37 - error: Argument of type "dict[str, JsonValue] | dict[str, str]" cannot be assigned to parameter "fields" of type "dict[str, JsonValue]" in function "_read_event"
+    Type "dict[str, JsonValue] | dict[str, str]" is not assignable to type "dict[str, JsonValue]"
+      "dict[str, str]" is not assignable to "dict[str, JsonValue]"
+        Type parameter "_VT@dict" is invariant, but "str" is not the same as "JsonValue"
+        Consider switching from "dict" to "Mapping" which is covariant in the value type (reportArgumentType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:9 - error: Type of "profiles" is partially unknown
+    Type of "profiles" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:19 - error: Type of "funding" is partially unknown
+    Type of "funding" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:26 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:55 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2203:52 - error: Operator "not in" not supported for types "str" and "Any | object | dict[Unknown, Unknown]"
+    Operator "not in" not supported for types "str" and "object" (reportOperatorIssue)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2206:33 - error: Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "profiles" of type "Mapping[str, JsonObject]" in function "__init__"
+    Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, JsonObject]"
+      "object" is not assignable to "Mapping[str, JsonObject]" (reportArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2206:43 - error: Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "funding" of type "Mapping[str, str]" in function "__init__"
+    Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, str]"
+      "object" is not assignable to "Mapping[str, str]" (reportArgumentType)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\k7_rehearsal.py:236:11 - error: Cannot assign to attribute "lifecycle" for class "Store"
+    Attribute "lifecycle" is unknown (reportAttributeAccessIssue)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_app_logs.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_app_logs.py:47:2 - error: The function "contextmanager" is deprecated
+    Annotating the return type as `-> Iterator[Foo]` with `@contextmanager` is deprecated. Use `-> Generator[Foo]` instead. (reportDeprecated)
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:190:45 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "setattr"
+    Argument type is "(_settings: Unknown) -> ClockFacts" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:190:52 - error: Type of parameter "_settings" is unknown (reportUnknownLambdaType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\tests\test_heartbeats_loop.py:199:17 - error: Unnecessary "cast" call; type is already "Any" (reportUnnecessaryCast)
+13 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=1
+
+
+=== D k7 rehearsal after removing unused store.lifecycle | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_k7_rehearsal.py -q
+bringing up nodes...
+bringing up nodes...
+
+..                                                                       [100%]
+2 passed in 110.12s (0:01:50)
+EXIT=0
+
+
+=== D types-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+   Building qmn @ file:///D:/QMX-worktrees/bld-rc-20/qmn
+      Built qmn @ file:///D:/QMX-worktrees/bld-rc-20/qmn
+Uninstalled 1 package in 12ms
+Installed 1 package in 11ms
+d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:9 - error: Type of "costs" is partially unknown
+    Type of "costs" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2195:16 - error: Type of "funding_text" is partially unknown
+    Type of "funding_text" is "Any | object | dict[Unknown, Unknown]" (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:26 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+  d:\QMX-worktrees\bld-rc-20\qmx-agents\packages\qmx-host\src\qmx_host\host.py:2196:52 - error: Argument type is partially unknown
+    Argument corresponds to parameter "value" in function "_maps_to"
+    Argument type is "Any | object | dict[Unknown, Unknown]" (reportUnknownArgumentType)
+4 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=1
+
+
+=== D fmt-check-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+unformatted: File would be reformatted
+   --> tests\test_heartbeats_loop.py:190:1
+    |
+189 |     monkeypatch.setattr(host, "beat", one_row)
+190 +
+191 |     def probe_from(_settings: object) -> ClockFacts:
+    |
+
+1 file would be reformatted, 104 files already formatted
+EXIT=1
+
+
+=== D lint-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+EXIT=0
+
+
+=== D types-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== D fmt-check-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+105 files already formatted
+EXIT=0
+
+
+=== D lint-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+EXIT=0
+
+
+=== D host touched tests | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_app_logs.py tests/test_heartbeats_loop.py tests/test_k7_rehearsal.py -q
+bringing up nodes...
+bringing up nodes...
+
+................                                                         [100%]
+16 passed in 99.94s (0:01:39)
+EXIT=0
+
+
+=== D final types-root | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== D final fmt-check-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+105 files already formatted
+EXIT=0
+
+
+=== D final lint-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+EXIT=0
+
+
+=== D final types-qmx-judge | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-judge | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== D final types-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== E baseline qmn | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest <grants><maintenance> qmn/tests/test_qmn_supervisor_process.py -q
+bringing up nodes...
+bringing up nodes...
+
+
+no tests ran in 1.85s
+EXIT=5
+
+
+=== E baseline grants+supervisor | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest <grants node> qmn/tests/test_qmn_supervisor_process.py -q
+bringing up nodes...
+bringing up nodes...
+
+......                                                                   [100%]
+6 passed in 35.10s
+EXIT=0
+
+
+=== E baseline maintenance | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do -q
+   Building qmn @ file:///D:/QMX-worktrees/bld-rc-20/qmn
+   Building qmf-readings @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-readings
+      Built qmn @ file:///D:/QMX-worktrees/bld-rc-20/qmn
+      Built qmf-readings @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-readings
+Uninstalled 2 packages in 14ms
+Installed 2 packages in 11ms
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do _
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-315/popen-gw1/test_the_upkeep_switched_off_n0')
+
+    def test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do(
+        tmp_path: Path,
+    ) -> None:
+        layout, clock = folder(tmp_path / "QMX"), Clock()
+        backups = service(layout, clock)
+        backups.control.settings_put("backup", {"upkeep": {"on": False}})
+        first = finished(backups, backups.sweep())
+        clock.advance(days=32)
+        second = finished(backups, backups.sweep())
+        drill = backups.sweep()
+        drilled = None if drill is None else ended(backups, drill.id)
+    
+        assert (first.kind, first.state, second.kind, second.state) == (
+            "backup",
+            "finished",
+            "backup",
+            "finished",
+        )
+>       assert drilled is not None and drilled.kind == "drill"
+E       assert (None is not None)
+
+tests\test_maintenance.py:66: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do
+1 failed in 39.46s
+EXIT=1
+
+
+=== E baseline epic_13 static | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______________ test_t13_006_tier1_static_gate_ruff_and_pyright _______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+    def test_t13_006_tier1_static_gate_ruff_and_pyright() -> None:
+        """The tier-1 gate is green over qmb: ruff clean and pyright-strict clean.
+        (13.1 AC5) � pytest-green is observed via the independent suite, not re-run here.
+        """
+        ruff = _tool("ruff")
+        assert ruff is not None, "ruff not found in the environment"
+        ruff_run = subprocess.run(
+            [ruff, "check", str(QMB_SRC), str(ROOT / "qmb" / "tests")],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            timeout=180,
+        )
+>       assert ruff_run.returncode == 0, f"ruff not clean:\n{ruff_run.stdout}\n{ruff_run.stderr}"
+E       AssertionError: ruff not clean:
+E         E501 Line too long (102 > 100)
+E            --> qmb\tests\test_risk_event_rows.py:362:101
+E             |
+E         361 |     assert isinstance(refused, TypedRefusal), refused
+E         362 |     assert refused.context["reason"] == "a decision's reason has no code in the journal's closed list"
+E             |                                                                                                     ^^
+E         363 |     assert refused.context["text"] == "their own words"
+E             |
+E         
+E         Found 1 error.
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['D:\\QMX-worktrees\\bld-rc-20\\.venv\\Scripts\\ruff.EXE', 'check', 'D:\\QMX-worktrees\\bld-rc-2...              ^^\n363 |     assert refused.context["text"] == "their own words"\n    |\n\nFound 1 error.\n', stderr='').returncode
+
+qa\tests\epic_13\test_l0_static_build.py:185: AssertionError
+=========================== short test summary info ===========================
+FAILED qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright
+1 failed in 4.86s
+EXIT=1
+
+
+=== F rsi_low before | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________ test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi __________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+loaded = LoadedUnit(compiled=CompiledUnit(unit=Unit(schema=<Marker.UNIT_1: 'qmx.unit/1'>, unit_id='dummy-trend-pullback', famil...y=(), dividends=(), funding_ns=None, rates={})}, margins={}, costs={}, conversions={}, rate_feeds={}, missing_rates=())
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-317/popen-gw1/test_rsi_low_is_in_force_on_ev0')
+
+    def test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi(
+        loaded: LoadedUnit, tmp_path: Path
+    ) -> None:
+        journal = _journal(loaded, tmp_path)
+        _run(loaded, journal, trace="every_bar")
+        report = _close(journal)
+    
+        long_rows = [
+            cast("dict[str, object]", r["body"])
+            for r in _records(report, "signal")
+            if r["market_id"] == "fx.eurusd"
+            and cast("dict[str, str]", r["body"])["side"] == "long"
+            and not cast("dict[str, str]", r["body"])["detail"].startswith("time exit")
+        ]
+        levels = [cast("dict[str, str]", b["numbers_in_force"])["rsi_low"] for b in long_rows]
+        held = loaded.bars()
+        assert not isinstance(held, TypedRefusal), held
+        bars = len(held.value["fx.eurusd"])
+    
+        changed = sum(1 for before, after in pairwise(levels) if before != after)
+    
+>       assert len(long_rows) == bars == 6144
+E       AssertionError: assert 6149 == 6144
+E        +  where 6149 = len([{'binding': '', 'detail': 'context: absent input trend, strength; trigger: absent input rsi_cross', 'inputs': {}, 'in...bsent input trend, strength; trigger: absent input rsi_cross', 'inputs': {}, 'instant': 1735695000000000000, ...}, ...])
+
+qmb\tests\test_run_journal.py:341: AssertionError
+=========================== short test summary info ===========================
+FAILED qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi
+1 failed in 45.70s
+EXIT=1
+
+
+=== F rsi_low probe | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python D:/Temp/rc20-probes/probe_rsi.py
+Traceback (most recent call last):
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 55, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 26, in main
+    probe = load()
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 21, in load
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 892, in get_code
+  File "<frozen importlib._bootstrap_external>", line 950, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: 'D:\\qmb\\tests\\test_run_journal.py'
+EXIT=1
+
+
+=== F rsi_low probe | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python D:/Temp/rc20-probes/probe_rsi.py
+Traceback (most recent call last):
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 55, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 29, in main
+    folder = probe.make_run_folder(root / "run")
+  File "D:\QMX-worktrees\bld-rc-20\qmb\tests\test_unit_runner.py", line 64, in make_run_folder
+    folder.mkdir()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\Mubarak\AppData\Local\Python\pythoncore-3.14-64\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] The system cannot find the path specified: 'C:\\Users\\Mubarak\\AppData\\Local\\Temp\\rsi-probe-_o9b0s3z\\run\\run'
+EXIT=1
+
+
+=== F rsi_low probe | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python D:/Temp/rc20-probes/probe_rsi.py
+bars 6144
+long rows 6149 kept 6149
+kept details [('trigger: does not hold', 3415), ('context: does not hold; trigger: does not hold', 2517), ('context: absent input trend, strength; trigger: does not hold', 84), ('near miss, context: does not hold', 43), ('all slots hold', 31), ('context: absent input strength; trigger: does not hold', 20), ('context: absent input trend, strength; trigger: absent input rsi_cross', 14), ('warming up', 7), ('a position is open', 5), ('time-exit-bars@2 closes the position: time', 5), ('the stop 1.10371 is not on the loss side', 3), ('the stop 1.09983 is not on the loss side', 2)]
+excluded details []
+kept outcomes Counter({('no_signal', 'no_signal'): 6094, ('taken', 'None'): 36, ('suppressed_warming', 'warming_up'): 7, ('skipped', 'stop_wrong_side'): 7, ('suppressed_limit', 'max_positions'): 5})
+most repeated [(('fx.eurusd', 'context: does not hold; trigger: does not hold'), 6065), (('metal.xauusd', 'context: does not hold; trigger: does not hold'), 6032), (('metal.xauusd', 'trigger: does not hold'), 5833), (('fx.eurusd', 'trigger: does not hold'), 5789), (('fx.eurusd', 'context: absent input trend, strength; trigger: does not hold'), 168)]
+EXIT=0
+
+
+=== F rsi_low after filter | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 69.31s (0:01:09)
+EXIT=0
+
+
+=== F fmt/lint | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=ruff format --check + ruff check qmb/tests/test_run_journal.py
+1 file already formatted
+EXIT=0
+All checks passed!
+EXIT=0
+
+
+=== A dictionary port final | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest tools/tests/test_dictionary_port.py -q
+bringing up nodes...
+bringing up nodes...
+
+.......                                                                  [100%]
+7 passed in 9.76s
+EXIT=0
+
+
+=== C lifecycle final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest qmx-agents/packages/qmx-host/tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing -q
+bringing up nodes...
+bringing up nodes...
+
+
+no tests ran in 1.89s
+EXIT=1
+
+
+=== F rsi_low final | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 55.79s
+EXIT=0
+
+
+=== C lifecycle final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 17.14s
+EXIT=0
+
+
+=== B derive final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest packages/qmx-tools/tests/test_derive_bars.py -q
+bringing up nodes...
+bringing up nodes...
+
+...                                                                      [100%]
+3 passed in 17.84s
+EXIT=0
+
+
+=== B qmb app final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest apps/qmb/tests/test_qmb_run_kinds.py apps/qmb/tests/test_run_honesty.py -q
+bringing up nodes...
+bringing up nodes...
+
+..................................                                       [100%]
+34 passed in 256.40s (0:04:16)
+EXIT=0
+
+
+=== FINAL types-root | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== FINAL fmt-check-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+105 files already formatted
+EXIT=0
+
+
+=== FINAL lint-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+EXIT=0
+
+
+=== FINAL types-qmx-judge | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-judge | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== FINAL types-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== E final grants+supervisor | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest <grants node> qmn/tests/test_qmn_supervisor_process.py -q
+bringing up nodes...
+bringing up nodes...
+
+......                                                                   [100%]
+6 passed in 24.93s
+EXIT=0
+
+
+=== E final maintenance | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do _
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-326/popen-gw1/test_the_upkeep_switched_off_n0')
+
+    def test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do(
+        tmp_path: Path,
+    ) -> None:
+        layout, clock = folder(tmp_path / "QMX"), Clock()
+        backups = service(layout, clock)
+        backups.control.settings_put("backup", {"upkeep": {"on": False}})
+        first = finished(backups, backups.sweep())
+        clock.advance(days=32)
+        second = finished(backups, backups.sweep())
+        drill = backups.sweep()
+        drilled = None if drill is None else ended(backups, drill.id)
+    
+        assert (first.kind, first.state, second.kind, second.state) == (
+            "backup",
+            "finished",
+            "backup",
+            "finished",
+        )
+>       assert drilled is not None and drilled.kind == "drill"
+E       assert (None is not None)
+
+tests\test_maintenance.py:66: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do
+1 failed in 45.40s
+EXIT=1
+
+
+=== E final epic_13 | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______________ test_t13_006_tier1_static_gate_ruff_and_pyright _______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+    def test_t13_006_tier1_static_gate_ruff_and_pyright() -> None:
+        """The tier-1 gate is green over qmb: ruff clean and pyright-strict clean.
+        (13.1 AC5) � pytest-green is observed via the independent suite, not re-run here.
+        """
+        ruff = _tool("ruff")
+        assert ruff is not None, "ruff not found in the environment"
+        ruff_run = subprocess.run(
+            [ruff, "check", str(QMB_SRC), str(ROOT / "qmb" / "tests")],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            timeout=180,
+        )
+>       assert ruff_run.returncode == 0, f"ruff not clean:\n{ruff_run.stdout}\n{ruff_run.stderr}"
+E       AssertionError: ruff not clean:
+E         E501 Line too long (102 > 100)
+E            --> qmb\tests\test_risk_event_rows.py:362:101
+E             |
+E         361 |     assert isinstance(refused, TypedRefusal), refused
+E         362 |     assert refused.context["reason"] == "a decision's reason has no code in the journal's closed list"
+E             |                                                                                                     ^^
+E         363 |     assert refused.context["text"] == "their own words"
+E             |
+E         
+E         Found 1 error.
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['D:\\QMX-worktrees\\bld-rc-20\\.venv\\Scripts\\ruff.EXE', 'check', 'D:\\QMX-worktrees\\bld-rc-2...              ^^\n363 |     assert refused.context["text"] == "their own words"\n    |\n\nFound 1 error.\n', stderr='').returncode
+
+qa\tests\epic_13\test_l0_static_build.py:185: AssertionError
+=========================== short test summary info ===========================
+FAILED qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright
+1 failed in 34.24s
+EXIT=1
+

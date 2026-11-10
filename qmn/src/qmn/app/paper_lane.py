@@ -10,6 +10,11 @@ proven stop forms and its balance, and is never sent anything.
 
 A paper lane starts from the unit's defaults, as QMB tested it (AD-38). Its rows carry world
 ``paper`` in the unit journal and in the node journal, so no paper fill reads as a venue's.
+
+Over the practice venue (``practice.py``) the same lane runs unchanged: its prices and its bars
+are the shipped month, its binding is the conformance account, and no broker is named or reached.
+The rows still carry world ``paper``; the binding is what states ``venue_kind: practice`` beside
+them, on every order row and every card the runtime shows.
 """
 
 from __future__ import annotations

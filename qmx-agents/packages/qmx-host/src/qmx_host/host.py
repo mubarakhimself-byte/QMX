@@ -2165,7 +2165,7 @@ class QmbRun:
                 self._lay_out(laid, ticket, found, bars, costs)
             except (OSError, ValueError, LibraryRefused) as error:
                 self.lander.fail(ticket, str(error), status="failed")
-                _lighten(laid)
+                lighten(laid)
                 raise BundleRefused([str(error)]) from error
         return ticket
 
@@ -2192,14 +2192,17 @@ class QmbRun:
         body: object = json.loads(store.read_blob(blob.blob_id))
         held = cast(dict[str, Any], body).get("content", body) if isinstance(body, dict) else body
         stated = cast(dict[str, Any], held) if isinstance(held, dict) else {"costs": held}
-        profiles, funding = stated.get("costs") or {}, stated.get("funding") or {}
-        if not (_maps_to(profiles, dict) and _maps_to(funding, str)):
+        costs: object = stated.get("costs") or {}
+        funding_text: object = stated.get("funding") or {}
+        if not (_maps_to(costs, dict) and _maps_to(funding_text, str)):
             raise BundleRefused(
                 [
                     f"cost_profile {pin} needs costs by market, each an object, and funding by "
                     "market, each CSV text"
                 ]
             )
+        profiles = cast("dict[str, Any]", costs)
+        funding = cast("dict[str, str]", funding_text)
         missing = [market for market in markets if market not in profiles]
         if missing:
             raise BundleRefused([f"cost_profile {pin} names no costs for {', '.join(missing)}"])
@@ -2455,7 +2458,7 @@ class QmbRun:
             landed = self.lander.close(Landing(ticket, bundle, run.folder))
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
-        _lighten(run.folder / "in")
+        lighten(run.folder / "in")
         return landed
 
     def fail(self, ticket: AppTicket, reason: str, status: Ending) -> str:
@@ -2464,11 +2467,11 @@ class QmbRun:
             landed = self.lander.fail(own, reason, status=status)
         except LibraryRefused as refused:
             raise BundleRefused([str(refused)]) from refused
-        _lighten(self.folder_of(own.app_id, own.run_id) / "in")
+        lighten(self.folder_of(own.app_id, own.run_id) / "in")
         return landed
 
 
-def _lighten(laid: Path) -> None:
+def lighten(laid: Path) -> None:
     """A landed run's copies of its bars go, last of all, because the lander reads them first. The
     market store and the result keep what they held. A file still open stays, and fails no run."""
     for copied in ("bars", "data"):

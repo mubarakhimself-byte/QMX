@@ -427,8 +427,8 @@ def regenerate() -> None:
         tempfile.TemporaryDirectory(prefix="b12-pack-") as scratch,
         world_at(Path(scratch)) as world,
     ):
-        kept = host_module._lighten
-        host_module._lighten = _keep_laid
+        kept = host_module.lighten
+        host_module.lighten = _keep_laid
         try:
             ran = world.runtime.run_job(
                 "qmb",
@@ -437,7 +437,7 @@ def regenerate() -> None:
                 principal="operator",
             )
         finally:
-            host_module._lighten = kept
+            host_module.lighten = kept
         data = str(world.runtime.status("qmb").get("data") or "data")
         laid = Volume(world.runtime.home, "qmb").root / data / RUNS / str(ran["run_id"]) / "in"
         request = json.loads((laid / "request.json").read_text("utf-8"))

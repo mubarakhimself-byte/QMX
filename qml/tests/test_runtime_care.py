@@ -282,7 +282,7 @@ def test_every_committed_version_1_document_loads_through_the_upgrader() -> None
     loaded = [(name, upgrade(document)) for name, document in committed]
 
     stdlib = list((_QML / "src" / "qml" / "blocks" / "stdlib").glob("*/*/entry.json"))
-    templates, corpus, a_check = 1, 3, 1
+    templates, corpus, a_check = 2, 3, 1
     assert len(committed) == templates + corpus + len(stdlib) + a_check
     assert [(name, _ok(result)) for name, result in loaded] == committed
 

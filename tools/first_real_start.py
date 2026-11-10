@@ -5,12 +5,12 @@
 Its job is to prove that this machine's node is ready to receive a unit, on his real folder. It sets
 the practice node up through the running host, signs in on cTrader's own demo page, makes one test
 trade, lands the passport and the records, and finds the node's journal rows in This PC's store. A
-unit reaches a node by passing the judge and his click, and this script does not make that happen:
-with no unit named it prints one plain line saying no unit has passed the judge yet, so nothing was
-deployed, and that is not a failure. When one has, he names it with `--unit` and the script asks
-for his click and waits for the node's own deployment row to settle, a refusal in the node's words.
-It prints one PASS or FAIL line per fact and exits non-zero on any FAIL. Running it again converges:
-every step checks what is in place first.
+unit reaches a node by his click on paper, on the passing G safety record its check wrote and with
+no judge pass, and this script does not make that click happen: with no unit named it prints one
+plain line saying none was named, so nothing was deployed, and that is not a failure. When one is
+named with `--unit`, the script asks for his click and waits for the node's own deployment row to
+settle, a refusal in the node's words. It prints one PASS or FAIL line per fact and exits non-zero
+on any FAIL. Running it again converges: every step checks what is in place first.
 
 It talks only to the host's REST, with the bearer from Credential Manager, and imports nothing from
 `qmx-agents`, because the root env holds none of it. Only the trading node sends an order, and the
@@ -61,7 +61,7 @@ RECEIVER: Final = ("127.0.0.1", 47613)
 """The node's sign-in redirect (`qmn.app.grants.REDIRECT`), where cTrader sends the one code."""
 LANDED_ON: Final = "engine/base"
 """The branch his landed code sits on when he names none: the one his stack lands into."""
-PLAIN_NO_UNIT: Final = "no unit has passed the judge yet, so nothing was deployed"
+PLAIN_NO_UNIT: Final = "no unit was named, so nothing was deployed"
 """The deploy step with no unit named: a fact about the node, never a verdict."""
 SETTLED: Final = frozenset({"warming up", "trading", "waiting", "refused"})
 """The `Phase`es a deployment settles in (`qmn.app.runtime.Phase`), so the poll may stop."""
@@ -124,7 +124,7 @@ class Options:
     trade_s: float = 120.0
     sign_in_s: float = 300.0
     unit: str | None = None
-    """The unit id he names once one has passed the judge; none means the node alone is proved."""
+    """The unit id he names for his click; none means the node alone is proved."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -787,7 +787,7 @@ def main(
     parser.add_argument("--sign-in-s", type=float, default=Options.sign_in_s)
     parser.add_argument(
         "--unit",
-        help="the unit id he names once it has passed the judge; none proves the node alone",
+        help="the unit id he names for his click; none proves the node alone",
     )
     parser.add_argument(
         "--landed-on",

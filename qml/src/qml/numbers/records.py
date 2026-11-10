@@ -83,6 +83,9 @@ class InstrumentRecord:
     rolls_to: str | None = None
     funding_interval: str | None = None
     conversions: Mapping[str, ConversionRef] = field(default_factory=dict[str, ConversionRef])
+    source: str | None = None
+    """Where the record says it comes from: ``shipped`` for the ones that ship with QML, and
+    None for a Library item, which states no source."""
 
     @property
     def name(self) -> str:
@@ -193,6 +196,7 @@ _KEYS: Final[tuple[tuple[str, str, _Reader, bool], ...]] = (
     ("rolls_to", "rolls_to", _text, False),
     ("funding_interval", "funding_interval", _text, False),
     ("conversions", "conversions", _conversions, False),
+    ("source", "source", _text, False),
 )
 
 

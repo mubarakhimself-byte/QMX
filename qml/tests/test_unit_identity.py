@@ -196,7 +196,7 @@ PAIRS: list[tuple[str, Callable[[Doc], None], set[EditLabel], Result]] = [
     ),
     (
         "block fixed to a new version",
-        _set("exit_set", 0, "block", value="swing-stop-buffer@2"),
+        _set("exit_set", 0, "block", value="swing-stop-buffer@1"),
         {EditLabel.BLOCK_FIX},
         Result.NEW_VERSION,
     ),

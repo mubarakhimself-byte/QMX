@@ -6822,7 +6822,7 @@
      "origin": "port-239",
      "recognition": "Start the timer at the stated state transition, then emit an exit instruction when the allowed duration or endpoint is reached, regardless of unrealized P&L unless stated otherwise.",
      "same_word_as": [
-      "time-exit-bars@1"
+      "time-exit-bars@2"
      ],
      "schema": "qmx.entry/1",
      "sources": [
