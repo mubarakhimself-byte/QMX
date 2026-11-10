@@ -711,6 +711,18 @@
                     "unit",
                     "account"
                   ]
+                },
+                "verb": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "no_new_entries",
+                    "reduce",
+                    "flatten"
+                  ]
+                },
+                "shadow": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -780,6 +792,18 @@
                     "unit",
                     "account"
                   ]
+                },
+                "verb": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "no_new_entries",
+                    "reduce",
+                    "flatten"
+                  ]
+                },
+                "shadow": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -849,6 +873,18 @@
                     "unit",
                     "account"
                   ]
+                },
+                "verb": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "no_new_entries",
+                    "reduce",
+                    "flatten"
+                  ]
+                },
+                "shadow": {
+                  "type": "boolean"
                 }
               },
               "required": [

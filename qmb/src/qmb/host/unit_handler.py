@@ -39,6 +39,7 @@ from qmf.core.exact import Price
 from qmf.core.fingerprint import Fingerprint
 from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.risk.controls import ControlRow, refuses_entries
 from qmf.risk.facts import Fact
 from qmf.risk.journal import RiskEvent
 from qmf.risk.unit_intent import (
@@ -55,6 +56,7 @@ from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import (
     Account,
     CalibrationRow,
+    ControlEvent,
     DecisionRow,
     Fault,
     HostedUnit,
@@ -79,6 +81,7 @@ __all__ = [
     "CashEvent",
     "CashKind",
     "CashPort",
+    "ControlFire",
     "ExecutionPort",
     "Fill",
     "FillKind",
@@ -90,6 +93,7 @@ __all__ = [
     "Skip",
     "UnitSliceHandler",
     "UnitTrade",
+    "WouldHave",
 ]
 
 _CENT: Final[Decimal] = Decimal("0.01")
@@ -184,8 +188,45 @@ class UnitTrade:
     """How old that rate was when the position closed, stamped so a reader never reads one."""
 
 
+@dataclass(frozen=True, slots=True)
+class ControlFire:
+    """One brake row that fired for real: the code it left, the root cause its one card is filed
+    under, the row that answered, its block, the verb it ran and its words (AD-12)."""
+
+    code: str
+    root: str
+    row: str
+    pin: str
+    verb: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class WouldHave:
+    """One entry a brake would have refused, or did: the row that answered, the decision row it
+    refused, the code its words resolve to, and the share of such entries it recorded (R1)."""
+
+    market_id: str | None
+    row: str
+    decision_row_id: str
+    code: str
+    reason: str
+    verb: str
+    propensity: Fraction
+    side: str | None = None
+
+
 JournalRecord = (
-    DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade | CashEvent | RiskEvent
+    DecisionRow
+    | CalibrationRow
+    | StateEvent
+    | Fill
+    | Skip
+    | UnitTrade
+    | CashEvent
+    | RiskEvent
+    | ControlFire
+    | WouldHave
 )
 
 
@@ -320,6 +361,19 @@ def _price(level: Decimal, instrument: Instrument) -> Price:
     return Price(int(level.scaleb(scale)), instrument, scale)
 
 
+def _would_refuse(event: ControlEvent) -> bool:
+    """Whether this answer would have refused entries, at the scope it acts at.
+
+    The one rule lives in ``qmf.risk.controls.refuses_entries``; the event carries the four fields
+    it reads, so the row is rebuilt and the rule asked, rather than a second law written here. A
+    shadowed row answers exactly what it would have done had it been live.
+    """
+    row = ControlRow(
+        name=event.row, pin=event.pin, code=event.code, scope=event.scope, verb=event.verb
+    )
+    return refuses_entries(row, shadowed=False)
+
+
 class UnitSliceHandler:
     """``run_slice``'s five hooks over one hosted unit. Stream ids are the unit's market ids."""
 
@@ -363,6 +417,9 @@ class UnitSliceHandler:
         self._entries = 0
         self._fault_roots: set[str] = set()
         """Each root-cause key a fault already landed a ``risk_event`` row, and so a card, for."""
+        self._noted: set[str] = set()
+        """Each brake row a ``risk_event`` has landed for, and each refused entry a ``would_have``
+        has landed for, so a fire that holds and a slice driven again write nothing twice."""
         self._close_pending: dict[str, str] = {}
         """The held markets the unit asked its host's last fall-through to close at their next
         bar's open, each with the reason it asked (AD-13); a market drops out once its bar comes."""
@@ -440,6 +497,58 @@ class UnitSliceHandler:
                 continue
             self._fault_roots.add(fault.block)
             self._journal.append(RiskEvent(fault.code, fault.block))
+
+    def _note_controls(self, step: UnitStep) -> None:
+        """What each brake left this step: a fire for real, or the entry it would have refused.
+
+        Every live fire lands one ``risk_event`` row per root cause, so a brake that holds for an
+        hour lands one card, a flatten or reduce fire is on the record too, and a position-scope
+        brake that refuses no entry still lands its fire's row. A row in shadow lands one
+        ``would_have`` row for each entry this step took, because a shadow row refuses nothing and
+        those entries went ahead. A row that refused for real lands one ``would_have`` row for each
+        decision the step marked ``suppressed``, which only a brake writes. Neither row can reach
+        an exit: nothing here builds or blocks one (AD-12, AD-13).
+        """
+        taken = [row for row in step.decisions if row.outcome == "taken"]
+        suppressed = [row for row in step.decisions if row.outcome == "suppressed"]
+        for event in step.controls:
+            if event.kind == "cold":
+                continue
+            answered = f"{event.scope}.{event.row}"
+            if event.kind == "fired":
+                key = f"risk:{answered}"
+                if key not in self._noted:
+                    self._noted.add(key)
+                    self._journal.append(
+                        ControlFire(
+                            event.code,
+                            event.pin,
+                            answered,
+                            event.pin,
+                            event.verb.value,
+                            event.reason,
+                        )
+                    )
+            if not _would_refuse(event):
+                continue
+            refused: Sequence[DecisionRow] = taken if event.kind == "would_fire" else suppressed
+            for row in refused:
+                key = f"would:{answered}:{row.row_id}"
+                if key in self._noted:
+                    continue
+                self._noted.add(key)
+                self._journal.append(
+                    WouldHave(
+                        row.market_id,
+                        answered,
+                        row.row_id,
+                        event.code,
+                        event.reason,
+                        event.verb.value,
+                        Fraction(1),
+                        row.side.value,
+                    )
+                )
 
     def adopt(
         self,
@@ -688,6 +797,7 @@ class UnitSliceHandler:
         if is_refusal(step):
             return step
         self._note_faults(step.value.faults)
+        self._note_controls(step.value)
         priced: tuple[Priced, ...] = ()
         if step.value.proposals:
             unit = cast("PricingUnit", self._unit)

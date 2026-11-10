@@ -259,7 +259,7 @@ def test_a_raising_logic_slot_leaves_exits_running() -> None:
     intent, at = exits[0]
     assert at == instants[4], "the time exit fires on the fifth bar the position is held"
     assert intent.kind.value == "close_full"
-    assert intent.reason_code.code == "time-exit"
+    assert intent.reason_code.code == "time"
     entries = [
         entry
         for step, priced in steps

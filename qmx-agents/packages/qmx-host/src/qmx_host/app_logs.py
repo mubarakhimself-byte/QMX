@@ -94,7 +94,9 @@ def record_of(line: str, app_id: str, file: str) -> str:
         parsed: object = json.loads(line, parse_constant=str, parse_float=_finite_or_text)
     except ValueError, RecursionError:
         parsed = None
-    fields = cast("dict[str, JsonValue]", parsed) if isinstance(parsed, dict) else {"message": line}
+    fields: dict[str, JsonValue] = (
+        cast("dict[str, JsonValue]", parsed) if isinstance(parsed, dict) else {"message": line}
+    )
     at = fields.get("at")
     if at is not None and not _instant(at):
         fields = {**{k: v for k, v in fields.items() if k != "at"}, "app_at": at}

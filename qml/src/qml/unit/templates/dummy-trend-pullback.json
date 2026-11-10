@@ -73,9 +73,9 @@
     }
   },
   "exit_set": [
-    {"name": "swing_stop", "scope": "position", "block": "swing-stop-buffer@1", "params": {"buffer": {"number": "stop_buffer"}}, "inputs": {"series": "m15"}},
-    {"name": "target_2r", "scope": "position", "block": "target-r-multiple@1", "params": {"multiple": {"number": "target_r"}}, "inputs": {}},
-    {"name": "time_out", "scope": "position", "block": "time-exit-bars@1", "params": {"bars": {"number": "time_out_bars"}}, "inputs": {}}
+    {"name": "swing_stop", "scope": "position", "block": "swing-stop-buffer@2", "params": {"buffer": {"number": "stop_buffer"}}, "inputs": {"series": "m15"}},
+    {"name": "target_2r", "scope": "position", "block": "target-r-multiple@2", "params": {"multiple": {"number": "target_r"}}, "inputs": {}},
+    {"name": "time_out", "scope": "position", "block": "time-exit-bars@2", "params": {"bars": {"number": "time_out_bars"}}, "inputs": {}}
   ],
   "sizer": {"name": "fixed_fraction", "block": "fixed-fraction-at-stop@2", "params": {"fraction": {"number": "risk_fraction"}}, "inputs": {}},
   "halts": {"position": [], "unit": [], "account": []},

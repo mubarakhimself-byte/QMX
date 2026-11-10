@@ -101,18 +101,14 @@ def _motion(**motion: object) -> _Edit:
     return _put("numbers/ema_period/motion", {"mode": "fixed", **motion})
 
 
-def _halts(scope: str) -> _Edit:
-    value: dict[str, object] = {"position": [], "unit": [], "account": []}
-    value[scope] = [
-        {
-            "name": "probe",
-            "scope": "position",
-            "block": "equity-drawdown-halt@1",
-            "params": {},
-            "inputs": {},
-        }
-    ]
-    return _put("halts", value)
+_MISFILED_HALT: Final = {
+    "name": "probe",
+    "scope": "position",
+    "block": "equity-drawdown-halt@1",
+    "params": {"max_drawdown": {"value": "0.05"}, "trailing": {"value": "0"}},
+    "inputs": {},
+}
+"""One halt row in the unit list whose own scope says position, so the two disagree."""
 
 
 _SESSION: Final = [
@@ -152,10 +148,11 @@ _RECIPE: Final = {"pod_id": "trend-pullback", "version": 1, "hash": "fp1:sha256:
 _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.streams", "/streams", _two_streams),
     _Probe("Unit.reads", "/reads", _put("reads", _READ)),
-    _Probe("Unit.halts", "/halts", _halts("position")),
-    _Probe("Halts.position", "/halts", _halts("position")),
-    _Probe("Halts.unit", "/halts", _halts("unit")),
-    _Probe("Halts.account", "/halts", _halts("account")),
+    _Probe(
+        "ControlBinding.scope",
+        "/halts/unit/0/scope",
+        _put("halts", {"position": [], "unit": [_MISFILED_HALT], "account": []}),
+    ),
     _Probe("Unit.sessions", "/sessions", _put("sessions", _SESSION)),
     _Probe(
         "Unit.context_needs", "/context_needs", _put("context_needs", {"block": [{"word": "fomc"}]})
@@ -225,7 +222,7 @@ _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.home_markets", "/home_markets", _put("home_markets", ["fx.eurusd"])),
     _Probe("Unit.tags", "/tags", _put("tags", ["trend"])),
 )
-"""One probe per ``_shape_problems`` branch, labelled with the field it proves."""
+"""One probe per refusal the guide lists, labelled with the field it proves."""
 
 _SLOTS: Final = (
     ("sizer", SizerInstance),

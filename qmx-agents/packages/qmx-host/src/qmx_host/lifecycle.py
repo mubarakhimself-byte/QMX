@@ -4,8 +4,10 @@
 its record id the move's `event_id`, after checking it against Part A's `fold` over every move
 already in this machine's journals: a move `fold` rejects is refused with its typed reason and
 nothing is written. Its callers are the verdict landing, for the judge's draft to tested or
-draft to parked move, and Part C's promote action, for his clicks. The judge never moves a unit
-toward paper or live: `fold` refuses that for any principal but `operator`.
+draft to parked move, and Part C's promote action, for his clicks. A draft reaches paper on his
+click alone, when the move names a passing G safety record; a draft with no record named is
+refused `g_record_missing`. The judge never moves a unit toward paper or live: `fold` refuses
+that for any principal but `operator`.
 
 One `JournalWriter` per unit holds that unit's stream (role `host`, so the node's own stream of
 risk stops never shares a partition). The journal envelope has no world for a research move, so

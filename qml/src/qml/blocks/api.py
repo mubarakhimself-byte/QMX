@@ -224,22 +224,31 @@ class ExitInstance(Instance, Protocol):
 
 
 class HaltAction(StrEnum):
+    """What a halt would do at its scope: stop new entries, reduce the next size, or flatten."""
+
     NO_NEW_ENTRIES = "no_new_entries"
+    REDUCE = "reduce"
     FLATTEN = "flatten"
 
 
 @dataclass(frozen=True, slots=True)
 class Halt:
-    """A halt that holds: what it does, at which scope, and why."""
+    """A halt that holds: what it does, at which scope, and why.
+
+    ``factor`` is the share a ``reduce`` halt cuts the next entry by, as ``0.5`` for half. A
+    halt of any other action leaves it out, and the row's own verb decides what runs.
+    """
 
     action: HaltAction
     scope: Scope
     reason: str
+    factor: Decimal | None = None
 
 
 class HaltInstance(Instance, Protocol):
     """A halt slot, read from unit and account statistics and his limits. ``None`` is the
-    contract's ``none``: nothing is halted. No host runs halts yet."""
+    contract's ``none``: nothing is halted. The unit runs its row in the control runner, which
+    refuses entries at the row's scope and never reaches an exit."""
 
     def update(self, evidence: Mapping[str, object]) -> Halt | None: ...
 

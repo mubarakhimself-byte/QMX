@@ -1,0 +1,76 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "swing-stop-buffer",
+  "version": 2,
+  "family": "protective-stop",
+  "aliases": [
+    "swing stop"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "component_type": "exit",
+  "definition": "Protective stop beyond the last swing low (long) or high (short) plus a buffer of its price, the buffer read from the evidence each bar.",
+  "boundaries": "A stand-in stop until the risk session writes the real exits. The buffer is a number that may move, so this version reads it from the evidence and keeps the make value only as the seed; version 1 held the make value and ignored a moved one.",
+  "recognition": "The stop sits just beyond the last confirmed swing low (long) or high (short), moved with the buffer a number that moves feeds it.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    },
+    {
+      "source_ref": "risk-core:round-2/arch/final/SPINE.md#AD-14",
+      "quote": "A block reads every number from `evidence`; `make` only seeds.",
+      "dated": "2026-11-08"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "buffer": {
+      "measure": "percent",
+      "default": "0.0002",
+      "origin": "placeholder",
+      "range": {
+        "min": "0",
+        "max": "0.01",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "5 bars",
+    "bars": 5
+  },
+  "confirmation_lag_bars": 2,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 6
+  },
+  "fingerprint": "fp1:sha256:de4e807707b132752df62f581d38367547ceb8b19cf28f9205b62a70aa7c96fe"
+}

@@ -157,7 +157,8 @@ def test_derived_pairs_give_the_same_bars_and_trades_as_the_ticks(tmp_path: Path
     )
     assert len(pair_bars) == 1920
     assert pair_bars == tick_bars == csv_bars
-    assert (len(pair_trades), pair_r) == (6, Decimal("-3.2610"))
+    # RC-11 runs every exit each bar on the side's bars; all three feeds land this R.
+    assert (len(pair_trades), pair_r) == (6, Decimal("-3.2846"))
     assert pair_trades == tick_trades == csv_trades
     assert csv_r == pair_r
 

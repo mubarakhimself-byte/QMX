@@ -701,6 +701,8 @@ APP_VERSIONS: Mapping[tuple[str, str], str] = {
     ("trading-node", "0.1.10"): "dd71b14d3f679fd6c809c9564a92a6ba",
     ("trading-node", "0.1.9"): "c1c01a4f5513f17a7ed72ccbb740f7a9",
     ("weekend-watcher", "1.0.0"): "2fd02bee829dbbb04b5f0a66dafe66cf",
+    ("qmb", "1.0.10"): "fc4b3e8c3a216b30d88b9a2da688f306",
+    ("trading-node", "0.1.15"): "ab21635b388be0c8a18a3c418a6e0c92",
 }
 """One row per app and version, append-only. A change anywhere in an app's folder moves its image
 hash, and the same version with new bytes answers `immutable_version` at his next start, so the
@@ -796,11 +798,3 @@ def test_no_shipped_app_or_template_takes_a_core_name() -> None:
         "app Backtest_Result takes the core kind backtest-result",
         "template backtest_run takes the catalog row backtest_run",
     ]
-
-
-
-
-
-
-
-

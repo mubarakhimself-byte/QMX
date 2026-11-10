@@ -66,7 +66,7 @@ from qmx_tools.service import (
     json_value,
     unwrap,
 )
-from qmx_tools.unit_check import checked
+from qmx_tools.unit_check import checked, shipped
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
@@ -809,7 +809,12 @@ def _landed_results(tries: list[dict[str, Any]]) -> set[str]:
 
 
 def _templates() -> list[str]:
-    return sorted(p.name.removesuffix(".json") for p in TEMPLATES.iterdir() if p.is_file())
+    """Each template in QML's folder: one JSON there is one template, and nothing else is one."""
+    return sorted(
+        path.name.removesuffix(".json")
+        for path in TEMPLATES.iterdir()
+        if path.is_file() and path.name.endswith(".json")
+    )
 
 
 def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]]]:
@@ -891,7 +896,7 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
         if (document is None) == (item is None):
             raise ValueError("pass exactly one of a document and the item of a unit in the Library")
         given: object = document if document is not None else draft(str(item)).fields
-        found = gather(ctx.library.store, given)
+        found = gather(shipped(ctx.library.store), given)
         return {"lines": list(explain(given, found.context)), "notes": list(found.warnings)}
 
     return {"unit_new": unit_new, "unit_check": unit_check, "unit_explain": unit_explain}

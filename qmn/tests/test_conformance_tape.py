@@ -4,14 +4,22 @@ Verify, unit block's second and third seams (K9 tests 1 and 13). The second driv
 own order path with a broker whose send raises: the decision row must already be in the node's
 journal, stamped ``written_before_send``, and no order may have left. The third records one
 conformance tape of proposals and the facts they are priced on and runs it through QMB's handler
-and through the unit the node's runtime hosts: the two journals' signal rows must be equal, with
-only fills, costs and latency free to differ.
+and through the unit the node's runtime hosts: the two journals' signal rows must carry one
+decision and one trail, so every field but the two host facts named below is compared.
 
 The tape is recorded over markets whose quote currency is the account's own, so no fact in the
 row carries a host's name. A conversion market's rate fact is stamped ``qmb:replay`` on one side
 and ``node:feed`` on the other (``qmb/host/facts.py:98``, ``qmn/app/facts.py:75``), which is
 honest and would make a byte-for-byte comparison of the two trails compare two sources instead
 of one decision. That limit is written down in ``qml/tests/conformance_tape/README.md``.
+
+The other host fact is the account. A live node folds the account its venue read left into every
+decision row (``_Journal.append`` in ``qmn/app/runtime.py``), so its ``inputs`` carry the seven
+``account.*`` facts, each stamped ``node:venue``, and ``account.basis``, the words naming who
+supplied the cash. A replay has no venue to ask: ``ReplayAccount`` (``qmb/host/facts.py``)
+answers a run's own book and its row carries none of those keys. ``_decision`` drops them from
+both rows and compares every other field, and the two assertions beside it hold the difference
+to exactly that: the node still carries the account facts and the replay still carries none.
 """
 
 # pyright: reportPrivateUsage=false, reportUnknownMemberType=false
@@ -38,6 +46,7 @@ from qmb.host.unit_runner import LoadedUnit, load_unit_folder
 from qmb.results.journal import JournalReport, RunJournal
 from qmf.core.chrono import Instant
 from qmf.core.refusal import Ok, Result
+from qmf.risk.facts import ACCOUNT_NAMES, account_name
 from qml.compile import CompiledUnit
 from qml.numbers import InstrumentRecord
 from qml.protocol.unit import Proposal, Surface, TraceLevel, construct_unit
@@ -61,6 +70,12 @@ TAPE = tuple((market, entry, stop) for market, entry, stop, _, rate in CASES if 
 """One proposal per quote-is-account market, with the facts it is priced on: ``EQUITY`` 100000 at
 fraction 0.005 is 500 at risk, and each row's quantity is the tape's own answer."""
 
+_ACCOUNT_PREFIX = "account."
+"""The ``inputs`` keys a live host fills from its own read of the account, never from the unit."""
+
+_ACCOUNT_FACTS = frozenset(account_name(name) for name in (*ACCOUNT_NAMES, "basis"))
+"""The seven account facts and their basis: what a live row carries and a replay's row cannot."""
+
 
 def _ok(result: Result[_T]) -> _T:
     assert isinstance(result, Ok), result.context
@@ -74,6 +89,29 @@ def _bodies(report: JournalReport, kind: str = "signal") -> list[dict[str, objec
             record = cast("dict[str, object]", json.loads(cast("str", row["record"])))
             rows.append(cast("dict[str, object]", record["body"]))
     return rows
+
+
+def _account_keys(body: dict[str, object]) -> list[str]:
+    """The ``account.*`` keys one row's ``inputs`` carry, sorted."""
+    inputs = cast("Mapping[str, object]", body["inputs"])
+    return sorted(name for name in inputs if name.startswith(_ACCOUNT_PREFIX))
+
+
+def _decision(body: dict[str, object]) -> dict[str, object]:
+    """One row as both hosts must agree on it: every field, less the account facts.
+
+    ``inputs`` keeps every key but the ``account.*`` ones, which are the host's own read of an
+    account: the equity, the open risk, the balance's age and the words naming who supplied them.
+    The sizer's own ``equity`` input, the two prices, the rate and the record stay in, so a row
+    priced on another number or another instrument still fails the tape.
+    """
+    inputs = cast("Mapping[str, object]", body["inputs"])
+    return {
+        **body,
+        "inputs": {
+            name: value for name, value in inputs.items() if not name.startswith(_ACCOUNT_PREFIX)
+        },
+    }
 
 
 def _qmb_handler(
@@ -256,4 +294,12 @@ def test_k9_1_and_13_same_trail_in_both_hosts(tmp_path: Path) -> None:
     assert [cast("dict[str, object]", row["steps"])["approved"] for row in qmb] == [
         {"kind": "quantity", "value": "1.00", "basis": "gross_at_stop"}
     ] * len(TAPE)
-    assert node == qmb, "one tape, two hosts, one trail"
+    assert [_account_keys(row) for row in node] == [sorted(_ACCOUNT_FACTS)] * len(TAPE), (
+        "the node journals the account its venue read left"
+    )
+    assert [_account_keys(row) for row in qmb] == [[]] * len(TAPE), (
+        "a replay has no venue read, so its row carries no account fact"
+    )
+    assert [_decision(row) for row in node] == [_decision(row) for row in qmb], (
+        "one tape, two hosts, one trail"
+    )

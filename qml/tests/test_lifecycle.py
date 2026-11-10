@@ -1,5 +1,6 @@
 """Each unit's one lifecycle (Part A slice A9, AD-115, AG-13): every move by every actor is
-allowed or refused as the table says, and nothing but his click reaches paper or live."""
+allowed or refused as the table says. Only his click promotes a unit; a risk rule may send a
+stopped member back to paper, and never anywhere else."""
 
 from __future__ import annotations
 
@@ -23,6 +24,8 @@ HIM = Actor(ActorKind.HIS_CLICK, "operator")
 JUDGE = Actor(ActorKind.JUDGE, "run:judge-7")
 RISK = Actor(ActorKind.RISK_RULE, "node:vps-1")
 KEY = MarketKey("dummy-trend-pullback", "v1", "fx.eurusd")
+G_RECORD = "qmbr-g-pass"
+"""The passing G safety record a draft names to reach paper on his click (AD-24)."""
 
 
 def _event(
@@ -35,6 +38,7 @@ def _event(
     clears: str | None = None,
     at: datetime | None = None,
     writer: str = "this-pc",
+    evidence: str | None = None,
 ) -> Event:
     return Event(
         event_id=f"e{n}-{version}",
@@ -46,7 +50,7 @@ def _event(
         to_state=to_state,
         by=by,
         reason="test",
-        evidence_ref=None,
+        evidence_ref=evidence,
         at=at or T0 + timedelta(minutes=n),
         writer=writer,
         sequence=n,
@@ -76,7 +80,7 @@ def _path(target: State, version: str = "v1") -> list[Event]:
 def _attempt(start: State, to: State, by: Actor) -> list[Refusal]:
     before = _path(start)
     stop = before[-1].event_id if start is S.STOPPED else None
-    move = _event(10, start, to, by, clears=stop)
+    move = _event(10, start, to, by, clears=stop, evidence=G_RECORD)
     folded = fold([*before, move])
     assert folded.applied[: len(before)] == tuple(before), "the path to the start state is legal"
     return [rejected.refusal for rejected in folded.rejected]
@@ -86,11 +90,13 @@ NOT_RETIRED = [state for state in S if state is not S.RETIRED]
 ALLOWED = {
     (S.DRAFT, S.TESTED, ActorKind.JUDGE),
     (S.DRAFT, S.PARKED, ActorKind.JUDGE),
+    (S.DRAFT, S.PAPER, ActorKind.HIS_CLICK),
     (S.TESTED, S.PAPER, ActorKind.HIS_CLICK),
     (S.PAPER, S.LIVE, ActorKind.HIS_CLICK),
     (S.PAPER, S.STOPPED, ActorKind.RISK_RULE),
     (S.LIVE, S.STOPPED, ActorKind.RISK_RULE),
     (S.STOPPED, S.STOPPED, ActorKind.RISK_RULE),
+    (S.STOPPED, S.PAPER, ActorKind.RISK_RULE),
     (S.STOPPED, S.PAPER, ActorKind.HIS_CLICK),
     (S.STOPPED, S.LIVE, ActorKind.HIS_CLICK),
     (S.LIVE, S.PARKED, ActorKind.HIS_CLICK),
@@ -116,18 +122,32 @@ def test_every_move_by_every_actor_is_allowed_or_refused_as_the_table_says() -> 
     assert allowed == ALLOWED
 
 
-TOWARD_TRADING = [(S.TESTED, S.PAPER), (S.PAPER, S.LIVE), (S.STOPPED, S.PAPER), (S.STOPPED, S.LIVE)]
+TOWARD_TRADING = [
+    (S.DRAFT, S.PAPER),
+    (S.TESTED, S.PAPER),
+    (S.PAPER, S.LIVE),
+    (S.STOPPED, S.PAPER),
+    (S.STOPPED, S.LIVE),
+]
 OTHERS = ["agent:copilot-1", "run:wf-9", "node:vps-1", "system", "", "Operator", "operator "]
+BACK_TO_PAPER = (S.STOPPED, S.PAPER, ActorKind.RISK_RULE)
 
 
 @pytest.mark.parametrize("principal", OTHERS)
-def test_no_principal_but_operator_moves_a_unit_toward_paper_or_live(principal: str) -> None:
-    refusals = {
+def test_no_principal_but_operator_promotes_a_unit(principal: str) -> None:
+    """A principal that is not his click makes one move toward trading: a risk rule sends a
+    stopped member back to paper. Every other move toward paper or live, and every move to live,
+    stays his."""
+    moves = {
         (start, to, kind): _attempt(start, to, Actor(kind, principal))
         for (start, to), kind in itertools.product(TOWARD_TRADING, ActorKind)
     }
 
-    assert refusals == {move: [Refusal.NOT_OPERATOR] for move in refusals}
+    assert {move for move, refusals in moves.items() if refusals == []} == {BACK_TO_PAPER}
+    assert all(refusals for move, refusals in moves.items() if move != BACK_TO_PAPER)
+    assert {
+        move: refusals for move, refusals in moves.items() if move[1] is S.LIVE
+    } == {move: [Refusal.NOT_OPERATOR] for move in moves if move[1] is S.LIVE}
 
 
 def test_the_judge_never_moves_a_unit_to_paper() -> None:
@@ -135,6 +155,27 @@ def test_the_judge_never_moves_a_unit_to_paper() -> None:
 
     assert fold(events).state(KEY) is S.TESTED
     assert [r.refusal for r in fold(events).rejected] == [Refusal.NOT_OPERATOR]
+
+
+def test_a_draft_reaches_paper_on_his_click() -> None:
+    """A draft moves straight to paper on his click, on the safety half of G and no judge pass."""
+    stamped = _event(0, S.DRAFT, S.PAPER, HIM, evidence=G_RECORD)
+
+    folded = fold([stamped])
+
+    assert (folded.state(KEY), folded.rejected) == (S.PAPER, ())
+
+
+def test_no_g_record_no_paper() -> None:
+    """The same click with no G record named is refused: paper needs the safety record."""
+    unstamped = _event(0, S.DRAFT, S.PAPER, HIM)
+
+    folded = fold([unstamped])
+
+    assert (folded.state(KEY), [r.refusal for r in folded.rejected]) == (
+        S.DRAFT,
+        [Refusal.G_RECORD_MISSING],
+    )
 
 
 @pytest.mark.parametrize("node_clock", [timedelta(seconds=-50), timedelta(minutes=30)])
