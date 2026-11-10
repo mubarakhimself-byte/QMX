@@ -29,7 +29,7 @@ from qmf.core.fingerprint import fingerprint
 from qml.compile import CompiledUnit, compile_unit
 from qml.door import check
 from qmx_library.port import LibraryRefused, ObjectView
-from qmx_library.principal import MAIN, Principal
+from qmx_library.principal import MAIN, Principal, state_ref
 
 from qmx_tools.gather import gather
 
@@ -68,9 +68,11 @@ class ShippedStore:
     """A store that answers QML's shipped instrument records where the Library holds none.
 
     `gather` reads it exactly as it reads a Library: `with_field` for a symbol, then `head`, then
-    `get`. A record on `main` wins, because a shipped answer is offered only for a venue and
-    symbol the store does not already hold, so one market still binds one record. Wrapped around
-    None it is what a check with no Library reads, and every other verb goes to the real store.
+    `get`. A live record on `main` wins, because a shipped answer is offered only for a venue and
+    symbol the store holds no live record for: one on a draft, or on an archived item, binds
+    nothing (`gather._held` reads it the same way), so one market still binds one record. Wrapped
+    around None it is what a check with no Library reads, and every other verb goes to the real
+    store.
     """
 
     store: Store | None = None
@@ -89,11 +91,12 @@ class ShippedStore:
         held = [] if self.store is None else self.store.with_field(kind_name, key, value)
         if kind_name != "instrument" or key != "symbol":
             return held
-        taken: set[str] = (
-            set()
-            if self.store is None
-            else {str(self.get(self.engine, object_id).fields.get("venue")) for object_id in held}
-        )
+        taken: set[str] = set()
+        for object_id in held:
+            view = self.get(self.engine, object_id)
+            head, state = self.head(view.item, MAIN), self.head(view.item, state_ref(view.item))
+            if head is not None and not (state is not None and state[0] == "archived"):
+                taken.add(str(view.fields.get("venue")))
         return [
             *held,
             *(
