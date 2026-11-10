@@ -13,12 +13,24 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from qmx_library.port import Draft
+from qmx_library.principal import MAIN, Principal, drafts_ref
 
 from qmx_tools import functions, gather
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
 
 TEMPLATES = Path(str(gather.TEMPLATES))
+OPERATOR = Principal("operator")
+EURUSD: dict[str, Any] = {
+    "venue": "icmarkets-ctrader",
+    "symbol": "EURUSD",
+    "market_id": "eurusd",
+    "class": "fx",
+    "currency": "USD",
+    "status": "specified",
+}
+"""A record on the canary's fx market, with the kind's six required keys and nothing else."""
 
 
 @pytest.fixture
@@ -76,3 +88,38 @@ def test_a_new_template_is_one_json(
         "['canary', 'dummy-trend-pullback', 'third-shape']"
     )
     assert (checked["verdict"], checked["counts"]["errors"]) == ("pass", 0)
+
+
+def test_an_archived_eurusd_lets_the_shipped_record_answer(context: DomainContext) -> None:
+    store = context.library.store
+    store.put(
+        OPERATOR,
+        Draft("instrument", "instrument-eurusd", "EURUSD", fields=dict(EURUSD)),
+        on=MAIN,
+        expected_head=None,
+    )
+    store.archive(OPERATOR, "instrument-eurusd", "withdrawn")
+    unit = domain_functions(context)["unit"]
+    made = unit["unit_new"]("canary", {})
+
+    result = unit["unit_check"](document=made["document"])
+
+    assert (result["verdict"], result["counts"]["errors"]) == ("pass", 0)
+    assert result["notes"] == []
+
+
+def test_a_draft_only_eurusd_does_not_hide_the_shipped_record(context: DomainContext) -> None:
+    store = context.library.store
+    store.put(
+        OPERATOR,
+        Draft("instrument", "instrument-eurusd", "EURUSD", fields=dict(EURUSD)),
+        on=drafts_ref("instrument-eurusd"),
+        expected_head=None,
+    )
+    unit = domain_functions(context)["unit"]
+    made = unit["unit_new"]("canary", {})
+
+    result = unit["unit_check"](document=made["document"])
+
+    assert (result["verdict"], result["counts"]["errors"]) == ("pass", 0)
+    assert result["notes"] == []

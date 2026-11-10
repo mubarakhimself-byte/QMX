@@ -20,7 +20,8 @@ from qmx_control.service import ControlService, WorkflowEngine
 from qmx_engine.ledger import redact
 from qmx_host.host import LanderLibrary, landers  # pyright: ignore[reportMissingTypeStubs]
 from qmx_host.practice_start import practice_start  # pyright: ignore[reportMissingTypeStubs]
-from qmx_library.principal import Principal
+from qmx_library.port import Draft
+from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
@@ -32,6 +33,15 @@ MARCH: dict[str, Any] = {"start": "2025-03-01", "end": "2025-04-01"}
 ASKED: dict[str, Any] = {"window": MARCH, "allow_gaps": True, "source": "practice"}
 """The shipped month has a 4-bar Sunday-open hole each week, one more than `gap_bars_refuse`, and
 its bars are read from the market store's `practice` source."""
+EURUSD: dict[str, Any] = {
+    "venue": "icmarkets-ctrader",
+    "symbol": "EURUSD",
+    "market_id": "eurusd",
+    "class": "fx",
+    "currency": "USD",
+    "status": "specified",
+}
+"""A record for the canary's fx market, with the kind's six required keys and nothing else."""
 
 
 class Clock:
@@ -112,3 +122,19 @@ def test_a_backtest_finds_bars_from_an_empty_store(world: World) -> None:
         "practice/XAUUSD/bar-m1/ask",
     ]
     assert record is not None and record.safety_passed
+
+
+def test_a_draft_eurusd_does_not_stop_either_shipped_record_landing(tmp_path: Path) -> None:
+    with Store.open(tmp_path / "library", redactor=redact) as store:
+        store.put(
+            OPERATOR,
+            Draft("instrument", "draft-eurusd", "EURUSD draft", fields=dict(EURUSD)),
+            on=drafts_ref("draft-eurusd"),
+            expected_head=None,
+        )
+
+        started = practice_start(tmp_path / "home", store)
+
+        assert [one.outcome for one in started.instruments] == ["landed", "landed"]
+        assert store.head("instrument-icmarkets-ctrader-eurusd", MAIN) is not None
+        assert store.head("instrument-icmarkets-ctrader-xauusd", MAIN) is not None
