@@ -32,7 +32,7 @@ LINES = (
     "test trade rows in This PC's store",
 )
 DEPLOY = LINES[5]
-PLAIN = "no unit has passed the judge yet, so nothing was deployed"
+PLAIN = "no unit was named, so nothing was deployed"
 DEPLOYMENT = "dep-1"
 TAG = "abcd1234"
 SETUP_CHECKS = [
@@ -331,7 +331,7 @@ def test_with_no_unit_named_it_prints_the_plain_line_and_exits_zero(
     code = rig.rehearse()
     out = capsys.readouterr().out
     assert code == 0
-    assert PLAIN == "no unit has passed the judge yet, so nothing was deployed"
+    assert PLAIN == "no unit was named, so nothing was deployed"
     assert PLAIN in out.splitlines()
     assert [line for line in out.splitlines() if line.startswith("FAIL ")] == []
     assert "POST /api/units/promote" not in rig.host.asked
