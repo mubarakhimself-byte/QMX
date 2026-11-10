@@ -8,6 +8,10 @@ against QML's own blocks; the row checks against the Library's as well.
 
 `offline_checked` is what a step with no Library can say: the plugin's hook and the `unit-check`
 block ask it, and it defers to `notes` what only the Library can settle.
+
+A market whose record the store does not hold reads the record QML ships with its numbers
+(`qml/src/qml/numbers/shipped_records.json`), through `ShippedStore`: the same `with_field`,
+`head` and `get` calls `gather` makes of a Library, so day one needs no broker.
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
@@ -22,12 +28,15 @@ from qmf.core import is_refusal
 from qmf.core.fingerprint import fingerprint
 from qml.compile import CompiledUnit, compile_unit
 from qml.door import check
+from qmx_library.port import LibraryRefused, ObjectView
+from qmx_library.principal import MAIN, Principal
 
 from qmx_tools.gather import gather
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
+    from qmx_library.port import JsonObject, ObjectId
     from qmx_library.store import Store
 
 PASSED = 0
@@ -41,20 +50,117 @@ records. QMB's lander compiles the pin with the Library before any run, so nothi
 NO_SOURCE: Final = "block_missing"
 """What the compiler adds for a pin only the Library holds, beside that pin's `pin_unresolved`."""
 NOT_BUILT_HINT: Final = "the compiler format does not run this yet; write it another way"
+SHIPPED_RECORDS: Final = files("qml.numbers") / "shipped_records.json"
+"""The instrument records that ship with QML, beside the parser that reads their keys."""
+SHIPPED_ITEM: Final = "shipped-instrument-"
+"""The item a shipped record answers under. No Library item carries this name, so a shipped
+record and one on `main` never answer for each other."""
+
+
+def shipped_records() -> tuple[dict[str, object], ...]:
+    """The instrument records QML ships, each labelled `source: shipped` in the file."""
+    body = cast("dict[str, object]", json.loads(SHIPPED_RECORDS.read_text("utf-8")))
+    return tuple(cast("list[dict[str, object]]", body["records"]))
+
+
+@dataclass
+class ShippedStore:
+    """A store that answers QML's shipped instrument records where the Library holds none.
+
+    `gather` reads it exactly as it reads a Library: `with_field` for a symbol, then `head`, then
+    `get`. A record on `main` wins, because a shipped answer is offered only for a venue and
+    symbol the store does not already hold, so one market still binds one record. Wrapped around
+    None it is what a check with no Library reads, and every other verb goes to the real store.
+    """
+
+    store: Store | None = None
+    records: tuple[dict[str, object], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.records:
+            self.records = shipped_records()
+
+    @property
+    def engine(self) -> Principal:
+        """The principal a read names; with no Library behind it, a shipped engine answers."""
+        return Principal("engine", "shipped") if self.store is None else self.store.engine
+
+    def with_field(self, kind_name: str, key: str, value: str) -> list[ObjectId]:
+        held = [] if self.store is None else self.store.with_field(kind_name, key, value)
+        if kind_name != "instrument" or key != "symbol":
+            return held
+        taken: set[str] = (
+            set()
+            if self.store is None
+            else {str(self.get(self.engine, object_id).fields.get("venue")) for object_id in held}
+        )
+        return [
+            *held,
+            *(
+                SHIPPED_ITEM + str(record["symbol"])
+                for record in self.records
+                if record.get("symbol") == value and str(record.get("venue")) not in taken
+            ),
+        ]
+
+    def head(self, item: str, ref: str) -> tuple[ObjectId, int] | None:
+        if item.startswith(SHIPPED_ITEM):
+            return (item, 1) if ref == MAIN else None
+        return None if self.store is None else self.store.head(item, ref)
+
+    def get(self, who: Principal, object_id: ObjectId) -> ObjectView:
+        if object_id.startswith(SHIPPED_ITEM):
+            return self._view(object_id)
+        if self.store is None:
+            raise LibraryRefused("not_found", f"no object {object_id} and no Library to read it")
+        return self.store.get(who, object_id)
+
+    def read_blob(self, blob_id: str) -> bytes:
+        if self.store is None:
+            raise LibraryRefused("not_found", f"no blob {blob_id} and no Library to read it")
+        return self.store.read_blob(blob_id)
+
+    def _view(self, object_id: str) -> ObjectView:
+        symbol = object_id.removeprefix(SHIPPED_ITEM)
+        record = next(record for record in self.records if record.get("symbol") == symbol)
+        return ObjectView(
+            object_id,
+            object_id,
+            "instrument",
+            "record",
+            symbol,
+            "",
+            cast("JsonObject", {**record, "record_version": 1}),
+            {},
+            (),
+            (),
+            {},
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        store = self.__dict__.get("store")
+        if store is None:
+            raise AttributeError(name)
+        return getattr(store, name)
+
+
+def shipped(store: Store | None) -> ShippedStore:
+    """`store` with QML's shipped instrument records behind it."""
+    return ShippedStore(store)
 
 
 def checked(
     store: Store | None, document: object, previous_problem_set: str | None = None
 ) -> dict[str, object]:
     """`document`'s check result with what `gather` found in `store`, and gather's notes."""
-    found = gather(store, document)
+    found = gather(shipped(store), document)
     result = check(document, found.context, previous_problem_set)
     return {**result.to_json(), "notes": list(found.warnings)}
 
 
 def _compiler_problems(document: object) -> list[dict[str, object]]:
     """What only the compiler refuses, in the check's own problem shape, without the blind spot."""
-    built = compile_unit(document, gather(None, document).context)
+    built = compile_unit(document, gather(shipped(None), document).context)
     if isinstance(built, CompiledUnit):
         return []
     return [
