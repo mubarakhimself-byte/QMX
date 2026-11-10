@@ -47,7 +47,7 @@ The kit summarizes; this file points at the originals. When a summary is unclear
 | What | Path or address |
 |---|---|
 | T3 Code: his desktop app, plus its web door (pair in his Chrome) | Desktop app "T3 Code (Beta)"; web `http://172.23.80.1:3773` |
-| Video and Stageshow downloads (frames, skill source) | `kit/refs/raw/watch-of628/`, `kit/refs/raw/stageshow-src/` (copied out of a temporary folder; the video file itself was dropped, re-download it from https://youtu.be/of628n5754g) |
+| Video and Stageshow downloads (frames, skill source) | `kit/refs/raw/stageshow-src/` (copied out of a temporary folder; video files deleted on his word, notes stay in `kit/refs/videos.md`) |
 | Skill repos (cloned) | `C:/Users/Mubarak/skill-repos/emil-skills`, `C:/Users/Mubarak/skill-repos/taste-skill` |
 | Installed design skills | `C:/Users/Mubarak/.claude/skills/` (`variant-picker`, `emil-design-eng`, `break-ui`, `review-animations`, `remove-animations`, `apple-design`) |
 | Refero (signed in, free tier; its research chat works best) | https://refero.design |
