@@ -6,7 +6,7 @@ This is the release note for stop point A. It says what now works, what is still
 
 Sign the trading node at version 0.1.15. That signature records stop point A. One unit trades on paper from zero, with no broker and no judge, sizes itself, and brakes bind on any unit that declares them.
 
-QMB, the tester app, moves to 1.0.10 in the same PR because RC-17 added a test file to its folder. QMB never touches money and is not part of what you sign.
+QMB, the tester app, moves to 1.0.10 in the same PR because a test file inside its app folder changed twice. QMB never touches money and is not part of what you sign.
 
 Only your hand signs. The control service's signing route is operator-only and is not an agent tool. The signatures besides yours belong to tests, each made with its own key in its own home.
 
@@ -35,7 +35,7 @@ Only your hand signs. The control service's signing route is operator-only and i
 
 Your signature binds the trading node's app folder at 0.1.15. The signature is a keyed hash over four things: the app's id, the hash of that folder, the active revision it replaces, and the action, publish or rollback. The folder hash covers the node's own files, including its `app.toml`, `pyproject.toml` and `uv.lock`. It does not bind the QML. The lock names QML as an editable path with no hash, so a change to the QML alone does not change the signature. The QML this slice changes is this release's subject, not something your signature pins. It does not approve live trading, does not turn a placeholder into a number, and does not make the practice venue a production binding.
 
-Publishing enforces this signature. The publish step computes the expected signature from those four values and refuses to publish a money app unless the signature matches, so the trading node will not go live without your signature. The publish record's `operator_signed` reads `true` for a money publish. There is no separate gate in the release tooling that checks stop point A, so this note and the 0.1.15 version row are the record for the stop point.
+Publishing enforces this signature. The publish step computes the expected signature from those four values. It refuses a publish without that signature when the app is money or replaces a money app. The supervisor refuses to start a money app with no active revision or to rebuild a signed version whose sources changed, QML included. The trading node will not go live without your signature. The publish record's `operator_signed` reads `true` whenever the signature was required. There is no separate gate in the release tooling that checks stop point A, so this note and the 0.1.15 version row are the record for the stop point.
 
 ## Known reds that are not this slice
 
