@@ -63,6 +63,9 @@ _CENSUS = frozenset(
     Read.reading Read.market Read.fallback Read.stale_after_s
     NumberSpec.kind NumberSpec.measure NumberSpec.default NumberSpec.motion NumberSpec.authority
     NumberSpec.origin NumberSpec.range NumberSpec.applies_to_open_positions
+    NumberSpec.derivation NumberSpec.owner NumberSpec.reason NumberSpec.cautious NumberSpec.guard
+    NumberSpec.never_self_tune NumberSpec.stage_values
+    Guard.revert_after Guard.freeze_after
     Motion.mode Motion.source Motion.cadence Motion.min_count Motion.shrink_k Motion.step_limit
     Motion.rule Motion.rule_params
     Cadence.every_closed_trades Cadence.at
@@ -194,6 +197,7 @@ _UNBOUND = {
     "motion": {"mode": "fixed"},
     "authority": "motion_inside_range",
     "origin": "source_stated",
+    "reason": "a spare number nothing binds, so the format refuses it by name",
 }
 _PARTS: dict[str, tuple[Edit, str, str]] = {
     "sessions": (_put("sessions", [_SESSION]), "sessions_not_built", "/sessions"),
