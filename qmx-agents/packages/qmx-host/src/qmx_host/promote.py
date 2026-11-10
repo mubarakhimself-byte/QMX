@@ -419,6 +419,8 @@ class Promoter:
                 click, digest, current, compiled.compiled_fingerprint.value, report or None
             )
             self._allowed(probe, known)
+        if not report:
+            report, tested = self._g_record(compiled, click.market_id)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
         account = _one(
             _main(self.store, "account", "account_id", click.account.id),
@@ -439,8 +441,6 @@ class Promoter:
                     f"the unit still uses placeholder blocks: {', '.join(compiled.placeholders)}",
                     "Tick that you accept the placeholders, then click again.",
                 )
-        if not report:
-            report, tested = self._g_record(compiled, click.market_id)
         if again is not None:
             deployment = self._deployment(
                 click,
