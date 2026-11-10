@@ -7,7 +7,9 @@ fraction 0.005, equity 100000, EURUSD's 0.0050 stop distance, and 1.00 lots.
 
 The row hash is pinned as a literal on purpose: it is the receipt's identity, so a change to an
 input, a step or a verdict the size used must change the hash loudly instead of passing. It is
-read from the implementation once, when the row's shape is fixed.
+read from the implementation once, when the row's shape is fixed; it moved once after that, when
+the shipped dummy's numbers each gained the reason and owner this section requires, because the
+receipt covers the document's risk half.
 """
 
 # pyright: reportPrivateUsage=false
@@ -25,7 +27,7 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:01e3bd10993e186a9e12d3ee9b9429c0e61d109aaa11a7c3e349ce7f1d1bbee0"
+_STORED_HASH = "fp1:sha256:b235d5fdd1b0713e6e88cf0de26894790aeeedeead0e8ec1c79a588bb05c02db"
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
