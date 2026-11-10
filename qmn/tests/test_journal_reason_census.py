@@ -76,7 +76,7 @@ def test_every_text_the_node_can_write_has_a_code() -> None:
     }
 
     assert no_code == {}
-    assert len(found) == 53, "the walk has stopped finding the node's texts"
+    assert len(found) == 54, "the walk has stopped finding the node's texts"
     assert {
         "the cross-unit hook refused the order",
         "the close could not be built (X)",

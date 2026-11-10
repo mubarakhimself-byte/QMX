@@ -693,6 +693,7 @@ def bound_rig(
             clock_ns=clock,
             steady_ns=steady_ns,
             image_digest=lambda: DIGEST,
+            bar_ns=BAR,
         )
         made.append(built)
         return built

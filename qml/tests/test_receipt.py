@@ -9,7 +9,9 @@ The row hash is pinned as a literal on purpose: it is the receipt's identity, so
 input, a step or a verdict the size used must change the hash loudly instead of passing. It is
 read from the implementation once, when the row's shape is fixed; it moved once after that, when
 the shipped dummy's numbers each gained the reason and owner this section requires, because the
-receipt covers the document's risk half.
+receipt covers the document's risk half; and it moved again when this row joined the stack tip,
+whose compiler format 9 fingerprints the same numbers under a new format. Each value after the
+first was read from a failing run at the tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -27,7 +29,7 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:b235d5fdd1b0713e6e88cf0de26894790aeeedeead0e8ec1c79a588bb05c02db"
+_STORED_HASH = "fp1:sha256:f034a3c2d69631653cecf61a46e7623766345a5eb58a0cb663501376bc3a527d"
 
 
 def _proposal(fraction: str) -> hosted.Proposal:

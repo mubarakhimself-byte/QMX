@@ -547,9 +547,11 @@ def test_a_slice_driven_again_sends_nothing_and_fills_nothing_twice(tmp_path: Pa
     # The driver's own state before the slice it would drive again after a refusal.
     frontier, resting = loop._frontier, loop._resting  # pyright: ignore[reportPrivateUsage]
     for _, market, bar in (item for item in live if item[0] == after):
-        unit.windows[market].push(bar)
+        unit.windows[(unit.stream, market)].push(bar)
     observations = tuple(
-        SliceObservation(market, Instant(after), True) for t, market, _ in live if t == after
+        SliceObservation(unit.stream_id(market), Instant(after), True)
+        for t, market, _ in live
+        if t == after
     )
     driven = [
         run_slice(

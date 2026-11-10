@@ -104,7 +104,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 8
+COMPILER_FORMAT_VERSION: Final[int] = 9
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -261,7 +261,8 @@ class SlowPlan:
 class Plan:
     """The compiled closure as data: what runs, in order, on each bar of each market."""
 
-    stream: str
+    streams: tuple[str, ...]
+    """The unit's streams, the primary first: the fastest bar, which the unit steps on."""
     markets: tuple[tuple[Market, InstrumentRecord], ...]
     sides: tuple[SidePlan, ...]
     exits: tuple[ExitPlan, ...]
@@ -270,6 +271,11 @@ class Plan:
     derived: tuple[DerivedPlan, ...]
     slow: tuple[SlowPlan, ...]
     defaults: Mapping[str, Decimal]
+
+    @property
+    def stream(self) -> str:
+        """The primary stream's name: the one a single-stream reader means."""
+        return self.streams[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -876,19 +882,34 @@ def _built(
         return None
 
 
-def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
-    """The bars a market needs before entries, and the unit's summed state bound. It builds every
-    instance once, so a value no block can run is named at compile.
+def _feeds(bound: BoundBlock, streams: AbstractSet[str]) -> frozenset[str]:
+    """The streams a binding's own inputs name. A ref that names a binding names no stream."""
+    return frozenset(
+        ref.partition(".")[0] for ref in bound.inputs.values() if ref.partition(".")[0] in streams
+    )
 
-    A binding is warm at the later of its recorded settle length, at this binding's parameters, and
-    the bars its upstream needs plus its own warm-up; a derived number at its source's plus its
-    block's.
+
+def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
+    """The bars each of the unit's streams needs before entries, and the unit's summed state
+    bound. It builds every instance once, so a value no block can run is named at compile.
+
+    A binding is warm at the later of its recorded settle length, at this binding's parameters,
+    and the bars its upstream needs plus its own warm-up; a derived number at its source's plus
+    its block's. A bar count belongs to the streams the binding reads, inherited from its
+    upstream when its inputs are all bindings, so a stream read by nothing needs nothing.
     """
+    streams = frozenset(plan.streams)
     warm: dict[str, int] = {}
+    reads: dict[str, frozenset[str]] = {}
+    need: dict[str, int] = dict.fromkeys(plan.streams, 0)
     bound_total = 0
 
     def make(b: BoundBlock, side: Side) -> Instance | None:
         return _built(b.block, _values(b, plan.defaults), b.inputs, side, b.pin, b.where, problems)
+
+    def attribute(key: str) -> None:
+        for stream in reads.get(key, frozenset()):
+            need[stream] = max(need[stream], warm[key])
 
     for side in plan.sides:
         for slot in side.slots:
@@ -896,13 +917,15 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
                 instance = make(b, side.side)
                 if instance is None:
                     continue
-                upstream = max(
-                    (warm.get(f"{side.side.value}.{ref}", 0) for ref in b.inputs.values()),
-                    default=0,
-                )
+                refs = [f"{side.side.value}.{ref}" for ref in b.inputs.values()]
+                upstream = max((warm.get(ref, 0) for ref in refs), default=0)
                 recorded = b.face.settle
                 settle = recorded.bars_at(_values(b, plan.defaults)) if recorded is not None else 0
                 warm[b.key] = max(settle, upstream + instance.warm_up_bars)
+                reads[b.key] = _feeds(b, streams) | frozenset().union(
+                    *(reads.get(ref, frozenset()) for ref in refs)
+                )
+                attribute(b.key)
                 bound_total += instance.state_bound
     for d in plan.derived:
         instance = _built(
@@ -910,15 +933,19 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
         )
         if instance is None:
             continue
-        warm[f"derived.{d.side.value}.{d.number}"] = (
-            warm.get(f"{d.side.value}.{d.source}", 0) + instance.warm_up_bars
-        )
+        key = f"derived.{d.side.value}.{d.number}"
+        source = f"{d.side.value}.{d.source}"
+        warm[key] = warm.get(source, 0) + instance.warm_up_bars
+        reads[key] = reads.get(source, frozenset())
+        attribute(key)
         bound_total += instance.state_bound
     for e in plan.exits:
         instance = make(e.binding, Side.LONG)
         if instance is None:
             continue
         warm[e.binding.key] = instance.warm_up_bars
+        reads[e.binding.key] = _feeds(e.binding, streams)
+        attribute(e.binding.key)
         bound_total += instance.state_bound
     for h in plan.halts:
         # A brake's own warm-up never gates the unit's entries: the row goes cold and says so.
@@ -936,7 +963,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
             f"/numbers/{s.number.name}/motion",
             problems,
         )
-    return max(warm.values(), default=0), bound_total
+    return MappingProxyType(dict(need)), bound_total
 
 
 def _faces(
@@ -1003,8 +1030,16 @@ def _motion_unread(spec: NumberSpec) -> tuple[str, ...]:
 
 def _shape_problems(unit: Unit, problems: _Problems) -> None:
     """The fields of the document this format runs nothing behind."""
-    if len(unit.streams) != 1:
-        problems.add("streams_not_built", "/streams", f"{_FORMAT} runs one stream")
+    if not unit.streams:
+        problems.add("streams_not_built", "/streams", f"{_FORMAT} needs a stream to step on")
+    names = [stream.name for stream in unit.streams]
+    twice = next((name for name in names if names.count(name) > 1), None)
+    if twice is not None:
+        problems.add(
+            "streams_not_built",
+            "/streams",
+            f"{_FORMAT} runs each stream once, and this unit names {twice} twice",
+        )
     if unit.reads:
         problems.add("reads_not_built", "/reads", f"{_FORMAT} reads no readings")
     if unit.sessions:
@@ -1118,7 +1153,7 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
             problems.add(
                 "market_not_built",
                 f"/streams/{index}/market",
-                f"{_FORMAT} runs the one stream on every market in /markets, not on "
+                f"{_FORMAT} runs a stream on every market in /markets, not on "
                 f"{stream.market} alone",
             )
         if stream.price is not Price.BID_ASK:
@@ -1273,7 +1308,7 @@ def compile_unit(
     if problems.found or sizer is None or is_refusal(document_fp):
         return tuple(problems.found)
     plan = Plan(
-        stream=unit.streams[0].name,
+        streams=tuple(s.name for s in sorted(unit.streams, key=lambda s: s.bar.size)),
         markets=markets,
         sides=sides,
         exits=exits,
@@ -1319,7 +1354,7 @@ def compile_unit(
         risk_fingerprint=risk.fingerprint,
         compiler_format_version=COMPILER_FORMAT_VERSION,
         options=options,
-        warm_up={plan.stream: warm_up},
+        warm_up=warm_up,
         state_bound=state_bound,
         placeholders=placeholders,
         trace_schema=TRACE_SCHEMA,
