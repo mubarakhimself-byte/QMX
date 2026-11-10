@@ -15,11 +15,12 @@ from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from typing import cast
 
+import pytest
 from qmf.core.chrono import Instant
-from qmf.risk.controls import Verb
+from qmf.risk.controls import StateWord, Verb
 from qmf.risk.unit_intent import UnitEntryIntent, UnitExitIntent
 from qml.blocks.api import Signal
-from qml.compile import CompiledUnit
+from qml.compile import CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.protocol.unit import (
     Account,
@@ -33,7 +34,7 @@ from qml.protocol.unit import (
 )
 from qml.unit.model import Side
 
-from test_compile_dummy import _compiled, _document, _instants, _ok, _slice, _target
+from test_compile_dummy import _compiled, _context, _document, _instants, _ok, _slice, _target
 
 _MARKET = "fx.eurusd"
 
@@ -264,6 +265,26 @@ def test_a_raising_row_stops_no_exit() -> None:
     assert (intent.kind.value, at) == ("close_full", instants[4])
 
 
+def test_a_raising_row_moves_no_risk_word() -> None:
+    """A raise is a fault, not a brake fire: the row never answered, so the fold cannot read a
+    bench that no restore row could lift and that the node's restart reader never saw."""
+    compiled = _compiled(_one_market_with(_session_loss()))
+    bars = _slice()[_MARKET]
+    instant = _instants({_MARKET: bars})[0]
+    unit = _host(compiled, _surfaces(bars))
+    unit._core.halt_instances["unit.session_loss"] = _Raising()  # the row's block has a bug
+
+    raised = _step(unit, instant)
+    state = unit.risk_state(instant)
+
+    assert [(fault.block, fault.code) for fault in raised.faults] == [
+        ("session-loss-limit-halt@1", "link_fault")
+    ], "the raising row is still a fault"
+    assert (state.word, state.since) == (StateWord.ACTIVE, None), (
+        "a raise is not a brake; only a fired row moves the risk word"
+    )
+
+
 # --- a row in shadow -----------------------------------------------------------------
 
 
@@ -335,3 +356,21 @@ def test_a_row_in_shadow_never_refuses() -> None:
         for intent in (*step.intents, *(one.intent for one in priced))
         if isinstance(intent, UnitEntryIntent)
     ]
+
+
+# --- a row whose own scope disagrees with the list it sits in ------------------------
+
+
+@pytest.mark.parametrize(("listed", "declared"), [("unit", "position"), ("position", "unit")])
+def test_a_halt_row_filed_under_another_scope_is_refused(listed: str, declared: str) -> None:
+    """A row says its scope twice. The list decides where it runs, so the row's own field can
+    only agree or refuse; a row the compiler silently re-scopes would brake the wrong thing."""
+    row = _session_loss()
+    row["scope"] = declared
+    document = _one_market()
+    _with_halt(document, row, listed)
+
+    problems = compile_unit(document, _context())
+
+    assert isinstance(problems, tuple), "a row whose scope field disagrees with its list compiled"
+    assert [(p.kind, p.where) for p in problems] == [("halt_scope", f"/halts/{listed}/0/scope")]

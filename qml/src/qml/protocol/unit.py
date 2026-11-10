@@ -670,10 +670,10 @@ class _Core:
         self.risk = Fold(f"unit:{scope_id}")
         """What this unit's brakes say it is doing (AD-18): one fold, fed by the rows its own
         control path answers and by the journal rows a host hands on a restart."""
-        self.risk_seeded = risk_rows is not None
-        """Whether a host handed the rows: when it did they are the truth, and the snapshot's
-        cache is not read."""
-        if risk_rows is not None:
+        self.risk_seeded = bool(risk_rows)
+        """Whether a host handed rows to seed the fold. An empty sequence is a reader that found
+        none, not the truth that the scope is up, so the snapshot's cache answers instead."""
+        if risk_rows:
             self.risk.extend(risk_rows)
         self.pending: list[StateEvent] = []
         self.pending_faults: list[Fault] = []
@@ -1204,8 +1204,8 @@ class _Run:
             facts["account.equity"] = equity
         run = self.unit.control_runner.run(facts)
         for raised in run.raised:
+            # a raise is a fault, not a brake: it moves no risk word, and no restore row lifts one
             self.faults.append(Fault(raised.row.pin, FaultPhase.CONTROLS, raised.code))
-            self._fold(raised.row.key, raised.code, Verb.NO_NEW_ENTRIES, f"{raised.row.pin} raised")
         for fired in run.fired:
             self.controls_out.append(
                 ControlEvent(

@@ -502,11 +502,12 @@ class UnitSliceHandler:
         """What each brake left this step: a fire for real, or the entry it would have refused.
 
         Every live fire lands one ``risk_event`` row per root cause, so a brake that holds for an
-        hour lands one card and a flatten or reduce fire is on the record too. A row in shadow
-        lands one ``would_have`` row for each entry this step took, because a shadow row refuses
-        nothing and those entries went ahead. A row that refused for real lands one ``would_have``
-        row for each decision the step marked ``suppressed``, which only a brake writes. Neither
-        row can reach an exit: nothing here builds or blocks one (AD-12, AD-13).
+        hour lands one card, a flatten or reduce fire is on the record too, and a position-scope
+        brake that refuses no entry still lands its fire's row. A row in shadow lands one
+        ``would_have`` row for each entry this step took, because a shadow row refuses nothing and
+        those entries went ahead. A row that refused for real lands one ``would_have`` row for each
+        decision the step marked ``suppressed``, which only a brake writes. Neither row can reach
+        an exit: nothing here builds or blocks one (AD-12, AD-13).
         """
         taken = [row for row in step.decisions if row.outcome == "taken"]
         suppressed = [row for row in step.decisions if row.outcome == "suppressed"]

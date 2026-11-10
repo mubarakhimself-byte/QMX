@@ -117,7 +117,7 @@ or the census labels it.
 | `ControlBinding.block` | - | - | - |
 | `ControlBinding.params` | - | - | - |
 | `ControlBinding.inputs` | - | - | - |
-| `ControlBinding.scope` | - | - | - |
+| `ControlBinding.scope` | `/halts/unit/0/scope` | `halt_scope` | compiler format 8 runs a row in the unit list, and this row's scope says position |
 | `ControlBinding.verb` | - | - | - |
 | `ControlBinding.shadow` | - | - | - |
 | `Read.reading` | - | - | - |

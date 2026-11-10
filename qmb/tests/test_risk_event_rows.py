@@ -91,6 +91,20 @@ def _shadow_fire() -> ControlEvent:
     )
 
 
+def _fired(*, verb: Verb = Verb.NO_NEW_ENTRIES, scope: str = "unit") -> ControlEvent:
+    """The same ``session-loss-limit-halt@1`` answer, live: it fired for real."""
+    return ControlEvent(
+        row="session_loss",
+        pin="session-loss-limit-halt@1",
+        scope=scope,
+        kind="fired",
+        verb=verb,
+        factor=None,
+        code="session-loss-limit-halt",
+        reason="lost 2R this session, at or past the 2R limit",
+    )
+
+
 class _Scripted:
     """A unit that answers each instant with the rows and control answers a test names."""
 
@@ -199,6 +213,106 @@ def test_a_shadow_row_writes_would_have(tmp_path: Path) -> None:
     ]
     assert _written(closed.value, "risk_event") == [], (
         "a row in shadow refuses nothing, so nothing fired for real"
+    )
+
+
+def test_a_live_fire_writes_its_row_and_a_refire_writes_none(tmp_path: Path) -> None:
+    """A live halt fires on trade 3: one ``risk_event`` row naming the row, its block, the verb it
+    ran and its words; one ``would_have`` for the entry it suppressed; no second row on the next
+    bar, because one root cause is one card."""
+    compiled = _compiled(tmp_path)
+    opened = RunJournal.open(
+        tmp_path / "journal", compiled, run_id="run-rc-15", machine="pc", build="test"
+    )
+    assert not is_refusal(opened), opened
+    journal = opened.value
+
+    fired = _fired()
+    _drive(
+        {
+            _T1: ([_row("row-2", _T1, "suppressed")], [fired]),
+            _T2: ([], [fired]),
+        },
+        journal,
+    )
+    closed = journal.close()
+
+    assert not is_refusal(closed), closed
+    assert _written(closed.value, "risk_event") == [
+        {
+            "code": "session-loss-limit-halt",
+            "root": "session-loss-limit-halt@1",
+            "event_id": "session-loss-limit-halt:unit.session_loss",
+            "action": "look at the brake, then resume it when its cause is gone",
+            "actionable": True,
+            "row": "unit.session_loss",
+            "pin": "session-loss-limit-halt@1",
+            "verb": "no_new_entries",
+            "detail": "lost 2R this session, at or past the 2R limit",
+        }
+    ], "the live writer lands one row for the root cause, and the next bar adds no second"
+    assert _written(closed.value, "would_have") == [
+        {
+            "row": "unit.session_loss",
+            "decision_row_id": "row-2",
+            "code": "session-loss-limit-halt",
+            "reason": "halt_slot",
+            "propensity": "1/1",
+            "verb": "no_new_entries",
+            "detail": "lost 2R this session, at or past the 2R limit",
+            "market_id": _M,
+            "side": "long",
+        }
+    ]
+
+
+def test_a_fire_that_refuses_nothing_still_writes_its_row(tmp_path: Path) -> None:
+    """A warn-only row (``verb: none``) and a position-scope ``no_new_entries`` row both fired for
+    real: each lands its one ``risk_event`` row, and neither lands a ``would_have``, because a
+    position-scope brake acts on one position and refuses no entry."""
+    compiled = _compiled(tmp_path)
+    opened = RunJournal.open(
+        tmp_path / "journal", compiled, run_id="run-rc-15", machine="pc", build="test"
+    )
+    assert not is_refusal(opened), opened
+    journal = opened.value
+
+    _drive(
+        {
+            _T1: ([], [_fired(verb=Verb.NONE)]),
+            _T2: ([_row("row-4", _T2, "suppressed")], [_fired(scope="position")]),
+        },
+        journal,
+    )
+    closed = journal.close()
+
+    assert not is_refusal(closed), closed
+    assert _written(closed.value, "risk_event") == [
+        {
+            "code": "session-loss-limit-halt",
+            "root": "session-loss-limit-halt@1",
+            "event_id": "session-loss-limit-halt:unit.session_loss",
+            "action": "look at the brake, then resume it when its cause is gone",
+            "actionable": True,
+            "row": "unit.session_loss",
+            "pin": "session-loss-limit-halt@1",
+            "verb": "none",
+            "detail": "lost 2R this session, at or past the 2R limit",
+        },
+        {
+            "code": "session-loss-limit-halt",
+            "root": "session-loss-limit-halt@1",
+            "event_id": "session-loss-limit-halt:position.session_loss",
+            "action": "look at the brake, then resume it when its cause is gone",
+            "actionable": True,
+            "row": "position.session_loss",
+            "pin": "session-loss-limit-halt@1",
+            "verb": "no_new_entries",
+            "detail": "lost 2R this session, at or past the 2R limit",
+        },
+    ], "a fire with no entry to refuse is still a fire: each shape lands its one row"
+    assert _written(closed.value, "would_have") == [], (
+        "neither row refused an entry, so neither has a would-have"
     )
 
 

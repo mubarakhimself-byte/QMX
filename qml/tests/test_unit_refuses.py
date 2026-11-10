@@ -251,6 +251,26 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
         "plain_python_not_built",
         "/plain_python",
     ),
+    "a halt filed under another scope": (
+        _put(
+            "halts",
+            {
+                "position": [],
+                "unit": [
+                    {
+                        "name": "probe",
+                        "scope": "position",
+                        "block": "equity-drawdown-halt@1",
+                        "params": {"max_drawdown": {"value": "0.05"}, "trailing": {"value": "0"}},
+                        "inputs": {},
+                    }
+                ],
+                "account": [],
+            },
+        ),
+        "halt_scope",
+        "/halts/unit/0/scope",
+    ),
     "an exit's scope": (
         _put("exit_set/0/scope", "account"),
         "exit_not_built",
