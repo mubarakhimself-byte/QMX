@@ -609,7 +609,7 @@
  },
  "cost_profile": "none (costs_uncalibrated)",
  "data": "QML's synthetic March 2025 month, labelled not evidence",
- "made_at_head": "baf7c9faa0b492e8faf03768e4bf0755110db1af",
+ "made_at_head": "e55c8db8250d2b05c26b4e0de8f664806627da81",
  "made_by": "the shipped tester qmb@1.0.10 (qmx-agents/apps/qmb), through the core's conformance job path, by tests/test_conformance.py's regenerate()",
  "realism": "B10's rules in force: gap fills, lot rounding with residue, carry as cash events, holes counted (this pack allows gaps and lists them)",
  "versions": {
