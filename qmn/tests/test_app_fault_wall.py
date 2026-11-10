@@ -235,7 +235,8 @@ def raise_every_exit(runtime: Runtime, deployment_id: str) -> None:
 def aim_at(runtime: Runtime, deployment_id: str, level: Decimal) -> None:
     """Aim the held position's protective target at ``level``, as the target block could have."""
     handler = handler_of(runtime, deployment_id)
-    handler._held[MARKET] = replace(handler._held[MARKET], target=level)
+    position_id = handler.open_on(MARKET)[0].position_id
+    handler._held[position_id] = replace(handler._held[position_id], target=level)
 
 
 def count_drives(runtime: Runtime) -> dict[str, int]:
