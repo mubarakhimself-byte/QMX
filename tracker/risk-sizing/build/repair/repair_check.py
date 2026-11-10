@@ -6,6 +6,8 @@ Run with the audit copy's interpreter, never a bare python, which is a Windows s
 Commands:
   check <id> <builder|fix|reviewer> [--transcript=<path>] [--store=<path>]   did the agent do the work, in order?
   gate <id> <head> [--store=<path>]    may this PR join the stack? Nothing stacks without a PASS here.
+  carry <id> <old-parent> <old-head> <new-parent> <new-head> [--store=<path>]   after a rebase, move a CLEAN verdict to the new head if the change is the same outside version rows and pins.
+  gate-dsh <id> <parent> <head> [--store=<path>]   the gate for a DeepSeek Harness run: owner files, exact-head review, lane logs, nothing out of bounds.
   alive                                minutes since each repair agent's transcript last changed.
   hook <builder|reviewer>              PreToolUse hook for the two agent types. Exit 2 blocks and tells the agent why.
 
@@ -16,6 +18,7 @@ import glob
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import time
 
@@ -23,6 +26,8 @@ PROJECT = pathlib.Path.home() / ".claude/projects/C--Users-Mubarak-Desktop-QMX"
 STORE = pathlib.Path("D:/QMX-worktrees/repair-ship")
 ENV = "source D:/QMX-worktrees/repair-ship/tools/env.sh"
 MAX_SECONDS = 290
+REPO = "C:/Users/Mubarak/Desktop/QMX"
+PLUMBING = ("**/app.toml", "**/test_shipped_apps.py")
 
 SKILLS = r"skills[\\/]+{0}[\\/]+SKILL\.md|^Skill:{0}\b"
 BUILDER = {
@@ -177,7 +182,7 @@ def order_check(pr, uses, store, say):
         path = str(given.get("file_path", ""))
         for owner in ("owner-how.md", "owner-sketch.md", "owner-red.log"):
             by_tool = name in ("Write", "Edit") and owner in path
-            by_shell = name in ("Bash", "PowerShell") and owner == "owner-red.log" and re.search(r"(>|\btee\s+)\s*\S*owner-red\.log", str(given.get("command", "")))
+            by_shell = name in ("Bash", "PowerShell") and owner == "owner-red.log" and "owner-red.log" in str(given.get("command", "")) and re.search(r">|\btee\s", str(given.get("command", "")))
             if (by_tool or by_shell) and owner not in seen:
                 seen[owner] = index
         if name in ("Write", "Edit", "NotebookEdit") and first_product is None and "bld-repair" in path.replace("\\", "/") and not is_test(path):
@@ -295,7 +300,90 @@ def hook(role):
     return 0
 
 
+def owner_files(pr, store, say):
+    """The three owner files exist with real content, and the red log shows a real failure."""
+    evidence = store / "evidence" / pr
+    for name, least in (("owner-how.md", 400), ("owner-sketch.md", 200), ("owner-red.log", 20)):
+        target = evidence / name
+        say(target.is_file() and target.stat().st_size >= least, f"{name} exists with real content in {evidence}")
+    red_file = evidence / "owner-red.log"
+    if red_file.is_file():
+        red = red_file.read_text("utf-8", errors="replace")
+        if pr in NO_RED_TEST:
+            say("NO-RED:" in red or re.search(r"\bfailed\b|FAILED|Error", red) is not None, "owner-red.log says why there is no failing test")
+        else:
+            say(re.search(r"\b\d+ failed\b|FAILED|\bfailed\b|\berror\b|Error|FAIL\b", red) is not None, "owner-red.log shows a real failure")
+
+
+def gate_dsh(pr, parent, head, store, say):
+    """The gate for a DeepSeek Harness run, where there is no Claude transcript to read."""
+    owner_files(pr, store, say)
+    review = store / "review" / f"{pr}-check-{head[:8]}.md"
+    say(review.is_file(), f"a review exists for this exact head: {review.name}")
+    if review.is_file():
+        first = review.read_text("utf-8", errors="replace").splitlines()[:1]
+        say(bool(first) and first[0].strip() == "CLEAN", "that review says CLEAN")
+    logs = sorted(p for p in (store / "evidence" / pr).glob("*.log") if not p.name.startswith("owner-"))
+    say(len(logs) >= 3, f"lane logs saved by the coordinator: {len(logs)}, at least 3 needed")
+    lines = [line for p in logs for line in p.read_text("utf-8", errors="replace").splitlines()]
+    print(f"INFO lane lines: PASS {sum(line.startswith('PASS') for line in lines)}, FAIL {sum(line.startswith('FAIL') for line in lines)}. Read them yourself.")
+    listed = subprocess.run(["git", "-C", REPO, "diff", "--name-only", parent, head], capture_output=True, check=False)
+    say(listed.returncode == 0, "git could read the change")
+    paths = listed.stdout.decode(errors="replace").splitlines()
+    outside = [p for p in paths if re.search(OUT_OF_BOUNDS, "/" + p)]
+    say(not outside, "the change stays in bounds" + (f": {outside[0]}" if outside else ""))
+    print(f"INFO files changed: {len(paths)}")
+
+
+def carry(pr, old_parent, old_head, new_parent, new_head, store, say):
+    """A rebase changes the head, and the gate wants a review for the exact head. A verdict moves only if the change itself did not."""
+    def git(*args, feed=None):
+        return subprocess.run(["git", "-C", REPO, *args], input=feed, capture_output=True, check=False)
+
+    def change_id(parent, head):
+        diff = git("diff", parent, head, "--", ".", *[f":(exclude,glob){p}" for p in PLUMBING]).stdout
+        return git("patch-id", "--stable", feed=diff).stdout.split(b" ")[0].decode()
+
+    old_review = store / "review" / f"{pr}-check-{old_head[:8]}.md"
+    first = old_review.read_text("utf-8", errors="replace").splitlines()[:1] if old_review.is_file() else []
+    say(first == ["CLEAN"], f"{old_review.name} says CLEAN")
+    say(git("merge-base", "--is-ancestor", new_parent, new_head).returncode == 0, "the new head sits on the new parent")
+    before, after = change_id(old_parent, old_head), change_id(new_parent, new_head)
+    say(bool(before) and before == after, f"the change is the same outside version rows and pins: {before[:12]} {after[:12]}")
+    print("INFO plumbing lines, read them yourself:")
+    print(git("diff", "--stat", new_parent, new_head, "--", *[f":(glob){p}" for p in PLUMBING]).stdout.decode(errors="replace").strip())
+    if first == ["CLEAN"] and before and before == after and git("merge-base", "--is-ancestor", new_parent, new_head).returncode == 0:
+        target = store / "review" / f"{pr}-check-{new_head[:8]}.md"
+        if target.exists():
+            print(f"INFO {target.name} already exists, left as it is")
+            return
+        target.write_text(f"CLEAN\nCarried by rebase from {old_head[:8]}, reviewed there. Change id {before}.\n", "utf-8")
+        print(f"INFO wrote {target.name}")
+
+
 def main(argv):
+    if len(argv) >= 5 and argv[1] == "gate-dsh":
+        store = pathlib.Path(next((a.split("=", 1)[1] for a in argv[5:] if a.startswith("--store=")), str(STORE)))
+        failures = []
+
+        def say(ok, text):
+            print(("PASS " if ok else "FAIL ") + text)
+            if not ok:
+                failures.append(text)
+
+        gate_dsh(argv[2].lower(), argv[3], argv[4], store, say)
+        return 1 if failures else 0
+    if len(argv) >= 7 and argv[1] == "carry":
+        store = pathlib.Path(next((a.split("=", 1)[1] for a in argv[7:] if a.startswith("--store=")), str(STORE)))
+        failures = []
+
+        def say(ok, text):
+            print(("PASS " if ok else "FAIL ") + text)
+            if not ok:
+                failures.append(text)
+
+        carry(argv[2].lower(), *argv[3:7], store, say)
+        return 1 if failures else 0
     if len(argv) >= 2 and argv[1] == "alive":
         alive()
         return 0

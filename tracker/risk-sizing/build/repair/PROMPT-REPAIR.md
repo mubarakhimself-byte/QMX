@@ -1,5 +1,7 @@
 # QMX repair program, coordinator prompt
 
+**Read `D:/QMX-worktrees/repair-ship/SPEED-2026-11-05.md` right after this file, on every wake-up. It holds his newest orders, and where it differs from this file, it wins.**
+
 He pastes the short prompt at the bottom into a fresh session in the Claude app's Code tab, opened in `C:/Users/Mubarak/Desktop/QMX`, on Opus 5.5, in Auto mode, with the laptop plugged in and the lid open, so the project's `CLAUDE.md` and `.claude/settings.local.json` load. His default model is Fable, so if you are not on Opus 5.5, say so and stop.
 
 Short paths: `A` = `D:/QMX-worktrees/audit-ship`, `S` = `D:/QMX-worktrees/repair-ship`, `P` = `D:/QMX-worktrees/unit-plan/tracker/risk-sizing`. `CHECK` below means this command, written out in full each time: `D:/QMX-worktrees/audit-head/.venv/Scripts/python.exe -I D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/repair/repair_check.py`. Never run a bare `python`, which is a Windows stub that hangs on this PC.
