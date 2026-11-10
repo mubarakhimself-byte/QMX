@@ -102,7 +102,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 8
+COMPILER_FORMAT_VERSION: Final[int] = 9
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -148,6 +148,9 @@ _HOLDING_OUTPUTS: Final[frozenset[OutputType]] = frozenset(
 _SIZER_ANSWERS: Final[frozenset[OutputType]] = frozenset({OutputType.AMOUNT, OutputType.QUANTITY})
 """What a sizer's face may answer: a typed amount, or the legacy lots a ``Size`` states. Any
 other face in that slot would have nothing the one converter can spell (AD-10)."""
+_FACTOR: Final[OutputType] = OutputType.FACTOR
+"""What a sizing modifier's face answers (AD-11): a factor inside the range it declares, which the
+unit multiplies into the sizer's amount in the order the document writes the rows."""
 _SLOT_PORT_KINDS: Final[frozenset[str]] = frozenset({"series", "bars"})
 """The input kinds a slot binding is fed, as layer B wires them. Account, position, record and
 trades facts reach a sizer, an exit or a rule through their own doors, and never a slot."""
@@ -265,6 +268,7 @@ class Plan:
     exits: tuple[ExitPlan, ...]
     halts: tuple[HaltPlan, ...]
     sizer: BoundBlock
+    modifiers: tuple[BoundBlock, ...]
     derived: tuple[DerivedPlan, ...]
     slow: tuple[SlowPlan, ...]
     defaults: Mapping[str, Decimal]
@@ -442,6 +446,45 @@ class _Wiring:
             inputs=binding.inputs,
             where=where,
         )
+
+    def modifiers(self) -> tuple[BoundBlock, ...]:
+        """The sizing modifiers this format runs, in the order the document writes them.
+
+        A modifier answers a factor, so a face of any other shape is refused here by name rather
+        than multiplying a size with something that is not one. The rows share the sizer's evidence
+        door, so a declared input is refused for the same reason a sizer's is: nothing feeds it yet.
+        """
+        planned: list[BoundBlock] = []
+        seen: set[str] = set()
+        for index, binding in enumerate(self.unit.modifiers):
+            where = f"/modifiers/{index}"
+            if binding.name in seen:
+                self.problems.add(
+                    "duplicate_name",
+                    f"{where}/name",
+                    f"{binding.name} names two modifier rows, and each row is one trail line",
+                )
+                continue
+            seen.add(binding.name)
+            bound = self.bind(binding, f"modifier.{binding.name}", where)
+            if bound is None:
+                continue
+            if bound.face.output.type is not _FACTOR:
+                self.problems.add(
+                    "modifier_not_built",
+                    f"{where}/block",
+                    f"{bound.pin} answers {bound.face.output.type.value}, and a sizing modifier "
+                    "answers a factor with the range it must sit inside",
+                )
+            for port in bound.inputs:
+                self.problems.add(
+                    "inputs_not_built",
+                    f"{where}/inputs/{port}",
+                    f"{_FORMAT} hands a modifier the sizer's equity, prices and record, so it "
+                    "never reads its own input",
+                )
+            planned.append(bound)
+        return tuple(planned)
 
     def side(self, side: Side) -> SidePlan | None:
         found = _side_slots(self.unit, side)
@@ -923,6 +966,11 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[int, int]:
         instance = make(h.binding, Side.LONG)
         if instance is not None:
             bound_total += instance.state_bound
+    for m in plan.modifiers:
+        # A modifier with no answer reads neutral, so its warm-up never holds a size back either.
+        instance = make(m, Side.LONG)
+        if instance is not None:
+            bound_total += instance.state_bound
     make(plan.sizer, Side.LONG)
     for s in plan.slow:
         _built(
@@ -1030,12 +1078,6 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
             "plain_python_not_built",
             "/plain_python",
             f"{_FORMAT} runs the unit's slots, so {unit.plain_python.block} would never run",
-        )
-    if unit.modifiers:
-        problems.add(
-            "modifiers_not_built",
-            "/modifiers",
-            f"{_FORMAT} runs one unmodified size, so these would never apply",
         )
     if unit.gates:
         problems.add(
@@ -1199,6 +1241,7 @@ def compile_unit(
     )
     exits = wiring.exits()
     halts = wiring.halts()
+    modifiers = wiring.modifiers()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
     if sizer is not None and sizer.face.output.type not in _SIZER_ANSWERS:
         problems.add(
@@ -1222,6 +1265,7 @@ def compile_unit(
         exits=exits,
         halts=halts,
         sizer=sizer,
+        modifiers=modifiers,
         derived=derived,
         slow=slow,
         defaults=_defaults(unit),
@@ -1243,7 +1287,7 @@ def compile_unit(
     if is_refusal(compiled_fp):  # pragma: no cover - the content is all text and integers
         raise ValueError(json.dumps(dict(compiled_fp.context), default=str))
     bound_all = [b for s in sides for slot in s.slots for b in slot.bindings]
-    bound_all += [e.binding for e in exits] + [sizer]
+    bound_all += [e.binding for e in exits] + [sizer, *modifiers]
     placeholders = tuple(
         dict.fromkeys(
             b.name

@@ -113,9 +113,9 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
     assert [v.annotations.get("status") is None for v in before] == [False] * 343
     assert sum(c["published"] for c in counts) == 343
     assert [c["refused"] for c in counts] == [0] * 5
-    assert len(pages) == 471
+    assert len(pages) == 472
     assert [p["entry_id"] for p in pages if p["status"] is None] == []
-    assert len(list(cast(Path, STDLIB).glob("*/*/entry.json"))) == 128
+    assert len(list(cast(Path, STDLIB).glob("*/*/entry.json"))) == 129
     assert store.annotation_log.read_bytes() == log
 
 

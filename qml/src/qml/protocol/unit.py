@@ -50,6 +50,7 @@ from qml.blocks.api import (
     Amount,
     EntryOrder,
     ExitAction,
+    Factor,
     Instance,
     OutputType,
     Signal,
@@ -85,7 +86,9 @@ __all__ = [
     "ACCOUNT_CURRENCY",
     "EXIT_FAULT",
     "EXIT_FAULT_BARS",
+    "FACTOR_OUT_OF_RANGE",
     "FAULT_CLEAN_BARS",
+    "NEUTRAL",
     "OHLC",
     "PER_TRADE_CAP_SHARE",
     "SEAM_JUMP_SCALE",
@@ -101,6 +104,7 @@ __all__ = [
     "FaultPhase",
     "HostPort",
     "HostedUnit",
+    "ModifierReading",
     "MotionSwitch",
     "OwnPosition",
     "Priced",
@@ -157,6 +161,13 @@ run before the host's ``close_scope`` port closes it (AD-13, AD-23 step 4). The 
 through the gap, so three bars is long enough for a transient fault to clear and short enough that
 a position never sits with no exit able to run for an hour on the 15-minute stream the shipped
 templates run. Labelled placeholder, range one to 96 bars, owner numbers talk."""
+FACTOR_OUT_OF_RANGE: Final[str] = "factor_out_of_range"
+"""The name a row carries when a sizing modifier answers a factor outside the range it declares
+(AD-11). The factor is refused, so the entry is not sized; that row still prints the modifier
+reading neutral with its fail mode."""
+NEUTRAL: Final[str] = "neutral"
+"""What a sizing modifier that cannot answer reads: a factor of one, never a cut and never a raise.
+It is the modifier's fail mode, stamped on the row beside the reading."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -244,6 +255,27 @@ class SlotOutput:
 
 
 @dataclass(frozen=True, slots=True)
+class ModifierReading:
+    """One sizing modifier's answer on this entry, as the row stores it (AD-11).
+
+    ``value`` is the factor the size used, ``1`` when the modifier reads neutral. ``range`` is the
+    range the block declared for its answer, absent when the block answered nothing at all.
+    ``code`` is ``none`` for an applied factor, ``neutral`` when the block had no answer, and
+    ``factor_out_of_range`` when the factor fell outside its own range. ``fail_mode`` names what a
+    modifier does when it cannot answer: it reads neutral, so a broken row never presses or cuts a
+    size on its own.
+    """
+
+    name: str
+    pin: str
+    value: Decimal
+    range: tuple[Decimal, Decimal] | None
+    reason: str
+    code: str = "none"
+    fail_mode: str = NEUTRAL
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionRow:
     """One decision, with every input the size read, so one row answers "why this size?".
 
@@ -283,6 +315,9 @@ class DecisionRow:
     written_before_send: bool = False
     """True on a row a host's journal wrote before the send it names. A unit mints false: it
     writes nothing, and a flag the unit set could not be true."""
+    modifiers: tuple[ModifierReading, ...] = ()
+    """Each sizing modifier's answer, in the order the rows ran (AD-11). A row with no modifiers
+    carries none, so its stored body is the one it carried before the chain existed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -730,6 +765,10 @@ class _Core:
         state.instances["sizer"] = self.plan.sizer.block.make(
             self.params(self.plan.sizer, numbers), self.plan.sizer.inputs
         )
+        for modifier in self.plan.modifiers:
+            state.instances[modifier.key] = modifier.block.make(
+                self.params(modifier, numbers), modifier.inputs
+            )
         return state
 
     # --- state -------------------------------------------------------------------
@@ -911,6 +950,7 @@ class HostedUnit:
         core = self._core
         compiled = core.compiled
         inputs = _sizing_inputs(proposal, facts)
+        readings: list[ModifierReading] = []
 
         def receipt(
             row: DecisionRow, steps: Mapping[str, Amount], verdicts: tuple[str, ...]
@@ -922,6 +962,7 @@ class HostedUnit:
                 inputs=inputs,
                 steps=steps,
                 verdicts=verdicts,
+                modifiers=tuple(readings),
                 logic_fp=compiled.logic_fingerprint.value,
                 risk_fp=compiled.risk_fingerprint.value,
                 placeholders=compiled.placeholders,
@@ -946,25 +987,107 @@ class HostedUnit:
                 "sizer_skip",
                 "the proposal names no market this unit runs",
             )
+        evidence: dict[str, object] = {
+            "equity": facts.equity,
+            "entry_price": proposal.entry_price,
+            "stop_price": proposal.stop,
+            "record": proposal.record,
+        }
         try:
-            answer = market.instances["sizer"].update(
-                {
-                    "equity": facts.equity,
-                    "entry_price": proposal.entry_price,
-                    "stop_price": proposal.stop,
-                    "record": proposal.record,
-                }
-                | dict(proposal.params)
+            answer = market.instances["sizer"].update(evidence | dict(proposal.params))
+        except Exception:  # the fault wall: a sizer's raise is a skip, never a crash
+            core.pending_faults.append(Fault(compiled.plan.sizer.pin, FaultPhase.PRICE))
+            core.bench()
+            return ended(proposal.row, {}, ("sizer: refuse",), UNIT_FAULT, "the sizer raised")
+        wanted = _amount(answer)
+        if isinstance(wanted, _Skip):
+            return ended(proposal.row, {}, ("sizer: refuse",), wanted.code, wanted.detail)
+
+        factor = Decimal(1)
+        verdicts: list[str] = ["sizer: none"]
+        for modifier in compiled.plan.modifiers:
+            try:
+                read = market.instances[modifier.key].update(
+                    evidence | dict(core.params(modifier, core.settled()))
+                )
+            except Exception:  # a modifier's raise is that block's fault, never a crash
+                core.pending_faults.append(Fault(modifier.pin, FaultPhase.PRICE))
+                core.bench()
+                verdicts.append(f"modifier {modifier.name}: refuse ({UNIT_FAULT})")
+                return ended(
+                    proposal.row,
+                    {"wanted": wanted},
+                    tuple(verdicts),
+                    UNIT_FAULT,
+                    f"the modifier {modifier.name} raised",
+                )
+            if read is None:
+                readings.append(
+                    ModifierReading(
+                        modifier.name,
+                        modifier.pin,
+                        Decimal(1),
+                        None,
+                        "the modifier has no answer yet",
+                        NEUTRAL,
+                    )
+                )
+                verdicts.append(f"modifier {modifier.name}: {NEUTRAL}")
+                continue
+            if not isinstance(read, Factor):
+                core.pending_faults.append(Fault(modifier.pin, FaultPhase.PRICE))
+                core.bench()
+                verdicts.append(f"modifier {modifier.name}: refuse ({UNIT_FAULT})")
+                return ended(
+                    proposal.row,
+                    {"wanted": wanted},
+                    tuple(verdicts),
+                    UNIT_FAULT,
+                    f"the modifier {modifier.name} answered no factor",
+                )
+            block_range = (read.range[0], read.range[1])
+            if not block_range[0] <= read.value <= block_range[1]:
+                readings.append(
+                    ModifierReading(
+                        modifier.name,
+                        modifier.pin,
+                        Decimal(1),
+                        block_range,
+                        read.reason,
+                        FACTOR_OUT_OF_RANGE,
+                    )
+                )
+                verdicts.append(f"modifier {modifier.name}: refuse ({FACTOR_OUT_OF_RANGE})")
+                return ended(
+                    proposal.row,
+                    {"wanted": wanted},
+                    tuple(verdicts),
+                    FACTOR_OUT_OF_RANGE,
+                    read.reason,
+                )
+            readings.append(
+                ModifierReading(modifier.name, modifier.pin, read.value, block_range, read.reason)
             )
-            wanted = _amount(answer)
-            if isinstance(wanted, _Skip):
-                return ended(proposal.row, {}, ("sizer: refuse",), wanted.code, wanted.detail)
-            factor = core.reduce
-            amount = (
-                wanted
-                if factor == 1
-                else Amount(kind=wanted.kind, value=wanted.value * factor, basis=wanted.basis)
-            )
+            verdicts.append(f"modifier {modifier.name}: none")
+            factor *= read.value
+
+        sized = (
+            wanted
+            if factor == 1
+            else Amount(kind=wanted.kind, value=wanted.value * factor, basis=wanted.basis)
+        )
+        reduced = core.reduce
+        amount = (
+            sized
+            if reduced == 1
+            else Amount(kind=sized.kind, value=sized.value * reduced, basis=sized.basis)
+        )
+        steps: dict[str, Amount] = {"wanted": wanted}
+        if factor != 1:
+            steps["modified"] = sized
+        if reduced != 1:
+            steps["reduced"] = amount
+        try:
             converted = to_quantity(
                 amount,
                 proposal.entry_price,
@@ -973,21 +1096,18 @@ class HostedUnit:
                 _rate(proposal.record, facts, proposal.row.instant),
                 RoundRule(now=proposal.row.instant),
             )
-        except Exception:  # the fault wall: a sizer or converter raise is a skip, never a crash
+        except Exception:  # the converter is core code: its raise is the sizer's fault row
             core.pending_faults.append(Fault(compiled.plan.sizer.pin, FaultPhase.PRICE))
             core.bench()
             return ended(proposal.row, {}, ("sizer: refuse",), UNIT_FAULT, "the sizer raised")
         if converted.skipped is not None or converted.quantity is None:
             return ended(
                 proposal.row,
-                {"wanted": amount},
-                ("sizer: none", "converter: refuse"),
+                steps,
+                (*verdicts, "converter: refuse"),
                 converted.skipped or "kind_unknown",
                 "",
             )
-        steps: dict[str, Amount] = {"wanted": wanted}
-        if factor != 1:
-            steps["reduced"] = amount
         steps["approved"] = Amount(kind="quantity", value=converted.quantity, basis=wanted.basis)
         entry = PricedEntry(
             amount=amount,
@@ -1001,7 +1121,7 @@ class HostedUnit:
             return ended(
                 proposal.row,
                 steps,
-                ("sizer: none", "converter: none", f"size_band: refuse ({code})"),
+                (*verdicts, "converter: none", f"size_band: refuse ({code})"),
                 code,
                 "",
             )
@@ -1018,11 +1138,11 @@ class HostedUnit:
             return ended(
                 proposal.row,
                 steps,
-                ("sizer: none", "converter: none", "size_band: none", "intent: refuse"),
+                (*verdicts, "converter: none", "size_band: none", "intent: refuse"),
                 "sizer_skip",
                 str(reason) if reason else "",
             )
-        row = receipt(proposal.row, steps, ("sizer: none", "converter: none", "size_band: none"))
+        row = receipt(proposal.row, steps, (*verdicts, "converter: none", "size_band: none"))
         return Priced(row, admitted.value[0], None)
 
     @property
