@@ -4,6 +4,7 @@ The seam list is the PR section's Verify, unit box. Every assertion goes through
 person or a host uses: ``check`` for the two named problems, ``explain`` for the line a person
 reads, ``parse`` for the shape, and ``compile_unit`` for a field the compiled format refuses.
 """
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from typing import Any, cast
 
 import pytest
 from qml.check import check
-from qml.compile import CompileContext, compile_unit
+from qml.compile import compile_unit
 from qml.door import explain
 from qml.unit import parse
 from qml.unit.model import Authority, Origin
