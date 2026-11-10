@@ -176,9 +176,10 @@ def test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing(
     with pytest.raises(MoveRefused) as refused:
         writer.record_move(judge_to_paper)
 
+    # RC-16's law names his click "promotes" and a rule's move "send", so the pin follows it.
     assert (refused.value.refusal, str(refused.value)) == (
         Refusal.NOT_OPERATOR,
-        "only his click moves a unit to paper",
+        "only his click promotes a unit to paper; a risk rule may only send it to paper",
     )
     assert rows(tmp_path / "journals") == []
 
