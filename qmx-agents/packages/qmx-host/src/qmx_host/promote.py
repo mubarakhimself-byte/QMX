@@ -409,11 +409,15 @@ class Promoter:
         if again is not None and self._no_live_deployment(click) is not True:
             again = None
         document, compiled = self._unit(click)
-        # A draft reaches paper on the G safety record its move names, and the fold reads that name
-        # off the move: fetch the record before the probe, so the probe is the move itself.
-        report, tested = self._g_record(compiled, click.market_id)
+        # The draft-to-paper row names the G record the fold demands as its evidence, so that one
+        # move fetches the record before the probe. Every other move probes as it did before.
+        report, tested = "", ""
+        if current is State.DRAFT and click.target is State.PAPER:
+            report, tested = self._g_record(compiled, click.market_id)
         if again is None:
-            probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, report)
+            probe = self._event(
+                click, digest, current, compiled.compiled_fingerprint.value, report or None
+            )
             self._allowed(probe, known)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
         account = _one(
@@ -435,6 +439,8 @@ class Promoter:
                     f"the unit still uses placeholder blocks: {', '.join(compiled.placeholders)}",
                     "Tick that you accept the placeholders, then click again.",
                 )
+        if not report:
+            report, tested = self._g_record(compiled, click.market_id)
         if again is not None:
             deployment = self._deployment(
                 click,
