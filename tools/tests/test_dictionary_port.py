@@ -154,9 +154,10 @@ def test_a_slug_two_families_share_is_scoped_by_family_and_linked() -> None:
     scoped = sorted(i for i in faces if "." in i)
 
     assert (len(faces), len(scoped)) == (239, 21)
+    # RC-12 shipped time-exit-bars@2, and the link names the catalogue's live version.
     assert [faces[i].get("same_word_as") for i in ("locations.vwap", "exits.time-stop")] == [
         ["context.vwap@1"],
-        ["time-exit-bars@1"],
+        ["time-exit-bars@2"],
     ]
 
 
