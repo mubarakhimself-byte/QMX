@@ -198,6 +198,7 @@ class RunJournal:
         compiled: CompiledUnit,
         run_id: str,
         account: str | None = None,
+        stated: Mapping[str, object] | None = None,
     ) -> None:
         self._writer = writer
         self._clock = clock
@@ -205,6 +206,7 @@ class RunJournal:
         self._run_id = run_id
         self._account = account
         self._live = account is not None
+        self._stated: Mapping[str, object] = {} if stated is None else stated
         self._venues = {m.market_id: r.venue for m, r in compiled.plan.markets}
         self._pins = {
             (side.side.value, binding.name): binding.pin
@@ -252,18 +254,21 @@ class RunJournal:
         build: str,
         boot_epoch_id: str,
         account: str,
+        stated: Mapping[str, object] | None = None,
     ) -> Result[RunJournal]:
         """A trading host's unit journal: one fsynced line under ``root`` per row, as it is
         made, in the host's own world (the trading node, Part C slice C-12a). ``scope_id`` is
         the deployment id; the rows keep the shapes a QMB run writes and name ``account``. A
         text with no code costs a label, never the journal, and a row the writer refuses
-        leaves the later rows still tried, with ``write_failure`` set."""
+        leaves the later rows still tried, with ``write_failure`` set. ``stated`` is what the
+        venue says about itself, merged into every row's body beside the envelope's world;
+        nothing for a broker, and the practice world and kind for the practice venue."""
         scope = WriterScope(JournalStream.UNIT, compiled.unit.unit_id, world, machine, role, build)
         clock = _ReplayClock()
         writer = JournalWriter.open(root, scope, clock=clock, boot_epoch_id=boot_epoch_id)
         if is_refusal(writer):
             return writer
-        return Ok(cls(writer.value, clock, compiled, scope_id, account))
+        return Ok(cls(writer.value, clock, compiled, scope_id, account, stated))
 
     @property
     def write_failure(self) -> TypedRefusal | None:
@@ -342,7 +347,7 @@ class RunJournal:
     def _write(self, kind: str, body: Mapping[str, object], facts: RowFacts) -> None:
         if self._refused is not None and not self._live:
             return
-        receipt = self._writer.append(kind, body, facts)
+        receipt = self._writer.append(kind, {**self._stated, **body}, facts)
         if is_refusal(receipt):
             self._refused = receipt
             return

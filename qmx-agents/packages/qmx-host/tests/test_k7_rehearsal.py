@@ -2,7 +2,7 @@
 
 Two seams, the two the section names. The first runs K7, whose venue is the fake broker because
 the Library's account kind cannot hold a practice account; the second binds the practice venue to
-a real node and reads every row and card it produces.
+a real node and reads every row of both its journals and both its cards.
 """
 
 from __future__ import annotations
@@ -55,6 +55,11 @@ def test_k9_7_canary_reaches_a_filled_paper_entry(tmp_path: Path) -> None:
 
 
 def test_practice_says_it_is_practice(tmp_path: Path) -> None:
+    """Every row of both journals says the practice world and kind, and so do the two cards.
+
+    The node stream carries this building's order rows; the unit stream every row of the
+    deployment's own journal, which the venue must label as it labels the orders.
+    """
     node, runtime, now = _practice_node(tmp_path)
     document = relay.deployment(_data(tmp_path), None)
     document["lane"] = "paper"
@@ -64,6 +69,7 @@ def test_practice_says_it_is_practice(tmp_path: Path) -> None:
     _settle(runtime, "dep-1")
     _play(node, runtime, now)
     orders = [row for row in _rows(node, "node") if row["kind"] == "order"]
+    unit_rows = _rows(node, "unit")
     card = next(
         row
         for row in cast("list[Mapping[str, object]]", _value(node, "status")["venues"])
@@ -76,6 +82,13 @@ def test_practice_says_it_is_practice(tmp_path: Path) -> None:
         ("paper", "paper")
     }
     assert {cast("dict[str, object]", row["body"])["venue_kind"] for row in orders} == {"practice"}
+    assert unit_rows, "the practice unit wrote no journal rows"
+    assert {
+        (row["world"], cast("dict[str, object]", row["body"]).get("world")) for row in unit_rows
+    } == {("paper", "paper")}
+    assert {cast("dict[str, object]", row["body"]).get("venue_kind") for row in unit_rows} == {
+        "practice"
+    }
     assert (card["venue"], card["world"], card["venue_kind"]) == (SHIPPED_VENUE, "paper", "practice")
     assert (unit_card["world"], unit_card["venue_kind"]) == ("paper", "practice")
     assert stated(object()) == {}
