@@ -1926,3 +1926,402 @@ Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
 
 EXIT=0
 
+
+=== E baseline qmn | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest <grants><maintenance> qmn/tests/test_qmn_supervisor_process.py -q
+bringing up nodes...
+bringing up nodes...
+
+
+no tests ran in 1.85s
+EXIT=5
+
+
+=== E baseline grants+supervisor | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest <grants node> qmn/tests/test_qmn_supervisor_process.py -q
+bringing up nodes...
+bringing up nodes...
+
+......                                                                   [100%]
+6 passed in 35.10s
+EXIT=0
+
+
+=== E baseline maintenance | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do -q
+   Building qmn @ file:///D:/QMX-worktrees/bld-rc-20/qmn
+   Building qmf-readings @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-readings
+      Built qmn @ file:///D:/QMX-worktrees/bld-rc-20/qmn
+      Built qmf-readings @ file:///D:/QMX-worktrees/bld-rc-20/packages/qmf-readings
+Uninstalled 2 packages in 14ms
+Installed 2 packages in 11ms
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do _
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-315/popen-gw1/test_the_upkeep_switched_off_n0')
+
+    def test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do(
+        tmp_path: Path,
+    ) -> None:
+        layout, clock = folder(tmp_path / "QMX"), Clock()
+        backups = service(layout, clock)
+        backups.control.settings_put("backup", {"upkeep": {"on": False}})
+        first = finished(backups, backups.sweep())
+        clock.advance(days=32)
+        second = finished(backups, backups.sweep())
+        drill = backups.sweep()
+        drilled = None if drill is None else ended(backups, drill.id)
+    
+        assert (first.kind, first.state, second.kind, second.state) == (
+            "backup",
+            "finished",
+            "backup",
+            "finished",
+        )
+>       assert drilled is not None and drilled.kind == "drill"
+E       assert (None is not None)
+
+tests\test_maintenance.py:66: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do
+1 failed in 39.46s
+EXIT=1
+
+
+=== E baseline epic_13 static | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______________ test_t13_006_tier1_static_gate_ruff_and_pyright _______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+    def test_t13_006_tier1_static_gate_ruff_and_pyright() -> None:
+        """The tier-1 gate is green over qmb: ruff clean and pyright-strict clean.
+        (13.1 AC5) � pytest-green is observed via the independent suite, not re-run here.
+        """
+        ruff = _tool("ruff")
+        assert ruff is not None, "ruff not found in the environment"
+        ruff_run = subprocess.run(
+            [ruff, "check", str(QMB_SRC), str(ROOT / "qmb" / "tests")],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            timeout=180,
+        )
+>       assert ruff_run.returncode == 0, f"ruff not clean:\n{ruff_run.stdout}\n{ruff_run.stderr}"
+E       AssertionError: ruff not clean:
+E         E501 Line too long (102 > 100)
+E            --> qmb\tests\test_risk_event_rows.py:362:101
+E             |
+E         361 |     assert isinstance(refused, TypedRefusal), refused
+E         362 |     assert refused.context["reason"] == "a decision's reason has no code in the journal's closed list"
+E             |                                                                                                     ^^
+E         363 |     assert refused.context["text"] == "their own words"
+E             |
+E         
+E         Found 1 error.
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['D:\\QMX-worktrees\\bld-rc-20\\.venv\\Scripts\\ruff.EXE', 'check', 'D:\\QMX-worktrees\\bld-rc-2...              ^^\n363 |     assert refused.context["text"] == "their own words"\n    |\n\nFound 1 error.\n', stderr='').returncode
+
+qa\tests\epic_13\test_l0_static_build.py:185: AssertionError
+=========================== short test summary info ===========================
+FAILED qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright
+1 failed in 4.86s
+EXIT=1
+
+
+=== F rsi_low before | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________ test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi __________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+loaded = LoadedUnit(compiled=CompiledUnit(unit=Unit(schema=<Marker.UNIT_1: 'qmx.unit/1'>, unit_id='dummy-trend-pullback', famil...y=(), dividends=(), funding_ns=None, rates={})}, margins={}, costs={}, conversions={}, rate_feeds={}, missing_rates=())
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-317/popen-gw1/test_rsi_low_is_in_force_on_ev0')
+
+    def test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi(
+        loaded: LoadedUnit, tmp_path: Path
+    ) -> None:
+        journal = _journal(loaded, tmp_path)
+        _run(loaded, journal, trace="every_bar")
+        report = _close(journal)
+    
+        long_rows = [
+            cast("dict[str, object]", r["body"])
+            for r in _records(report, "signal")
+            if r["market_id"] == "fx.eurusd"
+            and cast("dict[str, str]", r["body"])["side"] == "long"
+            and not cast("dict[str, str]", r["body"])["detail"].startswith("time exit")
+        ]
+        levels = [cast("dict[str, str]", b["numbers_in_force"])["rsi_low"] for b in long_rows]
+        held = loaded.bars()
+        assert not isinstance(held, TypedRefusal), held
+        bars = len(held.value["fx.eurusd"])
+    
+        changed = sum(1 for before, after in pairwise(levels) if before != after)
+    
+>       assert len(long_rows) == bars == 6144
+E       AssertionError: assert 6149 == 6144
+E        +  where 6149 = len([{'binding': '', 'detail': 'context: absent input trend, strength; trigger: absent input rsi_cross', 'inputs': {}, 'in...bsent input trend, strength; trigger: absent input rsi_cross', 'inputs': {}, 'instant': 1735695000000000000, ...}, ...])
+
+qmb\tests\test_run_journal.py:341: AssertionError
+=========================== short test summary info ===========================
+FAILED qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi
+1 failed in 45.70s
+EXIT=1
+
+
+=== F rsi_low probe | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python D:/Temp/rc20-probes/probe_rsi.py
+Traceback (most recent call last):
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 55, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 26, in main
+    probe = load()
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 21, in load
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 892, in get_code
+  File "<frozen importlib._bootstrap_external>", line 950, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: 'D:\\qmb\\tests\\test_run_journal.py'
+EXIT=1
+
+
+=== F rsi_low probe | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python D:/Temp/rc20-probes/probe_rsi.py
+Traceback (most recent call last):
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 55, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "D:\Temp\rc20-probes\probe_rsi.py", line 29, in main
+    folder = probe.make_run_folder(root / "run")
+  File "D:\QMX-worktrees\bld-rc-20\qmb\tests\test_unit_runner.py", line 64, in make_run_folder
+    folder.mkdir()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\Mubarak\AppData\Local\Python\pythoncore-3.14-64\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] The system cannot find the path specified: 'C:\\Users\\Mubarak\\AppData\\Local\\Temp\\rsi-probe-_o9b0s3z\\run\\run'
+EXIT=1
+
+
+=== F rsi_low probe | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python D:/Temp/rc20-probes/probe_rsi.py
+bars 6144
+long rows 6149 kept 6149
+kept details [('trigger: does not hold', 3415), ('context: does not hold; trigger: does not hold', 2517), ('context: absent input trend, strength; trigger: does not hold', 84), ('near miss, context: does not hold', 43), ('all slots hold', 31), ('context: absent input strength; trigger: does not hold', 20), ('context: absent input trend, strength; trigger: absent input rsi_cross', 14), ('warming up', 7), ('a position is open', 5), ('time-exit-bars@2 closes the position: time', 5), ('the stop 1.10371 is not on the loss side', 3), ('the stop 1.09983 is not on the loss side', 2)]
+excluded details []
+kept outcomes Counter({('no_signal', 'no_signal'): 6094, ('taken', 'None'): 36, ('suppressed_warming', 'warming_up'): 7, ('skipped', 'stop_wrong_side'): 7, ('suppressed_limit', 'max_positions'): 5})
+most repeated [(('fx.eurusd', 'context: does not hold; trigger: does not hold'), 6065), (('metal.xauusd', 'context: does not hold; trigger: does not hold'), 6032), (('metal.xauusd', 'trigger: does not hold'), 5833), (('fx.eurusd', 'trigger: does not hold'), 5789), (('fx.eurusd', 'context: absent input trend, strength; trigger: does not hold'), 168)]
+EXIT=0
+
+
+=== F rsi_low after filter | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 69.31s (0:01:09)
+EXIT=0
+
+
+=== F fmt/lint | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=ruff format --check + ruff check qmb/tests/test_run_journal.py
+1 file already formatted
+EXIT=0
+All checks passed!
+EXIT=0
+
+
+=== A dictionary port final | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest tools/tests/test_dictionary_port.py -q
+bringing up nodes...
+bringing up nodes...
+
+.......                                                                  [100%]
+7 passed in 9.76s
+EXIT=0
+
+
+=== C lifecycle final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest qmx-agents/packages/qmx-host/tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing -q
+bringing up nodes...
+bringing up nodes...
+
+
+no tests ran in 1.89s
+EXIT=1
+
+
+=== F rsi_low final | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qmb/tests/test_run_journal.py::test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 55.79s
+EXIT=0
+
+
+=== C lifecycle final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_lifecycle.py::test_the_writer_refuses_a_move_fold_rejects_and_writes_nothing -q
+bringing up nodes...
+bringing up nodes...
+
+.                                                                        [100%]
+1 passed in 17.14s
+EXIT=0
+
+
+=== B derive final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest packages/qmx-tools/tests/test_derive_bars.py -q
+bringing up nodes...
+bringing up nodes...
+
+...                                                                      [100%]
+3 passed in 17.84s
+EXIT=0
+
+
+=== B qmb app final | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents | cmd=uv run --all-packages --all-groups python -m pytest apps/qmb/tests/test_qmb_run_kinds.py apps/qmb/tests/test_run_honesty.py -q
+bringing up nodes...
+bringing up nodes...
+
+..................................                                       [100%]
+34 passed in 256.40s (0:04:16)
+EXIT=0
+
+
+=== FINAL types-root | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== FINAL fmt-check-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet fmt-check
+Poe => ruff format --config pyproject.toml --check src tests
+105 files already formatted
+EXIT=0
+
+
+=== FINAL lint-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet lint
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+EXIT=0
+
+
+=== FINAL types-qmx-judge | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-judge | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== FINAL types-qmx-host | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --no-sync python -m poethepoet types
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+EXIT=0
+
+
+=== E final grants+supervisor | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest <grants node> qmn/tests/test_qmn_supervisor_process.py -q
+bringing up nodes...
+bringing up nodes...
+
+......                                                                   [100%]
+6 passed in 24.93s
+EXIT=0
+
+
+=== E final maintenance | cwd=D:/QMX-worktrees/bld-rc-20/qmx-agents/packages/qmx-host | cmd=uv run --all-packages --all-groups python -m pytest tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do _
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\qmx-agents\.venv\Scripts\python.exe
+
+tmp_path = WindowsPath('C:/Users/Mubarak/AppData/Local/Temp/pytest-of-Mubarak/pytest-326/popen-gw1/test_the_upkeep_switched_off_n0')
+
+    def test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do(
+        tmp_path: Path,
+    ) -> None:
+        layout, clock = folder(tmp_path / "QMX"), Clock()
+        backups = service(layout, clock)
+        backups.control.settings_put("backup", {"upkeep": {"on": False}})
+        first = finished(backups, backups.sweep())
+        clock.advance(days=32)
+        second = finished(backups, backups.sweep())
+        drill = backups.sweep()
+        drilled = None if drill is None else ended(backups, drill.id)
+    
+        assert (first.kind, first.state, second.kind, second.state) == (
+            "backup",
+            "finished",
+            "backup",
+            "finished",
+        )
+>       assert drilled is not None and drilled.kind == "drill"
+E       assert (None is not None)
+
+tests\test_maintenance.py:66: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_maintenance.py::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do
+1 failed in 45.40s
+EXIT=1
+
+
+=== E final epic_13 | cwd=D:/QMX-worktrees/bld-rc-20 | cmd=uv run --no-sync python -m pytest qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright -q
+bringing up nodes...
+bringing up nodes...
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______________ test_t13_006_tier1_static_gate_ruff_and_pyright _______________
+[gw1] win32 -- Python 3.14.6 D:\QMX-worktrees\bld-rc-20\.venv\Scripts\python.exe
+
+    def test_t13_006_tier1_static_gate_ruff_and_pyright() -> None:
+        """The tier-1 gate is green over qmb: ruff clean and pyright-strict clean.
+        (13.1 AC5) � pytest-green is observed via the independent suite, not re-run here.
+        """
+        ruff = _tool("ruff")
+        assert ruff is not None, "ruff not found in the environment"
+        ruff_run = subprocess.run(
+            [ruff, "check", str(QMB_SRC), str(ROOT / "qmb" / "tests")],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            timeout=180,
+        )
+>       assert ruff_run.returncode == 0, f"ruff not clean:\n{ruff_run.stdout}\n{ruff_run.stderr}"
+E       AssertionError: ruff not clean:
+E         E501 Line too long (102 > 100)
+E            --> qmb\tests\test_risk_event_rows.py:362:101
+E             |
+E         361 |     assert isinstance(refused, TypedRefusal), refused
+E         362 |     assert refused.context["reason"] == "a decision's reason has no code in the journal's closed list"
+E             |                                                                                                     ^^
+E         363 |     assert refused.context["text"] == "their own words"
+E             |
+E         
+E         Found 1 error.
+E         
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['D:\\QMX-worktrees\\bld-rc-20\\.venv\\Scripts\\ruff.EXE', 'check', 'D:\\QMX-worktrees\\bld-rc-2...              ^^\n363 |     assert refused.context["text"] == "their own words"\n    |\n\nFound 1 error.\n', stderr='').returncode
+
+qa\tests\epic_13\test_l0_static_build.py:185: AssertionError
+=========================== short test summary info ===========================
+FAILED qa/tests/epic_13/test_l0_static_build.py::test_t13_006_tier1_static_gate_ruff_and_pyright
+1 failed in 34.24s
+EXIT=1
+
