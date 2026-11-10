@@ -148,7 +148,7 @@ def _span(spec: NumberSpec) -> str:
 
 
 def _why(spec: NumberSpec) -> str:
-    """Where the value comes from, who argues it, and why it holds. AD-14's four answers."""
+    """Who argues the value, why it holds, and where it came from. AD-14's answers, in one line."""
     said = f"owner {spec.owner or 'unstated'}, because {spec.reason or 'it states no reason'}"
     return said if spec.derivation is None else f"{said}, from {spec.derivation}"
 

@@ -1193,13 +1193,14 @@ def _number_fields(name: str, spec: NumberSpec, problems: _Problems) -> None:
         problems.add(
             "cautious_not_built",
             f"{where}/cautious",
-            f"{_FORMAT} moves a number by its rule, never toward {spec.cautious.value}",
+            f"{_FORMAT} moves a number by its rule and never asks which way is cautious, so "
+            f"{name}'s {spec.cautious.value} would decide nothing",
         )
     if spec.never_self_tune:
         problems.add(
             "never_self_tune_not_built",
             f"{where}/never_self_tune",
-            f"{_FORMAT} tunes a calibrated number by its own rule and reads no never_self_tune",
+            f"{_FORMAT} tunes a number by its own motion rule and reads no never_self_tune",
         )
     if spec.stage_values:
         problems.add(
