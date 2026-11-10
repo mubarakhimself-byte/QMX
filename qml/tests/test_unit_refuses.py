@@ -67,7 +67,7 @@ _CENSUS = frozenset(
     NumberSpec.never_self_tune NumberSpec.stage_values
     Guard.revert_after Guard.freeze_after
     Motion.mode Motion.source Motion.cadence Motion.min_count Motion.shrink_k Motion.step_limit
-    Motion.rule Motion.rule_params
+    Motion.window Motion.rule Motion.rule_params
     Cadence.every_closed_trades Cadence.at
     Range.min Range.max Range.step
     Pin.entry_id Pin.version Pin.fingerprint

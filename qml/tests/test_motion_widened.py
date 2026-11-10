@@ -38,6 +38,7 @@ from qml.protocol.unit import (
     UnitStep,
     construct_unit,
 )
+from qml.unit.model import Side
 
 _T = TypeVar("_T")
 _WEAK = Decimal("0.0003")
@@ -162,8 +163,61 @@ def test_a_scaled_number_follows_its_fact() -> None:
     assert (before, after) == (Decimal("0.0020"), Decimal("0.0040"))
 
 
+def _calibrated_sizer_canary() -> CompiledUnit:
+    """The canary with ``risk_fraction``, the sizer's own number, moved by the shipped rule.
+
+    Its only binding is the sizer's, so before this PR the compiler found no stamp and refused it
+    ``motion_not_built``; the stamp a risk number carries is its own value, ``number:<name>``.
+    """
+    document = canary._document()
+    numbers = cast("dict[str, object]", document["numbers"])
+    spec = cast("dict[str, object]", numbers["risk_fraction"])
+    spec["kind"] = "calibrated"
+    spec["motion"] = {
+        "mode": "shrink_from_own_trades",
+        "source": "own_record",
+        "cadence": {"every_closed_trades": 20},
+        "min_count": 20,
+        "shrink_k": 100,
+        "step_limit": 1,
+        "rule": "trend-floor-from-record@2",
+        "rule_params": {"buckets": "5"},
+    }
+    compiled = compile_unit(document, canary._context())
+    assert isinstance(compiled, CompiledUnit), compiled
+    return compiled
+
+
+def _risk_trade(n: int) -> ClosedTrade:
+    """One closed trade that carries the risk number's own value at entry, as RC-25 will write it."""
+    return ClosedTrade(
+        trade_id=f"r{n:02d}",
+        opened_at=Instant(canary._START + n * 900_000_000_000),
+        closed_at=Instant(canary._START + (n + 1) * 900_000_000_000),
+        side=Side.LONG,
+        market_id="fx.eurusd",
+        world="replay",
+        r_after_costs=Decimal("1.5"),
+        entry_stamps={"number:risk_fraction": Decimal("0.005")},
+    )
+
+
+def test_a_sizer_number_moves_on_its_own_stamp() -> None:
+    compiled = _calibrated_sizer_canary()
+    assert {slow.number.name: slow.number.stamp for slow in compiled.plan.slow} == {
+        "min_trend_strength": "strength",
+        "risk_fraction": "number:risk_fraction",
+    }
+
+    unit = _canary_host(compiled, canary._surfaces([_risk_trade(n) for n in range(1, 21)]))
+    steps = canary._drive(unit, [canary._instant_after(n) for n in range(1, 21)])
+
+    moves = [(row.number, row.old, row.new, row.count) for step in steps for row in step.calibrations]
+    assert moves == [("risk_fraction", Decimal("0.005"), Decimal("0.0049"), 20)]
+    assert unit.calibrated_values["risk_fraction"] == Decimal("0.0049")
+
+
 def _shuffled(count: int, seed: int) -> list[tuple[Decimal, Decimal]]:
-    """The canary's golden strengths, with their outcomes dealt out again by ``seed``."""
     strengths = [_WEAK if n % 3 == 0 else _STRONG for n in range(1, count + 1)]
     outcomes = [_LOSS if n % 3 == 0 else _WIN for n in range(1, count + 1)]
     random.Random(seed).shuffle(outcomes)
