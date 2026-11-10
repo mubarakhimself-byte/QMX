@@ -12,6 +12,12 @@ block ask it, and it defers to `notes` what only the Library can settle.
 A market whose record the store does not hold reads the record QML ships with its numbers
 (`qml/src/qml/numbers/shipped_records.json`), through `ShippedStore`: the same `with_field`,
 `head` and `get` calls `gather` makes of a Library, so day one needs no broker.
+
+`feasibility_of` is the verdict a unit's card shows: can one minimum lot at this stop fit the
+share, through QML's one converter (FUNNEL I17, RC-29). The check holds the document and its
+record but none of the numbers a verdict needs, so the card passes the share, the entry, the stop
+and the rate it has, and `checked`/`offline_checked` carry the answer under `feasibility` when it
+is given. The verdict is QML's; nothing here re-derives the fit.
 """
 
 from __future__ import annotations
@@ -19,15 +25,22 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from qmf.core import is_refusal
+from qmf.core.chrono import Instant
 from qmf.core.fingerprint import fingerprint
+from qmf.risk.facts import Fact
 from qml.compile import CompiledUnit, compile_unit
 from qml.door import check
+from qml.numbers.convert import RoundRule
+from qml.numbers.feasible import Feasibility, feasibility
 from qmx_library.port import LibraryRefused, ObjectView
 from qmx_library.principal import MAIN, Principal, state_ref
 
@@ -152,13 +165,82 @@ def shipped(store: Store | None) -> ShippedStore:
     return ShippedStore(store)
 
 
+@dataclass(frozen=True, slots=True)
+class AtCard:
+    """The numbers a verdict needs, from the caller that holds them at the card's instant.
+
+    The check has the document and its markets' records; the share a sizer answers, the entry and
+    the stop of the trade being priced, and the rate into the account's currency are the card's,
+    because the document names none of them. ``rate`` is account currency per one unit of the
+    record's quote currency, as ``market.rate:<quote>`` states it.
+    """
+
+    market: str
+    share: Decimal
+    entry: Decimal
+    stop: Decimal | None
+    rate: Decimal | None = Decimal(1)
+    """The rate the card holds; one when the account is in the record's quote currency."""
+    now: Instant | None = None
+    """The instant the verdict is asked at; None reads the clock this row runs on."""
+
+    def instant(self) -> Instant:
+        return Instant(time.time_ns()) if self.now is None else self.now
+
+
+def feasibility_of(store: Store | None, document: object, at: AtCard) -> dict[str, object]:
+    """The verdict on ``at``'s market of ``document``, through QML's one converter (FUNNEL I17).
+
+    The record is the one `gather` reads for that market, so a card and a check never ask two
+    different records. The rate the card holds is one fact at the instant asked, and a market the
+    document does not name has no record, which the converter names as its own skip.
+    """
+    gathered = gather(shipped(store), document)
+    record = gathered.context.records.get(at.market)
+    now = at.instant()
+    if record is None:
+        return {
+            "schema": "qmx.feasibility/1",
+            "market": at.market,
+            "verdict": "no_record",
+            "shortfall": "0",
+            "quantity": None,
+            "residue_r": "0",
+            "notes": list(gathered.warnings),
+        }
+    rate = (
+        None
+        if at.rate is None
+        else Fact(at.rate, now, "open", f"the card's rate into {record.currency}, as it holds it")
+    )
+    verdict: Feasibility = feasibility(
+        at.share, at.entry, at.stop, record, rate, RoundRule(now=now)
+    )
+    return {
+        "schema": "qmx.feasibility/1",
+        "market": at.market,
+        **verdict.document(),
+        "notes": list(gathered.warnings),
+    }
+
+
 def checked(
-    store: Store | None, document: object, previous_problem_set: str | None = None
+    store: Store | None,
+    document: object,
+    previous_problem_set: str | None = None,
+    at: AtCard | None = None,
 ) -> dict[str, object]:
-    """`document`'s check result with what `gather` found in `store`, and gather's notes."""
+    """`document`'s check result with what `gather` found in `store`, and gather's notes.
+
+    ``at`` adds the card's verdict under ``feasibility``: the check alone has no numbers to answer
+    it with, so a caller that holds them asks for it, and a caller that does not gets no claim.
+    """
     found = gather(shipped(store), document)
     result = check(document, found.context, previous_problem_set)
-    return {**result.to_json(), "notes": list(found.warnings)}
+    out: dict[str, object] = {**result.to_json(), "notes": list(found.warnings)}
+    if at is not None:
+        out["feasibility"] = feasibility_of(store, document, at)
+    return out
 
 
 def _compiler_problems(document: object) -> list[dict[str, object]]:
@@ -188,7 +270,9 @@ def _problem_set(problems: Iterable[Mapping[str, Any]]) -> str:
     return made.value.value
 
 
-def offline_checked(document: object, previous: str | None = None) -> dict[str, object]:
+def offline_checked(
+    document: object, previous: str | None = None, at: AtCard | None = None
+) -> dict[str, object]:
     """`checked` with no Library, with every kind only the Library can settle moved to `notes`.
 
     A market only the Library knows reads `no_record` from the layers, and `check` compiles only
@@ -196,7 +280,7 @@ def offline_checked(document: object, previous: str | None = None) -> dict[str, 
     here, or everything it alone refuses would be invisible on that market. In any other case the
     check reached the compiler already or still has errors to fix.
     """
-    result = checked(None, document, previous)
+    result = checked(None, document, previous, at)
     errors = cast("list[dict[str, Any]]", result["errors"])
     deferred = [p for p in errors if p["kind"] in LIBRARY_SETTLES]
     if not deferred:

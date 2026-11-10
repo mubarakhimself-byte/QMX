@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "halt",
   "definition": "Flatten the unit and stop it once its own journal counts days or more losing days in a row.",
-  "boundaries": "TradingView stops the whole strategy for good; this halt holds while the streak stands, and a streak can only end with a winning day the unit is not trading, so in practice it holds until he releases it. The count is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "boundaries": "TradingView stops the whole strategy for good; this halt holds while the streak stands, and a streak can only end with a winning day the unit is not trading, so in practice it holds until he releases it. The count is his to set: its default is the risk session's placeholder.",
   "recognition": "After several losing days in a row the unit stops trading.",
   "eligible_roles": [
     "halt"

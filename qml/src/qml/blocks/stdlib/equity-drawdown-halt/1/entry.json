@@ -11,7 +11,7 @@
   "origin": "qml",
   "component_type": "halt",
   "definition": "Flatten the account and stop trading once equity has fallen more than max_drawdown below its base: the first equity seen, or its highest when trailing is 1.",
-  "boundaries": "Once it holds it keeps holding, as TradingView's max_drawdown does; LEAN's model restarts from the next value instead. A new high in trailing mode never halts. Equity includes open positions' floating result. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "boundaries": "Once it holds it keeps holding, as TradingView's max_drawdown does; LEAN's model restarts from the next value instead. A new high in trailing mode never halts. Equity includes open positions' floating result.",
   "recognition": "When the account is down a set share from its start or its peak, everything is closed and trading stops.",
   "eligible_roles": [
     "halt"

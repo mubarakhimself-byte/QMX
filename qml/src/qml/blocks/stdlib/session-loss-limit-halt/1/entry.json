@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "halt",
   "definition": "Flatten the unit and stop it for the session once its session result from its own journal, session_loss_r, is at or below -limit R.",
-  "boundaries": "TradingView counts the loss in money or in percent of equity; this counts R, the unit journal's measure, and reads the unit alone. The host resets the session result at each session start, which releases the halt. The limit is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "boundaries": "TradingView counts the loss in money or in percent of equity; this counts R, the unit journal's measure, and reads the unit alone. The host resets the session result at each session start, which releases the halt. The limit is his to set: its default is the risk session's placeholder.",
   "recognition": "After a bad session the unit is closed out and sits out the rest of it.",
   "eligible_roles": [
     "halt"

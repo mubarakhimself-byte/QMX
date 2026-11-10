@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "halt",
   "definition": "Flatten the account for the day once equity is at or below (1 - limit) times the equity at the day's start.",
-  "boundaries": "The day boundary is the host's (the article uses the broker's server midnight) and it passes day_start_equity; a new day releases the halt. Equity includes floating results, as the article's combined daily result does. The limit is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "boundaries": "The day boundary is the host's (the article uses the broker's server midnight) and it passes day_start_equity; a new day releases the halt. Equity includes floating results, as the article's combined daily result does. The limit is his to set: its default is the risk session's placeholder.",
   "recognition": "After a set loss in one day the account is closed out until tomorrow.",
   "eligible_roles": [
     "halt"

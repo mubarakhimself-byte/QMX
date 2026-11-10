@@ -11,6 +11,7 @@ import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from decimal import Decimal
 from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
@@ -66,7 +67,7 @@ from qmx_tools.service import (
     json_value,
     unwrap,
 )
-from qmx_tools.unit_check import checked, shipped
+from qmx_tools.unit_check import AtCard, checked, shipped
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
@@ -869,8 +870,14 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
         document: dict[str, Any],
         item: str | None = None,
         previous_problem_set: str | None = None,
+        at: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Check a unit at layers A to F, every problem at once; save it as `item`'s draft first."""
+        """Check a unit at layers A to F, every problem at once; save it as `item`'s draft first.
+
+        `at` asks for the card's verdict beside the problems: `market`, `share`, `entry`, `stop`,
+        and the card's `rate` and `now` when it holds them. Without it the check claims no verdict,
+        because a document alone names no share and no entry.
+        """
         saved: dict[str, Any] | None = None
         if item is not None:
             before = draft(item)
@@ -887,7 +894,11 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
                 }
             except KindRefused as refused:
                 saved = {"object_id": None, "refused": [p.as_json() for p in refused.problems]}
-        return {**checked(ctx.library.store, document, previous_problem_set), "saved": saved}
+        card = None if at is None else _at_card(at)
+        return {
+            **checked(ctx.library.store, document, previous_problem_set, card),
+            "saved": saved,
+        }
 
     def unit_explain(
         document: dict[str, Any] | None = None, item: str | None = None
@@ -900,6 +911,21 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
         return {"lines": list(explain(given, found.context)), "notes": list(found.warnings)}
 
     return {"unit_new": unit_new, "unit_check": unit_check, "unit_explain": unit_explain}
+
+
+def _at_card(given: Mapping[str, Any]) -> AtCard:
+    """The card's verdict numbers, from the JSON a caller has: no document names these."""
+    stop = given.get("stop")
+    rate = given["rate"] if "rate" in given else Decimal(1)
+    now = given.get("now")
+    return AtCard(
+        market=str(given["market"]),
+        share=Decimal(str(given["share"])),
+        entry=Decimal(str(given["entry"])),
+        stop=None if stop is None else Decimal(str(stop)),
+        rate=None if rate is None else Decimal(str(rate)),
+        now=None if now is None else Instant(int(now)),
+    )
 
 
 @dataclass(frozen=True, slots=True)

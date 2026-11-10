@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "halt",
   "definition": "Flatten the unit and stop it for the session once its own journal counts more than fills filled orders this session.",
-  "boundaries": "TradingView acts when the strategy fills more than the maximum, so the fill past the limit has already happened when the halt holds. The host resets the count at each session start. The limit is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "boundaries": "TradingView acts when the strategy fills more than the maximum, so the fill past the limit has already happened when the halt holds. The host resets the count at each session start. The limit is his to set: its default is the risk session's placeholder.",
   "recognition": "A unit that trades too often in one session is stopped for the rest of it.",
   "eligible_roles": [
     "halt"
