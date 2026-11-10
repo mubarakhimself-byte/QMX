@@ -123,7 +123,7 @@ from qml.protocol.unit import (
 )
 from qml.unit.model import Side
 
-from qmn.app import paper_lane
+from qmn.app import paper_lane, practice
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.facts import FeedRates, LiveAccount
 from qmn.app.facts import refs as rate_refs
@@ -810,6 +810,10 @@ class ConformanceAccount:
     """The quantity each coming entry fills, first entry first; an entry past the list fills
     whole. The rest of a partly filled entry is never filled."""
     received: list[Ticket] = field(default_factory=list[Ticket])
+    venue_kind: str = ""
+    """The kind of venue this account answers as: empty for a double a test binds directly,
+    ``practice`` for the venue :mod:`qmn.app.practice` builds. Every card and row of a binding
+    that names a kind states it (``practice.stated``), and every other row reads as it did."""
     stated_balance: Decimal | None = None
     """The cash the venue states when a case moves it; None answers the starting balance."""
     balance_reads: int = 0
@@ -823,7 +827,12 @@ class ConformanceAccount:
 
     @classmethod
     def open(
-        cls, account: Account, starting_equity: Decimal, *, holds_stops: bool = True
+        cls,
+        account: Account,
+        starting_equity: Decimal,
+        *,
+        holds_stops: bool = True,
+        venue_kind: str = "",
     ) -> Result[ConformanceAccount]:
         double = ConformanceDouble.try_create(World.LIVE, account.venue)
         if is_refusal(double):
@@ -834,7 +843,7 @@ class ConformanceAccount:
         verified = double.value.verify_capabilities()
         if is_refusal(verified):
             return verified
-        return Ok(cls(double.value, account, starting_equity, holds_stops))
+        return Ok(cls(double.value, account, starting_equity, holds_stops, venue_kind=venue_kind))
 
     @property
     def account(self) -> Account:
@@ -1053,12 +1062,18 @@ def _past_entry(side: Side, stop: Decimal, entry: Decimal) -> bool:
 class _OrderJournal:
     """The node journal as the journal-before-dispatch gate's sink: one ``order`` row."""
 
-    def __init__(self, journal: JournalWriter, clock_ns: Callable[[], int]) -> None:
+    def __init__(
+        self,
+        journal: JournalWriter,
+        clock_ns: Callable[[], int],
+        stated: Mapping[str, object] | None = None,
+    ) -> None:
         self._journal = journal
         self._clock_ns = clock_ns
+        self._stated = {} if stated is None else stated
 
     def append(self, event: object, /) -> SinkResult:
-        body = dict(cast("Mapping[str, object]", event))
+        body = {**self._stated, **cast("Mapping[str, object]", event)}
         written = self._journal.append(
             "order", body, RowFacts(ts_recv=self._clock_ns(), clock_ok=False)
         )
@@ -1105,8 +1120,14 @@ class OrderPath:
         self._ordinal += 1
         return self._ordinal
 
+    @property
+    def stated(self) -> Mapping[str, object]:
+        """What every order row of this binding states about its venue: nothing for a broker, and
+        the practice world and kind for the practice venue (:func:`practice.stated`)."""
+        return practice.stated(self.venue.client)
+
     def _journalled(self, body: dict[str, object], ticket: Ticket) -> Result[Sent]:
-        sink = _OrderJournal(self.journal, self.clock_ns)
+        sink = _OrderJournal(self.journal, self.clock_ns, self.stated)
         enacted = enact_command(
             body, journal=sink, dispatcher=_Dispatch(lambda: self._send(ticket))
         )
@@ -1122,7 +1143,12 @@ class OrderPath:
     def _note(self, client_order_id: str, step: str, body: Mapping[str, object]) -> None:
         self.journal.append(
             "order",
-            {"event_id": f"{client_order_id}/{step}", "client_order_id": client_order_id, **body},
+            {
+                **self.stated,
+                "event_id": f"{client_order_id}/{step}",
+                "client_order_id": client_order_id,
+                **body,
+            },
             RowFacts(ts_recv=self.clock_ns(), clock_ok=False),
         )
 
@@ -2523,9 +2549,13 @@ class Runtime:
         source = self._accounts.get(account)
         if source is None:
             supplied_by = (
-                "the fake conformance double"
-                if isinstance(venue.client, ConformanceAccount)
-                else "the venue"
+                "the practice venue"
+                if practice.stated(venue.client)
+                else (
+                    "the fake conformance double"
+                    if isinstance(venue.client, ConformanceAccount)
+                    else "the venue"
+                )
             )
             source = LiveAccount(
                 lambda venue=venue: venue.client,
@@ -3484,9 +3514,13 @@ class Runtime:
             placed = self.board_read(hosted)
             if placed is not None:
                 boards[deployment_id] = placed.document()
+            stated = practice.NO_STATEMENT if hosted.venue is None else practice.stated(
+                hosted.venue.client
+            )
             units.append(
                 {
                     **({} if placed is None else {"board": boards[deployment_id]}),
+                    **stated,
                     "deployment_id": deployment_id,
                     "unit_id": hosted.deployment.unit_id,
                     "state": hosted.phase.value,
@@ -3513,7 +3547,10 @@ class Runtime:
             scope: PLACEHOLDER_KILL_EFFECTS[level].document()
             for scope, level in self.applied.items()
         }
-        venues = [venue.feed.document() for venue in self.venues.values()]
+        venues = [
+            {**venue.feed.document(), **practice.stated(venue.client)}
+            for venue in self.venues.values()
+        ]
         for key, value in (
             ("runtime.deployments", deployments),
             ("runtime.units", units),
