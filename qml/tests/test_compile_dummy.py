@@ -308,6 +308,7 @@ def adx_above(level: str) -> dict[str, object]:
         "motion": {"mode": "fixed"},
         "authority": "motion_inside_range",
         "origin": "builder_chosen",
+        "reason": "the ADX level the value rule gates at, a stand-in the test sets at 1 and 99",
     }
     for side in cast("dict[str, dict[str, dict[str, dict[str, Any]]]]", document["logic"]).values():
         side["slots"]["context"]["bindings"] += [
