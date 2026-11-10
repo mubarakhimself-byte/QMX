@@ -210,7 +210,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
     checks = reports(world.store)[before:]
     assert (answer["status"], again["status"]) == ("finished", "finished")
     assert (landed["status"], landed["kind"], landed["principal"]) == ("finished", "backtest", CHAT)
-    assert landed["tester"] == {"app": "qmb", "version": "1.0.10"}
+    assert landed["tester"] == {"app": "qmb", "version": "1.0.11"}
     assert landed["measures"]["trades"] == 8
     assert landed["labels"]["zero_trades"] is False
     assert len(checks) == 1
@@ -275,6 +275,7 @@ def test_an_agent_writes_adx_above_25_and_a_job_runs_it(world: World) -> None:
         "motion": {"mode": "fixed"},
         "authority": "motion_inside_range",
         "origin": "builder_chosen",
+        "reason": "the ADX level the agent asks for, 25 as a worked example and 99 as its off switch",
     }
     unit_new, unit_check = world.tools["unit"]["unit_new"], world.tools["unit"]["unit_check"]
     made = unit_new(
