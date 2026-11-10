@@ -3600,10 +3600,10 @@ class Runtime:
         feed bars long needs ``factor`` bars per primary step, and the recording may start part
         way through a bucket, which ``roll_up`` drops. So the read stops one base bar short of
         ``warm_needed + 1`` whole primary buckets: a mid-stream start still yields ``warm_needed``
-        whole buckets, and never a bucket past the one that completes warm-up. A unit driven past
-        that bucket would mint from the replay. This bounds the bars read, not the buckets that
-        close: a recording missing a base bar inside a bucket closes more buckets than it reads
-        whole, so the replay stops at the warming flip in ``_drive_one``.
+        whole buckets, and never a bucket past the one that completes warm-up. This bounds the
+        bars read, not the buckets that close: a recording missing a base bar inside a bucket
+        closes more buckets than it reads whole, and every bucket the read closes is stepped, so
+        the window reaches the live frontier with no hole in it.
         """
         if unit.base_ns is None or unit.base_ns <= 0:
             return venue.feed.recording.recent(market, unit.warm_needed)
@@ -3639,9 +3639,11 @@ class Runtime:
         hosted.detail = f"a fault: {why}"
 
     def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar], replay: bool = False) -> None:
-        """Step the unit over ``bars``. ``replay`` marks the warm-up bars read from the recording,
-        which stop at the close that warms the unit: a replayed bar past that flip would mint an
-        order from the past, and the live batch keeps stepping."""
+        """Step the unit over ``bars``. ``replay`` marks the warm-up bars read from the recording:
+        the unit stays warming over the whole batch, so no bar of it mints an order, and
+        ``_settle_warm`` flips the unit once the whole recording is in its window. A flip part way
+        through the batch would both place an order from a past bar and drop every recorded bar
+        after it, leaving the window short of the live frontier for good."""
         unit, loop = hosted.unit, hosted.loop
         if unit is None or loop is None:
             return
@@ -3681,11 +3683,8 @@ class Runtime:
                     return
                 if unit.warming:
                     unit.warm_seen += 1
-                    if unit.warm_seen >= unit.warm_needed:
+                    if not replay and unit.warm_seen >= unit.warm_needed:
                         unit.warming = False
-                        if replay:
-                            self._write_snapshot(hosted)
-                            return
         self._write_snapshot(hosted)
 
     # --- what he sees ---
