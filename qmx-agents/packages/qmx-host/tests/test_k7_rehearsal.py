@@ -29,7 +29,7 @@ STEPS = [
     "unit_new",
     "check",
     "backtest",
-    "stage_warm",
+    "click",
     "stage",
     "warm_up",
     "first_signal",
