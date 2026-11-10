@@ -108,9 +108,9 @@ def _bars_in(door: MarketDoor, folder: Path, staging: Path) -> tuple[list[str], 
         sides = [_month(bid), _month(ask)]
         if [stamp for stamp, _ in sides[0]] != [stamp for stamp, _ in sides[1]]:
             raise Refused(f"{bid.name} and {ask.name} do not cover the same bars")
-        scales = {_digits(prices) for _, prices in sides[0]}
+        scales = {_digits(prices) for side in sides for _, prices in side}
         if len(scales) != 1:
-            raise Refused(f"{bid.name} is written at more than one price scale")
+            raise Refused(f"{bid.name} and {ask.name} are not written at one price scale")
         scale = scales.pop()
         symbol = str(name["symbol"])
         for side, rows in zip(("bid", "ask"), sides, strict=True):
