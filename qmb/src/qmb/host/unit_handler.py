@@ -382,7 +382,8 @@ class UnitSliceHandler:
         *,
         stream: str,
         records: Mapping[str, InstrumentRecord],
-        bars: Mapping[str, Mapping[int, QuoteBar]] | Mapping[tuple[str, str], Mapping[int, QuoteBar]],
+        bars: Mapping[str, Mapping[int, QuoteBar]]
+        | Mapping[tuple[str, str], Mapping[int, QuoteBar]],
         opened_by: Fingerprint,
         equity: Decimal,
         execution: ExecutionPort,
@@ -430,8 +431,7 @@ class UnitSliceHandler:
     def _windows(
         self,
         bars: (
-            Mapping[str, Mapping[int, QuoteBar]]
-            | Mapping[tuple[str, str], Mapping[int, QuoteBar]]
+            Mapping[str, Mapping[int, QuoteBar]] | Mapping[tuple[str, str], Mapping[int, QuoteBar]]
         ),
     ) -> dict[tuple[str, str], Mapping[int, QuoteBar]]:
         """The windows by ``(stream, market)``. A host that reads one stream may key them by
@@ -448,7 +448,8 @@ class UnitSliceHandler:
         *,
         stream: str,
         records: Mapping[str, InstrumentRecord],
-        bars: Mapping[str, Mapping[int, QuoteBar]] | Mapping[tuple[str, str], Mapping[int, QuoteBar]],
+        bars: Mapping[str, Mapping[int, QuoteBar]]
+        | Mapping[tuple[str, str], Mapping[int, QuoteBar]],
         opened_by: Fingerprint,
         equity: Decimal,
         execution: ExecutionPort,
