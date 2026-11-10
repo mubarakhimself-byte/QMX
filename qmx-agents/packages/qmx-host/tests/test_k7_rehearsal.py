@@ -57,7 +57,7 @@ def test_k9_7_canary_reaches_a_filled_paper_entry(tmp_path: Path) -> None:
 def test_practice_says_it_is_practice(tmp_path: Path) -> None:
     """Every row of both journals says the practice world and kind, and so do the two cards.
 
-    The node stream carries this building's order rows; the unit stream every row of the
+    The node stream carries this binding's order rows. The unit stream carries every row of the
     deployment's own journal, which the venue must label as it labels the orders.
     """
     node, runtime, now = _practice_node(tmp_path)
