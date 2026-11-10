@@ -720,19 +720,19 @@ class UnitSliceHandler:
     def _facts(self, market: str) -> tuple[PositionFacts, ...]:
         """Every position on ``market`` as its exits read it, empty when flat. A seeded position
         is another unit's, so it carries its identity alone."""
-        held = tuple(self._fact(one) for _, one in self.held_in(market))
+        found = [self._fact(one) for _, one in self.held_in(market)]
         foreign = self._foreign.get(market)
-        if foreign is None:
-            return held
-        return held + (
-            PositionFacts(
-                position_id=foreign.position_id,
-                side=foreign.side,
-                quantity=foreign.quantity,
-                entry_price=foreign.entry_price,
-                opened_by=foreign.opened_by,
-            ),
-        )
+        if foreign is not None:
+            found.append(
+                PositionFacts(
+                    position_id=foreign.position_id,
+                    side=foreign.side,
+                    quantity=foreign.quantity,
+                    entry_price=foreign.entry_price,
+                    opened_by=foreign.opened_by,
+                )
+            )
+        return tuple(found)
 
     @property
     def trades(self) -> tuple[UnitTrade, ...]:
@@ -761,7 +761,9 @@ class UnitSliceHandler:
         """Every position this handler holds, by the position's own id, and a seeded one beside
         them under its id too, so no two positions ever answer one key (AD-25)."""
         held = {pid: one.position for pid, one in self._held.items()}
-        return held | {p.position_id: p for p in self._foreign.values() if p.position_id not in held}
+        return held | {
+            p.position_id: p for p in self._foreign.values() if p.position_id not in held
+        }
 
     def update_stream(
         self, stream_id: str, observation: SliceObservation | None, frontier: Instant

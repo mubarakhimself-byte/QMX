@@ -209,9 +209,11 @@ def test_the_own_position_surface_answers_the_facts_an_exit_reads() -> None:
     per-bar exit reads its stop, the bars held and its excursions in R from one surface."""
     handler, _, _ = _drive(_at_start(_entry("0.037")))
 
-    facts = handler.read_surfaces()[f"own_position:{_M}"].at(Instant(_T1))
+    facts = cast(
+        "tuple[object, ...]", handler.read_surfaces()[f"own_position:{_M}"].at(Instant(_T1))
+    )
 
-    assert isinstance(facts, tuple) and len(facts) == 1, facts
+    assert len(facts) == 1, facts
     one = facts[0]
     assert isinstance(one, PositionFacts), one
     assert (one.position_id, one.side, one.quantity, one.entry_price) == (

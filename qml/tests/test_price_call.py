@@ -128,7 +128,7 @@ def _surfaces() -> dict[str, Surface]:
     }
     for market in _MARKETS:
         surfaces[f"bars:m15:{market}"] = _At(None)
-        surfaces[f"own_position:{market}"] = _At(lambda _i: ())
+        surfaces[f"own_position:{market}"] = _At(())
     return surfaces
 
 

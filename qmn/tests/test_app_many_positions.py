@@ -16,19 +16,19 @@ from typing import cast
 from qmf.core import AccountRole, Instant, VenueId
 from qmf.core.refusal import is_refusal
 from qmf.risk.paper import ExecutionTarget
+from qmf.risk.unit_intent import UnitExitIntent
 from qml.compile import CompiledUnit
 from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import (
     OHLC,
     Account,
-    HostedUnit,
     QuoteBar,
     Surface,
-
     construct_unit,
 )
 from qml.unit.model import Side
 from qmn.app.runtime import compile_staged, parse_deployment, staging_folder
+from qmn.app.store import Json
 
 from test_app_runtime import deployment, rig
 
@@ -52,7 +52,7 @@ def _two_positions(*, time_out_bars: str = "48") -> dict[str, object]:
 def _compiled(data: Path, *, nets: bool, time_out_bars: str = "48") -> CompiledUnit | str:
     """Compile the staged deployment as the node does, with the account's position model."""
     document = deployment(data)
-    document["unit_document"] = cast("object", _two_positions(time_out_bars=time_out_bars))
+    document["unit_document"] = cast("Json", _two_positions(time_out_bars=time_out_bars))
     parsed = parse_deployment(cast("Mapping[str, object]", document))
     return compile_staged(parsed, staging_folder(data, "dep-1"), nets_positions=nets)
 
@@ -75,7 +75,7 @@ def test_a_two_position_unit_is_refused_by_name_on_a_netting_account(tmp_path: P
 
     assert isinstance(refused, str), refused
     assert "holds more than one position per market" in refused
-    assert "netting" in refused
+    assert "icmarkets-ctrader nets positions" in refused
 
 
 def _bar(at: int, low: str) -> QuoteBar:
@@ -152,10 +152,10 @@ def test_two_positions_on_one_market_each_run_their_own_exit(tmp_path: Path) -> 
         execution_target=_target(),
     )
     assert not is_refusal(hosted), hosted
-    unit = cast("HostedUnit", hosted.value)
+    unit = hosted.value
 
     step = unit.on_instant(Instant(_START))
 
     assert not is_refusal(step), step
-    closes = [intent for intent in step.value.intents if hasattr(intent, "position_ref")]
+    closes = [intent for intent in step.value.intents if isinstance(intent, UnitExitIntent)]
     assert sorted(one.position_ref.position_id for one in closes) == ["own-1", "own-2"]

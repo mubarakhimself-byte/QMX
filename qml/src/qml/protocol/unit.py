@@ -79,6 +79,7 @@ from qml.protocol.exits import (
     ExitSlot,
     ExitStack,
     PositionFacts,
+    PositionSource,
     answer,
     chosen,
     facts_from,
@@ -1148,15 +1149,22 @@ class _Run:
         fresh: dict[str, QuoteBar] = {}
         for m in self.unit.markets:
             given = self.surface(f"own_position:{m.market_id}")
-            if not isinstance(given, tuple) or not all(
-                isinstance(one, (OwnPosition, PositionFacts)) for one in given
-            ):
+            if not isinstance(given, tuple):
                 return invalid(
                     "own_position",
                     "a position surface answers a tuple of PositionFacts or OwnPositions",
                     market=m.market_id,
                 )
-            positions[m.market_id] = tuple(facts_from(one) for one in given)
+            held = cast("tuple[object, ...]", given)
+            if not all(isinstance(one, (OwnPosition, PositionFacts)) for one in held):
+                return invalid(
+                    "own_position",
+                    "a position surface answers a tuple of PositionFacts or OwnPositions",
+                    market=m.market_id,
+                )
+            positions[m.market_id] = tuple(
+                facts_from(cast("PositionSource | PositionFacts", one)) for one in held
+            )
             bars: dict[str, QuoteBar] = {}
             for stream in self.plan.streams:
                 given_bar = self.surface(f"bars:{stream}:{m.market_id}")
@@ -1326,11 +1334,15 @@ class _Run:
         account = self.surface("account")
         stakes: dict[str, list[Stake]] = {}
         for m in self.unit.markets:
-            rate = rate_used(m.record, account, self.instant) if isinstance(account, Account) else None
+            rate = (
+                rate_used(m.record, account, self.instant) if isinstance(account, Account) else None
+            )
             for position in positions[m.market_id]:
                 if not self.mine(position):
                     continue
-                stakes.setdefault(bet_key(self.unit.compiled.unit.family_id, m.market_id), []).append(
+                stakes.setdefault(
+                    bet_key(self.unit.compiled.unit.family_id, m.market_id), []
+                ).append(
                     Stake(
                         position.entry_price,
                         position.stop,

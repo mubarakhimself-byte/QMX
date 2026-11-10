@@ -969,9 +969,7 @@ def replay_windowed(
         markets: list[str] = []
         for _, _, market, item in group:
             if isinstance(item, Roll):
-                held = bool(handler.open_on(market)) or any(
-                    r.stream_id == market for r in resting
-                )
+                held = bool(handler.open_on(market)) or any(r.stream_id == market for r in resting)
                 if held:
                     return policy(
                         "roll",
