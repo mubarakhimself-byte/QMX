@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import TypeVar, cast
 
 from qmf.core.chrono import Instant
-from qmf.core.fingerprint import Fingerprint
 from qmf.core.identity import AccountRole, VenueId
 from qmf.core.refusal import Result, TypedRefusal
 from qmf.risk.paper import ExecutionTarget
@@ -27,7 +26,6 @@ from qml.protocol.unit import (
     Account,
     HostedUnit,
     MotionSwitch,
-    OwnPosition,
     UnitStep,
     construct_unit,
 )

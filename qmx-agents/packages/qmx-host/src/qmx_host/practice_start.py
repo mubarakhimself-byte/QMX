@@ -26,7 +26,7 @@ from qmf.core import is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import BAR_COLUMNS, TypedWriter
 from qmx_apps.supervisor import MARKET_STORE
-from qmx_library.principal import state_ref
+from qmx_library.principal import MAIN, state_ref
 from qmx_tools.unit_check import shipped_records
 
 from qmx_host.market_data import MarketDoor
@@ -213,11 +213,15 @@ def _records() -> list[tuple[str, str, Record]]:
 
 
 def _held(store: Store, venue: str, symbol: str) -> bool:
-    """Whether `main` holds a live instrument record for this venue and symbol. An archived item is
-    withdrawn, so its replacement binds alone (Library AD-6)."""
+    """Whether `main` holds a live instrument record for this venue and symbol. An item only on a
+    draft or a run ref holds nothing there, and an archived item is withdrawn, so its replacement
+    binds alone (Library AD-6)."""
     for object_id in store.with_field("instrument", "symbol", symbol):
         view = store.get(store.engine, object_id)
         if view.fields.get("venue") != venue or view.fields.get("symbol") != symbol:
+            continue
+        head = store.head(view.item, MAIN)
+        if head is None:
             continue
         state = store.head(view.item, state_ref(view.item))
         if state is None or state[0] != "archived":

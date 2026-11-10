@@ -3146,6 +3146,7 @@ class Runtime:
             build=self.build,
             boot_epoch_id=self.boot_epoch_id,
             account=deployment.account_id,
+            stated=practice.stated(venue.client),
         )
         if is_refusal(journal):
             hosted.phase, hosted.detail = Phase.REFUSED, "the unit journal would not open"
