@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "target-r-multiple",
+  "version": 2,
+  "family": "profit-target",
+  "aliases": [
+    "R multiple target"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "component_type": "exit",
+  "definition": "Profit target a multiple of R from the entry, R being the entry-to-stop distance, the multiple read from the evidence.",
+  "boundaries": "A stand-in target until the risk session writes the real exits. The multiple is a number that may move, so this version reads it from the evidence and keeps the make value only as the seed; version 1 held the make value and ignored a moved one.",
+  "recognition": "The target sits a set number of R beyond the entry, at the multiple a number that moves feeds it.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    },
+    {
+      "source_ref": "risk-core:round-2/arch/final/SPINE.md#AD-14",
+      "quote": "A block reads every number from `evidence`; `make` only seeds.",
+      "dated": "2026-11-08"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "stop_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "multiple": {
+      "measure": "r",
+      "default": "2",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.5",
+        "max": "10",
+        "step": "0.1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:ef773b311dcbb160f19abef3036372d0ef5e10ee2463b2d601e2dc48d55c0c72"
+}

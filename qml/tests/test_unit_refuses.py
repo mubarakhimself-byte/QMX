@@ -57,6 +57,8 @@ _CENSUS = frozenset(
     Combiner.close Combiner.within_bars
     ScopedBinding.name ScopedBinding.block ScopedBinding.params ScopedBinding.inputs
     ScopedBinding.scope
+    ControlBinding.name ControlBinding.block ControlBinding.params ControlBinding.inputs
+    ControlBinding.scope ControlBinding.verb ControlBinding.shadow
     Halts.position Halts.unit Halts.account
     Read.reading Read.market Read.fallback Read.stale_after_s
     NumberSpec.kind NumberSpec.measure NumberSpec.default NumberSpec.motion NumberSpec.authority
@@ -248,6 +250,26 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
         _put("plain_python", {"block": "ema@1"}),
         "plain_python_not_built",
         "/plain_python",
+    ),
+    "a halt filed under another scope": (
+        _put(
+            "halts",
+            {
+                "position": [],
+                "unit": [
+                    {
+                        "name": "probe",
+                        "scope": "position",
+                        "block": "equity-drawdown-halt@1",
+                        "params": {"max_drawdown": {"value": "0.05"}, "trailing": {"value": "0"}},
+                        "inputs": {},
+                    }
+                ],
+                "account": [],
+            },
+        ),
+        "halt_scope",
+        "/halts/unit/0/scope",
     ),
     "an exit's scope": (
         _put("exit_set/0/scope", "account"),

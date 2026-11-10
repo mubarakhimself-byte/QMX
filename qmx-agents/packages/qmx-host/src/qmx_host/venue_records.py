@@ -14,6 +14,11 @@ over it, and a new version lands only when the result differs. Keys he wrote on 
 cTrader does not state, a calendar or a note, stay as he wrote them. `world` is cTrader's live
 flag for the account as the node read it, never an argument.
 
+A venue can also have no read behind it: the practice venue replays QMX's own shipped month, and
+a lane's fake broker answers a fake. Those records are what QMX states, not what a venue answered,
+and :class:`Stated` is where they are built. They land by the same path and the same kinds, so a
+caller cannot tell a stated record from a read one except by the facts it holds.
+
 cTrader only. The CCXT refresh template's record files stay run artifacts until something binds
 a CCXT venue (BACKLOG).
 """
@@ -48,6 +53,7 @@ __all__ = [
     "Market",
     "Record",
     "Refresh",
+    "Stated",
     "VenueRecords",
     "bound_accounts",
     "land",
@@ -59,6 +65,7 @@ __all__ = [
     "refresh_s",
     "said",
     "self_test_passed",
+    "stated",
 ]
 
 NODE_APP: Final = "trading-node"
@@ -136,6 +143,23 @@ class Record:
     title: str
     facts: JsonObject
     named: JsonObject
+
+
+@dataclass(frozen=True, slots=True)
+class Stated:
+    """A venue QMX states itself, with no read behind it: the practice venue, or a lane's fake
+    broker. Its facts are QMX's own, so nothing here can claim more than QMX knows."""
+
+    venue: str
+    account_id: str
+    world: str
+    """The account kind's ``world``, as the account is stated: ``demo`` for a fake broker,
+    ``paper`` for the practice venue. The Library's account kind decides which it accepts."""
+    sandbox: str
+    """The venue kind's ``sandbox``: ``none`` for a venue with no broker behind it."""
+    base_currency: str = "USD"
+    position_mode: str = "netting"
+    owner: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +289,44 @@ def _instrument(venue: str, row: Mapping[str, object], market: Market, leverage:
             "day_boundary": market.day_boundary,
         },
     )
+
+
+def stated(record: Stated) -> list[Record]:
+    """The account row and the venue row of a venue QMX states itself.
+
+    A venue with no broker read behind it still needs both rows: promote reads one `account` for
+    the account his click names, and the deployment carries the `venue` row beside it. What the
+    account's ``world`` is decides whether the Library takes it; `land` answers that refusal by
+    name rather than raising, so a caller sees the wall instead of a silent absence.
+    """
+    account: JsonObject = _present(
+        {
+            "venue": record.venue,
+            "account_id": record.account_id,
+            "world": record.world,
+            "base_currency": record.base_currency,
+            "position_mode": record.position_mode,
+            "owner": record.owner,
+        }
+    )
+    return [
+        Record(
+            "account",
+            {"venue": record.venue, "account_id": record.account_id},
+            f"account-{_slug(record.venue, record.account_id)}",
+            f"{record.account_id} at {record.venue}",
+            account,
+            {},
+        ),
+        Record(
+            "venue",
+            {"venue": record.venue},
+            f"venue-{_slug(record.venue)}",
+            record.venue,
+            {"venue": record.venue, "sandbox": record.sandbox, "data_levels": DATA_LEVELS},
+            {},
+        ),
+    ]
 
 
 def _on_main(store: Store, record: Record) -> list[tuple[str, str, JsonObject]]:

@@ -16,6 +16,9 @@ from qmf.data.journal_envelope import JournalStream
 from qmf.data.journal_kinds.spec import IdRule, KindSpec, missing, one_of
 
 __all__ = [
+    "BLOCK_CODE",
+    "BLOCK_REASON_FAMILY",
+    "BRAKE_CODE",
     "BY_KINDS",
     "LIFECYCLE_SCHEMA",
     "LIFECYCLE_STATES",
@@ -75,13 +78,26 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
         "unlisted",
     }
 )
-"""Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
+"""Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine.
+A user block's own word is not here: it names its code in ``BLOCK_REASON_FAMILY``, so a block a
+user adds costs no table row and no journal change."""
+BLOCK_REASON_FAMILY: Final[str] = "block:"
+"""The head of a user-added block's own reason-code family. A block writes its code as
+``block:<its own word>``; the family is declared here once and appends without an edit, so the
+closed list above stays the unit's and the hosts' own words."""
+BLOCK_CODE: Final[re.Pattern[str]] = re.compile(r"\Ablock:[a-z0-9][a-z0-9._-]*\Z")
+BRAKE_CODE: Final[re.Pattern[str]] = re.compile(r"\A[a-z0-9][a-z0-9._-]*\Z")
+"""A brake's own word on its risk-event row: its block's entry id, which lands from a document and
+so can never be a static list. The form is the family, and the closed codes above are its first
+members."""
 READING_SOURCES: Final[frozenset[str]] = frozenset({"unit", "node", "mis"})
 STATE_EVENTS: Final[frozenset[str]] = frozenset({"warming", "ready", "cold_start", "seam_flag"})
-RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({"unit_fault"})
-"""What a risk event happened: ``unit_fault`` first, when a block raised in one of its unit's
-phases (AD-23). Closed and appendable; ``qmf-risk`` carries the same family for the code the hosts
-write."""
+RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({"unit_fault", "link_fault"})
+"""What a risk event happened: ``unit_fault`` when a block raised in one of its unit's phases
+(AD-23), ``link_fault`` when a chain link or a control row raised and its scope stood down (AD-9).
+Closed and appendable; ``qmf-risk`` carries the same family for the code the hosts write. A brake's
+own word joins the family by its form (``BRAKE_CODE``) and not by a list, because which brakes run
+is a document's."""
 LIFECYCLE_SCHEMA: Final[str] = "qmx.lifecycle/1"
 LIFECYCLE_STATES: Final[frozenset[str]] = frozenset(
     {"draft", "tested", "parked", "paper", "live", "stopped", "retired"}
@@ -92,12 +108,23 @@ _RATIONAL: Final[re.Pattern[str]] = re.compile(r"\A-?\d+/\d+\Z")
 """An exact rational as text: a rate reads ``1/1`` or ``1/150``, never a rounded decimal."""
 
 
+def _reason(body: Mapping[str, object]) -> str | None:
+    """The decision's code: one of the closed list, or a user block's own family code."""
+    code = body.get("reason")
+    if isinstance(code, str) and (code in REASON_CODES or BLOCK_CODE.match(code) is not None):
+        return None
+    return (
+        f"reason is one of {', '.join(sorted(REASON_CODES))}, or a block's own "
+        f"{BLOCK_REASON_FAMILY}<word>, not {code!r}"
+    )
+
+
 def _signal(body: Mapping[str, object]) -> str | None:
     wrong = one_of(body, "outcome", SIGNAL_OUTCOMES)
     if wrong is not None:
         return wrong
     if body["outcome"] in _NEEDS_REASON:
-        wrong = one_of(body, "reason", REASON_CODES)
+        wrong = _reason(body)
         if wrong is not None:
             return wrong
     readings = body.get("readings_used", [])
@@ -176,13 +203,60 @@ def _state(body: Mapping[str, object]) -> str | None:
 
 
 def _risk_event(body: Mapping[str, object]) -> str | None:
-    """The code that fired, and the root cause the one card is filed under (AD-23)."""
-    wrong = one_of(body, "code", RISK_EVENT_CODES)
+    """The code that fired, the root cause the one card is filed under, and the alert its reader
+    acts on (AD-12, AD-23). ``event_id`` names the incident rather than the row, so a restart that
+    writes the same brake's fire again files it under the same incident."""
+    wrong = _brake_code(body, "code")
     if wrong is not None:
         return wrong
     root = body["root"]
     if not isinstance(root, str) or not root.strip():
         return "root is a root-cause key, a non-blank string"
+    if not isinstance(body.get("event_id"), str) or not body["event_id"]:
+        return "event_id is the incident's own non-blank string"
+    if not isinstance(body.get("action"), str) or not body["action"]:
+        return "action is what its reader does, a non-blank string"
+    actionable = body.get("actionable")
+    if not isinstance(actionable, bool):
+        return "actionable is true or false"
+    for name in ("row", "pin", "verb", "detail"):
+        value = body.get(name)
+        if value is not None and not isinstance(value, str):
+            return f"{name} is a string"
+    return None
+
+
+def _brake_code(body: Mapping[str, object], field: str) -> str | None:
+    """The closed family: one of the hosts' own words, or a brake's own word by its form."""
+    code = body.get(field)
+    if isinstance(code, str) and (code in RISK_EVENT_CODES or BRAKE_CODE.match(code) is not None):
+        return None
+    return (
+        f"{field} is one of {', '.join(sorted(RISK_EVENT_CODES))}, or a brake's own word, "
+        f"not {code!r}"
+    )
+
+
+def _would_have(body: Mapping[str, object]) -> str | None:
+    """The entry a brake would have refused, or did: the row that answered, the decision row it
+    refused, the code its words resolve to, and the share of such entries it recorded."""
+    wrong = _brake_code(body, "code") or _reason(body)
+    if wrong is not None:
+        return wrong
+    for name in ("row", "decision_row_id"):
+        value = body.get(name)
+        if not isinstance(value, str) or not value:
+            return f"{name} is a non-blank string"
+    propensity = body.get("propensity")
+    if not isinstance(propensity, str) or _RATIONAL.fullmatch(propensity) is None:
+        return "propensity is an exact rational, n/d"
+    numerator, _, denominator = propensity.partition("/")
+    if int(denominator) == 0 or not 0 < int(numerator) <= int(denominator):
+        return "propensity is a share above 0 and at most 1/1"
+    for name in ("verb", "detail", "market_id", "side"):
+        value = body.get(name)
+        if value is not None and not isinstance(value, str):
+            return f"{name} is a string"
     return None
 
 
@@ -243,8 +317,20 @@ SPECS: Final[tuple[KindSpec, ...]] = (
     KindSpec(JournalStream.UNIT, "fill", IdRule.FILL, ("deal_id",)),
     KindSpec(JournalStream.UNIT, "trade", IdRule.TRADE, ("closing_deal_id",), _trade),
     KindSpec(JournalStream.UNIT, "guard", IdRule.SEQUENCE),
-    KindSpec(JournalStream.UNIT, "risk_event", IdRule.SEQUENCE, ("code", "root"), _risk_event),
-    KindSpec(JournalStream.UNIT, "would_have", IdRule.SEQUENCE),
+    KindSpec(
+        JournalStream.UNIT,
+        "risk_event",
+        IdRule.SEQUENCE,
+        ("code", "root", "event_id", "action", "actionable"),
+        _risk_event,
+    ),
+    KindSpec(
+        JournalStream.UNIT,
+        "would_have",
+        IdRule.SEQUENCE,
+        ("code", "row", "decision_row_id", "reason", "propensity"),
+        _would_have,
+    ),
     KindSpec(JournalStream.UNIT, "data_event", IdRule.SEQUENCE),
     # A replay's swap, financing, funding, dividend or commission line (B10, QB-04, QB-03).
     KindSpec(JournalStream.UNIT, "cash", IdRule.FILL, ("deal_id", "kind", "money")),

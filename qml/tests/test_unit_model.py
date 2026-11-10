@@ -34,9 +34,9 @@ def test_the_dummy_parses_with_zero_problems() -> None:
     assert unit.logic.short.slots["trigger"].bindings[0].params["level"] == NumberParam("rsi_high")
     assert unit.sizer is not None and str(unit.sizer.block) == "fixed-fraction-at-stop@2"
     assert [str(binding.block) for binding in unit.exit_set] == [
-        "swing-stop-buffer@1",
-        "target-r-multiple@1",
-        "time-exit-bars@1",
+        "swing-stop-buffer@2",
+        "target-r-multiple@2",
+        "time-exit-bars@2",
     ]
     floor = unit.numbers["min_trend_strength"]
     assert floor.range is not None and floor.range.max == Decimal("0.0030")

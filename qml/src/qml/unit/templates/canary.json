@@ -1,0 +1,109 @@
+{
+  "schema": "qmx.unit/1",
+  "unit_id": "canary",
+  "family_id": "trend-pullback",
+  "title": "Canary (no brakes)",
+  "claim_card": {
+    "idea": "One unit's shape for a stranger's first run on paper. It carries no brakes. A shape, not an edge.",
+    "sources": [
+      {"source_ref": "qmx:template", "locator": "built-in", "dated": "2026-11-10"}
+    ],
+    "written_at": "2026-11-10T00:00:00Z"
+  },
+  "markets": [
+    {"market_id": "fx.eurusd", "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": "EURUSD"}},
+    {"market_id": "metal.xauusd", "instrument_ref": {"venue": "icmarkets-ctrader", "symbol": "XAUUSD"}}
+  ],
+  "streams": [
+    {"name": "m15", "market": "*", "bar": {"kind": "time", "size": "900"}, "input": "closed_bars", "price": "bid_ask"}
+  ],
+  "direction": "both",
+  "position_limit": {"per_instrument": 1},
+  "logic": {
+    "long": {
+      "slots": {
+        "context": {
+          "role": "context",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "trend", "block": "ema@1", "params": {"period": {"number": "ema_period"}}, "inputs": {"series": "m15.close"}},
+            {"name": "strength", "block": "roc-of-series@1", "params": {"lookback": {"number": "roc_lookback"}, "floor": {"number": "min_trend_strength"}}, "inputs": {"series": "trend"}}
+          ]
+        },
+        "trigger": {
+          "role": "trigger",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "rsi_cross", "block": "rsi-cross-back@1", "params": {"period": {"number": "rsi_period"}, "level": {"number": "rsi_low"}}, "inputs": {"series": "m15.close"}}
+          ]
+        },
+        "entry_order": {
+          "role": "entry_order",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "next_open", "block": "market-next-open@1", "params": {}, "inputs": {}}
+          ]
+        }
+      }
+    },
+    "short": {
+      "slots": {
+        "context": {
+          "role": "context",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "trend", "block": "ema@1", "params": {"period": {"number": "ema_period"}}, "inputs": {"series": "m15.close"}},
+            {"name": "strength", "block": "roc-of-series@1", "params": {"lookback": {"number": "roc_lookback"}, "floor": {"number": "min_trend_strength"}}, "inputs": {"series": "trend"}}
+          ]
+        },
+        "trigger": {
+          "role": "trigger",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "rsi_cross", "block": "rsi-cross-back@1", "params": {"period": {"number": "rsi_period"}, "level": {"number": "rsi_high"}}, "inputs": {"series": "m15.close"}}
+          ]
+        },
+        "entry_order": {
+          "role": "entry_order",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "next_open", "block": "market-next-open@1", "params": {}, "inputs": {}}
+          ]
+        }
+      }
+    }
+  },
+  "exit_set": [
+    {"name": "swing_stop", "scope": "position", "block": "swing-stop-buffer@2", "params": {"buffer": {"number": "stop_buffer"}}, "inputs": {"series": "m15"}},
+    {"name": "target_2r", "scope": "position", "block": "target-r-multiple@2", "params": {"multiple": {"number": "target_r"}}, "inputs": {}},
+    {"name": "time_out", "scope": "position", "block": "time-exit-bars@2", "params": {"bars": {"number": "time_out_bars"}}, "inputs": {}}
+  ],
+  "sizer": {"name": "fixed_fraction", "block": "fixed-fraction-at-stop@2", "params": {"fraction": {"number": "risk_fraction"}}, "inputs": {}},
+  "halts": {"position": [], "unit": [], "account": []},
+  "reads": [],
+  "numbers": {
+    "ema_period": {"kind": "fixed", "measure": "bars", "range": {"min": "20", "max": "300", "step": "1"}, "default": "100", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "roc_lookback": {"kind": "fixed", "measure": "bars", "range": {"min": "5", "max": "100", "step": "1"}, "default": "20", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "min_trend_strength": {
+      "kind": "calibrated", "measure": "percent", "range": {"min": "0", "max": "0.0030", "step": "0.0001"}, "default": "0",
+      "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20}, "min_count": 20, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@2", "rule_params": {"buckets": "5"}},
+      "authority": "motion_inside_range", "origin": "placeholder", "applies_to_open_positions": false
+    },
+    "rsi_period": {"kind": "fixed", "measure": "bars", "range": {"min": "2", "max": "50", "step": "1"}, "default": "14", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "rsi_low": {
+      "kind": "derived", "measure": "ratio", "range": {"min": "0", "max": "100", "step": "0.01"}, "default": "30",
+      "motion": {"mode": "percentile_of_own_history", "source": "rsi_cross", "rule_params": {"percentile": "20", "window_bars": "500"}},
+      "authority": "motion_inside_range", "origin": "placeholder"
+    },
+    "rsi_high": {
+      "kind": "derived", "measure": "ratio", "range": {"min": "0", "max": "100", "step": "0.01"}, "default": "70",
+      "motion": {"mode": "percentile_of_own_history", "source": "rsi_cross", "rule_params": {"percentile": "80", "window_bars": "500"}},
+      "authority": "motion_inside_range", "origin": "placeholder"
+    },
+    "stop_buffer": {"kind": "fixed", "measure": "percent", "range": {"min": "0", "max": "0.01", "step": "0.0001"}, "default": "0.0002", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "target_r": {"kind": "fixed", "measure": "r", "range": {"min": "0.5", "max": "10", "step": "0.1"}, "default": "2", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "time_out_bars": {"kind": "fixed", "measure": "bars", "range": {"min": "1", "max": "1000", "step": "1"}, "default": "48", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
+    "risk_fraction": {"kind": "fixed", "measure": "percent", "range": {"min": "0.0001", "max": "0.05", "step": "0.0001"}, "default": "0.005", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"}
+  },
+  "pins": []
+}

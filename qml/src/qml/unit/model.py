@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 
+from qmf.risk.controls import Verb
+
 __all__ = [
     "AbsentInputs",
     "Authority",
@@ -28,6 +30,7 @@ __all__ = [
     "Combiner",
     "CombinerKind",
     "ContextNeeds",
+    "ControlBinding",
     "Direction",
     "EntryRef",
     "Fallback",
@@ -392,10 +395,21 @@ class Logic:
 
 
 @dataclass(frozen=True)
+class ControlBinding(ScopedBinding):
+    """A brake's row (AD-12): a scoped binding, the verb it runs when it fires, and whether it is
+    only in shadow. The rest of a control row is compiled from the block's face (``reads``) or
+    defaulted (``on_fire``, ``restore``, ``until_n``, ``enabled``), so the document states only
+    what a person chose."""
+
+    verb: Verb = Verb.NO_NEW_ENTRIES
+    shadow: bool = False
+
+
+@dataclass(frozen=True)
 class Halts:
-    position: tuple[ScopedBinding, ...] = ()
-    unit: tuple[ScopedBinding, ...] = ()
-    account: tuple[ScopedBinding, ...] = ()
+    position: tuple[ControlBinding, ...] = ()
+    unit: tuple[ControlBinding, ...] = ()
+    account: tuple[ControlBinding, ...] = ()
 
 
 @dataclass(frozen=True)

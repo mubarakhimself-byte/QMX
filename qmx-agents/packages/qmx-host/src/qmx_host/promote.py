@@ -51,6 +51,7 @@ from qmx_host.lifecycle import LifecycleWriter, MoveRefused
 from qmx_host.node_link import NODE_APP, Change, NodeLink
 
 __all__ = [
+    "PROTECTED_FIELDS",
     "ROUTE",
     "SCHEMA",
     "Click",
@@ -62,6 +63,8 @@ __all__ = [
 ROUTE: Final = "/api/units/promote"
 SCHEMA: Final = "qmx.units.promote/1"
 DEPLOYMENT_SCHEMA: Final = "qmx.node.deployment/1"
+RUN_STAMP_SCHEMA: Final = "qmx.run.stamp/1"
+"""The conditions a deployment's run starts under, as the host knows them at his click (R8)."""
 TRADING: Final = frozenset({State.PAPER, State.LIVE})
 READ: Final = Principal("operator")
 SHOWN: Final[Mapping[str, str]] = {"applied": "accepted", "waiting": "queued"}
@@ -70,10 +73,26 @@ GONE: Final = "unknown_deployment"
 """The node's answer to a withdraw of a deployment it does not hold: nothing is left to stop."""
 NOT_LIVE: Final = frozenset({"refused", "withdrawing", "stopped"})
 """The node's words for a deployment that is not running or will not run."""
+PROTECTED_FIELDS: Final[frozenset[str]] = frozenset(
+    {"floor", "kill_level", "never_self_tune", "plan_hash"}
+)
+"""The fields only his click writes: the floor, a kill level, whether a number may tune itself, and
+the plan hash his click binds to (AD-20, K5). No catalog row and no host route sets one; this list
+is the published surface a test over the tool table holds."""
 
 type Lane = Literal["paper", "live"]
 type Calibrations = Callable[[str, str], Sequence[Mapping[str, object]]]
 """The paper lane's harvested `calibration` row bodies of one unit version, oldest first."""
+GROUP_NONE: Final = "none"
+"""A unit version carries no group, so every run this build starts is solo; a group stamps its
+members at RC-52."""
+NO_GATE: Final = "none"
+"""The gate slot lands at RC-35, so beyond the risk row nothing gates an entry today."""
+COSTS_UNMEASURED: Final = "unmeasured"
+"""Costs are observed from fills at RC-28; until then a run states it has none measured."""
+VENUE_WORLDS: Final = frozenset({"demo", "live"})
+"""The account worlds whose quotes come from a venue's own feed. A paper-world account replays
+bars, so its real-tick share is zero."""
 
 
 class GRecords(Protocol):
@@ -272,6 +291,26 @@ def starting(
     return found
 
 
+def _run_stamp(account: Held, lane: Lane) -> Document:
+    """The conditions a run starts under, so a result from it is never read as proven (R8).
+
+    ``group`` is none because a unit version carries no group yet. ``quote_source`` is the bound
+    account's venue, whose feed the node reads. ``real_tick_share`` is ``1`` for a demo or live
+    account's venue feed and ``0`` for a paper-world account that replays bars. The gate slot and
+    measured costs land at RC-35 and RC-28, so both say what the run actually has today.
+    """
+    world = str(account.fields.get("world") or "")
+    return {
+        "schema": RUN_STAMP_SCHEMA,
+        "group": GROUP_NONE,
+        "quote_source": str(account.fields.get("venue") or ""),
+        "gate_settings": NO_GATE,
+        "costs": COSTS_UNMEASURED,
+        "real_tick_share": "1" if world in VENUE_WORLDS else "0",
+        "lane": lane,
+    }
+
+
 class Promoter:
     """His promote click over the Library, the lifecycle writer and the node link."""
 
@@ -370,11 +409,19 @@ class Promoter:
         if again is not None and self._no_live_deployment(click) is not True:
             again = None
         document, compiled = self._unit(click)
+        # The draft-to-paper row names the G record the fold demands as its evidence, so that one
+        # move fetches the record before the probe. Every other move probes as it did before.
+        report, tested = "", ""
+        if current is State.DRAFT and click.target is State.PAPER:
+            report, tested = self._g_record(compiled, click.market_id)
         if again is None:
-            probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
+            probe = self._event(
+                click, digest, current, compiled.compiled_fingerprint.value, report or None
+            )
             self._allowed(probe, known)
+        if not report:
+            report, tested = self._g_record(compiled, click.market_id)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
-        report, tested = self._g_record(compiled, click.market_id)
         account = _one(
             _main(self.store, "account", "account_id", click.account.id),
             f"account {click.account.id}",
@@ -676,6 +723,7 @@ class Promoter:
                 dict(account.fields),
             ],
             "lane": lane,
+            "run_stamp": _run_stamp(account, lane),
             "lifecycle_event": lifecycle_event,
             "placeholders_acknowledged": click.placeholders_acknowledged,
             "created_by": OPERATOR.principal,

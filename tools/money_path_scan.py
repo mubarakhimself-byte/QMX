@@ -40,9 +40,11 @@ value", not "provably float-free on the money path".
 
 **Scope.** The gate scans shipped source only — ``packages/*/src``,
 ``extensions/*/src``, the same ``src`` layout under ``qml/`` (and later ``qmb/``),
-and the top-level ``tools`` scripts — and skips ``tests`` trees, whose negative
-cases deliberately feed floats to money constructors to assert they are refused.
-Stdlib only; run via ``python tools/money_path_scan.py`` or ``poe money-path-scan``.
+``qmx-agents/packages/*/src``, and the top-level ``tools`` scripts — and skips
+``tests`` trees, whose negative cases deliberately feed floats to money
+constructors to assert they are refused. The agent packages are in scope because
+they carry the tool table and the promote door the fixed line is about. Stdlib
+only; run via ``python tools/money_path_scan.py`` or ``poe money-path-scan``.
 """
 
 from __future__ import annotations
@@ -57,7 +59,15 @@ ROOT = Path(__file__).resolve().parent.parent
 SELF = Path(__file__).resolve()
 
 # Shipped-source roots. Test trees are excluded (see module docstring).
-SCAN_ROOTS: tuple[str, ...] = ("packages", "extensions", "qml", "qmb", "qmn", "tools")
+SCAN_ROOTS: tuple[str, ...] = (
+    "packages",
+    "extensions",
+    "qml",
+    "qmb",
+    "qmn",
+    "qmx-agents",
+    "tools",
+)
 SKIP_DIRS: frozenset[str] = frozenset(
     {
         "tests",

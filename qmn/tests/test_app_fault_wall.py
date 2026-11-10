@@ -243,10 +243,10 @@ def count_drives(runtime: Runtime) -> dict[str, int]:
     drives: dict[str, int] = {}
     real = runtime._drive_one
 
-    def counted(hosted: _Hosted, bars: Sequence[Bar]) -> None:
+    def counted(hosted: _Hosted, bars: Sequence[Bar], replay: bool = False) -> None:
         deployment_id = hosted.deployment.deployment_id
         drives[deployment_id] = drives.get(deployment_id, 0) + 1
-        real(hosted, bars)
+        real(hosted, bars, replay=replay)
 
     runtime._drive_one = counted
     return drives

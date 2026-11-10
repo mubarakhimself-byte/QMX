@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import is_refusal
+from qmf.risk.controls import ControlRow
 
 from qml.blocks.api import (
     PORT_QUANTUM_SIGNIFICANT_DIGITS,
@@ -93,6 +94,7 @@ __all__ = [
     "DerivedPlan",
     "ExitPlan",
     "ExitUse",
+    "HaltPlan",
     "Plan",
     "SidePlan",
     "SlotPlan",
@@ -100,7 +102,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 7
+COMPILER_FORMAT_VERSION: Final[int] = 9
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -227,6 +229,14 @@ class ExitPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class HaltPlan:
+    """One brake: its block wired to its parameters, and the control row the unit runs."""
+
+    binding: BoundBlock
+    control: ControlRow
+
+
+@dataclass(frozen=True, slots=True)
 class DerivedPlan:
     """A derived number fed each bar by ``source``'s output on ``side``."""
 
@@ -254,6 +264,7 @@ class Plan:
     markets: tuple[tuple[Market, InstrumentRecord], ...]
     sides: tuple[SidePlan, ...]
     exits: tuple[ExitPlan, ...]
+    halts: tuple[HaltPlan, ...]
     sizer: BoundBlock
     derived: tuple[DerivedPlan, ...]
     slow: tuple[SlowPlan, ...]
@@ -403,6 +414,10 @@ def _combiner_extras(combiner: Combiner) -> tuple[str, ...]:
     return tuple(name for name, is_written in written.items() if is_written)
 
 
+_HALT_FACTS: Final[Mapping[str, str]] = MappingProxyType({"account": "account", "trades": "own"})
+"""The fact namespaces a control row may read, by the port kind its block declares."""
+
+
 class _Wiring:
     """Binds each document binding to its loaded block and records what does not fit."""
 
@@ -527,6 +542,76 @@ class _Wiring:
                 "risk session's",
             )
         return tuple(planned)
+
+    def halts(self) -> tuple[HaltPlan, ...]:
+        """The brake rows this format runs, in scope order and document order.
+
+        A row's ``reads`` are named from its block's declared ports, so a row never states a fact
+        its block does not read. The five shipped halts read account and trades facts, which the
+        unit supplies from its account surface and its own journal. A block that is not a halt,
+        or that declares a port the runner cannot feed, is refused by name here rather than
+        answering nothing forever. The list a row sits in decides where it runs, so a row whose
+        own ``scope`` disagrees with that list is refused rather than re-scoped in silence.
+        """
+        planned: list[HaltPlan] = []
+        for scope in (Scope.POSITION, Scope.UNIT, Scope.ACCOUNT):
+            seen: set[str] = set()
+            for index, binding in enumerate(getattr(self.unit.halts, scope.value)):
+                where = f"/halts/{scope.value}/{index}"
+                if binding.scope is not scope:
+                    self.problems.add(
+                        "halt_scope",
+                        f"{where}/scope",
+                        f"{_FORMAT} runs a row in the {scope.value} list, and this row's scope "
+                        f"says {binding.scope.value}",
+                    )
+                    continue
+                if binding.name in seen:
+                    self.problems.add(
+                        "duplicate_name", f"{where}/name", "two halt rows at one scope share a name"
+                    )
+                seen.add(binding.name)
+                bound = self.bind(binding, f"halt.{scope.value}.{binding.name}", where)
+                if bound is None:
+                    continue
+                if bound.face.component_type != "halt":
+                    self.problems.add(
+                        "halt_not_built",
+                        where,
+                        f"{_FORMAT} runs a halt row as a brake, and {bound.pin} answers a "
+                        f"{bound.face.component_type}",
+                    )
+                planned.append(
+                    HaltPlan(
+                        binding=bound,
+                        control=ControlRow(
+                            name=binding.name,
+                            pin=bound.pin,
+                            code=bound.face.entry_id,
+                            scope=scope.value,
+                            reads=self._halt_reads(bound, where),
+                            verb=binding.verb,
+                            shadow=binding.shadow,
+                        ),
+                    )
+                )
+        return tuple(planned)
+
+    def _halt_reads(self, bound: BoundBlock, where: str) -> tuple[str, ...]:
+        """The facts one row reads, named from its block's declared ports."""
+        reads: list[str] = []
+        for port in bound.face.inputs:
+            namespace = _HALT_FACTS.get(port.stream_kind)
+            if namespace is None:
+                self.problems.add(
+                    "halt_not_built",
+                    where,
+                    f"{_FORMAT} feeds a halt row account and own-journal facts, and {bound.pin} "
+                    f"reads a {port.stream_kind} port",
+                )
+                continue
+            reads.append(f"{namespace}.{port.port}")
+        return tuple(reads)
 
 
 def _bound_on(side: SidePlan, number: str) -> bool:
@@ -860,6 +945,11 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
         reads[e.binding.key] = _feeds(e.binding, streams)
         attribute(e.binding.key)
         bound_total += instance.state_bound
+    for h in plan.halts:
+        # A brake's own warm-up never gates the unit's entries: the row goes cold and says so.
+        instance = make(h.binding, Side.LONG)
+        if instance is not None:
+            bound_total += instance.state_bound
     make(plan.sizer, Side.LONG)
     for s in plan.slow:
         _built(
@@ -950,8 +1040,6 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
         )
     if unit.reads:
         problems.add("reads_not_built", "/reads", f"{_FORMAT} reads no readings")
-    if unit.halts.position or unit.halts.unit or unit.halts.account:
-        problems.add("halts_not_built", "/halts", f"{_FORMAT} runs no halt blocks")
     if unit.sessions:
         problems.add(
             "sessions_not_built",
@@ -1145,6 +1233,7 @@ def compile_unit(
         s for side in TRADED_SIDES[unit.direction] if (s := wiring.side(side)) is not None
     )
     exits = wiring.exits()
+    halts = wiring.halts()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
     if sizer is not None and sizer.face.output.type not in _SIZER_ANSWERS:
         problems.add(
@@ -1166,6 +1255,7 @@ def compile_unit(
         markets=markets,
         sides=sides,
         exits=exits,
+        halts=halts,
         sizer=sizer,
         derived=derived,
         slow=slow,

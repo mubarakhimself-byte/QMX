@@ -156,6 +156,20 @@ def live_start() -> int:
     return minutes()[MARKETS["m1"]][WARM_BARS].knowable_at.value_ns - MINUTE_NS
 
 
+def gapped_warm(market: str) -> tuple[QuoteBar, ...]:
+    """The warm-up buckets for ``market`` with one base bar missing in each.
+
+    Minute 7 of every fifteen is dropped, the shape a minute with no quote leaves, so every
+    15-minute bucket still starts on its own first base bar and closes, while the recording holds
+    fourteen bars per bucket and so closes more buckets than a contiguous recording of the same
+    length.
+    """
+    series = minutes()[market][:WARM_BARS]
+    gap = tuple(bar for index, bar in enumerate(series) if index % 15 != 7)
+    assert len(gap) == WARM_BARS - WARM_BARS // 15, "one base bar of every fifteen is missing"
+    return gap
+
+
 def keep_warm(rig: binding.Bound) -> None:
     """The fed recording holds the warm-up buckets before the live hour, per market."""
     feed = binding.runtime(rig).venues[binding.ACCOUNT].feed
@@ -261,4 +275,35 @@ def test_one_feed_hosts_1m_and_15m(tmp_path: Path) -> None:
     assert seen(hosted["m15"], "m15", MARKETS["m15"])[-4:] == [
         opened + (index + 1) * M15_NS for index in range(4)
     ], "the m15 unit steps on the four fifteen-minute bars of the same hour"
+    binding.runtime(rig).stop()
+
+
+def test_a_gapped_replay_places_no_order_before_the_live_hour(tmp_path: Path) -> None:
+    """One base bar missing in each warm-up bucket must not carry the replay past its flip.
+
+    A bucket that lost an interior base bar still closes, so a recording read as warming's worth
+    of base bars closes more buckets than a contiguous one. The m15 unit needs 86 and the gapped
+    recording closes 93, so a replay that counts base bars rather than its own flip mints from
+    seven buckets of the past. No live bar is fed before the assertion, so any order the unit's
+    path answered came from the replay.
+    """
+    rig = binding.bound_rig(tmp_path)
+    rig.door.bar_ns = MINUTE_NS
+    binding.signed_in(rig)
+    binding.bind(rig)
+    for _ in range(4):
+        binding.runtime(rig).tick()
+    feed = binding.runtime(rig).venues[binding.ACCOUNT].feed
+    for bar in gapped_warm(MARKETS["m15"]):
+        feed.recording.keep(MARKETS["m15"], bar)
+    rig.now[0] = live_start() - 1_000_000
+
+    assert deploy(rig, deployment(rig, "m15", "op-15m"), "op-15m")["ok"] is True
+    assert settle(rig, "dep-m15") is Phase.TRADING
+    unit = binding.runtime(rig).hosted["dep-m15"].unit
+    assert unit is not None
+    assert orders(unit) == {}, (
+        "the replay placed an order from a replayed bar, and no live bar has been fed yet. A live"
+        f" venue holds quotes, so it would be sent. The live hour starts at {live_start()}"
+    )
     binding.runtime(rig).stop()

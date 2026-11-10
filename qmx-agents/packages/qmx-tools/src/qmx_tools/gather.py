@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 import qml
 from qmf.core import is_refusal
@@ -36,8 +36,8 @@ from qml.unit.schema import ENTRY_REF_PATTERN
 from qmx_library.principal import MAIN, state_ref
 
 if TYPE_CHECKING:
-    from qmx_library.port import JsonObject
-    from qmx_library.store import Store
+    from qmx_library.port import JsonObject, ObjectId, ObjectView
+    from qmx_library.principal import Principal
 
 ENTRY_SCHEMA: Final = "qmx.entry/1"
 DUMMY: Final = "dummy-trend-pullback"
@@ -46,6 +46,23 @@ TEMPLATES: Final[Traversable] = files("qml.unit") / "templates"
 FIXTURE_RECORDS: Final = Path(qml.__file__).resolve().parents[2] / "tests" / "fixtures" / "records"
 FIXTURE_WARNING: Final = "no Library record for this market, so it reads QML's test fixture"
 _PIN: Final = re.compile(ENTRY_REF_PATTERN)
+
+
+class LibraryReads(Protocol):
+    """The five reads `gather` makes of a Library: a symbol's items, the head, the object, a blob,
+    and the principal a read names. Written down so a store that answers QML's shipped records can
+    stand where the real one does, and so the seam is visible to whoever widens either side."""
+
+    @property
+    def engine(self) -> Principal: ...
+
+    def with_field(self, kind_name: str, key: str, value: str) -> list[ObjectId]: ...
+
+    def head(self, item: str, ref: str) -> tuple[ObjectId, int] | None: ...
+
+    def get(self, who: Principal, object_id: ObjectId) -> ObjectView: ...
+
+    def read_blob(self, blob_id: str) -> bytes: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +101,7 @@ def _own(pin: str) -> tuple[bytes, bytes] | None:
     return face.read_bytes(), source.read_bytes()
 
 
-def _library(store: Store, pin: str) -> tuple[bytes, bytes] | None:
+def _library(store: LibraryReads, pin: str) -> tuple[bytes, bytes] | None:
     entry_id, version = pin.split("@")
     for object_id in store.with_field("component", "entry.entry_id", entry_id):
         view = store.get(store.engine, object_id)
@@ -118,7 +135,7 @@ def _fixtures() -> dict[tuple[str, str], tuple[str, InstrumentRecord, JsonObject
     return found
 
 
-def _held(store: Store, ref: SymbolRef) -> list[tuple[str, JsonObject, int]]:
+def _held(store: LibraryReads, ref: SymbolRef) -> list[tuple[str, JsonObject, int]]:
     """Each live `instrument` item whose head on `main` holds `ref`'s venue and symbol: the item,
     its fields and how many times `main` has moved for it, which is the record's version. An
     archived item is withdrawn (Library AD-6), so it binds nothing and its replacement binds
@@ -140,7 +157,7 @@ def _held(store: Store, ref: SymbolRef) -> list[tuple[str, JsonObject, int]]:
 
 
 def _record(
-    store: Store | None,
+    store: LibraryReads | None,
     ref: SymbolRef,
     market_id: str,
     fixtures: dict[tuple[str, str], tuple[str, InstrumentRecord, JsonObject]],
@@ -168,7 +185,7 @@ def _record(
     return (record, document), f"{FIXTURE_WARNING}: {market_id} reads {name}"
 
 
-def gather(store: Store | None, document: object) -> Gathered:
+def gather(store: LibraryReads | None, document: object) -> Gathered:
     """The check context of `document`: the blocks its pins name and its markets' records. A
     document whose shape does not hold gets an empty context, since only layer A runs on it."""
     entries: dict[str, bytes] = {}
@@ -198,7 +215,7 @@ def gather(store: Store | None, document: object) -> Gathered:
     return Gathered(CompileContext(sources, entries, records), tuple(warnings), documents)
 
 
-def check_unit(store: Store | None, document: object) -> tuple[CheckResult, tuple[str, ...]]:
+def check_unit(store: LibraryReads | None, document: object) -> tuple[CheckResult, tuple[str, ...]]:
     """Layers A to F over `document` with what `gather` found, and gather's warnings."""
     gathered = gather(store, document)
     return check(document, gathered.context), gathered.warnings

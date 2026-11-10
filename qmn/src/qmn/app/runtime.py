@@ -124,7 +124,7 @@ from qml.protocol.unit import (
 )
 from qml.unit.model import Side
 
-from qmn.app import paper_lane
+from qmn.app import paper_lane, practice
 from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.facts import FeedRates, LiveAccount
 from qmn.app.facts import refs as rate_refs
@@ -868,6 +868,10 @@ class ConformanceAccount:
     """The quantity each coming entry fills, first entry first; an entry past the list fills
     whole. The rest of a partly filled entry is never filled."""
     received: list[Ticket] = field(default_factory=list[Ticket])
+    venue_kind: str = ""
+    """The kind of venue this account answers as: empty for a double a test binds directly,
+    ``practice`` for the venue :mod:`qmn.app.practice` builds. Every card and row of a binding
+    that names a kind states it (``practice.stated``), and every other row reads as it did."""
     stated_balance: Decimal | None = None
     """The cash the venue states when a case moves it; None answers the starting balance."""
     balance_reads: int = 0
@@ -881,7 +885,12 @@ class ConformanceAccount:
 
     @classmethod
     def open(
-        cls, account: Account, starting_equity: Decimal, *, holds_stops: bool = True
+        cls,
+        account: Account,
+        starting_equity: Decimal,
+        *,
+        holds_stops: bool = True,
+        venue_kind: str = "",
     ) -> Result[ConformanceAccount]:
         double = ConformanceDouble.try_create(World.LIVE, account.venue)
         if is_refusal(double):
@@ -892,7 +901,7 @@ class ConformanceAccount:
         verified = double.value.verify_capabilities()
         if is_refusal(verified):
             return verified
-        return Ok(cls(double.value, account, starting_equity, holds_stops))
+        return Ok(cls(double.value, account, starting_equity, holds_stops, venue_kind=venue_kind))
 
     @property
     def account(self) -> Account:
@@ -1111,12 +1120,18 @@ def _past_entry(side: Side, stop: Decimal, entry: Decimal) -> bool:
 class _OrderJournal:
     """The node journal as the journal-before-dispatch gate's sink: one ``order`` row."""
 
-    def __init__(self, journal: JournalWriter, clock_ns: Callable[[], int]) -> None:
+    def __init__(
+        self,
+        journal: JournalWriter,
+        clock_ns: Callable[[], int],
+        stated: Mapping[str, object] | None = None,
+    ) -> None:
         self._journal = journal
         self._clock_ns = clock_ns
+        self._stated: Mapping[str, object] = {} if stated is None else stated
 
     def append(self, event: object, /) -> SinkResult:
-        body = dict(cast("Mapping[str, object]", event))
+        body = {**self._stated, **cast("Mapping[str, object]", event)}
         written = self._journal.append(
             "order", body, RowFacts(ts_recv=self._clock_ns(), clock_ok=False)
         )
@@ -1163,8 +1178,14 @@ class OrderPath:
         self._ordinal += 1
         return self._ordinal
 
+    @property
+    def stated(self) -> Mapping[str, object]:
+        """What every order row of this binding states about its venue: nothing for a broker, and
+        the practice world and kind for the practice venue (:func:`practice.stated`)."""
+        return practice.stated(self.venue.client)
+
     def _journalled(self, body: dict[str, object], ticket: Ticket) -> Result[Sent]:
-        sink = _OrderJournal(self.journal, self.clock_ns)
+        sink = _OrderJournal(self.journal, self.clock_ns, self.stated)
         enacted = enact_command(
             body, journal=sink, dispatcher=_Dispatch(lambda: self._send(ticket))
         )
@@ -1180,7 +1201,12 @@ class OrderPath:
     def _note(self, client_order_id: str, step: str, body: Mapping[str, object]) -> None:
         self.journal.append(
             "order",
-            {"event_id": f"{client_order_id}/{step}", "client_order_id": client_order_id, **body},
+            {
+                **self.stated,
+                "event_id": f"{client_order_id}/{step}",
+                "client_order_id": client_order_id,
+                **body,
+            },
             RowFacts(ts_recv=self.clock_ns(), clock_ok=False),
         )
 
@@ -1662,7 +1688,8 @@ class _OwnJournal:
 
 class _ScopeClose:
     """A unit's last fall-through: the node closes every position of the deployment whose own
-    exits could not run for ``exit_fault_bars`` bars, with the reason it gives (AD-13)."""
+    exits could not run for ``exit_fault_bars`` bars, with the reason it gives (AD-13). It is also
+    the door a row that waits for his hand calls for the one automatic stop (AD-12)."""
 
     def __init__(self, runtime: Runtime, deployment_id: str) -> None:
         self._runtime = runtime
@@ -1671,6 +1698,17 @@ class _ScopeClose:
     def close_scope(self, unit: object, why: str) -> None:
         del unit
         self._runtime.close_scope(self._deployment_id, why)
+
+    def risk_stop(self, rule: str, reason: str) -> None:
+        """Stop each market this deployment trades, by the rule that fired.
+
+        The lifecycle is per market, so one unit-scope row stops every market the unit runs.
+        """
+        hosted = self._runtime.hosted.get(self._deployment_id)
+        if hosted is None:
+            return
+        for market in hosted.deployment.markets:
+            self._runtime.risk_stop(self._deployment_id, market, rule, reason)
 
 
 class NodeUnit:
@@ -1756,6 +1794,9 @@ class NodeUnit:
         self.kept_values: dict[str, Decimal] = {}
         """The slow numbers the deployment's saved snapshot already holds, so a write happens
         only when one of them moves."""
+        self.kept_risk: tuple[str, str, int | None] | None = None
+        """The risk word the saved snapshot already holds, with its reason and the instant it
+        began, so a brake firing writes a snapshot even though no calibrated number moved."""
 
     def account_inputs(self) -> Mapping[str, object]:
         """The account's facts and basis beside the size trail, so a row says what the account
@@ -1801,9 +1842,13 @@ class NodeUnit:
         equity: Decimal,
         target: ExecutionTarget,
         snapshot: Mapping[str, object] | None = None,
+        risk_rows: Sequence[Mapping[str, object]] | None = None,
     ) -> Result[None]:
         """Host the unit: fresh through ``construct_unit``, or from ``snapshot`` through
-        ``restore_unit``, which resumes it warm or starts it cold with the reason (A10)."""
+        ``restore_unit``, which resumes it warm or starts it cold with the reason (A10).
+
+        ``risk_rows`` are the folding rows this deployment's unit journal holds; they are the truth
+        for the unit's state, and the snapshot's cache answers only when none are handed."""
 
         def host(surfaces: Mapping[str, Surface]) -> Result[HostedUnit]:
             own = _OwnJournal(self, surfaces["own_journal"])
@@ -1816,6 +1861,7 @@ class NodeUnit:
                     scope_id=scope,
                     execution_target=target,
                     assignment=self.assignment,
+                    risk_rows=risk_rows,
                 )
                 if snapshot is None
                 else restore_unit(
@@ -1825,6 +1871,7 @@ class NodeUnit:
                     scope_id=scope,
                     execution_target=target,
                     assignment=self.assignment,
+                    risk_rows=risk_rows,
                 )
             )
             if not is_refusal(built):
@@ -1853,6 +1900,8 @@ class NodeUnit:
         if is_refusal(started):
             return started
         self.handler = started.value
+        if self.hosted_unit is not None and isinstance(self.port, _ScopeClose):
+            self.hosted_unit.attach_stop_port(self.port)
         return Ok(None)
 
     @property
@@ -2613,9 +2662,13 @@ class Runtime:
         source = self._accounts.get(account)
         if source is None:
             supplied_by = (
-                "the fake conformance double"
-                if isinstance(venue.client, ConformanceAccount)
-                else "the venue"
+                "the practice venue"
+                if practice.stated(venue.client)
+                else (
+                    "the fake conformance double"
+                    if isinstance(venue.client, ConformanceAccount)
+                    else "the venue"
+                )
             )
             source = LiveAccount(
                 lambda venue=venue: venue.client,
@@ -3224,6 +3277,7 @@ class Runtime:
             build=self.build,
             boot_epoch_id=self.boot_epoch_id,
             account=deployment.account_id,
+            stated=practice.stated(venue.client),
         )
         if is_refusal(journal):
             hosted.phase, hosted.detail = Phase.REFUSED, "the unit journal would not open"
@@ -3252,13 +3306,19 @@ class Runtime:
         if is_refusal(target):
             hosted.phase, hosted.detail = Phase.REFUSED, "the account is not a trading target"
             return
-        started = unit.start(venue.client.equity(), target.value, self._saved_snapshot(deployment))
+        started = unit.start(
+            venue.client.equity(),
+            target.value,
+            self._saved_snapshot(deployment),
+            self._risk_rows(deployment, compiled),
+        )
         if is_refusal(started):
             hosted.phase = Phase.REFUSED
             hosted.detail = f"the unit would not start: {_why(started)}"
             return
         if unit.hosted_unit is not None:
             unit.kept_values = dict(unit.hosted_unit.calibrated_values)
+            unit.kept_risk = self._risk_key(unit)
         loop = self._loop(unit, account)
         if is_refusal(loop):
             hosted.phase, hosted.detail = Phase.REFUSED, "the loop driver refused the unit"
@@ -3276,7 +3336,7 @@ class Runtime:
         recorded = [
             Bar(market, bar) for market in unit.traded for bar in self._recent(unit, venue, market)
         ]
-        self._drive_one(hosted, recorded)
+        self._drive_one(hosted, recorded, replay=True)
         self._settle_warm(hosted)
 
     def _widen(self, venue: Venue, deployment: Deployment) -> bool:
@@ -3334,15 +3394,88 @@ class Runtime:
             return None
         return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else None
 
+    def _risk_rows(
+        self, deployment: Deployment, compiled: CompiledUnit
+    ) -> tuple[Mapping[str, object], ...] | None:
+        """The folding rows this deployment's unit journal holds, sorted by ``(at, id)``.
+
+        A brake's journal row carries the code its control row was compiled with, the verb the row
+        ran and the row's own name, so the fold reads what fired and not what it was allowed to do.
+        A row that states its verb needs no compiled row to read it, so a row whose block left the
+        document still folds; the compiled plan answers only for a row that states no verb. A row
+        of another deployment's unit is not ours; a code no compiled row names is not a control
+        word (AD-23's unit fault is the unit's own bench, not a brake's). None when the volume
+        refuses a read, so a unit keeps the state its snapshot cached rather than read a bench as
+        absent. A document that runs no brake reads no row: the snapshot's cache is its answer.
+        """
+        verbs = {halt.control.code: halt.control.verb.value for halt in compiled.plan.halts}
+        if not verbs:
+            return ()
+        found: list[tuple[int, str, Mapping[str, object]]] = []
+        for folder in stream_folders(self.context.journal_root):
+            if not folder.name.startswith(f"{JournalStream.UNIT.source}.risk_event."):
+                continue
+            lines = read_committed(folder)
+            if is_refusal(lines):
+                return None
+            for line in lines.value:
+                if not isinstance(line, JournalLine):
+                    continue
+                record = line.record
+                if record.get("run_id") != deployment.deployment_id:
+                    continue
+                body = record.get("body")
+                if not isinstance(body, Mapping):
+                    continue
+                stated = cast("Mapping[str, object]", body)
+                code = stated.get("code")
+                if not isinstance(code, str):
+                    continue
+                verb = stated.get("verb")
+                verb = verb if isinstance(verb, str) else verbs.get(code)
+                if verb is None:
+                    continue
+                ident = record.get("record_id")
+                name = str(ident) if isinstance(ident, str) else f"{line.t}:{line.seq}"
+                at = line.t * 1_000_000
+                found.append(
+                    (
+                        at,
+                        name,
+                        {
+                            "kind": "risk_event",
+                            "scope": f"unit:{deployment.deployment_id}",
+                            "at": at,
+                            "id": name,
+                            "code": code,
+                            "verb": verb,
+                        },
+                    )
+                )
+        found.sort(key=lambda row: (row[0], row[1]))
+        return tuple(row[2] for row in found)
+
+    def _risk_key(self, unit: NodeUnit) -> tuple[str, str, int | None] | None:
+        """The word, its reason and the instant it began, as the unit's fold answers them now."""
+        if unit.hosted_unit is None:
+            return None
+        state = unit.hosted_unit.risk_state(Instant(self.clock_ns()))
+        return (
+            state.word.value,
+            state.reason,
+            None if state.since is None else state.since.value_ns,
+        )
+
     def _write_snapshot(self, hosted: _Hosted) -> None:
-        """Save the unit's own state when one of its slow numbers moved, written whole and
-        replaced, so a stop halfway leaves the last good one. The next start hands it back to
-        ``unit.start``, which resumes the unit or writes the ``cold_start`` reason."""
+        """Save the unit's own state when one of its slow numbers or its risk word moved, written
+        whole and replaced, so a stop halfway leaves the last good one. The next start hands it
+        back to ``unit.start``, which resumes the unit or writes the ``cold_start`` reason."""
         unit = hosted.unit
         if unit is None or unit.hosted_unit is None:
             return
         values = dict(unit.hosted_unit.calibrated_values)
-        if values == unit.kept_values:
+        risk = self._risk_key(unit)
+        if values == unit.kept_values and risk == unit.kept_risk:
             return
         path = snapshot_path(self.context.data, hosted.deployment.deployment_id)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -3350,6 +3483,7 @@ class Runtime:
         temporary.write_text(json.dumps(unit.hosted_unit.snapshot(), sort_keys=True), "utf-8")
         os.replace(temporary, path)
         unit.kept_values = values
+        unit.kept_risk = risk
 
     def _paper_path(self, hosted: _Hosted, venue: Venue) -> OrderPath | None:
         """A paper deployment's own order path: every step a live order takes, ending at its
@@ -3439,7 +3573,9 @@ class Runtime:
         way through a bucket, which ``roll_up`` drops. So the read stops one base bar short of
         ``warm_needed + 1`` whole primary buckets: a mid-stream start still yields ``warm_needed``
         whole buckets, and never a bucket past the one that completes warm-up. A unit driven past
-        that bucket would mint from the replay.
+        that bucket would mint from the replay. This bounds the bars read, not the buckets that
+        close: a recording missing a base bar inside a bucket closes more buckets than it reads
+        whole, so the replay stops at the warming flip in ``_drive_one``.
         """
         if unit.base_ns is None or unit.base_ns <= 0:
             return venue.feed.recording.recent(market, unit.warm_needed)
@@ -3474,7 +3610,10 @@ class Runtime:
                 unit.journal.append(RiskEvent(UNIT_FAULT, key))
         hosted.detail = f"a fault: {why}"
 
-    def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar]) -> None:
+    def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar], replay: bool = False) -> None:
+        """Step the unit over ``bars``. ``replay`` marks the warm-up bars read from the recording,
+        which stop at the close that warms the unit: a replayed bar past that flip would mint an
+        order from the past, and the live batch keeps stepping."""
         unit, loop = hosted.unit, hosted.loop
         if unit is None or loop is None:
             return
@@ -3516,6 +3655,9 @@ class Runtime:
                     unit.warm_seen += 1
                     if unit.warm_seen >= unit.warm_needed:
                         unit.warming = False
+                        if replay:
+                            self._write_snapshot(hosted)
+                            return
         self._write_snapshot(hosted)
 
     # --- what he sees ---
@@ -3538,9 +3680,15 @@ class Runtime:
             placed = self.board_read(hosted)
             if placed is not None:
                 boards[deployment_id] = placed.document()
+            stated = (
+                practice.NO_STATEMENT
+                if hosted.venue is None
+                else practice.stated(hosted.venue.client)
+            )
             units.append(
                 {
                     **({} if placed is None else {"board": boards[deployment_id]}),
+                    **stated,
                     "deployment_id": deployment_id,
                     "unit_id": hosted.deployment.unit_id,
                     "state": hosted.phase.value,
@@ -3567,7 +3715,10 @@ class Runtime:
             scope: PLACEHOLDER_KILL_EFFECTS[level].document()
             for scope, level in self.applied.items()
         }
-        venues = [venue.feed.document() for venue in self.venues.values()]
+        venues = [
+            {**venue.feed.document(), **practice.stated(venue.client)}
+            for venue in self.venues.values()
+        ]
         for key, value in (
             ("runtime.deployments", deployments),
             ("runtime.units", units),

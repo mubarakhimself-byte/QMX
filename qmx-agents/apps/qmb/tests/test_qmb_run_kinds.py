@@ -181,9 +181,9 @@ def test_a_six_cell_sweep_lands_six_tries_in_the_units_family(world: World) -> N
     ]
     assert len({c["compiled_fp"] for c in cells}) == 6
     assert [(c["trades"], c["total_r"]) for c in cells] == [
-        (3, "-1.6852"),
-        (6, "-3.2610"),
-        (4, "-1.8102"),
+        (3, "-1.6964"),
+        (6, "-3.2846"),
+        (4, "-1.8180"),
         (3, "0.0013"),
         (2, "1.0013"),
         (3, "-1.0258"),
@@ -225,8 +225,8 @@ def test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason(world: 
 
 
 WORSEN_REFUSAL = (
-    "scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2824625 to "
-    "0.2175375; a scenario that can improve a result is a counted rerun"
+    "scenario 1-cost_shock is declared worsen only but improved expectancy_r from -0.2854125 to "
+    "0.2145875; a scenario that can improve a result is a counted rerun"
 )
 
 
@@ -252,9 +252,9 @@ def test_a_scenario_that_may_improve_is_a_counted_rerun_and_a_view_is_not(
         (s["name"], s["direction"], s["answer"], s["value"])
         for s in landed["measures"]["scenarios"]
     ] == [
-        ("1-skip_weekdays", "may_improve", "measured", "-0.04328333333333333333333333333"),
-        ("2-skip_weekdays", "may_improve", "measured", "-0.3834142857142857142857142857"),
-        ("3-drop_top_trades", "worsen_only", "measured", "-0.7808666666666666666666666667"),
+        ("1-skip_weekdays", "may_improve", "measured", "-0.04721666666666666666666666667"),
+        ("2-skip_weekdays", "may_improve", "measured", "-0.3850142857142857142857142857"),
+        ("3-drop_top_trades", "worsen_only", "measured", "-0.7827333333333333333333333333"),
         ("4-drop_top_trades", "worsen_only", "no_trades", None),
     ]
 
@@ -303,7 +303,7 @@ def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> N
     )
     assert robust["measures"]["random_entries"] == {
         "fx.eurusd": {
-            "edge_ratio": "0.4048",
+            "edge_ratio": "0.4037",
             "p": "0.7059",
             "trades": 6,
             "horizon_bars": 20,
@@ -322,8 +322,8 @@ def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> N
     assert robust["measures"]["cost_stress"] == {
         "fx.eurusd": {
             "multiplier": "1.5",
-            "expectancy_r": "-0.5657",
-            "base_expectancy_r": "-0.5435",
+            "expectancy_r": "-0.5685",
+            "base_expectancy_r": "-0.5474",
             "trades": 6,
             "window": MARCH["window"],
         },
@@ -338,8 +338,8 @@ def test_the_judge_reads_each_check_from_the_run_of_that_kind(world: World) -> N
     assert counted(world, robust["run_id"]) == []
     eurusd, xauusd = fields(world.store, verdict["result"]["verdict_id"])["per_market"]
     assert [(s["name"], s["outcome"], s["detail"]) for s in eurusd["steps"]][1:4] == [
-        ("random_entries", "failed", "entry edge ratio 0.4048 at p 0.7059"),
-        ("cost_stress", "failed", "expectancy -0.5657R at 1.5x costs"),
+        ("random_entries", "failed", "entry edge ratio 0.4037 at p 0.7059"),
+        ("cost_stress", "failed", "expectancy -0.5685R at 1.5x costs"),
         ("walk_forward", "failed", "efficiency 0.0000 of 0.5 needed"),
     ]
     assert [(s["name"], s["outcome"], s["detail"]) for s in xauusd["steps"]][1:4] == [

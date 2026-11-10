@@ -1,0 +1,70 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "time-exit-bars",
+  "version": 2,
+  "family": "time-exit",
+  "aliases": [
+    "time stop"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "component_type": "exit",
+  "definition": "Close the position after it has been held a number of bars, the count read from the evidence, and answer the block's own reason code `time`.",
+  "boundaries": "A stand-in exit until the risk session writes the real exits. The bar count is a number that may move, so this version reads it from the evidence and keeps the make value only as the seed; version 1 held the make value, ignored a moved one and answered a bare Signal, so the host wrote its own word.",
+  "recognition": "The position closes once it has been open the set number of bars, and the close names this exit with the reason code `time`.",
+  "eligible_roles": [
+    "exit",
+    "timeout"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    },
+    {
+      "source_ref": "risk-core:round-2/arch/final/SPINE.md#AD-14",
+      "quote": "A block reads every number from `evidence`; `make` only seeds.",
+      "dated": "2026-11-08"
+    }
+  ],
+  "inputs": [],
+  "output": {
+    "type": "exit_action",
+    "measure": "bars"
+  },
+  "parameters": {
+    "bars": {
+      "measure": "bars",
+      "default": "48",
+      "origin": "placeholder",
+      "range": {
+        "min": "1",
+        "max": "1000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 1
+  },
+  "fingerprint": "fp1:sha256:744d0aedada795a91d1c0098a9760ff001fb1b00320f44d8066ef15e10527e5e"
+}

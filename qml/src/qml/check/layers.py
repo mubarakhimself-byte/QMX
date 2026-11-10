@@ -686,7 +686,7 @@ def _complete(unit: Unit, bound: Sequence[tuple[_Use, EntryFace]], found: Found)
             "E",
             ProblemKind.NO_HALTS,
             "/halts",
-            "the unit names no halt",
+            "the unit names no brakes",
             "add a halt, or rely on the account's own",
         )
     timed = any(

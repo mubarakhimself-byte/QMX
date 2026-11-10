@@ -82,11 +82,11 @@ def test_the_published_dummy_lists_its_placeholder_bindings_and_numbers(
     assert _run(tmp_path, capsys) == [
         "unit\titem\twhat\tname\twhere\tblock\towner",
         "dummy-trend-pullback\titem-dummy\tbinding\tswing_stop\t/exit_set/0\t"
-        "swing-stop-buffer@1\trisk-session",
+        "swing-stop-buffer@2\trisk-session",
         "dummy-trend-pullback\titem-dummy\tbinding\ttarget_2r\t/exit_set/1\t"
-        "target-r-multiple@1\trisk-session",
+        "target-r-multiple@2\trisk-session",
         "dummy-trend-pullback\titem-dummy\tbinding\ttime_out\t/exit_set/2\t"
-        "time-exit-bars@1\trisk-session",
+        "time-exit-bars@2\trisk-session",
         "dummy-trend-pullback\titem-dummy\tbinding\tfixed_fraction\t/sizer\t"
         "fixed-fraction-at-stop@2\trisk-session",
         *_NUMBERS,
@@ -112,11 +112,11 @@ def test_a_real_sizer_from_the_library_drops_out_and_an_unknown_block_is_flagged
     assert _run(tmp_path, capsys) == [
         "unit\titem\twhat\tname\twhere\tblock\towner",
         "dummy-trend-pullback\titem-dummy\tbinding\tswing_stop\t/exit_set/0\t"
-        "swing-stop-buffer@1\trisk-session",
+        "swing-stop-buffer@2\trisk-session",
         "dummy-trend-pullback\titem-dummy\tunfound\ttarget_2r\t/exit_set/1\t"
         "target-from-volatility@1\t",
         "dummy-trend-pullback\titem-dummy\tbinding\ttime_out\t/exit_set/2\t"
-        "time-exit-bars@1\trisk-session",
+        "time-exit-bars@2\trisk-session",
         *_NUMBERS,
         "1 published units, 1 use a placeholder: 2 bindings, 4 numbers, 1 blocks not found, "
         "0 unreadable",

@@ -55,6 +55,7 @@ __all__ = [
     "CT25_CONTRACT_FORMAT_VERSION",
     "CT25_MAPPING_TABLE_VERSION",
     "LEGACY_PROJECTION_NAMES",
+    "LINK_FAULT",
     "RECORDS_STREAM_MAPPING",
     "RISK_AUTHORED_EVENT_TYPES",
     "RISK_EVENT_CODES",
@@ -92,7 +93,11 @@ CT25_COMMAND_FINGERPRINT_JOIN_VERSION: Final[int] = 1
 UNIT_FAULT: Final[str] = "unit_fault"
 """The first risk-event code: a block raised in one of its unit's phases, so that unit's entries
 stop until its clean bars pass (AD-23). Appendable, never redefined."""
-RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({UNIT_FAULT})
+LINK_FAULT: Final[str] = "link_fault"
+"""The second risk-event code: a chain link or a control row raised, so that link's scope stands
+down and its answer is refused, never an exit (AD-9's plain ``try``). Appendable, never
+redefined."""
+RISK_EVENT_CODES: Final[frozenset[str]] = frozenset({UNIT_FAULT, LINK_FAULT})
 """Every code a ``risk_event`` row may carry. Closed and appendable: a brake's own code joins this
 family where its control row lands (AD-12), and a chain link's ``link_fault`` joins it with the
 node chain."""
