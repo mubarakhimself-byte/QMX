@@ -192,8 +192,8 @@ def feasibility_of(store: Store | None, document: object, at: AtCard) -> dict[st
     """The verdict on ``at``'s market of ``document``, through QML's one converter (FUNNEL I17).
 
     The record is the one `gather` reads for that market, so a card and a check never ask two
-    different records. The rate the card holds is one fact at the instant asked, and a market the
-    document does not name has no record, which the converter names as its own skip.
+    different records. A market the document names no record for answers ``no_record``, the same
+    word the check's layers use, because the converter has no instrument to spell a lot of.
     """
     gathered = gather(shipped(store), document)
     record = gathered.context.records.get(at.market)
