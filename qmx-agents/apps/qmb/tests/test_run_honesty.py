@@ -6,6 +6,7 @@ synthetic March 2025 month, as in `test_qmb_app.py`, so every literal holds on e
 
 from __future__ import annotations
 
+import io
 import json
 import shutil
 from collections.abc import Generator
@@ -13,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
 import pytest
 from qml.catalogue.loader import block_fingerprint
 from qmx_apps.supervisor import Supervisor
@@ -119,6 +121,17 @@ def landed_of(world: World, ran: dict[str, Any]) -> dict[str, Any]:
     return {"id": found, **fields(world.store, found)}
 
 
+def risk_rows(world: World, result_id: str) -> list[dict[str, Any]]:
+    """The fault cards a run wrote, as the journal's risk_event bodies."""
+    blobs = world.store.get(OPERATOR, result_id).blobs
+    rows: list[dict[str, Any]] = []
+    for slot in sorted(s for s in blobs if s.startswith("journal/risk_event/")):
+        read: Any = pq.read_table(io.BytesIO(world.store.read_blob(blobs[slot].blob_id)))  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        table = cast("list[dict[str, str]]", read.to_pylist())  # pyright: ignore[reportUnknownMemberType]
+        rows += [json.loads(r["record"])["body"] for r in table]
+    return rows
+
+
 def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
     profile = a_stated_profile(world, "3.50")
 
@@ -127,16 +140,16 @@ def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
 
     rows = report(world.store, costed["id"])
     laid = run_folder(world, costed["run_id"]) / "in"
-    assert (plain["measures"]["total_r"], costed["measures"]["total_r"]) == ("-2.2597", "-2.2597")
+    assert (plain["measures"]["total_r"], costed["measures"]["total_r"]) == ("-2.2833", "-2.2833")
     assert (plain["measures"]["net_money"], costed["measures"]["net_money"]) == (
-        "-114.97",
-        "-161.39",
+        "-116.12",
+        "-160.39",
     )
     assert [t["r"] for t in rows["trades"]] == [
         t["r"] for t in report(world.store, plain["id"])["trades"]
     ]
     assert len(rows["cash_events"]) == 16
-    assert sum(Decimal(t["cash"]) for t in rows["trades"]) == Decimal("-47.38")
+    assert sum(Decimal(t["cash"]) for t in rows["trades"]) == Decimal("-45.22")
     assert costed["labels"]["costs_uncalibrated"] is True
     assert costed["labels"]["cost_profile"] == profile
     assert json.loads((laid / "costs" / "fx.eurusd.json").read_text("utf-8"))["fills"] == 0
@@ -147,7 +160,7 @@ def test_a_stated_cost_profile_changes_money_and_not_r(world: World) -> None:
     assert "costs uncalibrated" in verdict["says"]
 
 
-def test_a_block_that_raises_lands_a_failed_result_with_its_reason(world: World) -> None:
+def test_a_block_that_raises_lands_one_unit_fault_row_and_the_run_finishes(world: World) -> None:
     entry = json.loads((STDLIB / "rsi-cross-back" / "1" / "entry.json").read_text("utf-8"))
     source = (STDLIB / "rsi-cross-back" / "1" / "block.py").read_bytes().replace(b"\r\n", b"\n")
     update = b"    def update(self, evidence: Mapping[str, object]) -> Signal | None:\n"
@@ -202,10 +215,18 @@ def test_a_block_that_raises_lands_a_failed_result_with_its_reason(world: World)
 
     landed = landed_of(world, job(world, unit=unit, **GAPS))
 
-    assert (landed["status"], landed["reason"]) == (
-        "failed",
-        "ZeroDivisionError: division by zero",
-    )
+    # AD-23: a block's raise is a fault on its own path, not a failed run. The run finishes and
+    # the card is the journal's one risk_event row, named by the block's pin.
+    assert (landed["status"], landed["measures"]["trades"]) == ("finished", 0)
+    assert risk_rows(world, landed["id"]) == [
+        {
+            "action": "look at the block, then resume the unit when it is fixed",
+            "actionable": True,
+            "code": "unit_fault",
+            "event_id": "unit_fault:rsi-raises@1",
+            "root": "rsi-raises@1",
+        }
+    ]
     assert cast("dict[str, Any]", world.runtime.status("qmb")["metrics"])["errors"] == errors
 
 
