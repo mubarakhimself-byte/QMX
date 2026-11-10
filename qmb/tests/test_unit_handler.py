@@ -211,16 +211,18 @@ def test_the_own_position_surface_answers_the_facts_an_exit_reads() -> None:
 
     facts = handler.read_surfaces()[f"own_position:{_M}"].at(Instant(_T1))
 
-    assert isinstance(facts, PositionFacts), facts
-    assert (facts.position_id, facts.side, facts.quantity, facts.entry_price) == (
+    assert isinstance(facts, tuple) and len(facts) == 1, facts
+    one = facts[0]
+    assert isinstance(one, PositionFacts), one
+    assert (one.position_id, one.side, one.quantity, one.entry_price) == (
         _OWN,
         Side.LONG,
         Decimal("0.03"),
         Decimal("1.08530"),
     )
-    assert (facts.stop, facts.targets, facts.bars_held) == (Decimal("1.08000"), (), 1)
-    assert (facts.mae_r, facts.mfe_r) == (Decimal("0.0377"), Decimal(0))
-    assert facts.opened_by == _MINE
+    assert (one.stop, one.targets, one.bars_held) == (Decimal("1.08000"), (), 1)
+    assert (one.mae_r, one.mfe_r) == (Decimal("0.0377"), Decimal(0))
+    assert one.opened_by == _MINE
 
 
 def test_a_receipt_of_0_004_lots_is_below_the_minimum_lot_and_skips() -> None:
@@ -245,7 +247,7 @@ def test_a_close_for_a_position_the_unit_did_not_open_is_refused_and_it_stays_op
     assert is_refusal(refused)
     assert refused.category is RefusalCategory.POLICY_REJECTION
     assert refused.context["field"] == "position_ref"
-    assert handler.open_positions == seeded
+    assert handler.open_positions == {"foreign-1": seeded[_M]}
     assert handler.fills == ()
 
 
@@ -338,7 +340,7 @@ def test_an_amendment_that_widens_the_stop_is_refused_and_the_position_stays_ope
     assert refused.context["violation"] == "widen-stop"
     assert "from 1.08000 to 1.07900" in str(refused.context["reason"])
     assert [(f.kind, f.quantity) for f in handler.fills] == [(FillKind.ENTRY, Decimal("0.50"))]
-    assert handler.open_positions[_M].quantity == Decimal("0.50")
+    assert handler.open_positions[_OWN].quantity == Decimal("0.50")
 
 
 def test_the_close_scope_port_closes_every_held_market_at_its_next_bar() -> None:
@@ -395,7 +397,7 @@ def test_the_dummy_never_closes_a_seeded_position_it_did_not_open(tmp_path: Path
     result = run_unit(folder, request(folder), seeded=seeded)
 
     assert not isinstance(result, TypedRefusal), result
-    assert result.value.open_positions["fx.eurusd"] == seeded["fx.eurusd"]
+    assert result.value.open_positions["foreign-1"] == seeded["fx.eurusd"]
     assert all(f.position_id != "foreign-1" for f in result.value.fills)
     assert all(f.market_id != "fx.eurusd" for f in result.value.fills)
 

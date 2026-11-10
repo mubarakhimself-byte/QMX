@@ -187,7 +187,7 @@ def test_a_blocked_stop_move_leaves_the_position_open(tmp_path: Path) -> None:
     base.play(node, 1_742_508_000_000_000_000 + 900_000_000_001)
     unit = node.runtime.hosted["dep-1"].unit
     assert unit is not None and unit.handler is not None
-    held = unit.handler.open_positions["fx.eurusd"]
+    held = unit.handler.open_on("fx.eurusd")[0]
     name = unit.venue_name(held.position_id)
     level = held.entry_price - Decimal("0.00058")
     wire: dict[str, object] = {

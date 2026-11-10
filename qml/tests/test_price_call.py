@@ -128,7 +128,7 @@ def _surfaces() -> dict[str, Surface]:
     }
     for market in _MARKETS:
         surfaces[f"bars:m15:{market}"] = _At(None)
-        surfaces[f"own_position:{market}"] = _At(None)
+        surfaces[f"own_position:{market}"] = _At(lambda _i: ())
     return surfaces
 
 
@@ -226,7 +226,7 @@ def test_account_facts_never_reach_the_exit_pass() -> None:
     surfaces: dict[str, Surface] = {"account": _RecordingAccount(reads), "own_journal": _At(())}
     for market, series in bars.items():
         surfaces[f"bars:m15:{market}"] = _At(series[0])
-        surfaces[f"own_position:{market}"] = _At(held if market == "fx.eurusd" else None)
+        surfaces[f"own_position:{market}"] = _At((held,) if market == "fx.eurusd" else ())
     unit = _host(compiled, surfaces)
 
     step = _ok(unit.on_instant(instants[0]))

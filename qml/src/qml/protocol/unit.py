@@ -9,14 +9,16 @@ The host injects these read surfaces, each an object with ``at(instant)``:
 
 - ``bars:<stream>:<market_id>``: the latest closed ``QuoteBar`` of that stream knowable at the
   instant.
-- ``own_position:<market_id>``: the position open on that market as a ``PositionFacts``, the
-  ``OwnPosition`` a host that tracks none of its protection answers, or ``None`` when flat.
+- ``own_position:<market_id>``: every position open on that market, as a tuple of
+  ``PositionFacts``, of the ``OwnPosition`` a host that tracks none of its protection answers, or
+  empty when flat. A unit may hold more than one there where its ``position_limit`` says so and
+  the venue keeps them apart (AD-25).
 - ``own_journal``: the ``ClosedTrade`` rows this run or deployment closed.
 - ``account``: the ``Account`` facts the sizer reads.
 
-On each instant, for each market whose primary bar is new: every block updates, exits run for the
-positions this unit version's logic half opened, then entries. A slot reads a slower stream at its
-last closed bar, so neither the step nor any block sees a bar knowable after the instant. A
+On each instant, for each market whose primary bar is new: every block updates, exits run for
+every position this unit version's logic half opened, then entries. A slot reads a slower stream
+at its last closed bar, so neither the step nor any block sees a bar knowable after the instant. A
 market's entries wait for every stream's own warm-up (``warming``, then ``ready``). Calibrated
 numbers move last, from ``own_journal``, only when the unit is flat. The primary stream's ``close``
 and its bars are the bid side; an entry's reference price is the ask close for a long and the bid
@@ -38,7 +40,7 @@ from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.controls import ENTRY_SCOPES, Restore, RiskState, Verb
-from qmf.risk.facts import Fact
+from qmf.risk.facts import Fact, Stake, open_risk
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
@@ -557,6 +559,16 @@ def accept_unit_intents(raw: Sequence[Mapping[str, object]]) -> Result[tuple[Uni
     return Ok(tuple(accepted))
 
 
+def bet_key(family_id: str, market_id: str) -> str:
+    """The bet a position on one market expresses: this unit's family, and the open it fires at.
+
+    WALKS 3 writes this as ``family:session``. Sessions do not compile yet (RC-33), so the market
+    stands in for the open. The key names no unit, so two units of one family on one market count
+    their positions as one bet, which is what the group cap reads them as (I9, AD-25).
+    """
+    return f"{family_id}:{market_id}"
+
+
 def _price(value: Decimal, record: InstrumentRecord, rounding: str = ROUND_HALF_EVEN) -> Decimal:
     """``value`` on the record's tick, written to its digits."""
     ticks = (value / record.tick_size).quantize(Decimal(1), rounding=rounding)
@@ -598,6 +610,9 @@ class _Side:
     reason: str
     trail: tuple[SlotOutput, ...]
     order: EntryOrder | None
+    drivers: tuple[str, ...] = ()
+    """The slots whose answer held this bar, in the compiled order: what drove an entry, which its
+    intent carries as its driver tags (I9)."""
 
 
 @dataclass(slots=True)
@@ -1128,39 +1143,41 @@ class _Run:
 
     def step(self) -> Result[UnitStep]:
         journal = self.surface("own_journal")
-        positions: dict[str, PositionFacts | None] = {}
+        positions: dict[str, tuple[PositionFacts, ...]] = {}
         seen: dict[str, dict[str, QuoteBar]] = {}
         fresh: dict[str, QuoteBar] = {}
         for m in self.unit.markets:
-            position = self.surface(f"own_position:{m.market_id}")
-            if position is not None and not isinstance(position, (OwnPosition, PositionFacts)):
+            given = self.surface(f"own_position:{m.market_id}")
+            if not isinstance(given, tuple) or not all(
+                isinstance(one, (OwnPosition, PositionFacts)) for one in given
+            ):
                 return invalid(
                     "own_position",
-                    "a position surface answers a PositionFacts, an OwnPosition or None",
+                    "a position surface answers a tuple of PositionFacts or OwnPositions",
                     market=m.market_id,
                 )
-            positions[m.market_id] = None if position is None else facts_from(position)
+            positions[m.market_id] = tuple(facts_from(one) for one in given)
             bars: dict[str, QuoteBar] = {}
             for stream in self.plan.streams:
-                given = self.surface(f"bars:{stream}:{m.market_id}")
-                if given is None:
+                given_bar = self.surface(f"bars:{stream}:{m.market_id}")
+                if given_bar is None:
                     continue
-                if not isinstance(given, QuoteBar):
+                if not isinstance(given_bar, QuoteBar):
                     return invalid(
                         "bars", "a bar surface answers a QuoteBar or None", market=m.market_id
                     )
-                if given.knowable_at.value_ns > self.instant.value_ns:
+                if given_bar.knowable_at.value_ns > self.instant.value_ns:
                     return invalid(
                         "bars",
                         "a bar knowable after the instant is a look-ahead",
                         market=m.market_id,
                     )
-                bars[stream] = given
-                if given.knowable_at.value_ns > m.last_bar_ns.get(stream, -1):
-                    m.last_bar_ns[stream] = given.knowable_at.value_ns
+                bars[stream] = given_bar
+                if given_bar.knowable_at.value_ns > m.last_bar_ns.get(stream, -1):
+                    m.last_bar_ns[stream] = given_bar.knowable_at.value_ns
                     m.bars[stream] = m.bars.get(stream, 0) + 1
                     if stream == self.plan.stream:
-                        fresh[m.market_id] = given
+                        fresh[m.market_id] = given_bar
             seen[m.market_id] = bars
         if fresh and self.unit.benched and self.unit.clean_bars >= self.unit.fault_clean_bars:
             self.unit.benched = False
@@ -1176,7 +1193,10 @@ class _Run:
                 self.fault(fault.block, FaultPhase.UPDATE)
         self.halt_reason = self.controls(journal, positions)
         for m in self.unit.markets:
-            self.exits(m, positions[m.market_id], fresh.get(m.market_id))
+            held = positions[m.market_id]
+            self.kept(m, held)
+            for position in held:
+                self.exits(m, position, fresh.get(m.market_id))
         for m in self.unit.markets:
             bar = fresh.get(m.market_id)
             sides = results.get(m.market_id)
@@ -1189,7 +1209,7 @@ class _Run:
         if self.unit.motion is MotionSwitch.ON:
             trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
             try:
-                self.motion(trades, all(p is None for p in positions.values()))
+                self.motion(trades, all(not held for held in positions.values()))
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.MOTION)
         if fresh and self.unit.benched and not self.raised:
@@ -1213,26 +1233,27 @@ class _Run:
     # --- controls --------------------------------------------------------------------
 
     def controls(
-        self, journal: object, positions: Mapping[str, PositionFacts | None]
+        self, journal: object, positions: Mapping[str, tuple[PositionFacts, ...]]
     ) -> str | None:
         """Run the unit's brakes once this step, before exits and entries (AD-12).
 
-        Each row is fed the facts it declares: the unit's own statistics from its journal, and the
-        account's equity. A row that raises records a ``Fault`` with its ``link_fault`` code and
-        stands its scope down. It is a plain ``try`` around one block call, so a raise never
-        benches an exit and never reaches one (AD-9). A row that fires acts by its own verb:
-        ``flatten`` mints one close per held position through the same path the exits use,
-        ``reduce`` cuts the size of the entries this step prices, and ``no_new_entries`` refuses
-        them. A ``no_new_entries`` row that waits for his hand also asks the host's stop port for
-        the one automatic stop. A row whose own rule lets it come back writes a ``restore`` row;
-        a row that waits for his hand answers no change. The words this step's entries are
-        refused by come back, or None.
+        Each row is fed the facts it declares: the unit's own statistics from its journal, the
+        money at risk on each bet the unit holds open, and the account's equity. A row that raises
+        records a ``Fault`` with its ``link_fault`` code and stands its scope down. It is a plain
+        ``try`` around one block call, so a raise never benches an exit and never reaches one
+        (AD-9). A row that fires acts by its own verb: ``flatten`` mints one close per held
+        position through the same path the exits use, ``reduce`` cuts the size of the entries this
+        step prices, and ``no_new_entries`` refuses them. A ``no_new_entries`` row that waits for
+        his hand also asks the host's stop port for the one automatic stop. A row whose own rule
+        lets it come back writes a ``restore`` row; a row that waits for his hand answers no
+        change. The words this step's entries are refused by come back, or None.
         """
         self.unit.reduce = Decimal(1)
         if not self.unit.halt_instances:
             return None
         trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
         facts: dict[str, object] = own_facts(trades, self.instant)
+        facts["own.open_risk_by_bet_key"] = self.open_risk_by_bet_key(positions)
         equity = getattr(self.surface("account"), "equity", None)
         if isinstance(equity, Decimal):
             facts["account.equity"] = equity
@@ -1290,11 +1311,47 @@ class _Run:
             )
         return run.refusal_reason
 
+    def open_risk_by_bet_key(
+        self, positions: Mapping[str, tuple[PositionFacts, ...]]
+    ) -> Mapping[str, Decimal] | None:
+        """The money this unit holds at risk on each bet, by the bet's key (I9, WALKS 3).
+
+        A bet's money is the same figure the account's ``open_risk`` counts: each position's loss
+        if its stop fills, at the rate that converts its quote into the account's currency. Two
+        positions on one bet key add into one entry, so a row that caps one bet reads one number.
+        ``None`` when any position cannot be priced, because a partial sum reads as less risk
+        than the unit carries. This is the unit's own view: the same key crosses units, and the
+        group ledger is what adds their positions together (WALKS 3.4).
+        """
+        account = self.surface("account")
+        stakes: dict[str, list[Stake]] = {}
+        for m in self.unit.markets:
+            rate = rate_used(m.record, account, self.instant) if isinstance(account, Account) else None
+            for position in positions[m.market_id]:
+                if not self.mine(position):
+                    continue
+                stakes.setdefault(bet_key(self.unit.compiled.unit.family_id, m.market_id), []).append(
+                    Stake(
+                        position.entry_price,
+                        position.stop,
+                        position.quantity,
+                        m.record.value_per_point,
+                        rate,
+                    )
+                )
+        found: dict[str, Decimal] = {}
+        for key, group in stakes.items():
+            money = open_risk(group)
+            if money is None:
+                return None
+            found[key] = money
+        return MappingProxyType(found)
+
     def flatten(
         self,
         pin: str,
         reason: str,
-        positions: Mapping[str, PositionFacts | None],
+        positions: Mapping[str, tuple[PositionFacts, ...]],
     ) -> None:
         """Close every position this unit opened, through its own exit path (AD-12).
 
@@ -1304,10 +1361,10 @@ class _Run:
         """
         why = f"{pin} flattens the position: {reason}"
         for m in self.unit.markets:
-            position = positions.get(m.market_id)
-            if position is None or not self.mine(position) or position.position_id in m.exited:
-                continue
-            self.close_position(m, position, CONTROL_FLATTEN, why)
+            for position in positions[m.market_id]:
+                if not self.mine(position) or position.position_id in m.exited:
+                    continue
+                self.close_position(m, position, CONTROL_FLATTEN, why)
 
     def stop(self, pin: str, reason: str) -> None:
         """Ask the host for the stop a row that waits for his hand fires (AD-12)."""
@@ -1434,7 +1491,12 @@ class _Run:
         trigger = any(
             held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER and s.has_conditions
         )
-        return _Side(not failing, trigger, "; ".join(failing), tuple(trail), order)
+        drivers = tuple(
+            s.name
+            for s in plan.slots
+            if s.role is not Role.ENTRY_ORDER and held[s.name][0] and s.has_conditions
+        )
+        return _Side(not failing, trigger, "; ".join(failing), tuple(trail), order, drivers)
 
     @staticmethod
     def condition(
@@ -1484,8 +1546,8 @@ class _Run:
 
     # --- exits ---------------------------------------------------------------------
 
-    def exits(self, m: _Market, position: PositionFacts | None, bar: QuoteBar | None) -> None:
-        """This market's per-bar exits on ``position``, on the bar of the quote that closes it.
+    def exits(self, m: _Market, position: PositionFacts, bar: QuoteBar | None) -> None:
+        """This market's per-bar exits on one position, on the bar of the quote that closes it.
 
         A position is this unit's when its key is this version's logic half, which a risk edit
         leaves alone, or this compile's own fingerprint, which a host that pins one compile
@@ -1496,16 +1558,13 @@ class _Run:
         asks the host's ``close_scope`` port to close the position (AD-13, AD-23 step 4). One
         action runs: the chosen one, by rank and then by the order the document wrote the exits
         in. A step where this market has no new bar leaves that count alone, so a step of the
-        other market's bar never resets it.
+        other market's bar never resets it. Each position has its own stack and its own count, so
+        the first of two positions to be reached closes only itself.
         """
-        mine = position is not None and self.mine(position)
-        for gone in [pid for pid in m.timers if position is None or pid != position.position_id]:
-            del m.timers[gone]
-            m.exited.discard(gone)
-        if position is None or bar is None:
-            return
-        if not mine or position.position_id in m.exited:
+        if not self.mine(position) or position.position_id in m.exited:
             self.unit.exit_faults.pop(position.position_id, None)
+            return
+        if bar is None:
             return
         stack = m.timers.get(position.position_id)
         if stack is None or stack.side is not position.side:
@@ -1554,6 +1613,18 @@ class _Run:
             return
         self.close_position(m, position, winner.action.reason_code, winner.detail)
 
+    def kept(self, m: _Market, held: Sequence[PositionFacts]) -> None:
+        """Forget the exits of every position this market no longer holds (AD-13).
+
+        A position closes at the venue or by this unit's own answer, and the host stops
+        reporting it on a later step. Its per-bar exits went with it, and the identity is kept
+        out of ``exited`` so the same id never carries a stale close into a new position.
+        """
+        live = {one.position_id for one in held}
+        for gone in [pid for pid in m.timers if pid not in live]:
+            del m.timers[gone]
+            m.exited.discard(gone)
+
     def close_words(self, pin: str, raw: object, action: ExitAction) -> str:
         """The one sentence a close row carries. A per-bar exit that answers the old way keeps
         the shipped time exit's sentence; one that answers an ``ExitAction`` names itself."""
@@ -1600,9 +1671,10 @@ class _Run:
         m: _Market,
         bar: QuoteBar,
         sides: Mapping[Side, _Side],
-        position: PositionFacts | None,
+        positions: tuple[PositionFacts, ...],
     ) -> None:
         signalled = [s for s, r in sides.items() if r.holds]
+        limit = self.plan.position_limit
         for side, result in sides.items():
             if not result.holds:
                 if result.trigger_held:
@@ -1620,8 +1692,14 @@ class _Run:
                 self.decision(m, side, "suppressed_warming", result.trail, "warming up")
             elif len(signalled) > 1:
                 self.decision(m, side, "dropped_opposite", result.trail, "both sides signalled")
-            elif position is not None:
-                self.decision(m, side, "suppressed_limit", result.trail, "a position is open")
+            elif len(positions) >= limit:
+                self.decision(
+                    m,
+                    side,
+                    "suppressed_limit",
+                    result.trail,
+                    f"{len(positions)} of {limit} positions are open",
+                )
             else:
                 self.enter(m, bar, side, result)
 
@@ -1700,6 +1778,8 @@ class _Run:
                     "order": {"type": "market"},
                     "protection": protection,
                     "not_before": bar.knowable_at.value_ns,
+                    "bet_key": bet_key(compiled.unit.family_id, m.market_id),
+                    "driver_tags": list(result.drivers),
                     "placeholder_labels": list(  # mock-data-scan: allow (field)
                         compiled.placeholders
                     ),

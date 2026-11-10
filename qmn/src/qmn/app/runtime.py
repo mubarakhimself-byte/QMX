@@ -2106,7 +2106,7 @@ class NodeUnit:
         if is_refusal(parsed) or not isinstance(parsed.value, UnitExitIntent):
             return Blocked("the venue cannot take this exit")
         exit_ = parsed.value
-        held = self.handled.open_positions.get(market)
+        held = self.handled.open_positions.get(exit_.position_ref.position_id)
         if held is None or held.position_id != exit_.position_ref.position_id:
             return Blocked("the venue cannot close a position this unit did not open")
         position = self.venue_name(held.position_id)
@@ -2175,7 +2175,10 @@ class NodeUnit:
         if self.handler is None:
             return []
         shown: list[dict[str, object]] = []
-        for market, position in self.handler.open_positions.items():
+        for position_id, position in self.handler.open_positions.items():
+            market = self.handler.market_holding(position_id)
+            if market is None:  # a seeded position, which this unit never trades itself
+                continue
             name = self.venue_name(position.position_id)
             shown.append(
                 {
@@ -2250,10 +2253,18 @@ class _LoopClock:
 Compile = Callable[[Deployment, Path], "CompiledUnit | str"]
 
 
-def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
+def compile_staged(
+    deployment: Deployment, folder: Path, *, nets_positions: bool = True
+) -> CompiledUnit | str:
     """Read each staged file once and verify those bytes' fingerprint, then compile the
     deployment's unit from them through QML's one compiler, which checks every pin's
-    fingerprint; answers the compiled unit or why it does not trade."""
+    fingerprint; answers the compiled unit or why it does not trade.
+
+    ``nets_positions`` is the bound account's own answer, which decides whether a unit may hold
+    more than one position on a market: this node measures it at the venue, so a unit that asks
+    for two on an account that nets refuses here, by name, rather than cancelling its first
+    position at the venue (AD-25).
+    """
     sources: dict[str, bytes] = {}
     entries: dict[str, bytes] = {}
     for item in deployment.files:
@@ -2274,7 +2285,9 @@ def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
         return records
     compiled = compile_unit(
         deployment.unit_document,
-        CompileContext(sources=sources, entries=entries, records=records),
+        CompileContext(
+            sources=sources, entries=entries, records=records, nets_positions=nets_positions
+        ),
     )
     if isinstance(compiled, CompiledUnit):
         return compiled
@@ -2383,7 +2396,7 @@ class Runtime:
         steady_ns: Callable[[], int],
         sleep: Callable[[float], None],
         boot_epoch_id: str,
-        compile: Compile = compile_staged,
+        compile: Compile | None = None,
         tick_s: float = RECONCILE_TICK_S,
     ) -> None:
         self.context = context
@@ -2395,7 +2408,7 @@ class Runtime:
         self.steady_ns = steady_ns
         self.sleep = sleep
         self.boot_epoch_id = boot_epoch_id
-        self.compile = compile
+        self.compile = self._compile_at_venue if compile is None else compile
         self.tick_s = tick_s
         self.hosted: dict[str, _Hosted] = {}
         self.alarms: list[Mapping[str, object]] = []
@@ -2724,7 +2737,10 @@ class Runtime:
             sized = _unit_account(unit, instant)
             handler = unit.handler
             held: Mapping[str, OwnPosition] = {} if handler is None else handler.open_positions
-            for market, position in held.items():
+            for position_id, position in held.items():
+                market = None if handler is None else handler.market_holding(position_id)
+                if market is None:
+                    continue
                 record = unit.records.get(market)
                 if record is None or sized is None:
                     continue
@@ -3160,6 +3176,18 @@ class Runtime:
         return self.stand_downs.risk_stop(subject, rule, reason, covers=covers)
 
     # --- deployments: compile after the answer, then warm up, then trade ---
+
+    def _compile_at_venue(self, deployment: Deployment, folder: Path) -> CompiledUnit | str:
+        """Compile a deployment with the account's own position model, which it measures at the
+        venue: a netting account cancels a second position, so this node refuses that document
+        by name before the unit runs (AD-25). An account with no binding yet states nothing, and
+        the compiler's own netting answer refuses it rather than letting it trade a cancel."""
+        venue = self.venues.get(deployment.account_id)
+        return compile_staged(
+            deployment,
+            folder,
+            nets_positions=True if venue is None else venue.client.nets_positions(),
+        )
 
     def _deployments(self, target: Target) -> None:
         for deployment_id, change in target.deployments.items():

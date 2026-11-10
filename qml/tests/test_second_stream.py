@@ -205,7 +205,7 @@ def _surfaces(series: Mapping[str, Sequence[QuoteBar]]) -> dict[str, Surface]:
     out: dict[str, Surface] = {
         "account": _At(lambda _i: Account(Decimal("10000.00"))),
         "own_journal": _At(lambda _i: ()),
-        "own_position:fx.eurusd": _At(lambda _i: None),
+        "own_position:fx.eurusd": _At(lambda _i: ()),
     }
     for name, bars in series.items():
         out[f"bars:{name}:fx.eurusd"] = _Latest(bars)

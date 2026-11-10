@@ -102,7 +102,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 9
+COMPILER_FORMAT_VERSION: Final[int] = 10
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -169,11 +169,17 @@ class CompileProblem:
 
 @dataclass(frozen=True, slots=True)
 class CompileContext:
-    """What the host gathered: block sources and faces by pin, records by the unit's market id."""
+    """What the host gathered: block sources and faces by pin, records by the unit's market id,
+    and whether the venue keeps one position per symbol."""
 
     sources: Mapping[str, bytes]
     entries: Mapping[str, bytes]
     records: Mapping[str, InstrumentRecord]
+    nets_positions: bool = True
+    """The venue's own answer: a netting account cancels a second position on one symbol, so a
+    unit may hold more than one there only where the host says it may not. A host that states
+    nothing gets the netting answer, which refuses the second position rather than risking a
+    cancel the unit never sees (AD-25)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +275,9 @@ class Plan:
     derived: tuple[DerivedPlan, ...]
     slow: tuple[SlowPlan, ...]
     defaults: Mapping[str, Decimal]
+    position_limit: int = 1
+    """How many positions this unit may hold open on one market at once. One unless the document
+    says more, and more only compiles where the venue keeps positions apart (AD-25)."""
 
     @property
     def stream(self) -> str:
@@ -1026,7 +1035,19 @@ def _motion_unread(spec: NumberSpec) -> tuple[str, ...]:
     return tuple(unread)
 
 
-def _shape_problems(unit: Unit, problems: _Problems) -> None:
+def _venues(unit: Unit, context: CompileContext) -> str:
+    """The venues this unit's markets run on, named, for a refusal to say whose rule it is."""
+    found = sorted(
+        {
+            context.records[market.market_id].venue
+            for market in unit.markets
+            if market.market_id in context.records
+        }
+    )
+    return ", ".join(found) if found else "the venue this unit runs on"
+
+
+def _shape_problems(unit: Unit, context: CompileContext, problems: _Problems) -> None:
     """The fields of the document this format runs nothing behind."""
     if not unit.streams:
         problems.add("streams_not_built", "/streams", f"{_FORMAT} needs a stream to step on")
@@ -1142,9 +1163,16 @@ def _shape_problems(unit: Unit, problems: _Problems) -> None:
                 f"{_FORMAT} reads no settings record, so {market.market_id} would read the unit's "
                 "own numbers",
             )
-    if unit.position_limit is not None and unit.position_limit.per_instrument != 1:
+    if (
+        unit.position_limit is not None
+        and unit.position_limit.per_instrument > 1
+        and context.nets_positions
+    ):
         problems.add(
-            "limit_not_built", "/position_limit", f"{_FORMAT} holds one position per market"
+            "position_limit_nets",
+            "/position_limit",
+            f"{_FORMAT} holds more than one position per market only where the venue keeps them "
+            f"apart, and {_venues(unit, context)} nets positions",
         )
     for index, stream in enumerate(unit.streams):
         if stream.market != "*" and {stream.market} != {m.market_id for m in unit.markets}:
@@ -1219,7 +1247,7 @@ def compile_unit(
     problems.found.extend(
         CompileProblem(p.layer, p.kind.value, "/".join(p.where), p.message) for p in checked.errors
     )
-    _shape_problems(unit, problems)
+    _shape_problems(unit, context, problems)
     lock, faces = _faces(unit, context)
     loaded = load(lock, context.sources)
     if not isinstance(loaded, Loaded):
@@ -1260,6 +1288,7 @@ def compile_unit(
         derived=derived,
         slow=slow,
         defaults=_defaults(unit),
+        position_limit=1 if unit.position_limit is None else unit.position_limit.per_instrument,
     )
     warm_up, state_bound = _warm_up(plan, problems)
     if problems.found:
