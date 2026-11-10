@@ -136,6 +136,10 @@ class FakeCTrader:
     history_silent: bool = False
     history_limits: int = 0
     """How many coming deal requests the broker refuses by its rate limit."""
+    balance_cents: int = 1_000_000
+    """The cash the broker states, in the account's money digits (10,000.00). A real broker moves
+    it as positions close, so a test that closes at a loss states the balance it would then hold;
+    the default is the sign-in balance every other test reads."""
     deals: dict[int, list[dict[str, object]]] = field(
         default_factory=dict[int, list[dict[str, object]]]
     )
@@ -252,7 +256,7 @@ class FakeCTrader:
                 "ctidTraderAccountId": CTID,
                 "trader": {
                     "ctidTraderAccountId": CTID,
-                    "balance": 1_000_000,
+                    "balance": self.balance_cents,
                     "depositAssetId": 1,
                     "moneyDigits": 2,
                     "accountType": "HEDGED",
@@ -596,7 +600,7 @@ class FakeCTrader:
                         "grossProfit": 0,
                         "swap": 0,
                         "commission": 0,
-                        "balance": 1_000_000,
+                        "balance": self.balance_cents,
                     },
                 }
             )

@@ -234,6 +234,24 @@ class Account:
     """``market.rate:<quote>`` by the quote currency each converts from, its value the exact
     rational (AD-10 "Currency"). A host supplies one per quote its unit reads; the account's own
     currency takes the ``Fact(1)`` fast path and never looks here."""
+    account_equity: Decimal | None = None
+    """The whole account's equity, which an ``account`` scope brake row reads (RC-29).
+    ``equity`` is what the sizer divides: this unit's own book. A host that holds several units on
+    one account is the only actor that knows the account's own figure, so it states this; a host
+    that sees one book, as a replay does, leaves it None and ``equity`` is the account it sees."""
+    day_start_equity: Decimal | None = None
+    """The account's equity when its trading day began, as its host sets it (AD-12, RC-29). A row
+    whose facts are missing answers its cold rule, so a host that keeps no day boundary states
+    nothing here and the daily brake reads cold instead of guessing a day."""
+
+    def brake_facts(self) -> Mapping[str, Decimal]:
+        """The ``account.*`` facts a brake row reads, by the name its block declares."""
+        facts = {
+            "account.equity": self.equity if self.account_equity is None else self.account_equity
+        }
+        if self.day_start_equity is not None:
+            facts["account.day_start_equity"] = self.day_start_equity
+        return facts
 
 
 @dataclass(frozen=True, slots=True)
@@ -1184,24 +1202,25 @@ class _Run:
         """Run the unit's brakes once this step, before exits and entries (AD-12).
 
         Each row is fed the facts it declares: the unit's own statistics from its journal, and the
-        account's equity. A row that raises records a ``Fault`` with its ``link_fault`` code and
-        stands its scope down. It is a plain ``try`` around one block call, so a raise never
-        benches an exit and never reaches one (AD-9). A row that fires acts by its own verb:
-        ``flatten`` mints one close per held position through the same path the exits use,
-        ``reduce`` cuts the size of the entries this step prices, and ``no_new_entries`` refuses
-        them. A ``no_new_entries`` row that waits for his hand also asks the host's stop port for
-        the one automatic stop. A row whose own rule lets it come back writes a ``restore`` row;
-        a row that waits for his hand answers no change. The words this step's entries are
-        refused by come back, or None.
+        account's own numbers from the account surface. An ``account`` scope row reads the whole
+        account, never this unit's book, so a brake on one account binds every unit on it (RC-29).
+        A row that raises records a ``Fault`` with its ``link_fault`` code and stands its scope
+        down. It is a plain ``try`` around one block call, so a raise never benches an exit and
+        never reaches one (AD-9). A row that fires acts by its own verb: ``flatten`` mints one close
+        per held position through the same path the exits use, ``reduce`` cuts the size of the
+        entries this step prices, and ``no_new_entries`` refuses them. A ``no_new_entries`` row that
+        waits for his hand also asks the host's stop port for the one automatic stop. A row whose
+        own rule lets it come back writes a ``restore`` row; a row that waits for his hand answers
+        no change. The words this step's entries are refused by come back, or None.
         """
         self.unit.reduce = Decimal(1)
         if not self.unit.halt_instances:
             return None
         trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
         facts: dict[str, object] = own_facts(trades, self.instant)
-        equity = getattr(self.surface("account"), "equity", None)
-        if isinstance(equity, Decimal):
-            facts["account.equity"] = equity
+        account = self.surface("account")
+        if isinstance(account, Account):
+            facts |= dict(account.brake_facts())
         run = self.unit.control_runner.run(facts)
         for raised in run.raised:
             # a raise is a fault, not a brake: it moves no risk word, and no restore row lifts one

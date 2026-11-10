@@ -190,6 +190,10 @@ BUDGET_SHARE: Final[Decimal] = Decimal(1)
 At 1 a deployment may use the whole account, so only a share above that (a bug, not a choice) is
 not a budget. Labelled placeholder, owner numbers talk; a deployment document names none yet, so
 every deployment starts from this one. Range: above zero, at most one."""
+ACCOUNT_DAY_NS: Final[int] = 86_400_000_000_000
+"""The account's trading day for the daily brake: the UTC calendar day, a labelled placeholder owned
+by "numbers talk", until the account-scoped day-boundary calendar is bound (RC-33). The same day
+`qml.protocol.controls` counts a session by, so a day result and a session result never disagree."""
 HOST_FACTS: Final = Path("road") / "host" / "facts.json"
 """The host's facts in the node's volume (C-05c, AD-307): the machine, the trading profile, the
 holdout, and the newest clock probe."""
@@ -1613,6 +1617,29 @@ class _Journal:
         self._journal.append(record)
 
 
+class _BrakeAccount:
+    """The unit's account surface with the account's own numbers beside its book (RC-29).
+
+    The sizer divides by ``equity``, the unit's own book, exactly as before. A row at ``account``
+    scope reads ``account.equity`` and ``account.day_start_equity`` from the node, because a unit
+    cannot see the other units on its account. A host with no account figure to state, or none yet,
+    leaves the surface as it is and the row reads this unit's book.
+    """
+
+    def __init__(
+        self, inner: Surface, equity: Callable[[], tuple[Decimal | None, Decimal | None]] | None
+    ) -> None:
+        self._inner = inner
+        self._equity = equity
+
+    def at(self, instant: Instant, /) -> object:
+        answer = self._inner.at(instant)
+        if self._equity is None or not isinstance(answer, UnitAccount):
+            return answer
+        account_equity, day_start = self._equity()
+        return replace(answer, account_equity=account_equity, day_start_equity=day_start)
+
+
 class _OwnJournal:
     """The unit's own closed trades, stamped with the deployment's lane and venue names."""
 
@@ -1715,6 +1742,10 @@ class NodeUnit:
         """The account's facts and basis as the node last read them, for the rows this unit
         writes. The runtime sets it at the host; a unit hosted without one stamps no account
         fact."""
+        self.brake_equity: Callable[[], tuple[Decimal | None, Decimal | None]] | None = None
+        """The account's own equity and its day's start, for the ``account`` scope brakes (RC-29).
+        The runtime sets it at the host; a unit hosted without one reads the numbers its own book
+        answers, because then it is the only book the host can see."""
         self.kept_values: dict[str, Decimal] = {}
         """The slow numbers the deployment's saved snapshot already holds, so a write happens
         only when one of them moves."""
@@ -1746,7 +1777,11 @@ class NodeUnit:
 
         def host(surfaces: Mapping[str, Surface]) -> Result[HostedUnit]:
             own = _OwnJournal(self, surfaces["own_journal"])
-            read = {**surfaces, "own_journal": own}
+            read = {
+                **surfaces,
+                "own_journal": own,
+                "account": _BrakeAccount(surfaces["account"], self.brake_equity),
+            }
             scope = self.deployment.deployment_id
             built = (
                 construct_unit(
@@ -2290,6 +2325,10 @@ class Runtime:
         self._accounts: dict[str, LiveAccount] = {}
         self._facts: dict[str, AccountFacts] = {}
         """Each account's facts as the last refresh read them, by account id."""
+        self._day_starts: dict[str, tuple[int, Decimal]] = {}
+        """Each account's day and its equity at that day's first read, by account id (RC-29): the
+        ``account.day_start_equity`` a daily brake reads, so every unit on the account reads one
+        number. A new day's first read replaces it."""
         self._resumes_seen = journalled_resumes(context.journal_root)
         self._flattened: set[str] | None = None
         """Every flatten op journalled done; None until the journal could be read."""
@@ -2572,7 +2611,8 @@ class Runtime:
         A row written inside that pass reads what this left, so no exit and no row write can start
         a venue round trip. The account's facts are re-stated only when the read's timer is due, so
         the stops they carry are asked of the unit's own binding at the read's cadence, not on
-        every tick.
+        every tick. The first read of an account's day also records the equity it states, which is
+        the ``account.day_start_equity`` its daily brake reads (RC-29).
         """
         now = Instant(self.clock_ns())
         for account, venue in self.venues.items():
@@ -2583,6 +2623,31 @@ class Runtime:
                     stakes=self._stakes(account, now),
                     realised_since=self._realised(account, now),
                 )
+            self._note_day_start(account, now)
+
+    def _note_day_start(self, account: str, now: Instant) -> None:
+        """Record the account's equity at its day's first read, and replace it on a new day."""
+        facts = self._facts.get(account)
+        if facts is None or facts.equity.value is None:
+            return
+        day = now.value_ns // ACCOUNT_DAY_NS
+        held = self._day_starts.get(account)
+        if held is None or held[0] != day:
+            self._day_starts[account] = (day, facts.equity.value)
+
+    def account_brake_equity(self, account: str) -> tuple[Decimal | None, Decimal | None]:
+        """The account's own equity and its day's start, for the ``account`` scope brakes (RC-29).
+
+        The node is the only actor that holds several units on one account, so it is the only one
+        that can state the account's figure rather than one unit's book. A day start is stated only
+        once a read has recorded it; until then a daily brake reads cold rather than guess.
+        """
+        facts = self._facts.get(account)
+        start = self._day_starts.get(account)
+        return (
+            None if facts is None else facts.equity.value,
+            None if start is None else start[1],
+        )
 
     def account_facts(self, account: str) -> AccountFacts | None:
         """The account's facts as the last refresh left them, or None before the first read."""
@@ -3169,6 +3234,9 @@ class Runtime:
         )
         unit.journal_world = world
         unit.account = lambda account=deployment.account_id: self._account_inputs(account)
+        unit.brake_equity = (
+            lambda account=deployment.account_id: self.account_brake_equity(account)
+        )
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
         if is_refusal(target):
