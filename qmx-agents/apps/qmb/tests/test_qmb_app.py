@@ -275,7 +275,7 @@ def test_an_agent_writes_adx_above_25_and_a_job_runs_it(world: World) -> None:
         "motion": {"mode": "fixed"},
         "authority": "motion_inside_range",
         "origin": "builder_chosen",
-        "reason": "the ADX level the agent asks for, 25 as a worked example and 99 as its off switch",
+        "reason": "the ADX level the agent asks for, 25 by default and 99 to stand aside",
     }
     unit_new, unit_check = world.tools["unit"]["unit_new"], world.tools["unit"]["unit_check"]
     made = unit_new(
