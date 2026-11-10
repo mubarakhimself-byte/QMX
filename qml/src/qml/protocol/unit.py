@@ -526,6 +526,17 @@ def _amount(answer: object) -> Amount | _Skip:
             return _Skip("sizer_silent", "the sizer answered nothing")
 
 
+def _usable_factor(value: object, bounds: tuple[object, ...] | None) -> bool:
+    """A modifier's two answer fields, judged here rather than trusted from the block: an exact
+    factor and the range it declares. ``Factor`` states both and validates neither (AD-11)."""
+    return (
+        isinstance(value, Decimal)
+        and isinstance(bounds, tuple)
+        and len(bounds) == 2
+        and all(isinstance(bound, Decimal) for bound in bounds)
+    )
+
+
 def _skip_text(code: str, detail: str) -> str:
     """The row's words. Every sized skip keeps the ``sizer: `` head the journal maps to its
     closed ``sizer_skip`` code, and the specific code stays readable beside it."""
@@ -1034,7 +1045,7 @@ class HostedUnit:
                 )
                 verdicts.append(f"modifier {modifier.name}: {NEUTRAL}")
                 continue
-            if not isinstance(read, Factor):
+            if not isinstance(read, Factor) or not _usable_factor(read.value, read.range):
                 core.pending_faults.append(Fault(modifier.pin, FaultPhase.PRICE))
                 core.bench()
                 verdicts.append(f"modifier {modifier.name}: refuse ({UNIT_FAULT})")
@@ -1043,7 +1054,7 @@ class HostedUnit:
                     {"wanted": wanted},
                     tuple(verdicts),
                     UNIT_FAULT,
-                    f"the modifier {modifier.name} answered no factor",
+                    f"the modifier {modifier.name} answered no usable factor",
                 )
             block_range = (read.range[0], read.range[1])
             if not block_range[0] <= read.value <= block_range[1]:
