@@ -84,7 +84,8 @@ def two_units(root: Path) -> tuple[b.Bound, Runtime, int]:
     b.tick_quotes(rig)
     for deployment_id in DEPLOYMENTS:
         deployed = rig.node.call(
-            "deploy", {"op_id": f"op-{deployment_id}", "deployment": _deployment(rig, deployment_id)}
+            "deploy",
+            {"op_id": f"op-{deployment_id}", "deployment": _deployment(rig, deployment_id)},
         )
         assert b.value(deployed)["state"] == "accepted", deployed
     settle(runtime)
@@ -183,7 +184,7 @@ def test_account_halt_binds_across_two_units(tmp_path: Path) -> None:
         at = play_both(rig, runtime, at, 1)
         if len(unit_rows(rig, "trade")) >= 2:
             break
-    closed = [Decimal(str(row["money"])) for row in unit_rows(rig, "trade")]
+    closed: list[Decimal] = [Decimal(str(row["money"])) for row in unit_rows(rig, "trade")]
     assert len(closed) == 2, f"both units' stops filled, not {closed}"
     assert all(Decimal("-300.00") <= money < Decimal("-299.00") for money in closed), (
         f"each unit lost 300 to the lot step, not {closed}"
@@ -193,21 +194,21 @@ def test_account_halt_binds_across_two_units(tmp_path: Path) -> None:
     )
 
     # One loss is 3 per cent of the account, under the 5 per cent limit: no unit fires yet.
-    rig.fake.balance_cents = BALANCE - _cents(abs(min(closed)))
+    one = min(closed)
+    assert one < 0, f"a stop's money is a loss, not {one}"
+    rig.fake.balance_cents = BALANCE - _cents(-one)
     at = drive(rig, runtime, at, 2)
     under = [row for row in unit_rows(rig, "risk_event") if row["code"] == CODE]
 
     # The second takes the account 6 per cent down, and the brake binds both units on one bar.
-    rig.fake.balance_cents = BALANCE - _cents(sum(abs(money) for money in closed))
+    rig.fake.balance_cents = BALANCE - _cents(sum((-money for money in closed), Decimal(0)))
     at = drive(rig, runtime, at, 2)
 
     rows = [row for row in unit_rows(rig, "risk_event") if row["code"] == CODE]
     assert under == [], "300 of 10,000 is under the 500 limit, so no unit fires on it"
     assert len(rows) == len(DEPLOYMENTS), f"both units fire the account's brake, not {rows}"
     for deployment_id in DEPLOYMENTS:
-        fired = [
-            row for row in unit_rows(rig, "risk_event", deployment_id) if row["code"] == CODE
-        ]
+        fired = [row for row in unit_rows(rig, "risk_event", deployment_id) if row["code"] == CODE]
         assert len(fired) == 1, f"{deployment_id} fires the account's brake once, not {fired}"
     assert sorted(str(row["row"]) for row in rows) == ["account.daily_loss"] * len(DEPLOYMENTS), (
         "the fire is filed at the account's scope, not one unit's"

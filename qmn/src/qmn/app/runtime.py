@@ -2628,12 +2628,13 @@ class Runtime:
     def _note_day_start(self, account: str, now: Instant) -> None:
         """Record the account's equity at its day's first read, and replace it on a new day."""
         facts = self._facts.get(account)
-        if facts is None or facts.equity.value is None:
+        equity = None if facts is None else _stated_decimal(facts.equity.value)
+        if equity is None:
             return
         day = now.value_ns // ACCOUNT_DAY_NS
         held = self._day_starts.get(account)
         if held is None or held[0] != day:
-            self._day_starts[account] = (day, facts.equity.value)
+            self._day_starts[account] = (day, equity)
 
     def account_brake_equity(self, account: str) -> tuple[Decimal | None, Decimal | None]:
         """The account's own equity and its day's start, for the ``account`` scope brakes (RC-29).
@@ -2645,7 +2646,7 @@ class Runtime:
         facts = self._facts.get(account)
         start = self._day_starts.get(account)
         return (
-            None if facts is None else facts.equity.value,
+            None if facts is None else _stated_decimal(facts.equity.value),
             None if start is None else start[1],
         )
 
@@ -3234,9 +3235,7 @@ class Runtime:
         )
         unit.journal_world = world
         unit.account = lambda account=deployment.account_id: self._account_inputs(account)
-        unit.brake_equity = (
-            lambda account=deployment.account_id: self.account_brake_equity(account)
-        )
+        unit.brake_equity = lambda account=deployment.account_id: self.account_brake_equity(account)
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
         if is_refusal(target):
@@ -3693,3 +3692,10 @@ def _unit_account(unit: NodeUnit, instant: Instant) -> UnitAccount | None:
 
 def _placeholder(deployment_id: str) -> Deployment:
     return Deployment(deployment_id, "", "", {}, "", "", "", "", "", (), "", (), "paper")
+
+
+def _stated_decimal(value: Decimal | Fraction | None) -> Decimal | None:
+    """A fact's value as the decimal a brake reads, or None when the fact states no number."""
+    if value is None or isinstance(value, Decimal):
+        return value
+    return Decimal(value.numerator) / Decimal(value.denominator)
