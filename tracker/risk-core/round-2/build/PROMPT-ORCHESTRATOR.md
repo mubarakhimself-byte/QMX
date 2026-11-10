@@ -61,6 +61,22 @@ He watched the last orchestrator drift (memory `orchestrator-audit-2026-11-04`).
 - **The plan doesn't grow.** No new PR sections. Findings go to `BACKLOG.md`; his asks to `QUEUE.md`.
 - **Keep agents busy.** No slot sits idle while an unblocked PR exists. Last time a quarter of agent time was idle.
 
+## Speed orders, 10 November (these win over any earlier speed text in this file)
+
+From an independent timing review of the first 21 rows (`SPEED-REVIEW.md` beside this file): 2.0 to 2.45 hours a row, with empty builder seats, repair rounds and reviews waiting on the row below as the main costs. These apply to both harnesses.
+
+0. **First, close the gate hole.** Nine stacked rows carry a FAIL line in their final lane logs: RC-04, 13, 14, 15, 17, 18, 19, 20 and 27. RC-20 was stacked with lanes last run nine commits earlier, and the whole-repo run due at row 16 was skipped. Before new dispatches, rerun lane 1 for those rows' changed tests at the current tip, and run the whole-repo check once in the background. A real red is fixed on the newest row and named in `STACK-LIST.md`, never carried up through the stack. Keep the builder seats filled while this runs.
+1. **Review and repair each row at its own head.** On STACK-READY, start the lanes and the fresh reviewer at that head at once, whatever the row below is doing, and run the fix round there. When the row below is final, join. A merge with no conflict you do yourself, since it changes no code; anything else goes to an agent. Rerun lane 1 at the joined head, then `CHECK carry <id> <old-parent> <old-head> <new-parent> <joined-head>`. Carry PASS, lane 1 PASS and `CHECK gate-dsh` at the joined head stack the row. On a carry FAIL, a conflict, or when the fix below touched a file this row changes, a fresh reviewer reads the join (the whole diff for money, exits or brakes) and writes the review for the joined head.
+2. **Three builders, seats never empty.** A row may start when every row in its Depends-on line is STACK-READY, from that head. Append in any order that keeps a row above what it depends on. A stop point, a sweep or a whole-repo run never holds a dispatch. A test red only under load is rerun alone once.
+3. **Builders and fixers don't run long suites.** Before STACK-READY, a builder searches the tests for every value its change moves, updates each with its reason, and runs only the test files it changed or that hold those values, ten minutes in all. No whole-package suites; you run them. A fixer runs only the failing tests and the files it touched. This replaces the 9 November order that builders run their lane 1 suites.
+4. **Blockers mean what his light-verification rule says.** A blocker is only: a test or quality gate red at the head; anything on money, exits, brakes, sign-ins or keys; a money-path test or fact that cannot fail; a missing owner file or required skill. Wording, tidiness and descriptions are lows: log them and fix them at the stop sweep. One fix round, one small second, then park.
+5. **One lane script, six workers, no FAIL line ever stacked.** Lanes run with `-n 6`. Build each test list from `git diff --name-only <parent> <head>`. Files under `qmx-agents/` run from `qmx-agents` with `uv run --frozen`, the rest from the root. No row stacks with a FAIL line in its final-head lane logs: if the FAIL was your command, fix the command and rerun that line. Any commit that changes code or tests means lanes again at the new head.
+6. **Whole-repo check with `-n 4`,** after every eighth row and once at each stop point's final head, in the background, never holding a dispatch. After a sweep, rerun only what failed.
+7. **Tick every 600 seconds,** reading only `RESUME.md` and the watchdog.
+8. **On a takeover, fix DeepSeek rows at the tip.** The Opus re-review of earlier rows stays. A blocker it finds is fixed on the newest row and named in `STACK-LIST.md`, not carried up through the stack.
+
+Unchanged: a fresh reviewer per row, the gate at the exact head, one straight stack, no merges to any shared branch, every money and exit rule, the enforcement section.
+
 ## Rules
 
 1. **Builders write, push and run fast checks only.** You run the lanes, every full suite and every long test, in the background. A builder never waits on a long command, because its cache expires while it waits.
