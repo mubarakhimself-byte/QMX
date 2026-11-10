@@ -187,7 +187,11 @@ def test_a_drift_reaches_the_nodes_volume_with_no_settings_write(
     monkeypatch.setattr(host, "free_bytes", no_bytes)
     monkeypatch.setattr(host, "make_room", nothing)
     monkeypatch.setattr(host, "beat", one_row)
-    monkeypatch.setattr(host, "probe_from", lambda _settings: drifted())
+
+    def probe_from(_settings: object) -> ClockFacts:
+        return drifted()
+
+    monkeypatch.setattr(host, "probe_from", probe_from)
     core = SimpleNamespace(settings={}, paused=False)
     engine = SimpleNamespace(svc=SimpleNamespace(ctx=SimpleNamespace(engine=core)))
 
@@ -196,7 +200,7 @@ def test_a_drift_reaches_the_nodes_volume_with_no_settings_write(
             host.heartbeats(
                 runtime.home,
                 "pc",
-                cast(Any, control),
+                control,
                 cast(Any, None),
                 cast(Any, engine),
                 clock_read=clock_read,

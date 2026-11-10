@@ -36,9 +36,15 @@ if str(QMN_TESTS) not in sys.path:
     sys.path.insert(0, str(QMN_TESTS))
 
 import test_app_binding as broker  # noqa: E402 - qmn's fake broker lives with qmn's rig
-
+from qmn.app.practice import ACCOUNT as PRACTICE_ACCOUNT  # noqa: E402
+from qmn.app.practice import PRACTICE  # noqa: E402
+from qmn.app.runtime import Phase  # noqa: E402
 from qmx_control.service import ControlService, WorkflowEngine  # noqa: E402
 from qmx_engine.ledger import redact  # noqa: E402
+from qmx_library.store import Store  # noqa: E402
+from qmx_tools.functions import domain_functions  # noqa: E402
+from qmx_tools.service import DomainContext  # noqa: E402
+
 from qmx_host.host import LanderLibrary, landers, register_checkers  # noqa: E402
 from qmx_host.lifecycle import LifecycleWriter  # noqa: E402
 from qmx_host.node_link import NodeLink  # noqa: E402
@@ -52,13 +58,6 @@ from qmx_host.promote import (  # noqa: E402
     harvested_calibrations,
 )
 from qmx_host.venue_records import Stated, land, stated  # noqa: E402
-from qmx_library.store import Store  # noqa: E402
-from qmx_tools.functions import domain_functions  # noqa: E402
-from qmx_tools.service import DomainContext  # noqa: E402
-
-from qmn.app.practice import ACCOUNT as PRACTICE_ACCOUNT  # noqa: E402
-from qmn.app.practice import PRACTICE  # noqa: E402
-from qmn.app.runtime import Phase  # noqa: E402
 
 APP = REPO / "qmx-agents" / "apps" / "qmb"
 MARKET = "fx.eurusd"
@@ -234,7 +233,6 @@ def _click(
     land(store, stated(Stated(MARKET_VENUE, DEMO_ACCOUNT, "demo", "demo")))
     standing = cast("dict[str, Any]", rig.node.call("status", {}))["value"]
     writer = LifecycleWriter(home / "journals", "pc", "test")
-    store.lifecycle = writer
     promoter = Promoter(
         store,
         writer,

@@ -13,16 +13,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+import k7_rehearsal
 import pytest
 import test_feed_relay as relay
+from k7_rehearsal import DAY, LIVE_FROM
 from qmf.core import is_refusal
 from qmn.app.feed_keeper import FeedKeeper
 from qmn.app.practice import ACCOUNT, PRACTICE, SHIPPED_VENUE, Month, stated, venue
 from qmn.app.runtime import Phase, Runtime
 from qmn.app.server import Node, open_node
-
-import k7_rehearsal
-from k7_rehearsal import DAY, LIVE_FROM
 
 STEPS = [
     "practice_start",
@@ -89,7 +88,11 @@ def test_practice_says_it_is_practice(tmp_path: Path) -> None:
     assert {cast("dict[str, object]", row["body"]).get("venue_kind") for row in unit_rows} == {
         "practice"
     }
-    assert (card["venue"], card["world"], card["venue_kind"]) == (SHIPPED_VENUE, "paper", "practice")
+    assert (card["venue"], card["world"], card["venue_kind"]) == (
+        SHIPPED_VENUE,
+        "paper",
+        "practice",
+    )
     assert (unit_card["world"], unit_card["venue_kind"]) == ("paper", "practice")
     assert stated(object()) == {}
     """A broker's rows and cards state nothing, so no other binding reads differently."""

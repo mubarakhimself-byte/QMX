@@ -11,7 +11,7 @@ import socket
 import sqlite3
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import closing, contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -45,7 +45,7 @@ class Taken:
 
 
 @contextmanager
-def serving(taken: Taken, port: int = 0) -> Iterator[str]:
+def serving(taken: Taken, port: int = 0) -> Generator[str]:
     """An OTLP/HTTP endpoint on the loopback that keeps every post."""
 
     class Answer(BaseHTTPRequestHandler):
