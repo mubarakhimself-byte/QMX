@@ -5,6 +5,10 @@ entry: 100000 equity at the default 0.005 risks 500 at the stop 0.0050 away, and
 that distance. Two modifiers answer 0.5 and 1.5, so 500 becomes 375 and the venue is sent 0.75
 lots. A third reads 3 against a range of 0 to 2, and the row names `factor_out_of_range` while
 that modifier reads neutral with its fail mode.
+
+The last two tests answer the shape `Factor` declares and nothing validates: a float factor, and a
+factor with no range. Each is refused by name with the block on the fault, and the position held on
+the other market still runs its exit on that bar.
 """
 
 # pyright: reportPrivateUsage=false
@@ -15,15 +19,17 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from typing import Any, cast
 
-from qmf.risk.unit_intent import UNIT_INTENT_FORMAT_VERSION
-from qml.blocks.api import Amount
+from qmf.core.chrono import Instant
+from qmf.risk.unit_intent import UNIT_INTENT_FORMAT_VERSION, UnitExitIntent
+from qml.blocks.api import Amount, Factor
 from qml.compile import CompiledUnit
-from qml.protocol.unit import HostedUnit, Proposal
+from qml.protocol.unit import HostedUnit, Proposal, QuoteBar, Surface
 from qml.receipt import explain_size, stored_row
 from qml.unit.model import Side
 
 import test_price_call as price
-from test_compile_dummy import _compiled, _document
+from test_compile_dummy import _compiled, _document, _instants, _ok, _slice
+from test_fault_wall_unit import _Latest
 
 _EQUITY = price._EQUITY
 """100000, the account the sizer reads and the fixture the section's literals assume."""
@@ -31,9 +37,12 @@ _ROW = "row-modifiers"
 _START = price._START
 
 
-def _with_modifiers(levels: Sequence[tuple[str, str]]) -> CompiledUnit:
+def _with_modifiers(levels: Sequence[tuple[str, str]], time_out: str | None = None) -> CompiledUnit:
     """The shipped dummy with one `level-factor@1` row per (name, level), in that order."""
     document = cast("dict[str, Any]", _document())
+    if time_out is not None:
+        numbers = cast("dict[str, dict[str, Any]]", document["numbers"])
+        numbers["time_out_bars"]["default"] = time_out
     document["modifiers"] = [
         {
             "name": name,
@@ -251,3 +260,112 @@ class _Raising:
 
     def import_state(self, state: Mapping[str, object]) -> None:
         del state
+
+
+def _holding(
+    compiled: CompiledUnit, bars: Mapping[str, Sequence[QuoteBar]], opened_at: Instant
+) -> HostedUnit:
+    """The dummy hosted on both markets, with a position held on EURUSD from the first bar."""
+    held = price.hosted.OwnPosition(
+        "pos-1",
+        Side.LONG,
+        Decimal("0.10"),
+        Decimal("1.10000"),
+        compiled.logic_fingerprint,
+        opened_at,
+    )
+    surfaces: dict[str, Surface] = {
+        "account": price._At(price.hosted.Account(_EQUITY)),
+        "own_journal": price._At(()),
+    }
+    for market, series in bars.items():
+        surfaces[f"bars:m15:{market}"] = _Latest(series)
+        surfaces[f"own_position:{market}"] = price._At(held if market == "fx.eurusd" else None)
+    return price._host(compiled, surfaces)
+
+
+def _held_unit(answer: object) -> tuple[HostedUnit, list[Instant]]:
+    """The dummy with one `odd` modifier row, answered by `answer`, and a position held on EURUSD."""
+    compiled = _with_modifiers([("odd", "1")], time_out="5")
+    bars = _slice()
+    instants = _instants(bars)
+    unit = _holding(compiled, bars, instants[0])
+    for market in unit._core.markets:  # pyright: ignore[reportPrivateUsage]
+        market.instances["modifier.odd"] = answer  # pyright: ignore[reportArgumentType]
+    return unit, instants
+
+
+class _Malformed:
+    """A Library modifier that answers a `Factor` the core cannot read.
+
+    `Factor` declares a decimal value and a two-decimal range, and nothing validates either, so
+    these are the two answers the review found a `TypeError` for.
+    """
+
+    def __init__(self, value: object, bounds: object) -> None:
+        self._answer = Factor(
+            cast("Any", value), cast("Any", bounds), "a factor the core cannot read"
+        )
+
+    @property
+    def warm_up_bars(self) -> int:
+        return 0
+
+    @property
+    def state_bound(self) -> int:
+        return 0
+
+    def retained(self) -> int:
+        return 0
+
+    def update(self, evidence: Mapping[str, object]) -> object:
+        del evidence
+        return self._answer
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        del state
+
+
+def test_a_float_factor_keeps_the_held_exit_and_names_the_block() -> None:
+    """A float factor is refused by name, and the exit on that bar still runs."""
+    unit, instants = _held_unit(_Malformed(0.5, (Decimal("0"), Decimal("2"))))
+
+    steps = [_ok(unit.on_instant(instant)) for instant in instants[:5]]
+    exits = [
+        (intent.kind.value, intent.reason_code.code)
+        for step in steps
+        for intent in step.intents
+        if isinstance(intent, UnitExitIntent)
+    ]
+    assert exits == [("close_full", "time")], "the held position's exit closes on that bar"
+    priced = unit.price(price._proposal("0.005"), price.hosted.Account(_EQUITY))
+
+    assert priced.code == "unit_fault"
+    assert priced.intent is None
+    assert [(fault.block, fault.phase.value) for fault in unit._core.pending_faults] == [
+        ("level-factor@1", "price")
+    ]
+
+
+def test_a_factor_with_no_range_keeps_the_held_exit_and_names_the_block() -> None:
+    """A factor with no range is refused by name, and the exit on that bar still runs."""
+    unit, instants = _held_unit(_Malformed(Decimal("0.5"), None))
+
+    steps = [_ok(unit.on_instant(instant)) for instant in instants[:5]]
+    exits = [
+        (intent.kind.value, intent.reason_code.code)
+        for step in steps
+        for intent in step.intents
+        if isinstance(intent, UnitExitIntent)
+    ]
+    assert exits == [("close_full", "time")], "the held position's exit closes on that bar"
+    priced = unit.price(price._proposal("0.005"), price.hosted.Account(_EQUITY))
+
+    assert priced.code == "unit_fault"
+    assert priced.intent is None
+    assert [(fault.block, fault.phase.value) for fault in unit._core.pending_faults] == [
+        ("level-factor@1", "price")
+    ]
