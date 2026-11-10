@@ -16,15 +16,29 @@ from qmx_host.promote import PROTECTED_FIELDS  # pyright: ignore[reportMissingTy
 DOORS = frozenset({"promote"}) | PROTECTED_FIELDS
 """What only his click reaches: the promote move and the fields he alone writes (AD-20, K5)."""
 
+_SEPARATORS = re.compile(r"[^a-z0-9]+")
+"""A name is read as one string with its underscores kept, not split into words. Splitting turns
+`kill_level` into `kill` and `level`, which matches no door and hides the row."""
 
-def _words(row: OperationSpec) -> set[str]:
-    """Every word of a row's operation, target and REST path, so a door cannot hide in one name."""
-    named = [row.op, row.target, "" if row.rest is None else row.rest.path]
-    return {word for name in named for word in re.split(r"[^a-z0-9]+", name.casefold()) if word}
+
+def _names(row: OperationSpec) -> set[str]:
+    """Every name a row carries, lowercased with its underscores kept, so a door cannot hide in
+    one."""
+    raw = (row.name, row.op, row.target, "" if row.rest is None else row.rest.path)
+    return {_SEPARATORS.sub("_", name.casefold()).strip("_") for name in raw}
 
 
 def test_k9_8_no_agent_path_to_money() -> None:
-    reachable = frozenset(word for row in rows() if row.agent for word in _words(row))
+    found = rows()
 
-    assert reachable & DOORS == frozenset(), f"a tool row reaches {sorted(reachable & DOORS)}"
+    assert any(row.agent for row in found), "no agent row to test: the catalog answered nothing"
+    reached = sorted(
+        f"{door} in {name}"
+        for row in found
+        if row.agent
+        for name in _names(row)
+        for door in DOORS
+        if door in name
+    )
+    assert not reached, f"a tool row reaches {reached}"
     assert frozenset({"floor", "kill_level", "never_self_tune", "plan_hash"}) == PROTECTED_FIELDS
