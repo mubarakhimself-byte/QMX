@@ -1261,7 +1261,9 @@ class _Run:
             return None
         trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
         facts: dict[str, object] = own_facts(trades, self.instant)
-        facts["own.open_risk_by_bet_key"] = self.open_risk_by_bet_key(positions)
+        by_bet = self.open_risk_by_bet_key(positions)
+        if by_bet is not None:  # a position it cannot price leaves the fact absent, not zero
+            facts["own.open_risk_by_bet_key"] = by_bet
         equity = getattr(self.surface("account"), "equity", None)
         if isinstance(equity, Decimal):
             facts["account.equity"] = equity
