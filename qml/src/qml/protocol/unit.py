@@ -124,8 +124,9 @@ __all__ = [
     "seam_check",
 ]
 
-STATE_SCHEMA_VERSION: Final[int] = 2
-"""2 records the interpreter the snapshot was taken under (UT-09, QML-25)."""
+STATE_SCHEMA_VERSION: Final[int] = 3
+"""3 records the trades each slow number has read in all, beside the newest ones it keeps; 2
+recorded the interpreter the snapshot was taken under (UT-09, QML-25)."""
 SEAM_JUMP_SCALE: Final[Decimal] = Decimal(3)
 """The setting ``seam_jump_scale``: a seam flags past this many typical warm-up bar moves."""
 
@@ -556,8 +557,10 @@ def _fact(account: object, name: str) -> Decimal | None:
         return equity if isinstance(equity, Decimal) else None
     if not name.startswith(RATE_PREFIX):
         return None
-    rates = getattr(account, "rates", {})
-    fact = rates.get(name.removeprefix(RATE_PREFIX)) if isinstance(rates, Mapping) else None
+    rates: object = getattr(account, "rates", {})
+    if not isinstance(rates, Mapping):
+        return None
+    fact = cast("Mapping[str, Fact]", rates).get(name.removeprefix(RATE_PREFIX))
     value = getattr(fact, "value", None)
     if isinstance(value, Decimal):
         return value

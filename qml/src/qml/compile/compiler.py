@@ -619,18 +619,20 @@ class _Wiring:
         return tuple(reads)
 
 
-def _binds(binding: Binding | ControlBinding | ScopedBinding, number: str) -> bool:
+_ParamHolder = Binding | ControlBinding | ScopedBinding | BoundBlock
+"""Anything that carries a document or compiled binding's parameters."""
+
+
+def _binds(binding: _ParamHolder, number: str) -> bool:
     """Whether one binding reads ``number`` as a parameter."""
-    return any(
-        isinstance(p, NumberParam) and p.number == number for p in binding.params.values()
-    )
+    return any(isinstance(p, NumberParam) and p.number == number for p in binding.params.values())
 
 
 def _bound_on(side: SidePlan, number: str) -> bool:
     return any(_binds(b, number) for slot in side.slots for b in slot.bindings)
 
 
-def _risk_bindings(unit: Unit) -> tuple[Binding | ControlBinding | ScopedBinding, ...]:
+def _risk_bindings(unit: Unit) -> tuple[_ParamHolder, ...]:
     """The bindings outside the logic slots: the sizer, the exits and the control rows (AD-14)."""
     controls = (*unit.halts.position, *unit.halts.unit, *unit.halts.account)
     return (*([unit.sizer] if unit.sizer is not None else ()), *unit.exit_set, *controls)
@@ -671,7 +673,7 @@ def _only_on_a_dropped_side(unit: Unit, number: str) -> bool:
 
 def _bound_numbers(unit: Unit) -> set[str]:
     """Every number a binding on a stated side, an exit, the sizer or a control row reads."""
-    bindings: list[Binding | ControlBinding | ScopedBinding] = [
+    bindings: list[_ParamHolder] = [
         binding
         for side in Side
         if (found := _side_slots(unit, side)) is not None
