@@ -40,8 +40,8 @@ __all__ = [
     "SHIPPED_VENUE",
     "STATED",
     "Month",
-    "Replay",
     "Refused",
+    "Replay",
     "account",
     "stated",
     "venue",
@@ -103,9 +103,7 @@ class Month:
                 raise Refused(f"{symbol}'s bid and ask months do not cover the same bars")
             for (opened, one), (_, other) in zip(bid, ask, strict=True):
                 close = (opened + BAR_SECONDS) * 1_000_000_000
-                found.append(
-                    (close, market, QuoteBar(Instant(close), OHLC(*one), OHLC(*other)))
-                )
+                found.append((close, market, QuoteBar(Instant(close), OHLC(*one), OHLC(*other))))
         if not found:
             raise Refused(f"{folder} holds no month of bars")
         return cls(tuple(sorted(found, key=lambda item: item[0])))

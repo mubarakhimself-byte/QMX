@@ -1070,7 +1070,7 @@ class _OrderJournal:
     ) -> None:
         self._journal = journal
         self._clock_ns = clock_ns
-        self._stated = {} if stated is None else stated
+        self._stated: Mapping[str, object] = {} if stated is None else stated
 
     def append(self, event: object, /) -> SinkResult:
         body = {**self._stated, **cast("Mapping[str, object]", event)}
@@ -3514,8 +3514,10 @@ class Runtime:
             placed = self.board_read(hosted)
             if placed is not None:
                 boards[deployment_id] = placed.document()
-            stated = practice.NO_STATEMENT if hosted.venue is None else practice.stated(
-                hosted.venue.client
+            stated = (
+                practice.NO_STATEMENT
+                if hosted.venue is None
+                else practice.stated(hosted.venue.client)
             )
             units.append(
                 {
