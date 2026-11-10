@@ -273,7 +273,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "published_convention"
+        "origin": "published_convention",
+        "reason": "the trend line's length, a starting length nobody has argued yet",
+        "owner": "numbers talk"
       },
       "roc_lookback": {
         "kind": "fixed",
@@ -288,7 +290,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "builder_chosen"
+        "origin": "builder_chosen",
+        "reason": "how far the rate of change looks back, a starting lookback nobody has argued yet",
+        "owner": "numbers talk"
       },
       "min_trend_strength": {
         "kind": "calibrated",
@@ -316,7 +320,9 @@
         },
         "authority": "motion_inside_range",
         "origin": "builder_chosen",
-        "applies_to_open_positions": false
+        "applies_to_open_positions": false,
+        "reason": "the floor the trend must clear before an entry, moved from the unit's own closed trades",
+        "owner": "numbers talk"
       },
       "rsi_period": {
         "kind": "fixed",
@@ -331,7 +337,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "published_convention"
+        "origin": "published_convention",
+        "reason": "the RSI length the trigger reads, 14 being the published Wilder length",
+        "owner": "numbers talk"
       },
       "rsi_low": {
         "kind": "derived",
@@ -351,7 +359,9 @@
           }
         },
         "authority": "motion_inside_range",
-        "origin": "builder_chosen"
+        "origin": "builder_chosen",
+        "reason": "the RSI level a long entry crosses back above, moved by its own history",
+        "owner": "numbers talk"
       },
       "rsi_high": {
         "kind": "derived",
@@ -371,7 +381,9 @@
           }
         },
         "authority": "motion_inside_range",
-        "origin": "builder_chosen"
+        "origin": "builder_chosen",
+        "reason": "the RSI level a short entry crosses back below, moved by its own history",
+        "owner": "numbers talk"
       },
       "stop_buffer": {
         "kind": "fixed",
@@ -386,7 +398,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "placeholder"
+        "origin": "placeholder",
+        "reason": "the room past the swing that keeps the stop out of the bar's noise, a starting buffer",
+        "owner": "numbers talk"
       },
       "target_r": {
         "kind": "fixed",
@@ -401,7 +415,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "placeholder"
+        "origin": "placeholder",
+        "reason": "the profit target in R multiples, a starting multiple",
+        "owner": "numbers talk"
       },
       "time_out_bars": {
         "kind": "fixed",
@@ -416,7 +432,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "placeholder"
+        "origin": "placeholder",
+        "reason": "how long a position may stay open before the time exit closes it, a starting count",
+        "owner": "numbers talk"
       },
       "risk_fraction": {
         "kind": "fixed",
@@ -431,7 +449,9 @@
           "mode": "fixed"
         },
         "authority": "motion_inside_range",
-        "origin": "placeholder"
+        "origin": "placeholder",
+        "reason": "a starting fraction of equity at risk, unargued until the numbers talk",
+        "owner": "numbers talk"
       }
     },
     "pins": [
