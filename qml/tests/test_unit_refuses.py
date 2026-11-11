@@ -393,9 +393,14 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
         "motion_not_built",
         "/numbers/min_trend_strength/motion/source",
     ),
-    "role veto": (
-        _put("logic/long/slots/context/role", "veto"),
-        "role_not_built",
+    "role sizer in a logic slot": (
+        _put("logic/long/slots/context/role", "sizer"),
+        "role_has_a_section",
+        "/logic/long/slots/context/role",
+    ),
+    "a timeout with no arming": (
+        _put("logic/long/slots/context/role", "timeout"),
+        "timeout_not_armed",
         "/logic/long/slots/context/role",
     ),
     "two stops": (_exit_at(3, "swing-stop-buffer@1", _BARS), "exit_not_built", "/exit_set/3"),

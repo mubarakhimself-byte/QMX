@@ -27,9 +27,9 @@ import pytest
 from qmf.core.chrono import Instant
 from qml.catalogue import block_fingerprint
 from qml.compile import CompileContext, CompiledUnit, compile_unit
-from qml.protocol.unit import OHLC, QuoteBar, UnitStep
+from qml.protocol.unit import OHLC, QuoteBar, UnitStep, restore_unit
 from qml.unit.model import Role
-from test_compile_dummy import _drive
+from test_compile_dummy import _drive, _ok, _target
 from test_many_positions import (
     _BAR_NS,
     _START,
@@ -93,24 +93,75 @@ class _Block:
 
 BLOCK = _Block()
 '''
+_FLAT_STOP = '''"""A stop at 1.0900 for a long, read with or without a bar, keeping no state."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from decimal import Decimal
+
+from qml.blocks.api import Side
+
+
+class _FlatStop:
+    @property
+    def warm_up_bars(self) -> int:
+        return 0
+
+    @property
+    def state_bound(self) -> int:
+        return 0
+
+    def retained(self) -> int:
+        return 0
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal:
+        del evidence
+        return Decimal("1.0900")
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        del state
+
+
+class _Block:
+    def make(
+        self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
+    ) -> _FlatStop:
+        del params, inputs, side
+        return _FlatStop()
+
+
+BLOCK = _Block()
+'''
 _BLOCKS = {
     "bars-since-at-least@1": _SINCE_BLOCK.format(test="at least bars", compare="since >= bars"),
     "bars-since-under@1": _SINCE_BLOCK.format(test="under bars", compare="since < bars"),
+    "flat-stop@1": _FLAT_STOP,
 }
 
 
 def _face(pin: str, source: str) -> bytes:
     entry_id, _, version = pin.partition("@")
+    since = pin.startswith("bars-since")
     return json.dumps(
         {
             "schema": "qmx.entry/1",
             "entry_id": entry_id,
             "version": int(version),
-            "component_type": "filter",
+            "component_type": "filter" if since else "exit",
             "origin": "library",
-            "inputs": [],
-            "output": {"type": "state", "measure": None},
-            "parameters": {"bars": {"measure": "bars", "default": "3", "origin": "placeholder"}},
+            "inputs": []
+            if since
+            else [{"port": "series", "stream_kind": "bars", "measure": "price", "data_level": 1}],
+            "output": {"type": "state", "measure": None}
+            if since
+            else {"type": "level", "measure": "price"},
+            "parameters": {"bars": {"measure": "bars", "default": "3", "origin": "placeholder"}}
+            if since
+            else {},
             "mirroring": "not_applicable",
             "fingerprint": block_fingerprint(source.encode()).value,
         }
@@ -176,13 +227,21 @@ def _unit(
     slots: Mapping[str, dict[str, object]],
     numbers: Mapping[str, dict[str, object]] | None = None,
 ) -> CompiledUnit:
-    """The holding document with ``trigger``, then ``slots`` in their order, then the order."""
+    """The holding document with ``trigger``, then ``slots`` in their order, then the order, and a
+    stop that keeps no state, so a snapshot of the unit has one shape whenever it is taken."""
     document = _holding_document(limit=1)
     logic = cast("Document", document["logic"])["long"]["slots"]
     logic.clear()
     logic["trigger"] = _slot("trigger", trigger)
     logic.update(copy.deepcopy(dict(slots)))
     logic["entry_order"] = _slot("entry_order", {**_EVERY_BAR, "name": "at_open"})
+    cast("list[object]", document["exit_set"])[0] = {
+        "name": "flat_stop",
+        "scope": "position",
+        "block": "flat-stop@1",
+        "params": {},
+        "inputs": {"series": "m15"},
+    }
     document_numbers = cast("Document", document["numbers"])
     document_numbers.update(copy.deepcopy(_LEVELS))
     document_numbers.update(copy.deepcopy(dict(numbers or {})))
@@ -274,9 +333,13 @@ _CASES: dict[Role, _Case] = {
     ),
     Role.REGIME_DETECTOR: _Case(
         _EVERY_BAR,
-        {"regime": _slot("regime_detector", _above("trending", "m15.close", "high_close"))},
+        {
+            "regime_detector": _slot(
+                "regime_detector", _above("trending", "m15.close", "high_close")
+            )
+        },
         (_LOW, _HIGH),
-        ("near miss, regime: does not hold", "taken"),
+        ("near miss, regime_detector: does not hold", "taken"),
     ),
     Role.ARMING: _Case(
         _SIGNAL,
@@ -388,7 +451,7 @@ def test_no_role_blocks_an_exit() -> None:
         "veto": _slot("veto", _above("always", "m15.close", "dip_low")),
         **_ARMING,
         "invalidation": _slot("invalidation", _above("always_too", "m15.close", "dip_low")),
-        "regime": _slot("regime_detector", _above("never", "m15.close", "spike_high")),
+        "regime_detector": _slot("regime_detector", _above("never", "m15.close", "spike_high")),
         "cooldown": _slot("cooldown", _since("rest", "bars-since-at-least@1", "cooldown_bars")),
         "re_entry": _slot("re_entry", _above("reclaim", "m15.close", "reclaim_close")),
         "timeout": _slot("timeout", _since("live", "bars-since-under@1", "timeout_bars")),
@@ -406,3 +469,29 @@ def test_no_role_blocks_an_exit() -> None:
         for one in _closes(step)
     ] == [("own-1", "close_full", "stop-hit")]
     assert step.proposals == ()
+
+
+def test_a_restart_keeps_the_cooldown() -> None:
+    """The cooldown case stopped after bar 1 and restored from its snapshot, read back from JSON:
+    bar 2 still refuses and bar 4 enters, with no cold start."""
+    case = _CASES[Role.COOLDOWN]
+    compiled = _unit(case.trigger, case.slots, case.numbers)
+    bars = _bars(case.bars)
+    instants = [bar.knowable_at for bar in bars]
+    first = _host(compiled, _surfaces(bars, []))
+    head = _drive(first, instants[:2])
+    stored = json.loads(json.dumps(first.snapshot()))
+    resumed = _ok(
+        restore_unit(
+            stored,
+            compiled,
+            read_surfaces=_surfaces(bars, []),
+            scope_id="run-many",
+            execution_target=_target(),
+        )
+    )
+
+    tail = _drive(resumed, instants[2:])
+
+    assert [event.kind for step in tail for event in step.state_events] == []
+    assert _what([*head, *tail]) == list(case.expected)

@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from qml.protocol.unit import OwnPosition
 
 __all__ = [
+    "BARS_SINCE",
     "PASS_EVERY_ORDER",
     "PORT_QUANTUM_SIGNIFICANT_DIGITS",
     "Amount",
@@ -90,9 +91,19 @@ def quantise(value: float | Decimal, digits: int = PORT_QUANTUM_SIGNIFICANT_DIGI
     return context.create_decimal_from_float(value)
 
 
+BARS_SINCE: Final[str] = "bars_since"
+"""The evidence a cooldown's or a timeout's bindings read beside their own ports: the whole bars
+since their side last proposed an entry, or since it armed, and ``None`` before the first. The bars
+a rule waits is the block's own parameter, bound to a document number with a labelled default."""
+
+
 @dataclass(frozen=True, slots=True)
 class Signal:
-    """A context, trigger or exit output: whether it holds now, and the value it read."""
+    """A slot's or an exit's output: whether it holds now, and the value it read.
+
+    Every logic role answers with it. A slot holds when its combiner says so, and the role decides
+    what holding does to an entry: a veto or an invalidation refuses while it holds, an arming arms
+    the side, and every other role must hold. No role's answer reaches an exit."""
 
     state: bool
     value: Decimal | None = None
@@ -185,6 +196,7 @@ class Instance(Protocol):
 
         ``evidence`` holds the value of each input port by port name and, for a parameter
         bound to a number that moves, that number's current value under the parameter name.
+        A binding in a cooldown or a timeout slot also reads :data:`BARS_SINCE`.
         """
         ...
 

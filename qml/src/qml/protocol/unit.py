@@ -53,6 +53,7 @@ from qmf.risk.unit_intent import (
 
 from qml._refuse import invalid, unsupported
 from qml.blocks.api import (
+    BARS_SINCE,
     Amount,
     EntryOrder,
     ExitAction,
@@ -717,6 +718,136 @@ def _hours(
     return _Hours.SHUT, "; ".join(shut)
 
 
+class _Mark(StrEnum):
+    """What a side remembers between bars, as the market's primary bar count when it happened."""
+
+    ENTERED = "entered"
+    ARMED = "armed"
+
+
+@dataclass(frozen=True, slots=True)
+class _RoleRule:
+    """How one role's slot answer gates an entry. Every rule acts on entries only: it runs in
+    ``_Run.side`` and ``_Run.enter``, after the exits and the forced flat, and no close reads it.
+    A role with no rule here must hold, as context, filter and regime_detector do."""
+
+    refuses: bool = False
+    """Holding refuses the entry, so the slot passes only when it does not hold."""
+    arms: bool = False
+    """Holding arms the side; the slot then passes until an entry, an invalidation or a timeout."""
+    disarms: bool = False
+    """Holding clears the side's arm."""
+    expires: bool = False
+    """Not holding clears the side's arm."""
+    clock: _Mark | None = None
+    """The mark its bindings read as ``bars_since``."""
+    after_an_entry: bool = False
+    """Read only once the side has proposed an entry; the first entry passes it."""
+    word: str = ""
+    """What a refusing role's row says it did, before the bindings that held."""
+
+
+_ABSENT: Final[str] = "absent input"
+"""The head of a slot's answer when an input it needs is missing, which a refusing role keeps."""
+_MUST_HOLD: Final = _RoleRule()
+_ROLES: Final[Mapping[Role, _RoleRule]] = MappingProxyType(
+    {
+        Role.VETO: _RoleRule(refuses=True, word="vetoed"),
+        Role.INVALIDATION: _RoleRule(refuses=True, disarms=True, word="invalidated"),
+        Role.ARMING: _RoleRule(arms=True),
+        Role.TIMEOUT: _RoleRule(expires=True, clock=_Mark.ARMED),
+        Role.COOLDOWN: _RoleRule(clock=_Mark.ENTERED),
+        Role.RE_ENTRY: _RoleRule(after_an_entry=True),
+    }
+)
+_REMEMBERS: Final[frozenset[Role]] = frozenset({Role.ARMING, Role.COOLDOWN, Role.RE_ENTRY})
+"""The roles whose side keeps marks. A timeout and an invalidation act only on an arming's mark."""
+
+
+class _Marks:
+    """One side's marks on one market. It is kept with the market's block instances, so a snapshot
+    carries it by key and a side with no role that remembers keeps its snapshot's shape."""
+
+    __slots__ = ("marks",)
+
+    def __init__(self) -> None:
+        self.marks: dict[_Mark, int | None] = dict.fromkeys(_Mark)
+
+    @property
+    def warm_up_bars(self) -> int:
+        return 0
+
+    @property
+    def state_bound(self) -> int:
+        return len(_Mark)
+
+    def retained(self) -> int:
+        return sum(1 for at in self.marks.values() if at is not None)
+
+    def update(self, evidence: Mapping[str, object]) -> None:
+        del evidence
+
+    def since(self, mark: _Mark, now: int) -> int | None:
+        at = self.marks[mark]
+        return None if at is None else now - at
+
+    def export_state(self) -> Mapping[str, object]:
+        """Every mark by name, unset ones as None, so every snapshot of it has one shape."""
+        return {mark.value: at for mark, at in self.marks.items()}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        self.marks = {
+            mark: None if (at := state.get(mark.value)) is None else int(cast("int", at))
+            for mark in _Mark
+        }
+
+
+def _marks_key(side: Side) -> str:
+    return f"roles.{side.value}"
+
+
+def _gates(
+    slots: Sequence[SlotPlan],
+    held: Mapping[str, tuple[bool, str]],
+    fired: Mapping[str, Sequence[str]],
+    marks: _Marks | None,
+    now: int,
+) -> dict[str, tuple[bool, str]]:
+    """Each slot's ``(passes, why)`` once its role has read the slot's own answer.
+
+    The side's arm moves first: an arming that holds sets it, then an invalidation that holds or a
+    timeout that does not clears it. A slot of a role with no rule passes when it holds, so a side
+    with none of these roles answers exactly what its slots answered.
+    """
+    rules = [(slot, _ROLES.get(slot.role, _MUST_HOLD)) for slot in slots]
+    if marks is not None:
+        if marks.marks[_Mark.ARMED] is None and any(
+            rule.arms and slot.has_conditions and held[slot.name][0] for slot, rule in rules
+        ):
+            marks.marks[_Mark.ARMED] = now
+        if any(
+            (rule.disarms and slot.has_conditions and held[slot.name][0])
+            or (rule.expires and not held[slot.name][0])
+            for slot, rule in rules
+        ):
+            marks.marks[_Mark.ARMED] = None
+    gated: dict[str, tuple[bool, str]] = {}
+    for slot, rule in rules:
+        ok, why = held[slot.name]
+        if rule.refuses and ok and slot.has_conditions:
+            gated[slot.name] = (False, f"{rule.word} by {', '.join(fired[slot.name])}")
+        elif rule.refuses:
+            gated[slot.name] = (False, why) if why.startswith(_ABSENT) else (True, "")
+        elif rule.arms and marks is not None:
+            armed = marks.marks[_Mark.ARMED] is not None
+            gated[slot.name] = (True, "") if armed else (False, "not armed")
+        elif rule.after_an_entry and marks is not None and marks.marks[_Mark.ENTERED] is None:
+            gated[slot.name] = (True, "")
+        else:
+            gated[slot.name] = (ok, why)
+    return gated
+
+
 @dataclass(slots=True)
 class _Market:
     market_id: str
@@ -854,6 +985,8 @@ class _Core:
         )
         numbers = self.settled(state)
         for side in self.plan.sides:
+            if any(slot.role in _REMEMBERS for slot in side.slots):
+                state.instances[_marks_key(side.side)] = _Marks()
             for slot in side.slots:
                 for b in slot.bindings:
                     state.instances[b.key] = b.block.make(
@@ -1661,6 +1794,7 @@ class _Run:
         outputs: dict[str, object] = {}
         trail: list[SlotOutput] = []
         held: dict[str, tuple[bool, str]] = {}
+        fired: dict[str, list[str]] = {}
         order: EntryOrder | None = None
 
         def resolve(ref: str) -> object:
@@ -1672,11 +1806,17 @@ class _Run:
                 return bar.bid.fields()[part]
             return _value(outputs.get(ref))
 
+        marks = cast("_Marks | None", m.instances.get(_marks_key(plan.side)))
+        now = m.bars.get(self.plan.stream, 0)
         for slot in plan.slots:
+            clock = _ROLES.get(slot.role, _MUST_HOLD).clock
+            role_evidence: dict[str, object] = (
+                {} if clock is None else {BARS_SINCE: marks.since(clock, now) if marks else None}
+            )
             conditions: list[bool | None] = []
             for b in slot.bindings:
                 evidence = {port: resolve(ref) for port, ref in b.inputs.items()}
-                evidence |= self.unit.params(b, numbers)
+                evidence |= role_evidence | self.unit.params(b, numbers)
                 out = _answered(b.pin, m.instances[b.key], evidence)
                 outputs[b.name] = out
                 trail.append(SlotOutput(slot.name, b.name, _text(out)))
@@ -1684,6 +1824,11 @@ class _Run:
                     order = out
                 conditions.append(self.condition(b, out, evidence, plan.side))
             held[slot.name] = self.combine(slot, conditions)
+            fired[slot.name] = [
+                b.name
+                for b, c in zip(slot.bindings, conditions, strict=True)
+                if c is True and b.name not in slot.feeders
+            ]
         for d in self.plan.derived:
             if d.side is plan.side:
                 fed = _answered(
@@ -1696,7 +1841,8 @@ class _Run:
                     m.derived.setdefault(d.side, {})[d.number] = min(
                         spec.range.max, max(spec.range.min, fed)
                     )
-        failing = [f"{name}: {why}" for name, (ok, why) in held.items() if not ok]
+        gated = _gates(plan.slots, held, fired, marks, now)
+        failing = [f"{name}: {why}" for name, (ok, why) in gated.items() if not ok]
         trigger = any(
             held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER and s.has_conditions
         )
@@ -1738,7 +1884,7 @@ class _Run:
             return True, ""
         absent = [b.name for b, c in kept if c is None]
         if absent and not slot.absent_is_false and slot.combiner is CombinerKind.ALL:
-            return False, f"absent input {', '.join(absent)}"
+            return False, f"{_ABSENT} {', '.join(absent)}"
         true = sum(1 for _, c in kept if c is True)
         match slot.combiner:
             case CombinerKind.ALL:
@@ -1750,7 +1896,7 @@ class _Run:
         if ok:
             return True, ""
         if absent and not slot.absent_is_false:
-            return False, f"absent input {', '.join(absent)}"
+            return False, f"{_ABSENT} {', '.join(absent)}"
         return False, "does not hold"
 
     # --- exits ---------------------------------------------------------------------
@@ -1987,6 +2133,10 @@ class _Run:
             bars = self.unit.params(per_bar.binding, numbers).get("bars")
             if bars is not None:
                 protection["time_exit_bars"] = int(bars)
+        marks = cast("_Marks | None", m.instances.get(_marks_key(side)))
+        if marks is not None:
+            marks.marks[_Mark.ENTERED] = m.bars.get(self.plan.stream, 0)
+            marks.marks[_Mark.ARMED] = None
         row = self.row_id()
         compiled = self.unit.compiled
         target = self.unit.target

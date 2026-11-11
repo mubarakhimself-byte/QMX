@@ -116,17 +116,17 @@ _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 COMBINERS: Final[frozenset[CombinerKind]] = frozenset(
     {CombinerKind.ALL, CombinerKind.ANY, CombinerKind.K_OF_N}
 )
-ROLES_BUILT: Final[frozenset[Role]] = frozenset(
+ROLE_SECTIONS: Final[Mapping[Role, str]] = MappingProxyType(
     {
-        Role.CONTEXT,
-        Role.LOCATION,
-        Role.SETUP,
-        Role.TRIGGER,
-        Role.CONFIRMATION,
-        Role.FILTER,
-        Role.ENTRY_ORDER,
+        Role.SIZING_MODIFIER: "/modifiers",
+        Role.EXIT: "/exit_set",
+        Role.SIZER: "/sizer",
+        Role.HALT: "/halts",
     }
 )
+"""The socket roles, each with the section of the document it runs in rather than a slot."""
+ROLES_BUILT: Final[frozenset[Role]] = frozenset(Role) - ROLE_SECTIONS.keys()
+"""Every role a logic slot runs. Each acts on entries only, so none reaches an exit."""
 _VOLUME: Final[str] = "volume, which no bar carries yet"
 _CLOCK: Final[str] = "a clock it does not have: use version 2 and name its clock"
 BLOCKS_NOT_BUILT: Final[Mapping[str, str]] = {
@@ -542,11 +542,21 @@ class _Wiring:
                     f"{_FORMAT} reads no {extra} on a {slot.combiner.kind.value} combiner, so this "
                     "slot would hold or not without it",
                 )
-            if slot.role not in ROLES_BUILT:
+            section = ROLE_SECTIONS.get(slot.role)
+            if section is not None:
                 self.problems.add(
-                    "role_not_built",
+                    "role_has_a_section",
                     f"{where}/role",
-                    f"{_FORMAT} runs no slot of role {slot.role.value}",
+                    f"a {slot.role.value} runs in {section}, not in a logic slot",
+                )
+            if slot.role is Role.TIMEOUT and not any(
+                other.role is Role.ARMING for other in slots.values()
+            ):
+                self.problems.add(
+                    "timeout_not_armed",
+                    f"{where}/role",
+                    "a timeout counts the bars since its side armed, and this side has no "
+                    "arming slot, so it would count nothing",
                 )
             bound: list[BoundBlock] = []
             for index, binding in enumerate(slot.bindings):
