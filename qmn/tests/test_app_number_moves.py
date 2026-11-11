@@ -339,9 +339,7 @@ def drive(rig: Rig, *, restart_at: int | None = None) -> tuple[Run, int]:
             moved_at = gold_trades(rig)
     held = eur_held(rig)
     amends = sum(
-        1
-        for ticket in rig.account.received
-        if ticket.command.kind is CommandKind.AMEND_PROTECTION
+        1 for ticket in rig.account.received if ticket.command.kind is CommandKind.AMEND_PROTECTION
     )
     return (
         Run(

@@ -22,9 +22,8 @@ at its last closed bar, so neither the step nor any block sees a bar knowable af
 market's entries wait for every stream's own warm-up (``warming``, then ``ready``). Calibrated
 numbers move last, from ``own_journal``. A held position keeps the numbers its entry stamped, so a
 sizing or exit number moves with positions open, and a logic number waits for a flat market. The
-primary stream's ``close``
-and its bars are the bid side; an entry's reference price is the ask close for a long and the bid
-close for a short.
+primary stream's ``close`` and its bars are the bid side; an entry's reference price is the ask
+close for a long and the bid close for a short.
 """
 
 from __future__ import annotations
