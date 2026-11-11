@@ -41,7 +41,7 @@ from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.controls import ENTRY_SCOPES, Restore, RiskState, Verb
-from qmf.risk.facts import Fact, Stake, open_risk
+from qmf.risk.facts import RATE_PREFIX, Fact, Stake, open_risk
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
@@ -74,7 +74,7 @@ from qml.compile.compiler import (
 )
 from qml.environment import current_environment
 from qml.fold import Fold
-from qml.motion.engine import ClosedTrade, SlowState, calibrate
+from qml.motion.engine import ClosedTrade, ScaledNumber, SlowState, calibrate, scale
 from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord
 from qml.protocol.controls import CONTROL_FLATTEN, Runner, own_facts
@@ -139,8 +139,9 @@ __all__ = [
     "seam_check",
 ]
 
-STATE_SCHEMA_VERSION: Final[int] = 2
-"""2 records the interpreter the snapshot was taken under (UT-09, QML-25)."""
+STATE_SCHEMA_VERSION: Final[int] = 3
+"""3 records the trades each slow number has read in all, beside the newest ones it keeps; 2
+recorded the interpreter the snapshot was taken under (UT-09, QML-25)."""
 SEAM_JUMP_SCALE: Final[Decimal] = Decimal(3)
 """The setting ``seam_jump_scale``: a seam flags past this many typical warm-up bar moves."""
 
@@ -610,6 +611,30 @@ def _residue_text(residue: Decimal) -> str:
     return f"{exact.numerator}/{exact.denominator}"
 
 
+def _fact(account: object, name: str) -> Decimal | None:
+    """One fact off the account surface by its AD-15 name.
+
+    The two names a unit is handed today are ``account.equity`` and ``market.rate:<quote>``. A name
+    nothing supplies answers nothing, so its number reads its declared default that bar. A rate the
+    host stated as an exact fraction reads as that fraction's decimal.
+    """
+    if name == "account.equity":
+        equity = getattr(account, "equity", None)
+        return equity if isinstance(equity, Decimal) else None
+    if not name.startswith(RATE_PREFIX):
+        return None
+    rates: object = getattr(account, "rates", {})
+    if not isinstance(rates, Mapping):
+        return None
+    fact = cast("Mapping[str, Fact]", rates).get(name.removeprefix(RATE_PREFIX))
+    value = getattr(fact, "value", None)
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, Fraction):
+        return Decimal(value.numerator) / Decimal(value.denominator)
+    return None
+
+
 def accept_unit_intents(raw: Sequence[Mapping[str, object]]) -> Result[tuple[UnitIntent, ...]]:
     """Admit format-3 wire intents only; the first refused one refuses the step."""
     accepted: list[UnitIntent] = []
@@ -917,6 +942,10 @@ class _Core:
             s.number.name: SlowState(value=calibrated[s.number.name]) for s in self.plan.slow
         }
         self.slow_rules = {s.number.name: s.block.make(s.params, {}) for s in self.plan.slow}
+        self.scaled: tuple[ScaledNumber, ...] = self.plan.scaled
+        """Each ``scaled`` number's fact, multiple and range (AD-14's track)."""
+        self.tracked: dict[str, Decimal] = {}
+        """The values those numbers follow on this bar, read off the account surface."""
         self.halt_instances: dict[str, Instance] = {}
         """Each brake row's one instance, by run key: a brake lives on the unit, not a market."""
         settled = self.settled()
@@ -962,7 +991,22 @@ class _Core:
         )
 
     def numbers(self, market: _Market, side: Side) -> dict[str, Decimal]:
-        return self.settled(market) | market.derived.get(side, {})
+        return self.settled(market) | self.tracked | market.derived.get(side, {})
+
+    def track(self, account: object) -> None:
+        """Read each scaled number's fact off the account surface, so this bar's decisions read
+        the value in force (AD-14's track).
+
+        A fact the surface does not carry this bar puts its number back to its declared default,
+        not to the value it was last tracked at. This runs whether motion is on or off: a scaled
+        number is arithmetic on a fact, not a rule learning from its own trades, so
+        ``MotionSwitch`` does not silence it.
+        """
+        self.tracked = {
+            number.name: value
+            for number in self.scaled
+            if (value := scale(number, _fact(account, number.fact))) is not None
+        }
 
     def params(self, bound: BoundBlock, numbers: Mapping[str, Decimal]) -> dict[str, Decimal]:
         out: dict[str, Decimal] = {}
@@ -1034,6 +1078,7 @@ class _Core:
                 "value": str(s.value),
                 "read": [[t, str(stamp), str(r)] for t, stamp, r in s.read],
                 "watermark": None if s.watermark is None else list(s.watermark),
+                "read_total": s.read_total,
                 "read_at_last_run": s.read_at_last_run,
             }
             for name, s in self.slow.items()
@@ -1126,6 +1171,7 @@ class _Core:
                     cast("str", cast("list[object]", mark)[1]),
                 ),
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
+                read_total=cast("int", raw["read_total"]),
             )
 
     def _load_risk(self, snapshot: Mapping[str, object]) -> None:
@@ -1471,6 +1517,8 @@ class _Run:
 
     def step(self) -> Result[UnitStep]:
         journal = self.surface("own_journal")
+        if self.unit.scaled:  # a unit with no scaled number never reads the account surface here
+            self.unit.track(self.surface("account"))
         positions: dict[str, tuple[PositionFacts, ...]] = {}
         seen: dict[str, dict[str, QuoteBar]] = {}
         fresh: dict[str, QuoteBar] = {}

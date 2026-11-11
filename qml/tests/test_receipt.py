@@ -11,8 +11,10 @@ read from the implementation once, when the row's shape is fixed, and again each
 under it moved: when the shipped dummy's numbers each gained the reason and owner rc-23 requires,
 because the receipt covers the document's risk half; when the first join carried rc-31's second
 stream and rc-32's position count in at compiler formats 9 and 10; and when the joins settled this
-row's modifier chain at compiler format 11; and when rc-33's sessions moved the format to 12. Each
-value after the first was read from a failing run at the tree that moved it.
+row's modifier chain at compiler format 11; when rc-24's widened motion engine joined at compiler
+format 12; when rc-33's sessions joined on top at compiler format 13; and when rc-34's logic roles
+joined on rc-33 at compiler format 14. Each value after the first was read from a failing run at
+the tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -30,11 +32,11 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:4f09544fc80f3e7cc22cfeb492e240b2e14acfccb396cc984e6d1ccec2867159"
-"""The receipt's identity at compiler format 13. It moved from
-``fp1:sha256:3500c412...4714fb7cc6b8e`` because the row's receipt covers ``logic_fp`` and ``risk_fp``,
-and rc-34's format bump moves both halves by design. The size, the steps and every verdict are the
-same."""
+_STORED_HASH = "fp1:sha256:f2812eae50942ea295356c44bd53c8c20f1cfb4f82ef654842f73c081cb3d616"
+"""The receipt's identity at compiler format 14. It moved from
+``fp1:sha256:4f09544f...6d1ccec2867159`` because the row's receipt covers ``logic_fp`` and
+``risk_fp``, and AD-19's format bump for rc-34's logic roles joined on rc-33's sessions moves both
+halves by design. The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:

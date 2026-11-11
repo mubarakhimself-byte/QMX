@@ -1,6 +1,8 @@
-"""The motion engine: how a unit's calibrated numbers move from its own closed trades (AD-103).
+"""The motion engine: how a unit's numbers follow a fact, and move from its own closed trades
+(AD-103, AD-14).
 
-Derived numbers move every bar inside the compiled closure; this package owns the slow speed.
+Derived numbers move every bar inside the compiled closure; a ``scaled`` number is the track job
+(fact times multiple), and this package owns the slow speed.
 """
 
 from __future__ import annotations
@@ -11,10 +13,12 @@ from qml.motion.engine import (
     SLOW_CADENCE_TRADES,
     ClosedTrade,
     Move,
+    ScaledNumber,
     SlowNumber,
     SlowState,
     TradeRange,
     calibrate,
+    scale,
 )
 
 __all__ = [
@@ -23,8 +27,10 @@ __all__ = [
     "SLOW_CADENCE_TRADES",
     "ClosedTrade",
     "Move",
+    "ScaledNumber",
     "SlowNumber",
     "SlowState",
     "TradeRange",
     "calibrate",
+    "scale",
 ]

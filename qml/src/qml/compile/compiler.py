@@ -55,7 +55,13 @@ from qml.blocks.api import (
 )
 from qml.catalogue.loader import Loaded, LockEntry, load
 from qml.check.layers import TRADED_SIDES, check_layers
-from qml.motion.engine import MIN_TRADES, SHRINK_K, SLOW_CADENCE_TRADES, SlowNumber
+from qml.motion.engine import (
+    MIN_TRADES,
+    SHRINK_K,
+    SLOW_CADENCE_TRADES,
+    ScaledNumber,
+    SlowNumber,
+)
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import (
     Authority,
@@ -64,6 +70,7 @@ from qml.unit.model import (
     Cautious,
     Combiner,
     CombinerKind,
+    ControlBinding,
     Market,
     Measure,
     MirrorSide,
@@ -75,6 +82,7 @@ from qml.unit.model import (
     Price,
     Role,
     Scope,
+    ScopedBinding,
     Session,
     Side,
     Slot,
@@ -109,7 +117,7 @@ __all__ = [
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 13
+COMPILER_FORMAT_VERSION: Final[int] = 14
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -296,6 +304,7 @@ class Plan:
     modifiers: tuple[BoundBlock, ...]
     derived: tuple[DerivedPlan, ...]
     slow: tuple[SlowPlan, ...]
+    scaled: tuple[ScaledNumber, ...]
     defaults: Mapping[str, Decimal]
     position_limit: int = 1
     """How many positions this unit may hold open on one market at once. One unless the document
@@ -696,42 +705,68 @@ class _Wiring:
         return tuple(reads)
 
 
+_ParamHolder = Binding | ControlBinding | ScopedBinding | BoundBlock
+"""Anything that carries a document or compiled binding's parameters."""
+
+
+def _binds(binding: _ParamHolder, number: str) -> bool:
+    """Whether one binding reads ``number`` as a parameter."""
+    return any(isinstance(p, NumberParam) and p.number == number for p in binding.params.values())
+
+
 def _bound_on(side: SidePlan, number: str) -> bool:
-    return any(
-        isinstance(p, NumberParam) and p.number == number
-        for slot in side.slots
-        for b in slot.bindings
-        for p in b.params.values()
-    )
+    return any(_binds(b, number) for slot in side.slots for b in slot.bindings)
+
+
+def _risk_bindings(unit: Unit) -> tuple[_ParamHolder, ...]:
+    """The bindings outside the logic slots: the sizer, the exits and the control rows (AD-14)."""
+    controls = (*unit.halts.position, *unit.halts.unit, *unit.halts.account)
+    return (*([unit.sizer] if unit.sizer is not None else ()), *unit.exit_set, *controls)
+
+
+def _stamp_for(unit: Unit, number: str) -> str | None:
+    """The entry stamp the rule reads for ``number``: a stated side's binding name, or
+    ``number:<name>`` for a sizer, exit or control number (AD-14's first step).
+
+    A logic number keeps the stamp its slot binding already writes (``strength`` for the trend
+    floor); a risk number has no slot, so its stamp is its own value in force at entry.
+    """
+    for side in Side:
+        found = _side_slots(unit, side)
+        if found is None:
+            continue
+        for slot in found[1].values():
+            for binding in slot.bindings:
+                if _binds(binding, number):
+                    return binding.name
+    return f"number:{number}" if any(_binds(b, number) for b in _risk_bindings(unit)) else None
 
 
 def _only_on_a_dropped_side(unit: Unit, number: str) -> bool:
     """Whether ``number`` is bound on a stated side ``direction`` does not trade, and on no other,
-    so nothing runs it. A number bound on no stated side is not this, and still refuses."""
+    so nothing runs it. A number bound on no stated side is not this, and still refuses. A number
+    a sizer, exit or control row reads runs whatever the side says, so it is not this either."""
+    if any(_binds(b, number) for b in _risk_bindings(unit)):
+        return False
     binding_sides = {
         side
         for side in Side
         if (found := _side_slots(unit, side)) is not None
-        and any(
-            isinstance(p, NumberParam) and p.number == number
-            for slot in found[1].values()
-            for b in slot.bindings
-            for p in b.params.values()
-        )
+        and any(_binds(b, number) for slot in found[1].values() for b in slot.bindings)
     }
     return bool(binding_sides) and not binding_sides.intersection(TRADED_SIDES[unit.direction])
 
 
 def _bound_numbers(unit: Unit) -> set[str]:
-    """Every number a binding on a stated side, an exit or the sizer reads."""
-    bindings: list[Binding] = [
+    """Every number a binding on a stated side, an exit, the sizer or a control row reads."""
+    bindings: list[_ParamHolder] = [
         binding
         for side in Side
         if (found := _side_slots(unit, side)) is not None
         for slot in found[1].values()
         for binding in slot.bindings
     ]
-    bindings += [*unit.exit_set, *([unit.sizer] if unit.sizer is not None else [])]
+    bindings += list(_risk_bindings(unit))
     return {
         param.number
         for binding in bindings
@@ -756,15 +791,46 @@ def _unread_rule_params(
         )
 
 
+def _scaled(
+    name: str,
+    spec: NumberSpec,
+    where: str,
+    problems: _Problems,
+) -> ScaledNumber | None:
+    """A ``scaled`` number's row: the fact it follows, its multiple, and its range.
+
+    ``rule_params`` carries one key, ``multiple``, because there is no rule block here: the fact
+    times the multiple is the whole arithmetic. A key the compiler does not read is refused by
+    name, so a document cannot state a mechanism nothing runs.
+    """
+    motion = spec.motion
+    for key in sorted(motion.rule_params.keys() - {"multiple"}):
+        problems.add(
+            "motion_not_built",
+            f"{where}/rule_params/{key}",
+            f"a scaled number reads only its multiple, never {key}",
+        )
+    multiple = _decimal(motion.rule_params.get("multiple", "1"))
+    if motion.scaled_fact is None or multiple is None or spec.range is None:
+        problems.add(
+            "motion_not_built",
+            where,
+            f"{name} needs a scaled_fact, a numeric multiple and a range to hold it inside",
+        )
+        return None
+    return ScaledNumber(name, motion.scaled_fact, multiple, spec.range.min, spec.range.max)
+
+
 def _motion(
     unit: Unit,
     sides: Sequence[SidePlan],
     loaded: Loaded,
     faces: Mapping[str, EntryFace],
     problems: _Problems,
-) -> tuple[tuple[DerivedPlan, ...], tuple[SlowPlan, ...]]:
+) -> tuple[tuple[DerivedPlan, ...], tuple[SlowPlan, ...], tuple[ScaledNumber, ...]]:
     derived: list[DerivedPlan] = []
     slow: list[SlowPlan] = []
+    scaled: list[ScaledNumber] = []
     bound = _bound_numbers(unit)
     for name, spec in unit.numbers.items():
         where = f"/numbers/{name}/motion"
@@ -777,7 +843,11 @@ def _motion(
                 f"/numbers/{name}",
                 f"no binding reads {name}, so writing it changes nothing",
             )
-        if spec.kind is NumberKind.DERIVED:
+        if spec.kind is NumberKind.DERIVED and motion.mode is MotionMode.SCALED:
+            row = _scaled(name, spec, where, problems)
+            if row is not None:
+                scaled.append(row)
+        elif spec.kind is NumberKind.DERIVED:
             pin = DERIVED_BLOCKS.get(motion.mode)
             block = loaded.blocks.get(pin) if pin is not None else None
             if pin is None or block is None:
@@ -806,18 +876,7 @@ def _motion(
         elif spec.kind is NumberKind.CALIBRATED:
             rule = str(motion.rule) if motion.rule is not None else ""
             block = loaded.blocks.get(rule)
-            stamp = next(
-                (
-                    b.name
-                    for s in sides
-                    for slot in s.slots
-                    for b in slot.bindings
-                    if any(
-                        isinstance(p, NumberParam) and p.number == name for p in b.params.values()
-                    )
-                ),
-                None,
-            )
+            stamp = _stamp_for(unit, name)
             if (
                 motion.mode not in SLOW_MODES
                 or block is None
@@ -848,8 +907,17 @@ def _motion(
             every = (
                 motion.cadence.every_closed_trades if motion.cadence else None
             ) or SLOW_CADENCE_TRADES
-            slow.append(SlowPlan(SlowNumber(name, rule, stamp, every), block, params))
-    return tuple(derived), tuple(slow)
+            min_trades = (
+                motion.min_count if motion.min_count is not None else MIN_TRADES
+            )  # the same number the rule is told, now the engine's own floor as well
+            slow.append(
+                SlowPlan(
+                    SlowNumber(name, rule, stamp, every, min_trades, motion.window),
+                    block,
+                    params,
+                )
+            )
+    return tuple(derived), tuple(slow), tuple(scaled)
 
 
 def _wrong_feed(b: BoundBlock, streams: AbstractSet[str]) -> str | None:
@@ -971,7 +1039,25 @@ def _feeds(bound: BoundBlock, streams: AbstractSet[str]) -> frozenset[str]:
 
 def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
     """The bars each of the unit's streams needs before entries, and the unit's summed state
-    bound. It builds every instance once, so a value no block can run is named at compile.
+    bound. Each market builds its blocks on its own settings over the unit's defaults, and the
+    entry gate reads one count for the whole unit, so the unit needs the most any market needs.
+    """
+    own = sorted({tuple(sorted(market.settings.items())) for market, _ in plan.markets} or {()})
+    need: dict[str, int] = dict.fromkeys(plan.streams, 0)
+    bound = 0
+    for settings in own:
+        warm, total = _warm_at(plan, dict(plan.defaults) | dict(settings), problems)
+        for stream, bars in warm.items():
+            need[stream] = max(need[stream], bars)
+        bound = max(bound, total)
+    return MappingProxyType(need), bound
+
+
+def _warm_at(
+    plan: Plan, numbers: Mapping[str, Decimal], problems: _Problems
+) -> tuple[dict[str, int], int]:
+    """One market's warm-up per stream and summed state bound, on that market's numbers. It
+    builds every instance once, so a value no block can run is named at compile.
 
     A binding is warm at the later of its recorded settle length, at this binding's parameters,
     and the bars its upstream needs plus its own warm-up; a derived number at its source's plus
@@ -985,7 +1071,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
     bound_total = 0
 
     def make(b: BoundBlock, side: Side) -> Instance | None:
-        return _built(b.block, _values(b, plan.defaults), b.inputs, side, b.pin, b.where, problems)
+        return _built(b.block, _values(b, numbers), b.inputs, side, b.pin, b.where, problems)
 
     def attribute(key: str) -> None:
         for stream in reads.get(key, frozenset()):
@@ -1000,7 +1086,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
                 refs = [f"{side.side.value}.{ref}" for ref in b.inputs.values()]
                 upstream = max((warm.get(ref, 0) for ref in refs), default=0)
                 recorded = b.face.settle
-                settle = recorded.bars_at(_values(b, plan.defaults)) if recorded is not None else 0
+                settle = recorded.bars_at(_values(b, numbers)) if recorded is not None else 0
                 warm[b.key] = max(settle, upstream + instance.warm_up_bars)
                 reads[b.key] = _feeds(b, streams) | frozenset().union(
                     *(reads.get(ref, frozenset()) for ref in refs)
@@ -1048,7 +1134,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
             f"/numbers/{s.number.name}/motion",
             problems,
         )
-    return MappingProxyType(dict(need)), bound_total
+    return need, bound_total
 
 
 def _faces(
@@ -1090,7 +1176,7 @@ _MOTION_READ: Final[Mapping[NumberKind, frozenset[str]]] = {
     NumberKind.FIXED: frozenset(),
     NumberKind.DERIVED: frozenset({"source", "rule_params"}),
     NumberKind.CALIBRATED: frozenset(
-        {"cadence", "min_count", "shrink_k", "step_limit", "rule", "rule_params"}
+        {"cadence", "min_count", "shrink_k", "step_limit", "window", "rule", "rule_params"}
     ),
 }
 """The motion fields the compiled unit runs for each kind of number, beside ``mode``."""
@@ -1098,9 +1184,16 @@ _OWN_RECORD: Final[str] = "own_record"
 """The one ``source`` true of a calibrated number, which moves from the unit's own closed trades."""
 
 
+def _motion_read(spec: NumberSpec) -> frozenset[str]:
+    """The motion fields this format runs for one number, by its kind and its mode."""
+    if spec.kind is NumberKind.DERIVED and spec.motion.mode is MotionMode.SCALED:
+        return frozenset({"scaled_fact", "rule_params"})
+    return _MOTION_READ[spec.kind]
+
+
 def _motion_unread(spec: NumberSpec) -> tuple[str, ...]:
     motion = spec.motion
-    read = _MOTION_READ[spec.kind]
+    read = _motion_read(spec)
     unread = [
         item.name
         for item in fields(Motion)
@@ -1465,7 +1558,7 @@ def compile_unit(
             f"{sizer.face.pin} answers {sizer.face.output.type.value}, and a sizer answers an "
             "amount or a quantity, which one converter spells as the venue's lots",
         )
-    derived, slow = _motion(unit, sides, loaded, faces, problems)
+    derived, slow, scaled = _motion(unit, sides, loaded, faces, problems)
     streams = frozenset(s.name for s in unit.streams)
     sides = tuple(_with_feeders(s, derived, streams, problems) for s in sides)
     document_fp = fingerprint(document)
@@ -1483,6 +1576,7 @@ def compile_unit(
         modifiers=modifiers,
         derived=derived,
         slow=slow,
+        scaled=scaled,
         defaults=_defaults(unit),
         position_limit=1 if unit.position_limit is None else unit.position_limit.per_instrument,
         sessions=sessions,
