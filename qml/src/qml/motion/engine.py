@@ -88,6 +88,9 @@ class SlowState:
     """Every stamped trade this number has read, the ones a window dropped included."""
     read_at_last_run: int = 0
     """``read_total`` when the rule last ran, so a bounded read still knows its cadence."""
+    set_by: str = ""
+    """The id of the calibration row that set ``value``, empty while it is the number's start, so
+    a receipt names the row that moved the number it used (AD-14 step 4)."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -97,8 +97,9 @@ def _losses(count: int) -> list[ClosedTrade]:
 
 
 def _run() -> tuple[HostedUnit, list[CalibrationRow], list[Proposal]]:
-    """The moving dummy over the synthetic month: every calibration row, and every proposal made
-    after the last of them."""
+    """The moving dummy over the synthetic month: every calibration row of ``risk_fraction``, and
+    every proposal made after it. The trades' ``strength`` stamp also moves the dummy's own
+    ``min_trend_strength``, which is not this test's number."""
     bars = _slice()
     unit = _host(_moving_fraction(), _surfaces(bars, _losses(20)))
     moves: list[CalibrationRow] = []
@@ -107,7 +108,7 @@ def _run() -> tuple[HostedUnit, list[CalibrationRow], list[Proposal]]:
         made = _ok(unit.on_instant(instant))
         if moves:
             after.extend(made.proposals)
-        moves.extend(made.calibrations)
+        moves.extend(row for row in made.calibrations if row.number == "risk_fraction")
     return unit, moves, after
 
 

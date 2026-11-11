@@ -328,17 +328,6 @@ def _age_s(now: Instant, since: Instant | None) -> Decimal:
     return Decimal(0) if is_refusal(span) else Decimal(span.value.value_ns) / Decimal(1_000_000_000)
 
 
-def _stamps(row: DecisionRow | None) -> dict[str, Decimal]:
-    """Each slot output the entry's decision row recorded as a number, by binding name."""
-    stamps: dict[str, Decimal] = {}
-    for out in () if row is None else row.slot_trail:
-        try:
-            stamps[out.binding] = Decimal(out.output or "")
-        except ArithmeticError:
-            continue
-    return stamps
-
-
 def _decimal(value: int, scale: int) -> Decimal:
     return Decimal(value).scaleb(-scale)
 
@@ -900,7 +889,8 @@ class UnitSliceHandler:
             minted.append(made.value)
             if wire["intent_family"] == "entry":
                 row_id = cast("str", wire["decision_row_id"])
-                self._entry_stamps[row_id] = _stamps(decisions.get(row_id))
+                row = decisions.get(row_id)
+                self._entry_stamps[row_id] = {} if row is None else row.entry_stamps()
         return Ok(tuple(minted))
 
     def _step(self, frontier: Instant) -> Result[UnitStep]:

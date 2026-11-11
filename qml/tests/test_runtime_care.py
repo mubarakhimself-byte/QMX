@@ -98,7 +98,7 @@ def _without_cold_start(steps: list[UnitStep]) -> list[UnitStep]:
             None, "the snapshot belongs to another compiled fingerprint", id="fingerprint"
         ),
         pytest.param(
-            _put(2, "state_schema_version"), "state schema 2, this door reads 3", id="schema"
+            _put(2, "state_schema_version"), "state schema 2, this door reads 4", id="schema"
         ),
         pytest.param(
             _put({"python": "3.13"}, "environment"),
@@ -209,7 +209,7 @@ def test_a_snapshot_records_the_interpreter_and_resumes_warm_under_it() -> None:
         )
     )
 
-    assert (snapshot["state_schema_version"], snapshot["environment"]) == (3, {"python": "3.14"})
+    assert (snapshot["state_schema_version"], snapshot["environment"]) == (4, {"python": "3.14"})
     assert all(
         e.kind != "cold_start" for s in _drive(warm, instants[300:310]) for e in s.state_events
     )

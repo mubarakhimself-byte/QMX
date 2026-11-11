@@ -112,6 +112,7 @@ __all__ = [
     "HostedUnit",
     "ModifierReading",
     "MotionSwitch",
+    "MovedNumber",
     "OwnPosition",
     "Priced",
     "PricedEntry",
@@ -134,9 +135,10 @@ __all__ = [
     "seam_check",
 ]
 
-STATE_SCHEMA_VERSION: Final[int] = 3
-"""3 records the trades each slow number has read in all, beside the newest ones it keeps; 2
-recorded the interpreter the snapshot was taken under (UT-09, QML-25)."""
+STATE_SCHEMA_VERSION: Final[int] = 4
+"""4 records the calibration row that set each slow number's value; 3 recorded the trades each
+slow number has read in all, beside the newest ones it keeps; 2 recorded the interpreter the
+snapshot was taken under (UT-09, QML-25)."""
 SEAM_JUMP_SCALE: Final[Decimal] = Decimal(3)
 """The setting ``seam_jump_scale``: a seam flags past this many typical warm-up bar moves."""
 
@@ -325,6 +327,30 @@ class DecisionRow:
     modifiers: tuple[ModifierReading, ...] = ()
     """Each sizing modifier's answer, in the order the rows ran (AD-11). A row with no modifiers
     carries none, so its stored body is the one it carried before the chain existed."""
+    numbers_moved: Mapping[str, MovedNumber] = MappingProxyType({})
+    """Each number in force whose value a calibration row set, with its default and that row's id
+    (AD-14 step 4). A number still at its start is not here."""
+
+    def entry_stamps(self) -> dict[str, Decimal]:
+        """What a host stamps on the trade this row opens (AD-14 step 1): each slot output that is
+        a number, by binding name, and each number in force as ``number:<name>``, the stamp the
+        compiler gives a sizer, exit or control number's rule."""
+        stamps: dict[str, Decimal] = {}
+        for out in self.slot_trail:
+            try:
+                stamps[out.binding] = Decimal(out.output or "")
+            except ArithmeticError:
+                continue
+        stamps |= {f"number:{name}": value for name, value in self.numbers_in_force.items()}
+        return stamps
+
+
+@dataclass(frozen=True, slots=True)
+class MovedNumber:
+    """A number a calibration row moved: the default it started from and the row that set it."""
+
+    default: Decimal
+    calibration_row_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -800,6 +826,16 @@ class _Core:
     def settled(self) -> dict[str, Decimal]:
         return dict(self.plan.defaults) | {name: state.value for name, state in self.slow.items()}
 
+    def moved(self) -> Mapping[str, MovedNumber]:
+        """Each slow number a calibration row set, with its default and that row's id."""
+        return MappingProxyType(
+            {
+                name: MovedNumber(self.plan.defaults[name], state.set_by)
+                for name, state in self.slow.items()
+                if state.set_by
+            }
+        )
+
     def numbers(self, market: _Market, side: Side) -> dict[str, Decimal]:
         return self.settled() | self.tracked | market.derived.get(side, {})
 
@@ -887,6 +923,7 @@ class _Core:
                 "watermark": None if s.watermark is None else list(s.watermark),
                 "read_total": s.read_total,
                 "read_at_last_run": s.read_at_last_run,
+                "set_by": s.set_by,
             }
             for name, s in self.slow.items()
         }
@@ -979,6 +1016,7 @@ class _Core:
                 ),
                 read_at_last_run=cast("int", raw["read_at_last_run"]),
                 read_total=cast("int", raw["read_total"]),
+                set_by=cast("str", raw["set_by"]),
             )
 
     def _load_risk(self, snapshot: Mapping[str, object]) -> None:
@@ -1857,6 +1895,7 @@ class _Run:
                 slot_trail=trail,
                 numbers_in_force=MappingProxyType(dict(m.in_force.get(side, {}))),
                 reason=reason,
+                numbers_moved=self.unit.moved(),
             )
         )
         return row_id
@@ -1989,6 +2028,7 @@ class _Run:
                     slot_trail=result.trail,
                     numbers_in_force=MappingProxyType(dict(m.in_force.get(side, {}))),
                     reason="all slots hold",
+                    numbers_moved=self.unit.moved(),
                 ),
                 market_id=m.market_id,
                 side=side,
@@ -2016,12 +2056,14 @@ class _Run:
                 )
             except Exception as bad:  # the fault wall: a rule's raise is a Fault (AD-23)
                 raise _Fault(slow.number.rule_pin) from bad
-            unit.slow[name] = state
             if move is None:
+                unit.slow[name] = state
                 continue
+            row_id = self.row_id()
+            unit.slow[name] = replace(state, set_by=row_id)
             self.calibrations.append(
                 CalibrationRow(
-                    row_id=self.row_id(),
+                    row_id=row_id,
                     number=name,
                     old=move.old,
                     new=move.new,

@@ -44,6 +44,7 @@ _FactState = Literal["ok", "stale", "absent", "uncalibrated"]
 __all__ = [
     "FactSeen",
     "FactorSeen",
+    "NumberSeen",
     "Replay",
     "Step",
     "Trail",
@@ -93,6 +94,24 @@ class FactSeen:
 
 
 @dataclass(frozen=True, slots=True)
+class NumberSeen:
+    """One number in force at this entry: its value, and for a number a calibration row moved,
+    the default it started from and that row's id (AD-14 step 4)."""
+
+    name: str
+    value: str
+    default: str = ""
+    calibration_row_id: str = ""
+
+    @property
+    def text(self) -> str:
+        """The number as the trail prints it, naming the row that set it when one did."""
+        if not self.calibration_row_id:
+            return f"{self.name} {self.value}"
+        return f"{self.name} {self.value} default {self.default} set by {self.calibration_row_id}"
+
+
+@dataclass(frozen=True, slots=True)
 class Step:
     """One position of the entry's size, side by side (FUNNEL D42): the unit it is in, its value,
     and the basis R is measured against."""
@@ -126,7 +145,7 @@ class Trail:
     risk_fp: str
     written_before_send: bool
     facts: tuple[FactSeen, ...]
-    numbers: tuple[FactSeen, ...]
+    numbers: tuple[NumberSeen, ...]
     steps: tuple[Step, ...]
     verdicts: tuple[str, ...]
     residue_r: str
@@ -238,8 +257,10 @@ def stored_row(row: DecisionRow) -> Mapping[str, object]:
     """One decision row as a host journals it: the numbers, the facts it read, the three
     positions of its size, each link's verdict, the sizing modifiers and the two fingerprints it
     was made under. The host adds its own reason code and the readings its blocks produced. A row
-    with no sizing modifiers carries no ``modifiers`` key, so its body is the one it carried
-    before the chain existed."""
+    with no sizing modifiers carries no ``modifiers`` key, and one whose numbers are all at their
+    start carries no ``numbers_moved`` key, so its body is the one it carried before either
+    existed. Neither key is in the receipt's hash: they name where a value came from, and the
+    value itself is in ``numbers_in_force``."""
     body: dict[str, object] = {
         "row_id": row.row_id,
         "instant": row.instant.value_ns,
@@ -261,6 +282,14 @@ def stored_row(row: DecisionRow) -> Mapping[str, object]:
     }
     if row.modifiers:
         body["modifiers"] = [_modifier_stored(reading) for reading in row.modifiers]
+    if row.numbers_moved:
+        body["numbers_moved"] = {
+            name: {
+                "default": _number(moved.default),
+                "calibration_row_id": moved.calibration_row_id,
+            }
+            for name, moved in row.numbers_moved.items()
+        }
     return body
 
 
@@ -347,11 +376,23 @@ def _factor_seen(reading: object) -> FactorSeen:
     )
 
 
+def _number_seen(name: str, value: object, moved: object) -> NumberSeen:
+    """One stored number as the trail prints it, with the row that moved it when one did."""
+    body = _map(moved)
+    return NumberSeen(
+        name=name,
+        value=str(value),
+        default=str(body.get("default", "")),
+        calibration_row_id=str(body.get("calibration_row_id", "")),
+    )
+
+
 def explain_size(row: Mapping[str, object], fill: Mapping[str, object] | None = None) -> Trail:
-    """One entry's size trail: every fact with its source and age, the numbers in force, the base
-    amount and its basis, each link's verdict, the converter's residue, and the fill with its gap
-    when the caller has the fill row (the row is written before any order leaves, so the third
-    position of the size lands in the ``fill`` row and not on this one)."""
+    """One entry's size trail: every fact with its source and age, the numbers in force with the
+    default and calibration row of each one a row moved, the base amount and its basis, each link's
+    verdict, the converter's residue, and the fill with its gap when the caller has the fill row
+    (the row is written before any order leaves, so the third position of the size lands in the
+    ``fill`` row and not on this one)."""
     instant = int(cast("int", row.get("instant", 0)))
     steps = tuple(
         Step(
@@ -372,7 +413,7 @@ def explain_size(row: Mapping[str, object], fill: Mapping[str, object] | None = 
         written_before_send=row.get("written_before_send") is True,
         facts=tuple(_seen(name, fact, instant) for name, fact in _map(row.get("inputs")).items()),
         numbers=tuple(
-            FactSeen(name, str(value), "the unit's numbers at this entry", "")
+            _number_seen(name, value, _map(row.get("numbers_moved")).get(name))
             for name, value in _map(row.get("numbers_in_force")).items()
         ),
         steps=steps,

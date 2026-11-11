@@ -12,8 +12,9 @@ under it moved: when the shipped dummy's numbers each gained the reason and owne
 because the receipt covers the document's risk half; when the first join carried rc-31's second
 stream and rc-32's position count in at compiler formats 9 and 10; and when the joins settled this
 row's modifier chain at compiler format 11; and when rc-24's widened motion engine joined at
-compiler format 12. Each value after the first was read from a failing run at the tree that moved
-it.
+compiler format 12; and when rc-25 added ``own-r-step@1`` to the stdlib, whose pin the dummy's
+test helper takes with every other. Each value after the first was read from a failing run at the
+tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -31,11 +32,12 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:3500c4122f232e3ad6c6be0c204145b6a37085455e204af77234714fb7cc6b8e"
-"""The receipt's identity at compiler format 12. It moved from
-``fp1:sha256:dba50efc...67db526170`` because the row's receipt covers ``logic_fp`` and
-``risk_fp``, and AD-19's format bump for rc-24's widened motion engine moves both halves by design.
-The size, the steps and every verdict are the same."""
+_STORED_HASH = "fp1:sha256:43c053de640d0d684a4d0d995e7670703fa515efa908fe67618f3758f2de6d74"
+"""The receipt's identity at compiler format 12 with ``own-r-step@1`` in the stdlib. It moved from
+``fp1:sha256:3500c412...14fb7cc6b8e`` because the row's receipt covers ``logic_fp`` and
+``risk_fp``, the dummy's helper pins every stdlib entry, and the document's pins are part of both
+halves. With that one pin left out the row hashes to the old value
+(``evidence/rc-25/probe-receipt-pin.log``). The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
