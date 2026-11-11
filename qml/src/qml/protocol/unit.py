@@ -2059,6 +2059,9 @@ class _Run:
             if move is None:
                 unit.slow[name] = state
                 continue
+            if not slow.params["min"] <= move.new <= slow.params["max"]:
+                unit.slow[name] = replace(state, value=move.old)
+                raise _Fault(slow.number.rule_pin)  # a rule out of its range is benched, not obeyed
             row_id = self.row_id()
             unit.slow[name] = replace(state, set_by=row_id)
             self.calibrations.append(

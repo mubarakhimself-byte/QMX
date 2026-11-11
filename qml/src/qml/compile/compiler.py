@@ -690,19 +690,27 @@ def _bound_on(side: SidePlan, number: str) -> bool:
     return any(_binds(b, number) for slot in side.slots for b in slot.bindings)
 
 
+def _control_bindings(unit: Unit) -> tuple[_ParamHolder, ...]:
+    return (*unit.halts.position, *unit.halts.unit, *unit.halts.account)
+
+
 def _risk_bindings(unit: Unit) -> tuple[_ParamHolder, ...]:
     """The bindings outside the logic slots: the sizer, the exits and the control rows (AD-14)."""
-    controls = (*unit.halts.position, *unit.halts.unit, *unit.halts.account)
-    return (*([unit.sizer] if unit.sizer is not None else ()), *unit.exit_set, *controls)
+    sizer = (unit.sizer,) if unit.sizer is not None else ()
+    return (*sizer, *unit.exit_set, *_control_bindings(unit))
 
 
 def _stamp_for(unit: Unit, number: str) -> str | None:
     """The entry stamp the rule reads for ``number``: a stated side's binding name, or
-    ``number:<name>`` for a sizer, exit or control number (AD-14's first step).
+    ``number:<name>`` for a sizer or exit number (AD-14's first step).
 
     A logic number keeps the stamp its slot binding already writes (``strength`` for the trend
-    floor); a risk number has no slot, so its stamp is its own value in force at entry.
+    floor); a risk number has no slot, so its stamp is its own value in force at entry. A number a
+    control row reads has none: its brake is made once and never reads a moved value, so it may not
+    move until one does.
     """
+    if any(_binds(b, number) for b in _control_bindings(unit)):
+        return None
     for side in Side:
         found = _side_slots(unit, side)
         if found is None:
