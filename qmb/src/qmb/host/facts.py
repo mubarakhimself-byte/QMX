@@ -300,11 +300,13 @@ class CostCells:
     def fact(self, market: str, record: InstrumentRecord, instant: Instant) -> Fact:
         """``market.cost_cell:<market>`` at ``instant``: the cell's own mean once it has measured
         ``min_fills`` fills, and before that its fills blended with the stressed cost for the
-        fills it still lacks, labelled ``uncalibrated``."""
+        fills it still lacks, labelled ``uncalibrated``. A count below one reads as one, because
+        the step that mints a held position's exits reads every cell and must never raise."""
         cell = self.cell(market, record, instant)
-        source = f"{cell.fills} of {self.min_fills} fills measured at this hour"
-        if cell.fills >= self.min_fills:
+        need = max(self.min_fills, 1)
+        source = f"{cell.fills} of {need} fills measured at this hour"
+        if cell.fills >= need:
             return Fact(cell.total / cell.fills, instant, "open", source)
-        missing = self.min_fills - cell.fills
-        value = (cell.total + missing * self.stressed(record)) / self.min_fills
+        missing = need - cell.fills
+        value = (cell.total + missing * self.stressed(record)) / need
         return Fact(value, instant, "open", source, state="uncalibrated")
