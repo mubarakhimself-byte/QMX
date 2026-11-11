@@ -73,7 +73,10 @@ _CENSUS = frozenset(
     Pin.entry_id Pin.version Pin.fingerprint
     Lineage.parents Lineage.rewritten_from
     LineageParent.unit_id LineageParent.version_ref LineageParent.edit_labels
-    Session.name Session.calendar_ref Session.zone Session.windows
+    Session.name Session.calendar_ref Session.zone Session.windows Session.flat_before_close
+    Session.card
+    WindowCard.slice WindowCard.family WindowCard.how_found WindowCard.tries
+    WindowCard.status WindowCard.expiry
     Window.from Window.to
     PositionLimit.per_instrument
     ContextNeeds.require ContextNeeds.warn ContextNeeds.block Need.word Need.reading
@@ -188,6 +191,13 @@ _SESSION = {
     "zone": "Europe/London",
     "windows": [{"from": "08:00", "to": "16:00"}],
 }
+_SHADOW_CARD = {
+    "slice": "london open",
+    "family": "trend-pullback",
+    "how_found": "the curves",
+    "tries": 3,
+    "status": "shadow",
+}
 _BARS = {"series": "m15"}
 _UNBOUND = {
     "kind": "fixed",
@@ -200,11 +210,15 @@ _UNBOUND = {
     "reason": "a spare number nothing binds, so the format refuses it by name",
 }
 _PARTS: dict[str, tuple[Edit, str, str]] = {
-    "sessions": (_put("sessions", [_SESSION]), "sessions_not_built", "/sessions"),
-    "settings": (
-        _put("markets/0/settings", {"ema_period": "20"}),
+    "a shadow window card": (
+        _put("sessions", [_SESSION | {"card": _SHADOW_CARD}]),
+        "window_card_not_built",
+        "/sessions/0/card/status",
+    ),
+    "a market's own value of a moving number": (
+        _put("markets/0/settings", {"min_trend_strength": "0.0010"}),
         "settings_not_built",
-        "/markets/0/settings",
+        "/markets/0/settings/min_trend_strength",
     ),
     "settings record": (
         _put("markets/0/settings_record", "eurusd-settings@1"),
@@ -553,13 +567,13 @@ def test_a_mirror_of_a_side_neutral_block_says_state_both_sides() -> None:
 
 def test_two_refusals_are_listed_at_once() -> None:
     document = cast("Document", _document())
-    _put("sessions", [_SESSION])(document)
+    _put("markets/0/settings_record", "eurusd-settings@1")(document)
     _gate("vwap-session-anchored@1")(document)
 
     checked = check(document, _context())
 
     assert {pointer for p in checked.errors for pointer in p.where} == {
-        "/sessions",
+        "/markets/0/settings_record",
         "/logic/long/slots/context/bindings/2/block",
     }
 

@@ -121,6 +121,14 @@ _SESSION: Final = [
         "windows": [{"from": "08:00", "to": "16:00"}],
     }
 ]
+_SHADOW_CARD: Final = {
+    "slice": "london open",
+    "family": "trend-pullback",
+    "how_found": "the curves",
+    "tries": 3,
+    "status": "shadow",
+}
+"""A window card still watched in shadow, which the format binds as if it were written."""
 _READ: Final = [
     {
         "reading": "news@1",
@@ -155,7 +163,11 @@ _PROBES: Final[tuple[_Probe, ...]] = (
         "/halts/unit/0/scope",
         _put("halts", {"position": [], "unit": [_MISFILED_HALT], "account": []}),
     ),
-    _Probe("Unit.sessions", "/sessions", _put("sessions", _SESSION)),
+    _Probe(
+        "WindowCard.status",
+        "/sessions/0/card/status",
+        _put("sessions", [_SESSION[0] | {"card": _SHADOW_CARD}]),
+    ),
     _Probe(
         "Unit.context_needs", "/context_needs", _put("context_needs", {"block": [{"word": "fomc"}]})
     ),
@@ -163,9 +175,6 @@ _PROBES: Final[tuple[_Probe, ...]] = (
     _Probe("Unit.plain_python", "/plain_python", _put("plain_python", {"block": "ema@1"})),
     _Probe("Binding.inputs", "/sizer/inputs/equity", _put("sizer/inputs", {"equity": "m15.close"})),
     _Probe("Market.roll", "/markets/0/roll", _put("markets/0/roll", {"rule": "calendar"})),
-    _Probe(
-        "Market.settings", "/markets/0/settings", _put("markets/0/settings", {"ema_period": "20"})
-    ),
     _Probe(
         "Market.settings_record",
         "/markets/0/settings_record",

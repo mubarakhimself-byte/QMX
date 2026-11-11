@@ -59,7 +59,9 @@ _BST_DAY = {"15:55": 1_743_432_900, "16:05": 1_743_433_500}
 """Monday 31 March 2025, London on BST: the local minute is the UTC minute plus one hour."""
 
 
-def _session_unit(session: dict[str, object], numbers: dict[str, object] | None = None) -> CompiledUnit:
+def _session_unit(
+    session: dict[str, object], numbers: dict[str, object] | None = None
+) -> CompiledUnit:
     document = _holding_document(limit=1)
     document["sessions"] = [session]
     cast("dict[str, object]", document["numbers"]).update(numbers or {})
@@ -106,13 +108,23 @@ def test_flat_before_the_close() -> None:
         (one.position_ref.position_id, one.kind.value, one.reason_code.code)
         for one in _closes(buffer)
     ] == [("own-1", "close_full", "forced_flat")]
-    assert ("blocked", "outside_session: 15:45 Europe/London is inside london's last 900 seconds") in _rows(buffer)
+    assert (
+        "blocked",
+        "outside_session: 15:45 Europe/London is inside london's last 900 seconds",
+    ) in _rows(buffer)
 
 
 def test_a_market_keeps_its_own_number() -> None:
     """``stop_buffer`` 0.0002 on EURUSD and 0.0030 on XAUUSD (2 and 30 basis points, the
     measure being a percent written as a fraction) each read their own, over a unit default of
-    0.0010 neither market reads."""
+    0.0010 neither market reads.
+
+    The stop shows it was built on the market's own number. EURUSD's first proposal is a short
+    beyond the swing high 1.06867: 1.06867 x 1.0002 = 1.068883734, rounded away from the entry to
+    the 0.00001 tick, 1.06889 (the default would give 1.06974). XAUUSD's first is a long under the
+    swing low 3241.22: 3241.22 x 0.997 = 3231.49634, to the 0.01 tick, 3231.49 (the default would
+    give 3237.97).
+    """
     document = _document()
     numbers = cast("dict[str, dict[str, object]]", document["numbers"])
     numbers["stop_buffer"]["default"] = "0.0010"
@@ -130,3 +142,11 @@ def test_a_market_keeps_its_own_number() -> None:
         if row.outcome == "taken"
     }
     assert read == {("fx.eurusd", Decimal("0.0002")), ("metal.xauusd", Decimal("0.0030"))}
+    first: dict[str, tuple[str, Decimal]] = {}
+    for step in steps:
+        for proposal in step.proposals:
+            first.setdefault(proposal.market_id, (proposal.row.side.value, proposal.stop))
+    assert first == {
+        "fx.eurusd": ("short", Decimal("1.06889")),
+        "metal.xauusd": ("long", Decimal("3231.49")),
+    }
