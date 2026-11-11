@@ -280,7 +280,7 @@ def _holding(
     }
     for market, series in bars.items():
         surfaces[f"bars:m15:{market}"] = _Latest(series)
-        surfaces[f"own_position:{market}"] = price._At(held if market == "fx.eurusd" else None)
+        surfaces[f"own_position:{market}"] = price._At((held,) if market == "fx.eurusd" else ())
     return price._host(compiled, surfaces)
 
 

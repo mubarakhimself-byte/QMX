@@ -25,7 +25,7 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:60bf6a253fa9b65431ae2b173e4ffa37de6e8437d85ddb40a84d772ddb0a533d"
+_STORED_HASH = "fp1:sha256:bf4726a87c3add0c250c60c531a7e6ca5a1addfb0b6acfe69c730b7a2a4fa737"
 """The receipt's identity at compiler format 11. It moved from
 ``fp1:sha256:01e3bd10...1bbee0`` because the row's receipt covers ``logic_fp`` and ``risk_fp`` and
 AD-19's format bump moves both halves by design; the size, the steps and every verdict are the
