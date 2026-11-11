@@ -7,11 +7,11 @@ fraction 0.005, equity 100000, EURUSD's 0.0050 stop distance, and 1.00 lots.
 
 The row hash is pinned as a literal on purpose: it is the receipt's identity, so a change to an
 input, a step or a verdict the size used must change the hash loudly instead of passing. It is
-read from the implementation once, when the row's shape is fixed; it moved once after that, when
-the shipped dummy's numbers each gained the reason and owner this section requires, because the
-receipt covers the document's risk half; and it moved again when this row joined the stack tip,
-whose compiler format 9 fingerprints the same numbers under a new format. Each value after the
-first was read from a failing run at the tree that moved it.
+read from the implementation once, when the row's shape is fixed, and again each time the stack
+under it moved: when the shipped dummy's numbers each gained the reason and owner this section
+requires, because the receipt covers the document's risk half; when this row joined rc-31's
+compiler format 9; and when it joined rc-32's compiler format 10. Each value after the first was
+read from a failing run at the tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -29,7 +29,7 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:f034a3c2d69631653cecf61a46e7623766345a5eb58a0cb663501376bc3a527d"
+_STORED_HASH = "fp1:sha256:dd43fafc816c34351402270129d6cdb2fb590af4e708b2c6dfc0c9624b75f816"
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
