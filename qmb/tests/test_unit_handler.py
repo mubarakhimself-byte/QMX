@@ -13,6 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
+import pytest
 from qmb.execution.fill import BarExecution
 from qmb.host.unit_handler import (
     Fill,
@@ -32,23 +33,33 @@ from qmb.runloop.loop import (
 )
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint
+from qmf.core.identity import AccountRole, VenueId
 from qmf.core.refusal import Ok, RefusalCategory, Result, TypedRefusal, is_refusal
+from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import UnitIntent
+from qml.blocks.api import Amount, Size
+from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, parse_record
 from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import (
     EXIT_FAULT,
     OHLC,
+    Account,
     DecisionRow,
+    HostedUnit,
     OwnPosition,
+    Priced,
+    Proposal,
     QuoteBar,
     SlotOutput,
+    Surface,
     UnitStep,
     accept_unit_intents,
+    construct_unit,
 )
 from qml.unit.model import Side
-from test_unit_runner import make_run_folder, request
+from test_unit_runner import dummy_document, make_run_folder, request
 
 _REPO = Path(__file__).resolve().parents[2]
 _RECORDS = _REPO / "qml" / "tests" / "fixtures" / "records"
@@ -417,3 +428,188 @@ def test_no_unit_path_file_imports_the_bot_door() -> None:
 
     assert all("construct_bot" not in names for names in imported.values())
     assert "construct_unit" in imported["unit_runner.py"]
+
+
+# --- a malformed sizer answer under a modifier keeps the held exit -----------------------
+
+
+class _Answers:
+    """A Library sizer that answers one fixed thing, whatever the evidence."""
+
+    warm_up_bars = 0
+    state_bound = 0
+
+    def __init__(self, answer: object) -> None:
+        self._answer = answer
+
+    def retained(self) -> int:
+        return 0
+
+    def update(self, evidence: Mapping[str, object]) -> object:
+        del evidence
+        return self._answer
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        del state
+
+
+def _halved_dummy() -> CompiledUnit:
+    """The shipped dummy with one `level-factor@1` modifier row at level 0.5."""
+    document = dummy_document()
+    document["modifiers"] = [
+        {
+            "name": "half",
+            "block": "level-factor@1",
+            "params": {"level": {"value": "0.5"}, "max_level": {"value": "2"}},
+            "inputs": {},
+        }
+    ]
+    stdlib = [p.parent for p in (_REPO / "qml/src/qml/blocks/stdlib").glob("*/*/block.py")]
+    records = {market: _record(market) for market in _RECORD_FILE}
+    compiled = compile_unit(
+        document,
+        CompileContext(
+            sources={f"{p.parent.name}@{p.name}": (p / "block.py").read_bytes() for p in stdlib},
+            entries={f"{p.parent.name}@{p.name}": (p / "entry.json").read_bytes() for p in stdlib},
+            records=records,
+            nets_positions=False,
+        ),
+    )
+    assert isinstance(compiled, CompiledUnit), compiled
+    return compiled
+
+
+def _record(market: str) -> InstrumentRecord:
+    record = parse_record(json.loads((_RECORDS / _RECORD_FILE[market]).read_text("utf-8")))
+    assert not isinstance(record, TypedRefusal), record
+    return record.value
+
+
+def _gold_proposal() -> Proposal:
+    """One XAUUSD entry while EURUSD is held: the other market's proposal on the exit's bar."""
+    return Proposal(
+        wire={},
+        row=DecisionRow(
+            row_id="row-gold",
+            instant=Instant(_T1),
+            market_id=_X,
+            side=Side.LONG,
+            outcome="taken",
+            slot_trail=(),
+            numbers_in_force={"risk_fraction": Decimal("0.005")},
+            reason="all slots hold",
+        ),
+        market_id=_X,
+        side=Side.LONG,
+        entry_price=Decimal("2900.00"),
+        stop=Decimal("2890.00"),
+        params={"fraction": Decimal("0.005")},
+        record=_record(_X),
+    )
+
+
+class _RealPricing:
+    """Scripted steps over the real unit's own `price`: the entry at T0, and at T1 the held
+    position's close with a proposal on the other market."""
+
+    def __init__(self, real: HostedUnit) -> None:
+        self.real = real
+        entry = accept_unit_intents([_entry("0.10")])
+        close = accept_unit_intents([_own_exit("close_full", "row-exit")])
+        assert not isinstance(entry, TypedRefusal) and not isinstance(close, TypedRefusal)
+        self._steps = {
+            _T0: (entry.value, ()),
+            _T1: (close.value, (_gold_proposal(),)),
+        }
+
+    def on_instant(self, instant: object, /) -> Result[UnitStep]:
+        assert isinstance(instant, Instant)
+        intents, proposals = self._steps.get(instant.value_ns, ((), ()))
+        return Ok(UnitStep(instant, intents, (), (), (), proposals=proposals))
+
+    def price(self, proposal: Proposal, facts: Account) -> Priced:
+        return self.real.price(proposal, facts)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        Amount("money_at_risk", cast("Decimal", 500.0), "gross_at_stop"),
+        Amount("money_at_risk", cast("Decimal", None), "gross_at_stop"),
+        Amount("money_at_risk", cast("Decimal", "500"), "gross_at_stop"),
+        Amount("money_at_risk", Decimal("sNaN"), "gross_at_stop"),
+        Size(cast("Decimal", 0.5)),
+    ],
+    ids=["float", "none", "str", "snan", "float-size"],
+)
+def test_a_malformed_sizer_answer_under_a_modifier_keeps_the_held_exit(answer: object) -> None:
+    """The exit minted on the bar a malformed size is refused still fills on the next bar."""
+    compiled = _halved_dummy()
+    hosted: list[HostedUnit] = []
+
+    def host(surfaces: Mapping[str, Surface]) -> Result[_RealPricing]:
+        target = ExecutionTarget.try_create(
+            AccountRole.DEMO, VenueId("icmarkets-ctrader"), "exit-fix"
+        )
+        assert not isinstance(target, TypedRefusal), target
+        built = construct_unit(
+            compiled,
+            read_surfaces=surfaces,
+            scope_id="run-exit-fix",
+            execution_target=target.value,
+        )
+        assert not isinstance(built, TypedRefusal), built
+        for market in built.value._core.markets:  # pyright: ignore[reportPrivateUsage]
+            market.instances["sizer"] = _Answers(answer)  # pyright: ignore[reportArgumentType]
+        hosted.append(built.value)
+        return Ok(_RealPricing(built.value))
+
+    bars = {
+        _M: {at: _bar(at, "1.08500") for at in (_T0, _T1, _T2)},
+        _X: {at: _bar(at, "2900.00") for at in (_T0, _T1, _T2)},
+    }
+    records = {market: _record(market) for market in _RECORD_FILE}
+    journal = ListJournal()
+    started = UnitSliceHandler.start(
+        host,
+        stream="m15",
+        records=records,
+        bars=bars,
+        opened_by=_MINE,
+        equity=Decimal("10000.00"),
+        execution=BarExecution(900_000_000_000),
+        journal=journal,
+    )
+    assert not isinstance(started, TypedRefusal), started
+    handler = started.value
+    streams = StreamSet((DeclaredStream(_M, _M),))
+    frontier: Instant | None = None
+    resting: tuple[RestingIntent, ...] = ()
+    for at in (_T0, _T1, _T2):
+        outcome = run_slice(
+            [SliceObservation(_M, Instant(at))],
+            stream_set=streams,
+            current_frontier=frontier,
+            handler=handler,
+            resting=resting,
+        )
+        assert not isinstance(outcome, TypedRefusal), outcome
+        frontier, resting = outcome.value.frontier, outcome.value.resting
+
+    assert [(f.kind.value, f.position_id) for f in handler.fills] == [
+        ("entry", _OWN),
+        ("close", _OWN),
+    ], "the held position's close went out on the bar the size was refused"
+    assert dict(handler.open_positions) == {}
+    gold = [r for r in journal.records if isinstance(r, DecisionRow) and r.row_id == "row-gold"]
+    assert [(r.outcome, r.reason) for r in gold] == [
+        ("skipped", "sizer: unit_fault (the sizer answered no usable amount)")
+    ]
+    core = hosted[0]._core  # pyright: ignore[reportPrivateUsage]
+    assert [(f.block, f.phase.value) for f in core.pending_faults] == [
+        ("fixed-fraction-at-stop@2", "price")
+    ]
+    assert core.benched is True, "the fault benches the unit's entries"
