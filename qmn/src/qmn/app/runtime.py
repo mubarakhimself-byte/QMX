@@ -2090,7 +2090,9 @@ class NodeUnit:
                 record=record,
                 quantity=sized.value,
                 blocked_by=self.guard(market),
-                numbers_at_entry=None if self.handler is None else self.handler.entry_stamps_of(row),
+                numbers_at_entry=None
+                if self.handler is None
+                else self.handler.entry_stamps_of(row),
             )
             if isinstance(placed, Placed | Unprotected):
                 self.placed[named] = (market, Side(str(wire["direction"])), placed.price)
@@ -2403,7 +2405,11 @@ def journalled_trades(root: Path, deployment_id: str, world: str) -> tuple[Close
             body = cast("Mapping[str, object]", line.record.get("body", {}))
             stamps = body.get("numbers_at_entry")
             r, market = body.get("position_r"), line.record.get("market_id")
-            if not isinstance(stamps, Mapping) or not isinstance(r, str) or not isinstance(market, str):
+            if (
+                not isinstance(stamps, Mapping)
+                or not isinstance(r, str)
+                or not isinstance(market, str)
+            ):
                 continue
             found.append(
                 ClosedTrade(
