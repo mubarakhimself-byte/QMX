@@ -154,6 +154,13 @@ class UnitEntryIntent:
     not_before: Instant
     placeholder_labels: tuple[str, ...]
     decision_row_id: str
+    bet_key: str = ""
+    """The bet this entry expresses, ``family:session`` in WALKS 3's words, and the unit's own
+    document decides it. Optional in format 3, like ``protection.time_exit_bars``, so a writer
+    that predates it still parses and no reader has to guess: absent reads as no bet named."""
+    driver_tags: tuple[str, ...] = ()
+    """The blocks whose answer drove this entry, in the order the document lists them. Optional
+    for the same reason, and empty when the writer names none."""
 
     @property
     def contract_format_version(self) -> int:
@@ -179,7 +186,7 @@ class UnitEntryIntent:
         }
         if self.protection.time_exit_bars is not None:
             protection["time_exit_bars"] = self.protection.time_exit_bars
-        return {
+        wire: dict[str, object] = {
             "contract_format_version": UNIT_INTENT_FORMAT_VERSION,
             "intent_family": self.intent_family,
             "unit": {
@@ -207,6 +214,11 @@ class UnitEntryIntent:
             "placeholder_labels": list(self.placeholder_labels),  # mock-data-scan: allow (field)
             "decision_row_id": self.decision_row_id,
         }
+        if self.bet_key:
+            wire["bet_key"] = self.bet_key
+        if self.driver_tags:
+            wire["driver_tags"] = list(self.driver_tags)
+        return wire
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,6 +413,8 @@ def _read_entry(fields: _Fields) -> UnitEntryIntent:
         fields.required("protection"), fields.at("protection"), instrument
     )
     _check_sides(direction, order, protection)
+    bet_raw = fields.optional("bet_key")
+    drivers_raw = fields.optional("driver_tags")
     return UnitEntryIntent(
         unit=_read_unit_ref(fields.required("unit"), fields.at("unit")),
         instrument=instrument,
@@ -420,6 +434,10 @@ def _read_entry(fields: _Fields) -> UnitEntryIntent:
             fields.at("placeholder_labels"),  # mock-data-scan: allow (receipt field)
         ),
         decision_row_id=fields.text("decision_row_id"),
+        bet_key="" if bet_raw is None else _text(bet_raw, fields.at("bet_key")),
+        driver_tags=()
+        if drivers_raw is None
+        else _read_labels(drivers_raw, fields.at("driver_tags")),
     )
 
 

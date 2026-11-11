@@ -156,6 +156,11 @@ class _At:
         return self._answer(instant)
 
 
+def _one(position: OwnPosition | None) -> tuple[OwnPosition, ...]:
+    """The unit door answers every position on a market, so a fixture holding one answers one."""
+    return () if position is None else (position,)
+
+
 def _surfaces(held: Mapping[str, OwnPosition] | None = None) -> dict[str, _At]:
     positions: Mapping[str, OwnPosition] = {} if held is None else held
     surfaces = {
@@ -164,7 +169,7 @@ def _surfaces(held: Mapping[str, OwnPosition] | None = None) -> dict[str, _At]:
     }
     for market in _MARKETS:
         surfaces[f"bars:m15:{market}"] = _At(lambda _i: None)
-        surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: positions.get(m))
+        surfaces[f"own_position:{market}"] = _At(lambda _i, m=market: _one(positions.get(m)))
     return surfaces
 
 

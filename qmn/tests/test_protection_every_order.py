@@ -389,7 +389,7 @@ def test_a_stop_amendment_that_widens_is_refused_and_one_that_tightens_moves_the
     play(node, FIRST_SEND + 900_000_000_001)
     unit = node.runtime.hosted["dep-1"].unit
     assert unit is not None and unit.handler is not None
-    held = unit.handler.open_positions["fx.eurusd"]
+    held = unit.handler.open_on("fx.eurusd")[0]
     named = unit.venue_name(held.position_id)
     stop = node.account.stop_of(named)
     assert stop is not None

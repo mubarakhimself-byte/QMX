@@ -102,6 +102,7 @@ from qmf.risk.unit_intent import (
     parse_unit_intent,
 )
 from qml.compile import CompileContext, CompiledUnit, compile_unit
+from qml.feed import roll_up
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import (
@@ -574,6 +575,63 @@ def stream_seconds(name: str) -> int | None:
             return int(count) * 86_400
         case _:
             return None
+
+
+def _bar_name(ns: int) -> str:
+    """A feed bar size as the words a refusal says it in."""
+    seconds = ns // _NS
+    if ns % (60 * _NS) == 0:
+        return f"{seconds // 60:g}-minute"
+    return f"{seconds:g}-second"
+
+
+class _Roll:
+    """One unit's stream on one market, rolled up from its account feed's base bars (AD-25).
+
+    ``seconds`` is the unit's stream and ``base_ns`` the feed's base bar. The host refuses a
+    stream that is not a whole multiple of the base, so every stream bucket is a run of base
+    bars. A bucket is emitted only when its first base bar starts it, and the bucket joined part
+    way through is dropped by ``roll_up``.
+    """
+
+    def __init__(self, seconds: int, base_ns: int) -> None:
+        self.seconds = seconds
+        self.base_ns = base_ns
+        self._bucket: int | None = None
+        self._bars: list[QuoteBar] = []
+
+    def add(self, base: QuoteBar) -> QuoteBar | None:
+        """This base bar's closed stream bar, or None while the stream's bucket is open."""
+        end = base.knowable_at.value_ns
+        start = end - self.base_ns
+        bucket = start - start % (self.seconds * _NS)
+        if bucket != self._bucket:
+            self._bucket, self._bars = bucket, []
+        self._bars.append(base)
+        if end < bucket + self.seconds * _NS:
+            return None
+        rolled = roll_up(self._bars, self.seconds)
+        self._bars = []
+        return rolled
+
+
+def warm_slices(compiled: CompiledUnit) -> int:
+    """The primary bars a unit's slowest stream needs before it reaches its own warm-up.
+
+    A unit steps on its primary, so a stream ``factor`` primary bars long needs ``factor`` steps
+    per one of its own bars. The slowest stream sets the count; a stream the node cannot name in
+    seconds cannot be rolled, and the primary's own warm-up is the answer.
+    """
+    primary = stream_seconds(compiled.plan.stream)
+    needed = max(1, compiled.warm_up.get(compiled.plan.stream, 0))
+    if primary is None or primary <= 0:
+        return needed
+    for stream in compiled.plan.streams:
+        seconds = stream_seconds(stream)
+        if seconds is None:
+            continue
+        needed = max(needed, -(-(compiled.warm_up.get(stream, 0) * seconds) // primary))
+    return needed
 
 
 def staged_path(folder: Path, path: str) -> Path | None:
@@ -1706,6 +1764,14 @@ class NodeUnit:
         self.assignment = assignment
         self.traded = deployment.markets
         self.compiled = compiled
+        self.streams = compiled.plan.streams
+        """The unit's streams, the primary first: the stream a step is taken on."""
+        self.stream = compiled.plan.stream
+        self.stream_seconds = {name: stream_seconds(name) for name in self.streams}
+        self.warm_up = dict(compiled.warm_up)
+        """The bars each stream needs before entries."""
+        self.base_ns: int | None = None
+        """The account feed's base bar, or None when the feed's bars are the unit's own."""
         self.records = records
         self.orders = orders
         self.journal = journal
@@ -1716,8 +1782,18 @@ class NodeUnit:
         self.journal_world = JournalWorld.PAPER
         self.guard = guard
         self.rates = rates
-        self.windows = {market: BarWindow(window_size(compiled)) for market in records}
-        self.warm_needed = window_size(compiled)
+        self.windows = {
+            (stream, market): BarWindow(
+                window_size(compiled)
+                if stream == self.stream
+                else max(1, compiled.warm_up.get(stream, 0))
+            )
+            for stream in self.streams
+            for market in records
+        }
+        self.rolling: dict[tuple[str, str], _Roll] = {}
+        """One roll per stream and market, made when the feed's base bar arrives."""
+        self.warm_needed = warm_slices(compiled)
         self.warm_seen = 0
         self.warming = True
         self.venue_ids: dict[str, str] = {}
@@ -1761,6 +1837,36 @@ class NodeUnit:
         still reaches its quantity; the live account facts ride beside it under ``account.*``.
         """
         return {} if self.account is None else self.account()
+
+    def stream_id(self, market: str) -> str:
+        """The stream id that names this unit's stream and ``market`` (AD-25)."""
+        return f"{self.stream}:{market}"
+
+    def roll(self, market: str, base: QuoteBar) -> Mapping[str, QuoteBar]:
+        """The stream bars ``market``'s base bar closes, by stream; none while a bucket is open.
+
+        A feed whose bars are the unit's own passes the bar through as the primary's, the parent's
+        behaviour, kept for a venue that builds the unit's bars. A stream this node cannot name in
+        seconds is passed through the same way, and ``_host`` refuses a second stream there,
+        because it could not be rolled.
+        """
+        if self.base_ns is None:
+            return {self.stream: base}
+        closed: dict[str, QuoteBar] = {}
+        for name in self.streams:
+            seconds = self.stream_seconds.get(name)
+            if seconds is None:
+                if name == self.stream:
+                    closed[name] = base
+                continue
+            key = (name, market)
+            state = self.rolling.get(key)
+            if state is None:
+                state = self.rolling[key] = _Roll(seconds, self.base_ns)
+            rolled = state.add(base)
+            if rolled is not None:
+                closed[name] = rolled
+        return closed
 
     def start(
         self,
@@ -1811,9 +1917,14 @@ class NodeUnit:
 
         started = UnitSliceHandler.start(
             host,
-            stream=self.compiled.plan.stream,
+            stream=self.stream,
+            streams=self.streams,
             records=self.records,
-            bars=self.windows,
+            bars={
+                (stream, market): self.windows[(stream, market)]
+                for stream in self.streams
+                for market in self.records
+            },
             opened_by=self.compiled.logic_fingerprint,
             equity=equity,
             execution=self._execution,
@@ -1933,11 +2044,10 @@ class NodeUnit:
             return Ok(False)
         if not isinstance(placed, Placed):
             reason = "warming up" if placed is None else placed.reason
-            if wire.get("intent_family") == "entry":
+            market = self.handled.market_of(intent.stream_id)
+            if wire.get("intent_family") == "entry" and market is not None:
                 self._port.append(
-                    Skip(
-                        frontier, intent.stream_id, str(wire["decision_row_id"]), reason, Decimal(1)
-                    )
+                    Skip(frontier, market, str(wire["decision_row_id"]), reason, Decimal(1))
                 )
             self._done.add(intent.intent_id)
             return Ok(True)
@@ -1992,7 +2102,10 @@ class NodeUnit:
                 side = Side(str(wire["direction"]))
                 self._unknown[named] = (intent.intent_id, market, side, size)
             return placed
-        return self._exit(intent.stream_id, wire)
+        market = self.handled.market_of(intent.stream_id)
+        if market is None:
+            return Blocked("the intent names a stream this unit does not read")
+        return self._exit(market, wire)
 
     def resolve(self, client_order_id: str, found: Found | None, *, protected: bool) -> bool:
         """Settle an entry whose outcome was unknown, from what the reconciler read at the
@@ -2028,7 +2141,7 @@ class NodeUnit:
         if is_refusal(parsed) or not isinstance(parsed.value, UnitExitIntent):
             return Blocked("the venue cannot take this exit")
         exit_ = parsed.value
-        held = self.handled.open_positions.get(market)
+        held = self.handled.open_positions.get(exit_.position_ref.position_id)
         if held is None or held.position_id != exit_.position_ref.position_id:
             return Blocked("the venue cannot close a position this unit did not open")
         position = self.venue_name(held.position_id)
@@ -2097,7 +2210,10 @@ class NodeUnit:
         if self.handler is None:
             return []
         shown: list[dict[str, object]] = []
-        for market, position in self.handler.open_positions.items():
+        for position_id, position in self.handler.open_positions.items():
+            market = self.handler.market_holding(position_id)
+            if market is None:  # a seeded position, which this unit never trades itself
+                continue
             name = self.venue_name(position.position_id)
             shown.append(
                 {
@@ -2172,10 +2288,18 @@ class _LoopClock:
 Compile = Callable[[Deployment, Path], "CompiledUnit | str"]
 
 
-def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
+def compile_staged(
+    deployment: Deployment, folder: Path, *, nets_positions: bool = True
+) -> CompiledUnit | str:
     """Read each staged file once and verify those bytes' fingerprint, then compile the
     deployment's unit from them through QML's one compiler, which checks every pin's
-    fingerprint; answers the compiled unit or why it does not trade."""
+    fingerprint; answers the compiled unit or why it does not trade.
+
+    ``nets_positions`` is the bound account's own answer, which decides whether a unit may hold
+    more than one position on a market: this node measures it at the venue, so a unit that asks
+    for two on an account that nets refuses here, by name, rather than cancelling its first
+    position at the venue (AD-25).
+    """
     sources: dict[str, bytes] = {}
     entries: dict[str, bytes] = {}
     for item in deployment.files:
@@ -2196,7 +2320,9 @@ def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
         return records
     compiled = compile_unit(
         deployment.unit_document,
-        CompileContext(sources=sources, entries=entries, records=records),
+        CompileContext(
+            sources=sources, entries=entries, records=records, nets_positions=nets_positions
+        ),
     )
     if isinstance(compiled, CompiledUnit):
         return compiled
@@ -2305,7 +2431,7 @@ class Runtime:
         steady_ns: Callable[[], int],
         sleep: Callable[[float], None],
         boot_epoch_id: str,
-        compile: Compile = compile_staged,
+        compile: Compile | None = None,
         tick_s: float = RECONCILE_TICK_S,
     ) -> None:
         self.context = context
@@ -2317,7 +2443,7 @@ class Runtime:
         self.steady_ns = steady_ns
         self.sleep = sleep
         self.boot_epoch_id = boot_epoch_id
-        self.compile = compile
+        self.compile = self._compile_at_venue if compile is None else compile
         self.tick_s = tick_s
         self.hosted: dict[str, _Hosted] = {}
         self.alarms: list[Mapping[str, object]] = []
@@ -2677,7 +2803,10 @@ class Runtime:
             sized = _unit_account(unit, instant)
             handler = unit.handler
             held: Mapping[str, OwnPosition] = {} if handler is None else handler.open_positions
-            for market, position in held.items():
+            for position_id, position in held.items():
+                market = None if handler is None else handler.market_holding(position_id)
+                if market is None:
+                    continue
                 record = unit.records.get(market)
                 if record is None or sized is None:
                     continue
@@ -3114,6 +3243,18 @@ class Runtime:
 
     # --- deployments: compile after the answer, then warm up, then trade ---
 
+    def _compile_at_venue(self, deployment: Deployment, folder: Path) -> CompiledUnit | str:
+        """Compile a deployment with the account's own position model, which it measures at the
+        venue: a netting account cancels a second position, so this node refuses that document
+        by name before the unit runs (AD-25). An account with no binding yet states nothing, and
+        the compiler's own netting answer refuses it rather than letting it trade a cancel."""
+        venue = self.venues.get(deployment.account_id)
+        return compile_staged(
+            deployment,
+            folder,
+            nets_positions=True if venue is None else venue.client.nets_positions(),
+        )
+
     def _deployments(self, target: Target) -> None:
         for deployment_id, change in target.deployments.items():
             if deployment_id in self.hosted:
@@ -3161,12 +3302,30 @@ class Runtime:
             hosted.phase = Phase.REFUSED
             hosted.detail = "a live lane trades only on a demo binding until a live one is bound"
             return
-        seconds, account_bar = stream_seconds(compiled.plan.stream), venue.client.bar_size_ns()
-        if seconds is not None and account_bar is not None and seconds * _NS != account_bar:
+        account_bar = venue.client.bar_size_ns()
+        for stream in compiled.plan.streams:
+            seconds = stream_seconds(stream)
+            if seconds is None:
+                if len(compiled.plan.streams) > 1:
+                    hosted.phase = Phase.REFUSED
+                    hosted.detail = (
+                        f"the unit reads {stream} bars this node cannot name in seconds, so they"
+                        " cannot be rolled from another stream"
+                    )
+                    return
+                continue
+            if account_bar is not None and (seconds * _NS) % account_bar:
+                hosted.phase = Phase.REFUSED
+                hosted.detail = (
+                    f"the unit reads {stream} bars and this account's feed builds"
+                    f" {_bar_name(account_bar)} bars that do not divide it"
+                )
+                return
+        if len(compiled.plan.streams) > 1 and account_bar is None:
             hosted.phase = Phase.REFUSED
             hosted.detail = (
-                f"the unit reads {compiled.plan.stream} bars and this account's feed builds"
-                f" {account_bar // (60 * _NS):g}-minute bars"
+                f"the unit reads {compiled.plan.streams[-1]} bars and this account's feed does not"
+                " say its bar size, so they cannot be rolled"
             )
             return
         if self._widen(venue, deployment):
@@ -3233,6 +3392,7 @@ class Runtime:
             FeedRates(venue.feed.recording, rate_refs(records, ACCOUNT_CURRENCY), ACCOUNT_CURRENCY),
             port=_ScopeClose(self, deployment.deployment_id),
         )
+        unit.base_ns = account_bar
         unit.journal_world = world
         unit.account = lambda account=deployment.account_id: self._account_inputs(account)
         unit.brake_equity = lambda account=deployment.account_id: self.account_brake_equity(account)
@@ -3269,11 +3429,9 @@ class Runtime:
             unit.adopt(rebuilt.value)
         hosted.phase = Phase.WARMING
         recorded = [
-            Bar(market, bar)
-            for market in unit.traded
-            for bar in venue.feed.recording.recent(market, unit.warm_needed)
+            Bar(market, bar) for market in unit.traded for bar in self._recent(unit, venue, market)
         ]
-        self._drive_one(hosted, recorded)
+        self._drive_one(hosted, recorded, replay=True)
         self._settle_warm(hosted)
 
     def _widen(self, venue: Venue, deployment: Deployment) -> bool:
@@ -3473,7 +3631,9 @@ class Runtime:
         )
         if is_refusal(accumulator):
             return accumulator
-        streams = StreamSet.try_create([DeclaredStream(market, market) for market in unit.traded])
+        streams = StreamSet.try_create(
+            [DeclaredStream(unit.stream_id(market), market) for market in unit.traded]
+        )
         if is_refusal(streams):
             return streams
         latency = Duration.try_create(MAX_SLICE_LATENCY_NS)
@@ -3498,6 +3658,27 @@ class Runtime:
             hosted.detail = f"warming up {unit.warm_seen} of {unit.warm_needed}"
 
     # --- driving units on closed bars ---
+
+    def _recent(self, unit: NodeUnit, venue: Venue, market: str) -> tuple[QuoteBar, ...]:
+        """The feed bars to replay for warm-up: the primary's ``warm_needed`` buckets, no more.
+
+        ``warm_needed`` counts the slowest stream's warm-up in the primary's steps, so the read
+        follows the unit's own stepping even when it reads several streams. A stream ``factor``
+        feed bars long needs ``factor`` bars per primary step, and the recording may start part
+        way through a bucket, which ``roll_up`` drops. So the read stops one base bar short of
+        ``warm_needed + 1`` whole primary buckets: a mid-stream start still yields ``warm_needed``
+        whole buckets, and never a bucket past the one that completes warm-up. This bounds the
+        bars read, not the buckets that close: a recording missing a base bar inside a bucket
+        closes more buckets than it reads whole, and every bucket the read closes is stepped, so
+        the window reaches the live frontier with no hole in it.
+        """
+        if unit.base_ns is None or unit.base_ns <= 0:
+            return venue.feed.recording.recent(market, unit.warm_needed)
+        seconds = unit.stream_seconds.get(unit.stream)
+        if seconds is None:
+            return venue.feed.recording.recent(market, unit.warm_needed)
+        factor = seconds * _NS // unit.base_ns
+        return venue.feed.recording.recent(market, (unit.warm_needed + 1) * factor - 1)
 
     def _drive(self, venue: Venue, bars: Sequence[Bar]) -> None:
         for hosted in self.hosted.values():
@@ -3524,42 +3705,53 @@ class Runtime:
                 unit.journal.append(RiskEvent(UNIT_FAULT, key))
         hosted.detail = f"a fault: {why}"
 
-    def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar]) -> None:
+    def _drive_one(self, hosted: _Hosted, bars: Sequence[Bar], replay: bool = False) -> None:
+        """Step the unit over ``bars``. ``replay`` marks the warm-up bars read from the recording:
+        the unit stays warming over the whole batch, so no bar of it mints an order, and
+        ``_settle_warm`` flips the unit once the whole recording is in its window. A flip part way
+        through the batch would both place an order from a past bar and drop every recorded bar
+        after it, leaving the window short of the live frontier for good."""
         unit, loop = hosted.unit, hosted.loop
         if unit is None or loop is None:
             return
-        by_ns: dict[int, list[Bar]] = {}
+        by_at: dict[int, list[Bar]] = {}
         for event in bars:
             if event.market_id in unit.traded:
-                by_ns.setdefault(event.bar.knowable_at.value_ns, []).append(event)
-        for ns in sorted(by_ns):
-            for event in by_ns[ns]:
-                unit.windows[event.market_id].push(event.bar)
-                pushed = loop.accumulator.push(
-                    observation_id=f"{event.market_id}:{ns}",
-                    stream_id=event.market_id,
-                    receive_wall=Instant(ns),
-                    payload={"kind": "market-bar", "market_id": event.market_id},
-                    kind="market-bar",
-                    closed=True,
-                )
-                if is_refusal(pushed):
-                    hosted.phase, hosted.detail = Phase.STOPPED, _why(pushed)
+                by_at.setdefault(event.bar.knowable_at.value_ns, []).append(event)
+        for at in sorted(by_at):
+            closes: dict[int, list[str]] = {}
+            for event in by_at[at]:
+                for stream, closed in unit.roll(event.market_id, event.bar).items():
+                    unit.windows[(stream, event.market_id)].push(closed)
+                    if stream == unit.stream:
+                        closes.setdefault(closed.knowable_at.value_ns, []).append(event.market_id)
+            for ns in sorted(closes):
+                for market in closes[ns]:
+                    pushed = loop.accumulator.push(
+                        observation_id=f"{unit.stream_id(market)}:{ns}",
+                        stream_id=unit.stream_id(market),
+                        receive_wall=Instant(ns),
+                        payload={"kind": "market-bar", "market_id": market},
+                        kind="market-bar",
+                        closed=True,
+                    )
+                    if is_refusal(pushed):
+                        hosted.phase, hosted.detail = Phase.STOPPED, _why(pushed)
+                        return
+                unit.journal.at(Instant(ns))
+                driven = loop.close_frontier()
+                if is_refusal(driven):
+                    self._unit_fault(
+                        hosted,
+                        FaultPhase.HOST,
+                        str(driven.context.get("field") or "close_frontier"),
+                        _why(driven),
+                    )
                     return
-            unit.journal.at(Instant(ns))
-            driven = loop.close_frontier()
-            if is_refusal(driven):
-                self._unit_fault(
-                    hosted,
-                    FaultPhase.HOST,
-                    str(driven.context.get("field") or "close_frontier"),
-                    _why(driven),
-                )
-                return
-            if unit.warming:
-                unit.warm_seen += 1
-                if unit.warm_seen >= unit.warm_needed:
-                    unit.warming = False
+                if unit.warming:
+                    unit.warm_seen += 1
+                    if not replay and unit.warm_seen >= unit.warm_needed:
+                        unit.warming = False
         self._write_snapshot(hosted)
 
     # --- what he sees ---

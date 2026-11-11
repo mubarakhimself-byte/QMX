@@ -115,8 +115,11 @@ class _Sim:
         return _At(answer)
 
     def held(self, market: str) -> _At:
-        def answer(_instant: Instant) -> OwnPosition | None:
-            return self.positions.get(market)
+        """Every position held on ``market``, as the unit's own surface answers it (AD-25)."""
+
+        def answer(_instant: Instant) -> tuple[OwnPosition, ...]:
+            found = self.positions.get(market)
+            return () if found is None else (found,)
 
         return _At(answer)
 
