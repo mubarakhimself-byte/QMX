@@ -258,6 +258,10 @@ class Account:
     """``market.rate:<quote>`` by the quote currency each converts from, its value the exact
     rational (AD-10 "Currency"). A host supplies one per quote its unit reads; the account's own
     currency takes the ``Fact(1)`` fast path and never looks here."""
+    unpriced: str | None = None
+    """The skip code every entry answers instead of a size while the host holds a money figure it
+    cannot convert into ``currency`` (``rate_absent``). ``equity`` then leaves that figure out,
+    so it is never summed as account money and no entry is sized on it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1128,6 +1132,8 @@ class HostedUnit:
                 "sizer_skip",
                 "the proposal names no market this unit runs",
             )
+        if facts.unpriced is not None:
+            return ended(proposal.row, {}, ("converter: refuse",), facts.unpriced, "")
         evidence: dict[str, object] = {
             "equity": facts.equity,
             "entry_price": proposal.entry_price,

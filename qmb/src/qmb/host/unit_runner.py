@@ -42,7 +42,7 @@ import json
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -127,6 +127,7 @@ __all__ = [
 
 ZERO_TRADES: Final[str] = "zero_trades"
 _NS_PER_SEC: Final[int] = 1_000_000_000
+_CENT: Final[Decimal] = Decimal("0.01")
 _NS_PER_MS: Final[int] = 1_000_000
 _EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
 _QUOTES: Final[DataCard] = DataCard(Fidelity.QUOTES)
@@ -202,7 +203,9 @@ class UnitRunResult:
     fills: tuple[Fill, ...]
     open_positions: Mapping[str, OwnPosition]
     net_money: Decimal
-    """The trades' money plus every cash event's."""
+    """The account's own move over the run, in its currency and in cents: every trade's money and
+    every cash event's, each converted from its market's quote. A figure no rate converts is left
+    out, and the labels name ``rate_absent``."""
     total_r: Decimal
     labels: tuple[str, ...]
     cash_events: tuple[CashEvent, ...] = ()
@@ -674,6 +677,7 @@ def run_loaded(
     if rates is not None and rates.refused is not None:
         return rates.refused
     trades, cash = handler.value.trades, handler.value.cash_events
+    account = handler.value.latest_account()
     uncalibrated = any(
         market not in loaded.costs
         or not loaded.costs[market].calibrated(request.calibrated_min_fills)
@@ -684,7 +688,7 @@ def run_loaded(
         *((COSTS_UNCALIBRATED,) if uncalibrated else ()),
         *((HOLES_UNCHECKED,) if unchecked else ()),
         *((DATA_SHORT,) if short else ()),
-        *((RATE_ABSENT,) if loaded.missing_rates else ()),
+        *((RATE_ABSENT,) if loaded.missing_rates or account.unpriced else ()),
     )
     return Ok(
         UnitRunResult(
@@ -693,8 +697,7 @@ def run_loaded(
             trades=trades,
             fills=handler.value.fills,
             open_positions=handler.value.open_positions,
-            net_money=sum((t.money for t in trades), Decimal(0))
-            + sum((c.money for c in cash), Decimal(0)),
+            net_money=(account.equity - request.equity).quantize(_CENT, rounding=ROUND_HALF_EVEN),
             total_r=sum((t.r for t in trades), Decimal(0)),
             labels=labels,
             cash_events=cash,

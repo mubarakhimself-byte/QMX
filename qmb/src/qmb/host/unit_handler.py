@@ -55,6 +55,7 @@ from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots
 from qml.protocol.exits import PositionFacts
 from qml.protocol.unit import (
+    ACCOUNT_CURRENCY,
     Account,
     CalibrationRow,
     ControlEvent,
@@ -76,6 +77,7 @@ from qml.unit.model import Side
 from qmb._refuse import invalid, policy
 from qmb.execution.fill import FillKind, Reached
 from qmb.execution.financing import CashEvent, CashKind
+from qmb.host.facts import RATE_ABSENT
 from qmb.runloop.loop import RestingIntent, SliceObservation
 
 __all__ = [
@@ -317,9 +319,25 @@ def _exact(value: Decimal | Fraction) -> Fraction:
     return value if isinstance(value, Fraction) else Fraction(value)
 
 
-def _converted(money: Decimal, rate: Fraction | None) -> Fraction:
-    """One row's money in the account's currency at ``rate``, or the quote figure for no rate."""
-    return Fraction(money) if rate is None else Fraction(money) * rate
+def _in_account(
+    money: Decimal,
+    record: InstrumentRecord | None,
+    stamped: Fraction | None,
+    currency: str,
+    rates: Mapping[str, Fact],
+) -> Fraction | None:
+    """One money figure in the market's quote currency, in the account's ``currency``.
+
+    A figure converts by the rate its row stamped, else at one when the record quotes the
+    account's currency, else by the rate this call holds for the record's quote. A figure none
+    of these reaches answers None, so it is never summed as account money.
+    """
+    if stamped is not None:
+        return Fraction(money) * stamped
+    if record is not None and record.currency == currency:
+        return Fraction(money)
+    fact = None if record is None else rates.get(record.currency)
+    return None if fact is None or fact.value is None else Fraction(money) * _exact(fact.value)
 
 
 def _amount(value: Fraction) -> Decimal:
@@ -419,6 +437,7 @@ class UnitSliceHandler:
         self._fills: list[Fill] = []
         self._cash: list[CashEvent] = []
         self._carried: dict[tuple[str, str], Instant] = {}
+        self._last: Instant | None = None
         self._stepped: tuple[int, UnitStep, tuple[Priced, ...]] | None = None
         self._entry_stamps: dict[str, dict[str, Decimal]] = {}
         self._entry_rates: dict[str, tuple[Fraction | None, Instant | None]] = {}
@@ -666,35 +685,45 @@ class UnitSliceHandler:
     def _account(self, instant: Instant) -> Account:
         """The account facts at ``instant``: the equity in the account's currency and the rates.
 
-        Each closed trade's money is the quote figure its row kept, so it is converted before the
-        sum by the rate that row stamped; a row that carries none, an adopted position's close, is
-        converted by the rate this call holds for its quote. The rates come from the host's port
-        for every quote the unit reads, and a quote it cannot price is left out, which the
-        converter names ``rate_absent`` on that entry alone.
+        Every money figure is in its market's quote currency: each closed trade's money, and each
+        cash event, a commission, financing or funding. Each converts before the sum, a trade by
+        the rate its row stamped and the rest by the rate this call holds for its quote. A figure
+        no rate converts is left out of the sum and makes the account ``unpriced``, so every entry
+        skips ``rate_absent`` until a rate comes. The rates come from the host's port for every
+        quote the unit reads. A quote it cannot price is left out, which the converter names
+        ``rate_absent`` on that entry alone, and a port that raises reads as no rate at all, so
+        the read fails the entries and never the exits.
         """
+        currency = ACCOUNT_CURRENCY if self._rates is None else self._rates.currency
         rates: dict[str, Fact] = {}
+        read = True
         if self._rates is not None:
-            for record in self._records.values():
-                fact = self._rates.rate(record, instant)
-                if fact is not None:
-                    rates[record.currency] = fact
-        equity = Fraction(self._equity)
-        equity += sum(
-            (_converted(t.money, self._row_rate(t, rates)) for t in self._trades), Fraction(0)
+            try:
+                for record in self._records.values():
+                    fact = self._rates.rate(record, instant)
+                    if fact is not None:
+                        rates[record.currency] = fact
+            except Exception:  # the host's adapter is a boundary: its raise is no rate, not a crash
+                rates, read = {}, False
+        figures = (
+            *((t.money, t.market_id, t.rate) for t in self._trades),
+            *((c.money, c.market_id, None) for c in self._cash),
         )
-        equity += sum((Fraction(c.money) for c in self._cash), Fraction(0))
+        converted = [
+            _in_account(money, self._records.get(market), stamped, currency, rates)
+            for money, market, stamped in figures
+        ]
+        equity = Fraction(self._equity) + sum((c for c in converted if c is not None), Fraction(0))
+        unpriced = None if read and None not in converted else RATE_ABSENT
         if self._rates is None:
-            return Account(_amount(equity))
-        return Account(_amount(equity), self._rates.currency, MappingProxyType(rates))
+            return Account(_amount(equity), unpriced=unpriced)
+        return Account(_amount(equity), currency, MappingProxyType(rates), unpriced)
 
-    def _row_rate(self, trade: UnitTrade, rates: Mapping[str, Fact]) -> Fraction | None:
-        """The rate ``trade``'s money converts by: its own stamp, else this call's rate for the
-        row's quote. A quote the call holds no fact for keeps the row's quote figure."""
-        if trade.rate is not None:
-            return trade.rate
-        record = self._records.get(trade.market_id)
-        fact = None if record is None else rates.get(record.currency)
-        return None if fact is None or fact.value is None else _exact(fact.value)
+    def latest_account(self) -> Account:
+        """The account at the last bar this handler closed: the run's own move in its currency."""
+        if self._last is None:
+            return Account(self._equity)
+        return self._account(self._last)
 
     def held_in(self, market: str) -> tuple[tuple[str, HeldPosition], ...]:
         """Every position this handler holds on one market, each with its own id, in the order
@@ -865,6 +894,7 @@ class UnitSliceHandler:
             )
         bar = self._bars[key][observation.instant.value_ns]
         self._latest[key] = bar
+        self._last = frontier
         for position_id, held in self.held_in(key[1]):
             moved = _with_excursion(held, bar)
             self._held[position_id] = moved
