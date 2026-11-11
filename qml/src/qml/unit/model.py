@@ -26,6 +26,7 @@ __all__ = [
     "Binding",
     "Cadence",
     "CadenceAt",
+    "Cautious",
     "ClaimCard",
     "Combiner",
     "CombinerKind",
@@ -34,6 +35,7 @@ __all__ = [
     "Direction",
     "EntryRef",
     "Fallback",
+    "Guard",
     "Lineage",
     "LineageParent",
     "Marker",
@@ -215,7 +217,17 @@ class StageMove(StrEnum):
 
 
 class Authority(StrEnum):
+    OFF = "off"
     MOTION_INSIDE_RANGE = "motion_inside_range"
+    AT_ANCHOR = "at_anchor"
+
+
+class Cautious(StrEnum):
+    """The direction a move may take a number: toward less risk, toward more, or neither."""
+
+    DOWN = "down"
+    UP = "up"
+    HOLD = "hold"
 
 
 class Origin(StrEnum):
@@ -225,6 +237,7 @@ class Origin(StrEnum):
     INFERRED = "inferred"
     BUILDER_CHOSEN = "builder_chosen"
     UNRESOLVED = "unresolved"
+    FOUND_BY_REPLAY = "found_by_replay"
     PLACEHOLDER = "placeholder"  # mock-data-scan: allow (the risk session's label, AD-116)
 
 
@@ -428,6 +441,19 @@ class Range:
 
 
 @dataclass(frozen=True)
+class Guard:
+    """What a number does after its moves trip: return to the last value, then stop moving.
+
+    ``revert_after`` counts the trips that take the number back to the value it held before the
+    first move of the run. ``freeze_after`` counts the trips that stop it moving at all until a
+    person writes a new version. Both are counts of trips, so neither is ever zero.
+    """
+
+    revert_after: int = field(metadata={"minimum": 1})
+    freeze_after: int = field(metadata={"minimum": 1})
+
+
+@dataclass(frozen=True)
 class Cadence:
     every_closed_trades: int | None = field(default=None, metadata={"minimum": 1})
     at: CadenceAt | None = None
@@ -448,7 +474,14 @@ class Motion:
 @dataclass(frozen=True)
 class NumberSpec:
     """One number of the unit (AD-103). ``default`` is a decimal string, or a category or
-    flag value; which one depends on ``measure`` and is checked at layer C."""
+    flag value; which one depends on ``measure`` and is checked at layer C.
+
+    The four answers AD-14 asks of every number sit here: ``derivation`` says where the value
+    comes from (a rule block's pin, or a fact's name), ``authority`` and ``never_self_tune`` say
+    who may move it, ``owner`` names who argues it, and ``reason`` says why it holds this value
+    rather than another. A number that states none of them is an old document and reads: layer C
+    then names the reason it lacks.
+    """
 
     kind: NumberKind
     measure: Measure
@@ -456,6 +489,13 @@ class NumberSpec:
     motion: Motion
     authority: Authority
     origin: Origin
+    derivation: str | None = None
+    owner: str = ""
+    reason: str = ""
+    cautious: Cautious = Cautious.HOLD
+    guard: Guard | None = None
+    never_self_tune: bool = False
+    stage_values: Mapping[str, str] = field(default_factory=dict[str, str])
     range: Range | None = None
     applies_to_open_positions: bool = False
 

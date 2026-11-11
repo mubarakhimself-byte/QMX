@@ -181,6 +181,7 @@ def test_a_200_problem_answer_leads_with_its_counts_and_first_errors() -> None:
             "motion": {"mode": "fixed"},
             "authority": "motion_inside_range",
             "origin": "published_convention",
+            "reason": "a spare number whose range is deliberately backwards",
         }
 
     head = check(document, _context()).text()[:2000]

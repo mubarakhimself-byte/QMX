@@ -116,6 +116,8 @@ def _uses(unit: Unit) -> Iterator[_Use]:
         yield _Use(_at("/exit_set", index), binding, None, ())
     if unit.sizer is not None:
         yield _Use("/sizer", unit.sizer, None, ())
+    for index, binding in enumerate(unit.modifiers):
+        yield _Use(_at("/modifiers", index), binding, None, ())
     for scope in ("position", "unit", "account"):
         for index, binding in enumerate(getattr(unit.halts, scope)):
             yield _Use(_at("/halts", scope, index), binding, None, ())
@@ -678,7 +680,8 @@ def _complete(unit: Unit, bound: Sequence[tuple[_Use, EntryFace]], found: Found)
                 "E",
                 ProblemKind.PLACEHOLDER,
                 _at("/numbers", name, "origin"),
-                f"this number's value is a {_PLACEHOLDER}",
+                f"this number's value is a {_PLACEHOLDER} that {spec.owner or 'its owner'} "
+                "replaces",
                 "replace it with a value from a source",
             )
     if not (unit.halts.position or unit.halts.unit or unit.halts.account):

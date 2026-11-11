@@ -1029,7 +1029,9 @@
           "authority": {
             "type": "string",
             "enum": [
-              "motion_inside_range"
+              "off",
+              "motion_inside_range",
+              "at_anchor"
             ]
           },
           "origin": {
@@ -1041,8 +1043,53 @@
               "inferred",
               "builder_chosen",
               "unresolved",
+              "found_by_replay",
               "placeholder"
             ]
+          },
+          "derivation": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "cautious": {
+            "type": "string",
+            "enum": [
+              "down",
+              "up",
+              "hold"
+            ]
+          },
+          "guard": {
+            "type": "object",
+            "properties": {
+              "revert_after": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "freeze_after": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "revert_after",
+              "freeze_after"
+            ],
+            "additionalProperties": false
+          },
+          "never_self_tune": {
+            "type": "boolean"
+          },
+          "stage_values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "range": {
             "type": "object",

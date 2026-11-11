@@ -29,8 +29,10 @@ from qml.blocks.api import (
     CrossUnitHook,
     EntryOrder,
     ExitInstance,
+    Factor,
     Halt,
     HaltInstance,
+    ModifierInstance,
     OutputType,
     Refuse,
     Signal,
@@ -184,6 +186,36 @@ _PROBES: Final[tuple[_Probe, ...]] = (
         "/numbers/stop_buffer/applies_to_open_positions",
         _put("numbers/stop_buffer/applies_to_open_positions", True),
     ),
+    _Probe(
+        "NumberSpec.derivation",
+        "/numbers/stop_buffer/derivation",
+        _put("numbers/stop_buffer/derivation", "own-r-step@1"),
+    ),
+    _Probe(
+        "NumberSpec.guard",
+        "/numbers/stop_buffer/guard",
+        _put("numbers/stop_buffer/guard", {"revert_after": 3, "freeze_after": 5}),
+    ),
+    _Probe(
+        "NumberSpec.cautious",
+        "/numbers/stop_buffer/cautious",
+        _put("numbers/stop_buffer/cautious", "down"),
+    ),
+    _Probe(
+        "NumberSpec.never_self_tune",
+        "/numbers/min_trend_strength/never_self_tune",
+        _put("numbers/min_trend_strength/never_self_tune", True),
+    ),
+    _Probe(
+        "NumberSpec.stage_values",
+        "/numbers/stop_buffer/stage_values",
+        _put("numbers/stop_buffer/stage_values", {"stage_2": "0.0003"}),
+    ),
+    _Probe(
+        "NumberSpec.authority",
+        "/numbers/stop_buffer/authority",
+        _put("numbers/stop_buffer/authority", "at_anchor"),
+    ),
     _Probe("Motion.source", "/numbers/ema_period/motion/source", _motion(source="trend")),
     _Probe(
         "Motion.rule_params",
@@ -213,7 +245,6 @@ _PROBES: Final[tuple[_Probe, ...]] = (
         "/numbers/min_trend_strength/motion/cadence",
         _put("numbers/min_trend_strength/motion/cadence", {"at": "market_day_close"}),
     ),
-    _Probe("Unit.modifiers", "/modifiers", _put("modifiers", _MODIFIER)),
     _Probe("Unit.gates", "/gates", _put("gates", _MODIFIER)),
     _Probe("Unit.tolerations", "/tolerations", _put("tolerations", ["news"])),
     _Probe("Unit.stages", "/stages", _put("stages", _STAGES)),
@@ -226,6 +257,7 @@ _PROBES: Final[tuple[_Probe, ...]] = (
 
 _SLOTS: Final = (
     ("sizer", SizerInstance),
+    ("sizing modifier", ModifierInstance),
     ("exit", ExitInstance),
     ("halt", HaltInstance),
     ("cross-unit hook", CrossUnitHook),
@@ -234,6 +266,7 @@ _SLOTS: Final = (
 _ANSWERS: Final = (
     (Signal, "a context, trigger, confirmation, filter, veto or per-bar exit slot"),
     (Size, "a sizer slot"),
+    (Factor, "a sizing-modifier slot"),
     (Halt, "a halt slot"),
     (Refuse, "the cross-unit hook"),
     (EntryOrder, "an entry-order slot"),
@@ -349,7 +382,7 @@ def render(field_names: Sequence[str] | None = None) -> str:
         "",
         "## Socket list",
         "",
-        "The risk socket is the four slots a host fills. A block in a slot implements the",
+        "The risk socket is the five slots a host fills. A block in a slot implements the",
         "protocol's `update` method, or `before_order` for the cross-unit hook, and answers with",
         "the shape beside it.",
         "",

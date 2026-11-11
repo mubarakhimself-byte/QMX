@@ -17,7 +17,7 @@ from typing import cast
 from qml.check import CheckResult, check_and_compile
 from qml.check import check as _check
 from qml.compile import CompileContext, CompiledUnit
-from qml.unit.model import MirrorSide, NumberParam, Side, SlotsSide, ValueParam
+from qml.unit.model import MirrorSide, NumberParam, NumberSpec, Side, SlotsSide, ValueParam
 from qml.unit.parse import Problem, ProblemKind, parse
 
 __all__ = ["Match", "check", "compile", "explain", "find", "new"]
@@ -140,6 +140,19 @@ def _param(value: NumberParam | ValueParam) -> str:
     return value.number if isinstance(value, NumberParam) else str(value.value)
 
 
+def _span(spec: NumberSpec) -> str:
+    span = spec.range
+    if span is None:
+        return "range none"
+    return f"range {span.min} to {span.max} by {span.step}"
+
+
+def _why(spec: NumberSpec) -> str:
+    """Who argues the value, why it holds, and where it came from. AD-14's answers, in one line."""
+    said = f"owner {spec.owner or 'unstated'}, because {spec.reason or 'it states no reason'}"
+    return said if spec.derivation is None else f"{said}, from {spec.derivation}"
+
+
 def explain(document: object, context: CompileContext) -> tuple[str, ...]:
     """The unit in plain lines: what it trades, each side's slots, exits, sizer and numbers,
     and its check counts."""
@@ -169,7 +182,8 @@ def explain(document: object, context: CompileContext) -> tuple[str, ...]:
         lines.append(f"sizer {unit.sizer.name} = {unit.sizer.block}")
     lines += [
         f"number {name}: {spec.kind.value} {spec.measure.value}, default {spec.default}, "
-        f"moves by {spec.motion.mode.value}, origin {spec.origin.value}"
+        f"{_span(spec)}, moves by {spec.motion.mode.value}, origin {spec.origin.value}, "
+        f"{_why(spec)}"
         for name, spec in unit.numbers.items()
     ]
     lines.append(counts)

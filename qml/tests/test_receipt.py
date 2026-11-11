@@ -7,7 +7,12 @@ fraction 0.005, equity 100000, EURUSD's 0.0050 stop distance, and 1.00 lots.
 
 The row hash is pinned as a literal on purpose: it is the receipt's identity, so a change to an
 input, a step or a verdict the size used must change the hash loudly instead of passing. It is
-read from the implementation once, when the row's shape is fixed.
+read from the implementation once, when the row's shape is fixed, and again each time the stack
+under it moved: when the shipped dummy's numbers each gained the reason and owner rc-23 requires,
+because the receipt covers the document's risk half; when the first join carried rc-31's second
+stream and rc-32's position count in at compiler formats 9 and 10; and when the joins settled this
+row's modifier chain at compiler format 11. Each value after the first was read from a failing run
+at the tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -25,7 +30,11 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:f5354256422dea5cf3371b1a02a173f9c9300e83cc026f537b77331a7984b2da"
+_STORED_HASH = "fp1:sha256:dba50efc20dd184e298f7810549f86ba4fcd9655c08d932235407e67db526170"
+"""The receipt's identity at compiler format 11. It moved from
+``fp1:sha256:01e3bd10...1bbee0`` because the row's receipt covers ``logic_fp`` and ``risk_fp``:
+the joined document's numbers now carry rc-23's reason and owner, and AD-19's format bump moves
+both halves by design. The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
