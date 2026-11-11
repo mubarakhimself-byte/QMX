@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import bisect
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from decimal import Decimal
 from typing import cast
 
@@ -22,6 +23,7 @@ from qmf.risk.unit_intent import UnitEntryIntent, UnitExitIntent
 from qml.blocks.api import Signal
 from qml.compile import CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
+from qml.protocol.controls import own_facts
 from qml.protocol.unit import (
     Account,
     HostedUnit,
@@ -380,3 +382,19 @@ def test_a_halt_row_filed_under_another_scope_is_refused(listed: str, declared: 
 
     assert isinstance(problems, tuple), "a row whose scope field disagrees with its list compiled"
     assert [(p.kind, p.where) for p in problems] == [("halt_scope", f"/halts/{listed}/0/scope")]
+
+
+def test_the_brakes_read_net_r_not_gross_r() -> None:
+    """A trade that won 0.0100 R at fill prices and lost 0.0040 R after its cash is a loss to
+    every brake: one losing trade, one losing day, and a session down 0.0040 R."""
+    closed_at = Instant(1_741_000_000_000_000_000)
+    paid_away = replace(_trade(1, "0.0100", closed_at), net_r=Decimal("-0.0040"))
+
+    own = own_facts([paid_away], closed_at)
+
+    assert own == {
+        "own.session_loss_r": Decimal("-0.0040"),
+        "own.session_fills": 1,
+        "own.loss_streak": 1,
+        "own.losing_day_streak": 1,
+    }
