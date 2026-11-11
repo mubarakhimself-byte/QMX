@@ -30,7 +30,7 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:bf4726a87c3add0c250c60c531a7e6ca5a1addfb0b6acfe69c730b7a2a4fa737"
+_STORED_HASH = "fp1:sha256:dba50efc20dd184e298f7810549f86ba4fcd9655c08d932235407e67db526170"
 """The receipt's identity at compiler format 11. It moved from
 ``fp1:sha256:01e3bd10...1bbee0`` because the row's receipt covers ``logic_fp`` and ``risk_fp``:
 the joined document's numbers now carry rc-23's reason and owner, and AD-19's format bump moves
