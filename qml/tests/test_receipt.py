@@ -31,11 +31,11 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:3500c4122f232e3ad6c6be0c204145b6a37085455e204af77234714fb7cc6b8e"
-"""The receipt's identity at compiler format 12. It moved from
-``fp1:sha256:dba50efc...67db526170`` because the row's receipt covers ``logic_fp`` and
-``risk_fp``, and AD-19's format bump for rc-24's widened motion engine moves both halves by design.
-The size, the steps and every verdict are the same."""
+_STORED_HASH = "fp1:sha256:4f09544fc80f3e7cc22cfeb492e240b2e14acfccb396cc984e6d1ccec2867159"
+"""The receipt's identity at compiler format 13. It moved from
+``fp1:sha256:3500c412...14fb7cc6b8e`` because the row's receipt covers ``logic_fp`` and
+``risk_fp``, and AD-19's format bump for rc-33's sessions joined on rc-24's widened motion engine
+moves both halves by design. The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
