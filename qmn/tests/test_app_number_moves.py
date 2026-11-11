@@ -309,10 +309,15 @@ class Run:
     """Tickets that amended an open position's protection at the venue."""
 
 
+RISK_NUMBERS = ("risk_fraction", "target_r")
+"""The two numbers this test moves. The dummy's own logic number moves on the same trades too."""
+
+
 def calibrations(rig: Rig) -> tuple[tuple[str, str, str, str], ...]:
     return tuple(
         (str(row["number"]), str(row["old"]), str(row["new"]), str(row["row_id"]))
         for row in rows(rig, "calibration")
+        if row["number"] in RISK_NUMBERS
     )
 
 
@@ -360,31 +365,44 @@ def started(tmp_path: Path) -> Iterator[Rig]:
 
 def test_k9_15_self_configuration(started: Rig) -> None:
     run, at = drive(started)
-    after_move = [(t.command.kind, t.market_id) for t in started.account.received]
 
+    play(started, at, [(EURUSD, eur_bar(at, high="1.10960")), (GOLD, gold_bar(at, "1995.00"))])
+    past_the_moved_target = len(eur_held(started))
+    at += BAR
     play(started, at, [(EURUSD, eur_bar(at, high="1.11000")), (GOLD, gold_bar(at, "1995.00"))])
-    eur_trades = [
-        (row["exit_kind"], row["exit_price"], row.get("reason_code"))
-        for row in rows(started, "trade")
-        if row["exit_kind"] != "stop"
-    ]
+    at += BAR
+    play(started, at, [(EURUSD, eur_bar(at)), (GOLD, gold_bar(at, "1995.00"))])
+    closed = [row for row in rows(started, "trade") if row["exit_kind"] != "stop"]
     entries = [
         t.quantity
         for t in started.account.received
         if t.market_id == EURUSD and t.command.kind is CommandKind.PLACE_ORDER
     ]
     held = eur_held(started)
+    sized = [
+        row
+        for row in rows(started, "signal")
+        if row.get("market_id") == EURUSD and row.get("outcome") == "taken" and row.get("binding")
+    ][-1]
+    inputs = cast("dict[str, dict[str, Json]]", sized["inputs"])
+    in_force = cast("dict[str, Json]", sized["numbers_in_force"])
 
     assert run.moved_at_trade == LOSERS, "the move lands on trade 20, with EURUSD held"
-    assert [(n, old, new) for n, old, new, _ in run.calibrations] == [
+    assert sorted((n, old, new) for n, old, new, _ in run.calibrations) == [
         ("risk_fraction", "0.005", "0.0049"),
         ("target_r", "2", "1.9"),
     ]
     assert run.eur_target_after_move == Decimal("1.11000"), "the open trade keeps its target"
     assert run.amends == 0, "a moved number amends no open position at the venue"
-    assert (CommandKind.PLACE_ORDER, EURUSD) in after_move
-    assert eur_trades == [("target", "1.11000", "target")]
-    assert entries == [Decimal("1.00"), Decimal("0.98")]
+    assert past_the_moved_target == 1, "a bar past 1.1095 but short of 1.1100 leaves it open"
+    assert [(row["exit_kind"], row["exit_price"], row["reason_code"]) for row in closed] == [
+        ("target", "1.09990", "target")
+    ]
+    stamped = cast("dict[str, Json]", closed[0]["numbers_at_entry"])
+    assert (stamped["number:target_r"], stamped["number:risk_fraction"]) == ("2", "0.005")
+    assert (in_force["risk_fraction"], in_force["target_r"]) == ("0.0049", "1.9")
+    assert inputs["account.realised_since"]["value"] == "-9450", "20 gold losses since the start"
+    assert entries == [Decimal("1.00"), Decimal("0.88")], "0.0049 of 90550 at 500 a lot"
     assert [h.target for h in held] == [Decimal("1.10950")]
     assert dict(held[0].entry_stamps)["number:target_r"] == Decimal("1.9")
 

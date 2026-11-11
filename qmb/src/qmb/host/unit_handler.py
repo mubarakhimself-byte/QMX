@@ -192,6 +192,13 @@ class UnitTrade:
     this is the one rate every money figure is converted by (SPINE section 3, "Money")."""
     rate_age_s: Decimal = Decimal(0)
     """How old that rate was when the position closed, stamped so a reader never reads one."""
+    numbers_at_entry: Mapping[str, Decimal] = MappingProxyType({})
+    """What the position's entry stamped, the numbers its exits read while it was held."""
+    reason_code: str = ""
+    """Why it closed: the exit's own reason code, or the protective level the bar reached."""
+    position_r: Decimal | None = None
+    """The whole position's R after costs on the close that leaves nothing held, None on a partial
+    close: the closed trade a restart counts again from the journal (AD-14 step 6)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,7 +531,9 @@ class UnitSliceHandler:
             if why is None:
                 continue
             quote = bar.bid if held.position.side is Side.LONG else bar.ask
-            self._close(market, held, FillKind.CLOSE, quote.open, frontier, held.decision_row_id)
+            self._close(
+                market, held, FillKind.CLOSE, quote.open, frontier, held.decision_row_id, why
+            )
 
     def _note_faults(self, faults: Sequence[Fault]) -> None:
         """One ``risk_event`` row, and so one card, per root-cause key (AD-23): the same broken
@@ -596,18 +605,32 @@ class UnitSliceHandler:
         entry_stop: Decimal,
         target: Decimal | None,
         decision_row_id: str,
+        entry_stamps: Mapping[str, Decimal] | None = None,
     ) -> Result[None]:
         """Hold a position the unit opened before this handler started, as the node finds it
         at its venue after a process restart: its stop, target and exits are managed as the
-        unit's own. A ``seeded`` position is another's, which the unit never closes."""
+        unit's own, on the numbers its entry stamped. A ``seeded`` position is another's, which
+        the unit never closes."""
         record = self._records.get(market)
         if record is None:
             return invalid("market", "a unit adopts a position on its own markets", market=market)
         risk = _money(position.side, position.entry_price, entry_stop, position.quantity, record)
         self._held[position.position_id] = HeldPosition(
-            market, position, stop, target, decision_row_id, {}, entry_stop, risk.copy_abs()
+            market,
+            position,
+            stop,
+            target,
+            decision_row_id,
+            dict(entry_stamps or {}),
+            entry_stop,
+            risk.copy_abs(),
         )
         return Ok(None)
+
+    def entry_stamps_of(self, decision_row_id: str) -> Mapping[str, Decimal]:
+        """What the entry this row minted will stamp on its trade, until it fills, so a host can
+        keep them with its own record of the send."""
+        return self._entry_stamps.get(decision_row_id, {})
 
     def read_surfaces(self) -> dict[str, _At]:
         surfaces = {
@@ -854,6 +877,7 @@ class UnitSliceHandler:
                     reached.price,
                     frontier,
                     moved.decision_row_id,
+                    reached.kind.value,
                     gapped=reached.gap,
                 )
         self._close_at_open(key[1], bar, frontier)
@@ -1020,10 +1044,11 @@ class UnitSliceHandler:
                 position_id=exit_.position_ref.position_id,
             )
         row_id = exit_.decision_row_id
+        why = exit_.reason_code.code
         price = self._execution.close_price(market, held.position.side, bar)
         match exit_.action:
             case CloseFull():
-                self._close(market, held, FillKind.CLOSE, price, frontier, row_id)
+                self._close(market, held, FillKind.CLOSE, price, frontier, row_id, why)
             case ClosePartial(quantity=asked):
                 sized = lots(_decimal(asked.value, asked.scale), self._records[market])
                 if is_refusal(sized):
@@ -1038,7 +1063,7 @@ class UnitSliceHandler:
                         asked=str(quantity),
                         held=str(held.position.quantity),
                     )
-                self._close(market, held, FillKind.CLOSE, price, frontier, row_id, quantity)
+                self._close(market, held, FillKind.CLOSE, price, frontier, row_id, why, quantity)
             case AmendProtection(stop=stop, targets=targets):
                 current = _price(held.stop, exit_.position_ref.instrument)
                 tightens = check_amendment_tightens(
@@ -1063,11 +1088,13 @@ class UnitSliceHandler:
         price: Decimal,
         frontier: Instant,
         row_id: str,
+        reason: str,
         quantity: Decimal | None = None,
         *,
         gapped: bool = False,
     ) -> None:
-        """Close ``quantity`` of the held position, or all of it; the rest stays held."""
+        """Close ``quantity`` of the held position, or all of it; the rest stays held. The trade
+        names ``reason`` and the numbers the entry stamped (AD-14 step 4)."""
         record = self._records[market]
         position = held.position
         closed = position.quantity if quantity is None else quantity
@@ -1077,6 +1104,7 @@ class UnitSliceHandler:
             if held.risk
             else Decimal(0)
         )
+        rest = position.quantity - closed
         fill = Fill(
             frontier,
             market,
@@ -1108,11 +1136,13 @@ class UnitSliceHandler:
             risk=held.risk,
             rate=held.rate,
             rate_age_s=_age_s(frontier, held.rate_ts),
+            numbers_at_entry=held.entry_stamps,
+            reason_code=reason,
+            position_r=None if rest else held.realized_r + r,
         )
         self._record_fill(fill)
         self._trades.append(trade)
         self._journal.append(trade)
-        rest = position.quantity - closed
         if rest:
             self._held[position.position_id] = replace(
                 held,

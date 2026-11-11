@@ -561,6 +561,15 @@ class RunJournal:
         if trade.rate is not None:
             body["rate"] = f"{trade.rate.numerator}/{trade.rate.denominator}"
         body["rate_age_s"] = f"{trade.rate_age_s:f}"
+        # AD-14 steps 4 and 6: the close names its reason and the numbers its entry stamped, and
+        # the close that leaves nothing held carries the position's whole R, so a restarted node
+        # counts the unit's own closed trades again from these rows.
+        if trade.reason_code:
+            body["reason_code"] = trade.reason_code
+        if trade.numbers_at_entry:
+            body["numbers_at_entry"] = {k: str(v) for k, v in trade.numbers_at_entry.items()}
+        if trade.position_r is not None:
+            body["position_r"] = str(trade.position_r)
         self._write("trade", body, self._facts(trade.market_id))
 
     def _cash(self, event: CashEvent) -> None:

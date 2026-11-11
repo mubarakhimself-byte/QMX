@@ -20,7 +20,9 @@ On each instant, for each market whose primary bar is new: every block updates, 
 every position this unit version's logic half opened, then entries. A slot reads a slower stream
 at its last closed bar, so neither the step nor any block sees a bar knowable after the instant. A
 market's entries wait for every stream's own warm-up (``warming``, then ``ready``). Calibrated
-numbers move last, from ``own_journal``, only when the unit is flat. The primary stream's ``close``
+numbers move last, from ``own_journal``. A held position keeps the numbers its entry stamped, so a
+sizing or exit number moves with positions open, and a logic number waits for a flat market. The
+primary stream's ``close``
 and its bars are the bid side; an entry's reference price is the ask close for a long and the bid
 close for a short.
 """
@@ -95,6 +97,7 @@ __all__ = [
     "FACTOR_OUT_OF_RANGE",
     "FAULT_CLEAN_BARS",
     "NEUTRAL",
+    "NUMBER_STAMP",
     "OHLC",
     "PER_TRADE_CAP_SHARE",
     "SEAM_JUMP_SCALE",
@@ -160,6 +163,8 @@ FAULT_CLEAN_BARS: Final[int] = 8
 before its entries come back (AD-23). Eight bars is about two hours on the 15-minute stream the
 shipped templates run, long enough for the fault's card to be seen and short enough that a fixed
 block returns the same session. Labelled placeholder, range one to 96 bars, owner numbers talk."""
+NUMBER_STAMP: Final[str] = "number:"
+"""The head of a number's own stamp on a trade, ``number:<name>`` (AD-14 step 1)."""
 EXIT_FAULT: Final[str] = "exit_fault"
 """The reason a position is closed when its unit's own exits cannot run for ``exit_fault_bars``
 bars (AD-13, AD-23 step 4). It is the ``close_scope`` port's word, and the host's close row
@@ -341,7 +346,7 @@ class DecisionRow:
                 stamps[out.binding] = Decimal(out.output or "")
             except ArithmeticError:
                 continue
-        stamps |= {f"number:{name}": value for name, value in self.numbers_in_force.items()}
+        stamps |= {f"{NUMBER_STAMP}{name}": value for name, value in self.numbers_in_force.items()}
         return stamps
 
 
@@ -1436,7 +1441,7 @@ class _Run:
         if self.unit.motion is MotionSwitch.ON:
             trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
             try:
-                self.motion(trades, all(not held for held in positions.values()))
+                self.motion(trades, any(not held for held in positions.values()))
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.MOTION)
         if fresh and self.unit.benched and not self.raised:
@@ -1817,7 +1822,7 @@ class _Run:
             evidence = position.evidence(
                 self.instant,
                 series,
-                self.unit.params(plan.binding, m.in_force.get(position.side, {})),
+                self.unit.params(plan.binding, _opened_with(position, m.in_force, position.side)),
             )
             try:
                 raw = stack.instance(plan.binding.key).update(evidence)
@@ -2041,7 +2046,11 @@ class _Run:
 
     # --- motion ----------------------------------------------------------------------
 
-    def motion(self, trades: Sequence[ClosedTrade], flat: bool) -> None:
+    def motion(self, trades: Sequence[ClosedTrade], a_market_flat: bool) -> None:
+        """Move each calibrated number its cadence makes due. A sizing, exit or control number
+        moves with positions open, because each held position keeps the numbers its entry stamped
+        (AD-14 step 5). A logic number waits until some market is flat, so a unit holding one
+        market still moves it and a many-market unit cannot starve its cadence."""
         unit = self.unit
         for slow in self.plan.slow:
             name = slow.number.name
@@ -2052,7 +2061,7 @@ class _Run:
                     unit.slow[name],
                     trades,
                     instant=self.instant,
-                    flat=flat,
+                    flat=slow.number.stamp.startswith(NUMBER_STAMP) or a_market_flat,
                 )
             except Exception as bad:  # the fault wall: a rule's raise is a Fault (AD-23)
                 raise _Fault(slow.number.rule_pin) from bad
@@ -2079,6 +2088,20 @@ class _Run:
                     watermark=move.watermark,
                 )
             )
+
+
+def _opened_with(
+    position: PositionFacts, in_force: Mapping[Side, Mapping[str, Decimal]], side: Side
+) -> dict[str, Decimal]:
+    """The numbers a held position's exits read: each at the value its entry stamped, so a number
+    that moved since leaves an open trade on its own numbers (AD-14 step 5,
+    ``applies_to_open_positions`` false). A number the entry did not stamp, as on a position
+    adopted after a restart, reads its value in force."""
+    numbers = dict(in_force.get(side, {}))
+    for key, value in position.numbers_at_entry.items():
+        if key.startswith(NUMBER_STAMP):
+            numbers[key.removeprefix(NUMBER_STAMP)] = value
+    return numbers
 
 
 def _required_keys(compiled: CompiledUnit) -> frozenset[str]:

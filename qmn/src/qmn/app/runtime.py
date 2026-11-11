@@ -1220,13 +1220,22 @@ class OrderPath:
         record: InstrumentRecord,
         quantity: Quantity,
         blocked_by: str | None,
+        numbers_at_entry: Mapping[str, Decimal] | None = None,
     ) -> Placed | Blocked:
-        """Send one entry once; a second ask for the same client order id answers the first."""
+        """Send one entry once; a second ask for the same client order id answers the first.
+        ``numbers_at_entry`` rides the send row, so a restart adopts the position on them."""
         done = self._sent.get(client_order_id)
         if done is not None:
             return done
         outcome = self._entry(
-            deployment_id, client_order_id, label, wire, record, quantity, blocked_by
+            deployment_id,
+            client_order_id,
+            label,
+            wire,
+            record,
+            quantity,
+            blocked_by,
+            numbers_at_entry or {},
         )
         self._sent[client_order_id] = outcome
         return outcome
@@ -1240,6 +1249,7 @@ class OrderPath:
         record: InstrumentRecord,
         quantity: Quantity,
         blocked_by: str | None,
+        numbers_at_entry: Mapping[str, Decimal],
     ) -> Placed | Blocked:
         if blocked_by is not None:
             return Blocked(blocked_by)
@@ -1328,6 +1338,8 @@ class OrderPath:
         targets = cast("Sequence[Mapping[str, object]]", protection.get("targets") or ())
         if targets:
             body["target"] = str(targets[0]["price"])
+        if numbers_at_entry:
+            body["numbers_at_entry"] = {k: str(v) for k, v in numbers_at_entry.items()}
         sent = self._journalled(body, ticket)
         if is_refusal(sent):
             if sent.context.get("blocks_entries") is True:
@@ -1672,15 +1684,17 @@ class _Journal:
 
 
 class _OwnJournal:
-    """The unit's own closed trades, stamped with the deployment's lane and venue names."""
+    """The unit's own closed trades, stamped with the deployment's lane and venue names: the ones
+    its journal held when it started, then the ones this handler closed (AD-14 step 6)."""
 
-    def __init__(self, unit: NodeUnit, inner: Surface) -> None:
+    def __init__(self, unit: NodeUnit, inner: Surface, seed: Sequence[ClosedTrade]) -> None:
         self._unit = unit
         self._inner = inner
+        self._seed = tuple(seed)
 
     def at(self, instant: Instant, /) -> object:
         trades = cast("Iterable[ClosedTrade]", self._inner.at(instant))
-        return tuple(
+        return self._seed + tuple(
             replace(t, world=self._unit.lane, trade_id=self._unit.venue_name(t.trade_id))
             for t in trades
         )
@@ -1794,6 +1808,10 @@ class NodeUnit:
         self.kept_values: dict[str, Decimal] = {}
         """The slow numbers the deployment's saved snapshot already holds, so a write happens
         only when one of them moves."""
+        self.journal_root: Path | None = None
+        """Where the unit's journal lives, so each start counts its closed trades again from
+        their rows; the runtime sets it at the host, and a unit hosted without one starts with
+        none (AD-14 step 6)."""
         self.kept_risk: tuple[str, str, int | None] | None = None
         """The risk word the saved snapshot already holds, with its reason and the instant it
         began, so a brake firing writes a snapshot even though no calibrated number moved."""
@@ -1850,8 +1868,14 @@ class NodeUnit:
         ``risk_rows`` are the folding rows this deployment's unit journal holds; they are the truth
         for the unit's state, and the snapshot's cache answers only when none are handed."""
 
+        seed = (
+            ()
+            if self.journal_root is None
+            else journalled_trades(self.journal_root, self.deployment.deployment_id, self.lane)
+        )
+
         def host(surfaces: Mapping[str, Surface]) -> Result[HostedUnit]:
-            own = _OwnJournal(self, surfaces["own_journal"])
+            own = _OwnJournal(self, surfaces["own_journal"], seed)
             read = {**surfaces, "own_journal": own}
             scope = self.deployment.deployment_id
             built = (
@@ -1939,6 +1963,7 @@ class NodeUnit:
                 continue
             side = Side(venue.side)
             entry_stop = Decimal(str(send["stop"]))
+            stamped = send.get("numbers_at_entry")
             position = OwnPosition(
                 name,
                 side,
@@ -1954,6 +1979,12 @@ class NodeUnit:
                 entry_stop=entry_stop,
                 target=Decimal(str(send["target"])) if "target" in send else None,
                 decision_row_id=str(send["decision_row_id"]),
+                entry_stamps={
+                    str(k): Decimal(str(v))
+                    for k, v in cast("Mapping[object, object]", stamped).items()
+                }
+                if isinstance(stamped, Mapping)
+                else None,
             )
             if not is_refusal(adopted):
                 self.placed[name] = (market, side, venue.entry_price)
@@ -2059,6 +2090,7 @@ class NodeUnit:
                 record=record,
                 quantity=sized.value,
                 blocked_by=self.guard(market),
+                numbers_at_entry=None if self.handler is None else self.handler.entry_stamps_of(row),
             )
             if isinstance(placed, Placed | Unprotected):
                 self.placed[named] = (market, Side(str(wire["direction"])), placed.price)
@@ -2347,6 +2379,48 @@ def journalled_resumes(root: Path) -> set[str]:
                 if isinstance(body.get("op_id"), str):
                     found.add(str(body["op_id"]))
     return found
+
+
+def journalled_trades(root: Path, deployment_id: str, world: str) -> tuple[ClosedTrade, ...]:
+    """The deployment's own closed trades from its journal's ``trade`` rows, oldest first, so a
+    restart reads the same count a run that never stopped reads (AD-14 step 6).
+
+    Only a row that closed the whole position counts, with the position's R after costs and the
+    stamps its entry wrote; the motion engine's watermark drops what the snapshot already read.
+    A folder the volume refuses is passed over: a trade missed costs a number one cadence, and
+    no exit or order reads this count.
+    """
+    found: list[ClosedTrade] = []
+    for folder in stream_folders(root):
+        if not folder.name.startswith(f"{JournalStream.UNIT.source}.trade."):
+            continue
+        lines = read_committed(folder)
+        if is_refusal(lines):
+            continue
+        for line in lines.value:
+            if not isinstance(line, JournalLine) or line.record.get("run_id") != deployment_id:
+                continue
+            body = cast("Mapping[str, object]", line.record.get("body", {}))
+            stamps = body.get("numbers_at_entry")
+            r, market = body.get("position_r"), line.record.get("market_id")
+            if not isinstance(stamps, Mapping) or not isinstance(r, str) or not isinstance(market, str):
+                continue
+            found.append(
+                ClosedTrade(
+                    trade_id=str(body["trade_id"]),
+                    opened_at=Instant(int(cast("int", body["opened_at"]))),
+                    closed_at=Instant(int(cast("int", body["closed_at"]))),
+                    side=Side(str(body["side"])),
+                    market_id=market,
+                    world=world,
+                    r_after_costs=Decimal(r),
+                    entry_stamps={
+                        str(k): Decimal(str(v))
+                        for k, v in cast("Mapping[object, object]", stamps).items()
+                    },
+                )
+            )
+    return tuple(sorted(found, key=lambda t: (t.closed_at.value_ns, t.trade_id)))
 
 
 def journalled_flattens(root: Path) -> Result[set[str]]:
@@ -3329,6 +3403,7 @@ class Runtime:
         unit.base_ns = account_bar
         unit.journal_world = world
         unit.account = lambda account=deployment.account_id: self._account_inputs(account)
+        unit.journal_root = self.context.journal_root
         account = venue.client.account
         target = ExecutionTarget.try_create(account.role, account.venue, account.account_id)
         if is_refusal(target):
