@@ -71,6 +71,7 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("largest order", "above_max_lot"),
     ("a position is open", "max_positions"),
     ("warming up", "warming_up"),
+    ("outside_session: ", "outside_session"),
     ("not on the loss side", "stop_wrong_side"),
     ("no market entry order", "no_entry_order"),
     ("has no level yet", "reading_absent"),

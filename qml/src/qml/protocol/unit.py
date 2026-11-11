@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
 from fractions import Fraction
@@ -66,6 +67,7 @@ from qml.compile.compiler import (
     BoundBlock,
     CompiledUnit,
     ExitUse,
+    SessionPlan,
     SidePlan,
     SlotPlan,
 )
@@ -86,7 +88,7 @@ from qml.protocol.exits import (
     facts_from,
 )
 from qml.receipt import record_stored
-from qml.unit.model import CombinerKind, Role, Side, ValueParam
+from qml.unit.model import CombinerKind, Market, Role, Side, ValueParam
 
 __all__ = [
     "ACCOUNT_CURRENCY",
@@ -94,8 +96,10 @@ __all__ = [
     "EXIT_FAULT_BARS",
     "FACTOR_OUT_OF_RANGE",
     "FAULT_CLEAN_BARS",
+    "FORCED_FLAT",
     "NEUTRAL",
     "OHLC",
+    "OUTSIDE_SESSION",
     "PER_TRADE_CAP_SHARE",
     "SEAM_JUMP_SCALE",
     "SIZE_BAND",
@@ -171,6 +175,14 @@ FACTOR_OUT_OF_RANGE: Final[str] = "factor_out_of_range"
 """The name a row carries when a sizing modifier answers a factor outside the range it declares
 (AD-11). The factor is refused, so the entry is not sized; that row still prints the modifier
 reading neutral with its fail mode."""
+FORCED_FLAT: Final[str] = "forced_flat"
+"""The reason a held trade closes when its session is about to close, or has closed under a
+session that goes flat (RC-33). It is an exit: it reads only the bar's time and the unit's own
+numbers, and nothing refuses it."""
+OUTSIDE_SESSION: Final[str] = "outside_session"
+"""The head of a refused entry's reason when no session window is open at its bar, or the window
+is inside its closing buffer (RC-33). The journal files it under its own reason code."""
+_DAY: Final[int] = 86_400
 NEUTRAL: Final[str] = "neutral"
 """What a sizing modifier that cannot answer reads: a factor of one, never a cut and never a raise.
 It is the modifier's fail mode, stamped on the row beside the reading."""
@@ -664,6 +676,47 @@ class _Side:
     intent carries as its driver tags (I9)."""
 
 
+class _Hours(StrEnum):
+    """Where a bar falls against the unit's sessions."""
+
+    OPEN = "open"
+    CLOSING = "closing"
+    """Inside a window, within its flat buffer of the close."""
+    SHUT = "shut"
+
+
+def _hhmm(seconds: int) -> str:
+    return f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}"
+
+
+def _hours(
+    sessions: Sequence[SessionPlan], at: Instant, numbers: Mapping[str, Decimal]
+) -> tuple[_Hours, str]:
+    """Whether a bar knowable at ``at`` falls in an open window, each session read on its own
+    zone's clock, and the words that say where it fell. A unit with no session is always open."""
+    if not sessions:
+        return _Hours.OPEN, ""
+    closing: str | None = None
+    shut: list[str] = []
+    for session in sessions:
+        local = datetime.fromtimestamp(at.value_ns // 1_000_000_000, tz=session.zone)
+        now = local.hour * 3600 + local.minute * 60 + local.second
+        clock = f"{local:%H:%M} {session.zone.key}"
+        named = session.flat_before_close
+        buffer = numbers.get(named, Decimal(0)) if named is not None else Decimal(0)
+        for start, end in session.windows:
+            left = (end - start) % _DAY - (now - start) % _DAY
+            if left > buffer:
+                return _Hours.OPEN, ""
+            if left > 0 and closing is None:
+                closing = f"{clock} is inside {session.name}'s last {buffer} seconds"
+        spans = ", ".join(f"{_hhmm(start)} to {_hhmm(end)}" for start, end in session.windows)
+        shut.append(f"{clock} is outside {session.name} {spans}")
+    if closing is not None:
+        return _Hours.CLOSING, closing
+    return _Hours.SHUT, "; ".join(shut)
+
+
 @dataclass(slots=True)
 class _Market:
     market_id: str
@@ -682,6 +735,9 @@ class _Market:
     exited: set[str] = field(default_factory=set[str])
     in_force: dict[Side, dict[str, Decimal]] = field(default_factory=dict[Side, dict[str, Decimal]])
     """Each side's numbers this bar's decisions read, taken before the derived numbers update."""
+    settings: Mapping[str, Decimal] = field(default_factory=dict[str, Decimal])
+    """The market's own values of the unit's fixed numbers, which replace the unit's default here
+    and on no other market (E5)."""
 
 
 class _Core:
@@ -756,9 +812,7 @@ class _Core:
         """Entries are off after a fault until ``fault_clean_bars`` clean bars have passed."""
         self.clean_bars = 0
         """Bars with no fault since the one that benched the unit."""
-        self.markets = [
-            self.market(market.market_id, record) for market, record in self.plan.markets
-        ]
+        self.markets = [self.market(market, record) for market, record in self.plan.markets]
 
     def bench(self) -> None:
         """A fault benches the unit's entries and starts the clean count again (AD-23)."""
@@ -767,11 +821,17 @@ class _Core:
 
     # --- building --------------------------------------------------------------
 
-    def settled(self) -> dict[str, Decimal]:
-        return dict(self.plan.defaults) | {name: state.value for name, state in self.slow.items()}
+    def settled(self, market: _Market | None = None) -> dict[str, Decimal]:
+        """The unit's numbers, with a market's own settings in place of the unit's default."""
+        own = {} if market is None else market.settings
+        return (
+            dict(self.plan.defaults)
+            | dict(own)
+            | {name: state.value for name, state in self.slow.items()}
+        )
 
     def numbers(self, market: _Market, side: Side) -> dict[str, Decimal]:
-        return self.settled() | market.derived.get(side, {})
+        return self.settled(market) | market.derived.get(side, {})
 
     def params(self, bound: BoundBlock, numbers: Mapping[str, Decimal]) -> dict[str, Decimal]:
         out: dict[str, Decimal] = {}
@@ -782,16 +842,17 @@ class _Core:
                 out[name] = numbers[param.number]
         return out
 
-    def market(self, market_id: str, record: InstrumentRecord) -> _Market:
+    def market(self, market: Market, record: InstrumentRecord) -> _Market:
         state = _Market(
-            market_id,
+            market.market_id,
             record,
             {},
             {},
             last_bar_ns=dict.fromkeys(self.plan.streams, -1),
             bars=dict.fromkeys(self.plan.streams, 0),
+            settings=market.settings,
         )
-        numbers = self.settled()
+        numbers = self.settled(state)
         for side in self.plan.sides:
             for slot in side.slots:
                 for b in slot.bindings:
@@ -866,7 +927,7 @@ class _Core:
             side.side.value: {d.number for d in self.plan.derived if d.side is side.side}
             for side in self.plan.sides
         }
-        made = self.timer(Side.LONG)
+        made = self.timer(Side.LONG, None)
         timer = made.export_state() if made is not None else None
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
@@ -913,7 +974,7 @@ class _Core:
             for key, state in cast("Mapping[str, Mapping[str, object]]", saved["blocks"]).items():
                 m.instances[key].import_state(state)
             for pid, state in cast("Mapping[str, Mapping[str, object]]", saved["timers"]).items():
-                stack = self.timer(Side.LONG)  # shape_gap refused a timers table with no exit cold
+                stack = self.timer(Side.LONG, m)  # shape_gap refused a timers table with no exit
                 if stack is not None:
                     stack.import_state(state)
                     m.timers[pid] = stack
@@ -946,16 +1007,16 @@ class _Core:
         if cached.scope == self.risk.scope:
             self.risk = cached
 
-    def timer(self, side: Side) -> ExitStack | None:
-        """The per-bar exits for one position on ``side``, in the compiled order, or ``None`` for
-        a unit with no time exit, which layer E warns of (UT-18)."""
+    def timer(self, side: Side, market: _Market | None) -> ExitStack | None:
+        """The per-bar exits for one position on ``side``, on ``market``'s own numbers, in the
+        compiled order, or ``None`` for a unit with no time exit, which layer E warns of
+        (UT-18)."""
         slots: list[ExitSlot] = []
+        numbers = self.settled(market)
         for e in self.plan.exits:
             if e.use is not ExitUse.PER_BAR:
                 continue
-            instance = e.binding.block.make(
-                self.params(e.binding, self.plan.defaults), e.binding.inputs, side
-            )
+            instance = e.binding.block.make(self.params(e.binding, numbers), e.binding.inputs, side)
             slots.append(ExitSlot(f"exit.{e.binding.name}", e.binding.pin, instance))
         return None if not slots else ExitStack(side, slots)
 
@@ -1061,7 +1122,7 @@ class HostedUnit:
         for modifier in compiled.plan.modifiers:
             try:
                 read = market.instances[modifier.key].update(
-                    evidence | dict(core.params(modifier, core.settled()))
+                    evidence | dict(core.params(modifier, core.settled(market)))
                 )
             except Exception:  # a modifier's raise is that block's fault, never a crash
                 core.pending_faults.append(Fault(modifier.pin, FaultPhase.PRICE))
@@ -1336,6 +1397,7 @@ class _Run:
         for m in self.unit.markets:
             held = positions[m.market_id]
             self.kept(m, held)
+            self.forced_flat(m, held, fresh.get(m.market_id))
             for position in held:
                 self.exits(m, position, fresh.get(m.market_id))
         for m in self.unit.markets:
@@ -1715,7 +1777,7 @@ class _Run:
             return
         stack = m.timers.get(position.position_id)
         if stack is None or stack.side is not position.side:
-            built = self.unit.timer(position.side)
+            built = self.unit.timer(position.side, m)
             if built is None:
                 return
             if stack is not None:  # a restore built the table before it knew the side
@@ -1759,6 +1821,23 @@ class _Run:
         if winner is None or winner.action.kind != "close_full":
             return
         self.close_position(m, position, winner.action.reason_code, winner.detail)
+
+    def forced_flat(self, m: _Market, held: Sequence[PositionFacts], bar: QuoteBar | None) -> None:
+        """Close every position this unit holds here on a bar inside a session's flat buffer, or
+        outside every window when a session goes flat, with ``forced_flat``.
+
+        It runs before the per-bar exits, reads only the bar's time and the market's own numbers,
+        and goes out through the unit's own exit path, so no brake, fault or refusal stops it.
+        """
+        sessions = self.plan.sessions
+        if bar is None or not held or not any(s.flat_before_close for s in sessions):
+            return
+        hours, words = _hours(sessions, bar.knowable_at, self.unit.settled(m))
+        if hours is _Hours.OPEN:
+            return
+        for position in held:
+            if self.mine(position) and position.position_id not in m.exited:
+                self.close_position(m, position, FORCED_FLAT, f"{FORCED_FLAT}: {words}")
 
     def kept(self, m: _Market, held: Sequence[PositionFacts]) -> None:
         """Forget the exits of every position this market no longer holds (AD-13).
@@ -1822,6 +1901,11 @@ class _Run:
     ) -> None:
         signalled = [s for s, r in sides.items() if r.holds]
         limit = self.plan.position_limit
+        hours, words = (
+            _hours(self.plan.sessions, bar.knowable_at, self.unit.settled(m))
+            if self.plan.sessions
+            else (_Hours.OPEN, "")
+        )
         for side, result in sides.items():
             if not result.holds:
                 if result.trigger_held:
@@ -1831,6 +1915,9 @@ class _Run:
                 continue
             if self.halt_reason is not None:
                 self.decision(m, side, "suppressed", result.trail, self.halt_reason)
+                continue
+            if hours is not _Hours.OPEN:
+                self.decision(m, side, "blocked", result.trail, f"{OUTSIDE_SESSION}: {words}")
                 continue
             if any(
                 m.bars.get(stream, 0) < self.unit.warm_up.get(stream, 0)

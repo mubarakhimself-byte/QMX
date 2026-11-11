@@ -39,6 +39,7 @@ from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import is_refusal
@@ -64,6 +65,7 @@ from qml.unit.model import (
     Combiner,
     CombinerKind,
     Market,
+    Measure,
     MirrorSide,
     Motion,
     MotionMode,
@@ -73,12 +75,14 @@ from qml.unit.model import (
     Price,
     Role,
     Scope,
+    Session,
     Side,
     Slot,
     SlotsSide,
     StreamInput,
     Unit,
     ValueParam,
+    WindowStatus,
 )
 from qml.unit.parse import parse
 from qml.unit.sections import sections
@@ -98,13 +102,14 @@ __all__ = [
     "ExitUse",
     "HaltPlan",
     "Plan",
+    "SessionPlan",
     "SidePlan",
     "SlotPlan",
     "SlowPlan",
     "compile_unit",
 ]
 
-COMPILER_FORMAT_VERSION: Final[int] = 11
+COMPILER_FORMAT_VERSION: Final[int] = 12
 """Bumped by any compiler change that alters a decision, which makes a new fingerprint."""
 _FORMAT: Final[str] = f"compiler format {COMPILER_FORMAT_VERSION}"
 
@@ -267,6 +272,17 @@ class SlowPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionPlan:
+    """One session's hours on its own zone's clock: each window as seconds into the local day,
+    ``to`` before ``from`` when it crosses midnight, and the number naming its flat buffer."""
+
+    name: str
+    zone: ZoneInfo
+    windows: tuple[tuple[int, int], ...]
+    flat_before_close: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Plan:
     """The compiled closure as data: what runs, in order, on each bar of each market."""
 
@@ -284,6 +300,8 @@ class Plan:
     position_limit: int = 1
     """How many positions this unit may hold open on one market at once. One unless the document
     says more, and more only compiles where the venue keeps positions apart (AD-25)."""
+    sessions: tuple[SessionPlan, ...] = ()
+    """The hours the unit enters in. None declared means every hour, as before sessions ran."""
 
     @property
     def stream(self) -> str:
@@ -709,7 +727,7 @@ def _bound_numbers(unit: Unit) -> set[str]:
         for binding in bindings
         for param in binding.params.values()
         if isinstance(param, NumberParam)
-    }
+    } | {s.flat_before_close for s in unit.sessions if s.flat_before_close is not None}
 
 
 def _unread_rule_params(
@@ -1097,6 +1115,64 @@ def _venues(unit: Unit, context: CompileContext) -> str:
     return ", ".join(found) if found else "the venue this unit runs on"
 
 
+def _clock(text: str) -> int:
+    """An ``HH:MM`` the schema already matched, as seconds into the day."""
+    hours, minutes = text.split(":")
+    return int(hours) * 3600 + int(minutes) * 60
+
+
+def _session(index: int, session: Session, unit: Unit, problems: _Problems) -> SessionPlan | None:
+    """One session on its zone's clock, or None with each reason it cannot run."""
+    where = f"/sessions/{index}"
+    zone: ZoneInfo | None = None
+    try:
+        zone = ZoneInfo(session.zone)
+    except (ZoneInfoNotFoundError, ValueError):
+        problems.add(
+            "session_zone",
+            f"{where}/zone",
+            f"{session.zone} is no time zone this machine's zone database holds, so "
+            f"{session.name}'s hours would have no clock",
+        )
+    if not session.windows:
+        problems.add(
+            "session_window",
+            f"{where}/windows",
+            f"{session.name} names no window, so it would refuse every entry",
+        )
+    windows = tuple((_clock(w.start), _clock(w.end)) for w in session.windows)
+    for w_index, (start, end) in enumerate(windows):
+        if start == end:
+            problems.add(
+                "session_window",
+                f"{where}/windows/{w_index}",
+                f"{session.windows[w_index].start} to {session.windows[w_index].end} holds no time",
+            )
+    flat = session.flat_before_close
+    spec = unit.numbers.get(flat) if flat is not None else None
+    if flat is not None and spec is None:
+        problems.add(
+            "session_flat",
+            f"{where}/flat_before_close",
+            f"{flat} is not one of the unit's numbers",
+        )
+    elif flat is not None and spec is not None and spec.measure is not Measure.SECONDS:
+        problems.add(
+            "session_flat",
+            f"{where}/flat_before_close",
+            f"{flat} is a {spec.measure.value} number, and a flat buffer is seconds",
+        )
+    elif flat is not None and spec is not None and spec.kind is NumberKind.DERIVED:
+        problems.add(
+            "session_flat",
+            f"{where}/flat_before_close",
+            f"{flat} is derived on each side every bar, and a flat buffer holds one value",
+        )
+    if zone is None:
+        return None
+    return SessionPlan(session.name, zone, windows, flat)
+
+
 def _shape_problems(unit: Unit, context: CompileContext, problems: _Problems) -> None:
     """The fields of the document this format runs nothing behind."""
     if not unit.streams:
@@ -1111,12 +1187,14 @@ def _shape_problems(unit: Unit, context: CompileContext, problems: _Problems) ->
         )
     if unit.reads:
         problems.add("reads_not_built", "/reads", f"{_FORMAT} reads no readings")
-    if unit.sessions:
-        problems.add(
-            "sessions_not_built",
-            "/sessions",
-            f"{_FORMAT} runs no session window, so this unit would trade outside it",
-        )
+    for index, session in enumerate(unit.sessions):
+        if session.card is not None and session.card.status is WindowStatus.SHADOW:
+            problems.add(
+                "window_card_not_built",
+                f"/sessions/{index}/card/status",
+                f"{_FORMAT} binds a window as its card writes it, so a shadow card would refuse "
+                "the entries it only watches",
+            )
     needs = unit.context_needs
     if needs is not None and (needs.require or needs.warn or needs.block):
         problems.add(
@@ -1193,13 +1271,15 @@ def _shape_problems(unit: Unit, context: CompileContext, problems: _Problems) ->
                 f"/markets/{index}/roll",
                 f"{_FORMAT} reads no roll rule, so {market.market_id} would not roll by it",
             )
-        if market.settings:
-            problems.add(
-                "settings_not_built",
-                f"/markets/{index}/settings",
-                f"{_FORMAT} runs no setting for one market, so {market.market_id} would read the "
-                "unit's own numbers",
-            )
+        for name in market.settings:
+            spec = unit.numbers.get(name)
+            if spec is not None and spec.kind is not NumberKind.FIXED:
+                problems.add(
+                    "settings_not_built",
+                    f"/markets/{index}/settings/{name}",
+                    f"{_FORMAT} moves {name} by its own rule for the whole unit, so "
+                    f"{market.market_id}'s own value would be overwritten",
+                )
         if market.settings_record is not None:
             problems.add(
                 "settings_not_built",
@@ -1363,6 +1443,11 @@ def compile_unit(
     halts = wiring.halts()
     modifiers = wiring.modifiers()
     sizer = wiring.bind(unit.sizer, "sizer", "/sizer") if unit.sizer is not None else None
+    sessions = tuple(
+        plan
+        for index, session in enumerate(unit.sessions)
+        if (plan := _session(index, session, unit, problems)) is not None
+    )
     if sizer is not None and sizer.face.output.type not in _SIZER_ANSWERS:
         problems.add(
             "sizer_not_built",
@@ -1390,6 +1475,7 @@ def compile_unit(
         slow=slow,
         defaults=_defaults(unit),
         position_limit=1 if unit.position_limit is None else unit.position_limit.per_instrument,
+        sessions=sessions,
     )
     warm_up, state_bound = _warm_up(plan, problems)
     if problems.found:
