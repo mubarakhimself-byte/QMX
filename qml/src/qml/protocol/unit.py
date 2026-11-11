@@ -602,9 +602,8 @@ def _fact(account: object, name: str) -> Decimal | None:
     """One fact off the account surface by its AD-15 name.
 
     The two names a unit is handed today are ``account.equity`` and ``market.rate:<quote>``. A name
-    nothing supplies answers nothing, so its number keeps the value it already held, which is its
-    default until a fact arrives. A rate the host stated as an exact fraction reads as that
-    fraction's decimal.
+    nothing supplies answers nothing, so its number reads its declared default that bar. A rate the
+    host stated as an exact fraction reads as that fraction's decimal.
     """
     if name == "account.equity":
         equity = getattr(account, "equity", None)
@@ -807,10 +806,10 @@ class _Core:
         """Read each scaled number's fact off the account surface, so this bar's decisions read
         the value in force (AD-14's track).
 
-        A fact the surface does not carry leaves its number at the value it already held, which is
-        its default until a fact arrives. This runs whether motion is on or off: a scaled number
-        is arithmetic on a fact, not a rule learning from its own trades, so ``MotionSwitch`` does
-        not silence it.
+        A fact the surface does not carry this bar puts its number back to its declared default,
+        not to the value it was last tracked at. This runs whether motion is on or off: a scaled
+        number is arithmetic on a fact, not a rule learning from its own trades, so
+        ``MotionSwitch`` does not silence it.
         """
         self.tracked = {
             number.name: value
@@ -1324,7 +1323,8 @@ class _Run:
 
     def step(self) -> Result[UnitStep]:
         journal = self.surface("own_journal")
-        self.unit.track(self.surface("account"))
+        if self.unit.scaled:  # a unit with no scaled number never reads the account surface here
+            self.unit.track(self.surface("account"))
         positions: dict[str, tuple[PositionFacts, ...]] = {}
         seen: dict[str, dict[str, QuoteBar]] = {}
         fresh: dict[str, QuoteBar] = {}
