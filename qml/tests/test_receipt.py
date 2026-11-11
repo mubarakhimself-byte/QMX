@@ -11,8 +11,9 @@ read from the implementation once, when the row's shape is fixed, and again each
 under it moved: when the shipped dummy's numbers each gained the reason and owner rc-23 requires,
 because the receipt covers the document's risk half; when the first join carried rc-31's second
 stream and rc-32's position count in at compiler formats 9 and 10; and when the joins settled this
-row's modifier chain at compiler format 11. Each value after the first was read from a failing run
-at the tree that moved it.
+row's modifier chain at compiler format 11; and when rc-24's widened motion engine joined at
+compiler format 12. Each value after the first was read from a failing run at the tree that moved
+it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -30,11 +31,12 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:c4d1437b15eb159563708b5dbb5be446afae7e5cc462ece2225c69979d0ab1a2"
-"""The receipt's identity at compiler format 11. It moved from
-``fp1:sha256:dba50efc...526170`` because the row's receipt covers ``logic_fp`` and ``risk_fp``,
-and the test dummy pins every stdlib entry: rc-22 adds ``cushion-rule@1`` and ``press-gate@1``
-to that folder, so both halves' pins move. The size, the steps and every verdict are the same."""
+_STORED_HASH = "fp1:sha256:9bb8523a5732fb9ada3df246c3de208b2ab8307bd6f4fa34f3e92b7fef5377cd"
+"""The receipt's identity at compiler format 12, with ``cushion-rule@1`` and ``press-gate@1`` in
+the stdlib. It moved from ``fp1:sha256:dba50efc...67db526170`` because the row's receipt covers
+``logic_fp`` and ``risk_fp``: AD-19's format bump for rc-24's widened motion engine moves both
+halves, and the test dummy pins every stdlib entry, so rc-22's two new entries move them too. The
+size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
