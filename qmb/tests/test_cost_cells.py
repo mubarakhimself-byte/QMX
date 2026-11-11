@@ -23,9 +23,8 @@ from qmf.core.fingerprint import Fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.facts import Fact
 from qmf.risk.unit_intent import UnitIntent
-from qml.blocks.api import Amount
+from qml.blocks.api import Amount, EntryFace, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
-from qml.catalogue.entry import EntryFace, parse_entry
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, parse_record
 from qml.numbers.convert import RoundRule, to_quantity
