@@ -9,7 +9,10 @@ mid-position.
 
 The state carries everything the rule needs (the trades read, as their stamp and R) and a
 watermark, so a host feeds ``own_journal`` only the trades this run or deployment closed and a
-restored unit reads each trade once.
+restored unit reads each trade once. A number that states a ``window`` keeps only its newest
+trades, so the engine's memory is the number's own bound and never the journal's length; each
+trade reaches the rule under ``stamp`` beside ``strength``, so a rule bound to a risk number reads
+the risk number's own value in force at entry.
 """
 
 from __future__ import annotations
@@ -30,10 +33,12 @@ __all__ = [
     "SLOW_CADENCE_TRADES",
     "ClosedTrade",
     "Move",
+    "ScaledNumber",
     "SlowNumber",
     "SlowState",
     "TradeRange",
     "calibrate",
+    "scale",
 ]
 
 MIN_TRADES: Final[int] = 60
@@ -60,22 +65,41 @@ class ClosedTrade:
 
 @dataclass(frozen=True, slots=True)
 class SlowNumber:
-    """A calibrated number as compiled: its rule, the entry stamp the rule reads, its cadence."""
+    """A calibrated number as compiled: its rule, the entry stamp the rule reads, its cadence,
+    the trades it must have read before it runs, and the most it keeps."""
 
     name: str
     rule_pin: str
     stamp: str
     every: int
+    min_trades: int = MIN_TRADES
+    window: int | None = None
+    """The most trades the rule reads: ``None`` keeps every trade, as before AD-14's window."""
 
 
 @dataclass(frozen=True, slots=True)
 class SlowState:
     value: Decimal
     read: tuple[tuple[str, Decimal, Decimal], ...] = ()
-    """``(trade_id, stamp, r_after_costs)`` of every trade read, in watermark order."""
+    """``(trade_id, stamp, r_after_costs)`` of the newest trades read, at most ``window`` deep."""
     watermark: tuple[int, str] | None = None
     """``(closed_at ns, trade_id)`` of the last trade read."""
+    read_total: int = 0
+    """Every stamped trade this number has read, the ones a window dropped included."""
     read_at_last_run: int = 0
+    """``read_total`` when the rule last ran, so a bounded read still knows its cadence."""
+
+
+@dataclass(frozen=True, slots=True)
+class ScaledNumber:
+    """A ``scaled`` number as compiled: the fact it follows, the multiple it applies, and its own
+    range, so a fact outside the range cannot carry the number out of it (AD-14's track)."""
+
+    name: str
+    fact: str
+    multiple: Decimal
+    low: Decimal
+    high: Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +120,15 @@ class Move:
     watermark: Instant
     mean_r: Decimal
     mean_stamp: Decimal
+
+
+def scale(number: ScaledNumber, fact: Decimal | None) -> Decimal | None:
+    """The number's value on a bar whose fact reads ``fact``: the fact times the multiple, held
+    inside the number's range. A fact no reader supplied answers nothing, so the number keeps the
+    value it already had."""
+    if fact is None:
+        return None
+    return min(number.high, max(number.low, number.multiple * fact))
 
 
 def _key(trade: ClosedTrade) -> tuple[int, str]:
@@ -121,7 +154,12 @@ def _read(
         for t in fresh
         if number.stamp in t.entry_stamps
     )
-    return replace(state, read=state.read + rows, watermark=_key(fresh[-1]))
+    read = state.read + rows
+    if number.window is not None:
+        read = read[-number.window :]
+    return replace(
+        state, read=read, watermark=_key(fresh[-1]), read_total=state.read_total + len(rows)
+    )
 
 
 def calibrate(
@@ -133,20 +171,24 @@ def calibrate(
     instant: Instant,
     flat: bool,
 ) -> tuple[SlowState, Move | None]:
-    """Read the trades knowable at ``instant`` and, when the cadence is due and the unit is
-    flat, run the rule once. A trade without the stamp the rule reads is passed over."""
+    """Read the trades knowable at ``instant`` and, when the cadence is due, the number has read
+    ``min_trades`` and the unit is flat, run the rule once. A trade without the stamp the rule
+    reads is passed over, and the rule reads only the newest ``window`` of them."""
     state = _read(number, state, trades, instant)
-    due = len(state.read) - state.read_at_last_run >= number.every
+    due = (
+        state.read_total - state.read_at_last_run >= number.every
+        and state.read_total >= number.min_trades
+    )
     if not due or not flat:
         return state, None
     answer = rule.update(
         {
-            "trades": [{"strength": stamp, "r": r} for _, stamp, r in state.read],
+            "trades": [{"stamp": stamp, "strength": stamp, "r": r} for _, stamp, r in state.read],
             "current": state.value,
         }
     )
-    ran = replace(state, read_at_last_run=len(state.read))
-    if not isinstance(answer, Decimal) or state.watermark is None:
+    ran = replace(state, read_at_last_run=state.read_total)
+    if not isinstance(answer, Decimal) or state.watermark is None or not state.read:
         return ran, None
     move = Move(
         old=state.value,

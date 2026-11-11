@@ -11,8 +11,9 @@ read from the implementation once, when the row's shape is fixed, and again each
 under it moved: when the shipped dummy's numbers each gained the reason and owner rc-23 requires,
 because the receipt covers the document's risk half; when the first join carried rc-31's second
 stream and rc-32's position count in at compiler formats 9 and 10; and when the joins settled this
-row's modifier chain at compiler format 11; and when rc-33's sessions moved the format to 12. Each
-value after the first was read from a failing run at the tree that moved it.
+row's modifier chain at compiler format 11; when rc-24's widened motion engine joined at compiler
+format 12; and when rc-33's sessions joined on top at compiler format 13. Each value after the
+first was read from a failing run at the tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -32,9 +33,9 @@ from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target,
 _EURUSD = "fx.eurusd"
 _STORED_HASH = "fp1:sha256:3500c4122f232e3ad6c6be0c204145b6a37085455e204af77234714fb7cc6b8e"
 """The receipt's identity at compiler format 12. It moved from
-``fp1:sha256:dba50efc...67db526170`` because the row's receipt covers ``logic_fp`` and ``risk_fp``,
-and rc-33's format bump moves both halves by design. The size, the steps and every verdict are the
-same."""
+``fp1:sha256:dba50efc...67db526170`` because the row's receipt covers ``logic_fp`` and
+``risk_fp``, and AD-19's format bump for rc-24's widened motion engine moves both halves by design.
+The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:

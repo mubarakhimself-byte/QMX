@@ -981,6 +981,9 @@
               "source": {
                 "type": "string"
               },
+              "scaled_fact": {
+                "type": "string"
+              },
               "cadence": {
                 "type": "object",
                 "properties": {
@@ -1007,6 +1010,10 @@
                 "minimum": 0
               },
               "step_limit": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "window": {
                 "type": "integer",
                 "minimum": 1
               },

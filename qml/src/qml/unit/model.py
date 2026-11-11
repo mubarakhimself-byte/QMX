@@ -490,12 +490,19 @@ class Cadence:
 
 @dataclass(frozen=True)
 class Motion:
+    """How a number moves (AD-14). ``window`` is the most trades the engine keeps for it, so the
+    memory a rule reads is the number's own bound; ``None`` keeps every trade it has read.
+    ``scaled_fact`` names the fact a ``scaled`` number follows each bar, with its multiple in
+    ``rule_params``."""
+
     mode: MotionMode
     source: str | None = None
+    scaled_fact: str | None = None
     cadence: Cadence | None = None
     min_count: int | None = field(default=None, metadata={"minimum": 0})
     shrink_k: int | None = field(default=None, metadata={"minimum": 0})
     step_limit: int | None = field(default=None, metadata={"minimum": 1})
+    window: int | None = field(default=None, metadata={"minimum": 1})
     rule: EntryRef | None = None
     rule_params: Mapping[str, str] = field(default_factory=dict[str, str])
 
