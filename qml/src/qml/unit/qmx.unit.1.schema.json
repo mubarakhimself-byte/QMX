@@ -1224,6 +1224,46 @@
               ],
               "additionalProperties": false
             }
+          },
+          "flat_before_close": {
+            "type": "string"
+          },
+          "card": {
+            "type": "object",
+            "properties": {
+              "slice": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string"
+              },
+              "how_found": {
+                "type": "string"
+              },
+              "tries": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "hand_written",
+                  "shadow",
+                  "proven"
+                ]
+              },
+              "expiry": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "slice",
+              "family",
+              "how_found",
+              "tries",
+              "status"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

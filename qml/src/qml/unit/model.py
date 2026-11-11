@@ -77,6 +77,8 @@ __all__ = [
     "Unit",
     "ValueParam",
     "Window",
+    "WindowCard",
+    "WindowStatus",
 ]
 
 
@@ -335,12 +337,39 @@ class Window:
     end: str = field(metadata={"key": "to", "pattern": _CLOCK})
 
 
+class WindowStatus(StrEnum):
+    """How a window card's slice was found: written by hand, watched in shadow, or proven."""
+
+    HAND_WRITTEN = "hand_written"
+    SHADOW = "shadow"
+    PROVEN = "proven"
+
+
+@dataclass(frozen=True)
+class WindowCard:
+    """The window card kind: the slice one family trades in a window, how it was found, how many
+    tries found it, when it lapses and its status. A session's windows bind to it."""
+
+    slice: str
+    family: str
+    how_found: str
+    tries: int = field(metadata={"minimum": 0})
+    status: WindowStatus
+    expiry: str | None = None
+
+
 @dataclass(frozen=True)
 class Session:
+    """Hours the unit trades in, read on the clock of ``zone``, the session's own IANA zone, so
+    they follow its daylight-saving changes. ``flat_before_close`` names a number in seconds: a
+    held trade goes flat that long before a window closes."""
+
     name: str
     calendar_ref: str
     zone: str
     windows: tuple[Window, ...]
+    flat_before_close: str | None = None
+    card: WindowCard | None = None
 
 
 @dataclass(frozen=True)
