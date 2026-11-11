@@ -103,7 +103,7 @@ class InstrumentRecord:
     funding_interval: str | None = None
     commission_per_lot: Decimal | None = None
     """Money one lot pays per fill, in the record's quote currency, as the venue states it. None
-    where the record states none; a fill then measures it, or the venue books it."""
+    where the record states none; a fill then records only the commission its host booked."""
     conversions: Mapping[str, ConversionRef] = field(default_factory=dict[str, ConversionRef])
     source: str | None = None
     """Where the record says it comes from: ``shipped`` for the ones that ship with QML, and
