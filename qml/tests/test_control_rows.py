@@ -169,6 +169,11 @@ class _Latest:
         return self._bars[index - 1] if index else None
 
 
+def _held_tuple(position: OwnPosition | None) -> tuple[OwnPosition, ...]:
+    """The unit door answers every position on a market, so a fixture holding one answers one."""
+    return () if position is None else (position,)
+
+
 def _surfaces(
     bars: Sequence[QuoteBar],
     journal: Sequence[ClosedTrade] = (),
@@ -180,7 +185,7 @@ def _surfaces(
             lambda instant: tuple(t for t in journal if t.closed_at.value_ns <= instant.value_ns)
         ),
         f"bars:m15:{_MARKET}": _Latest(bars),
-        f"own_position:{_MARKET}": _At(held),
+        f"own_position:{_MARKET}": _At(lambda i, h=held: _held_tuple(h(i))),
     }
 
 

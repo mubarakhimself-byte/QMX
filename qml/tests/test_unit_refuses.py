@@ -216,7 +216,11 @@ _PARTS: dict[str, tuple[Edit, str, str]] = {
         "open_positions_not_built",
         "/numbers/stop_buffer/applies_to_open_positions",
     ),
-    "limit": (_put("position_limit", {"per_instrument": 3}), "limit_not_built", "/position_limit"),
+    "limit on a netting venue": (
+        _put("position_limit", {"per_instrument": 3}),
+        "position_limit_nets",
+        "/position_limit",
+    ),
     "price": (_put("streams/0/price", "mid"), "price_not_built", "/streams/0/price"),
     "input quotes": (_put("streams/0/input", "quotes"), "input_not_built", "/streams/0/input"),
     "bar kind tick": (

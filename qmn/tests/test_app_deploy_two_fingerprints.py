@@ -98,6 +98,6 @@ def test_a_risk_only_recompile_is_taken_on_the_same_g_record(tmp_path: Path) -> 
     play(node, _OPEN_AT)
     unit = node.runtime.hosted["dep-2"].unit
     assert unit is not None and unit.handler is not None
-    held = unit.handler.open_positions["fx.eurusd"]
+    held = unit.handler.open_on("fx.eurusd")[0]
     assert held.opened_by == compiled.logic_fingerprint
     node.runtime.stop()

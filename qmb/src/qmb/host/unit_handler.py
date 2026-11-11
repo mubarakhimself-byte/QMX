@@ -5,20 +5,21 @@ node's runtime both drive a unit through this file. The host builds the ``Hosted
 read surfaces this handler serves (``UnitSliceHandler.start`` takes the host's own
 ``construct_unit`` or resume call), and injects the execution and journal ports.
 
-Per slice, in ``run_slice``'s order: a held position's scheduled cash events since its market's
+Per slice, in ``run_slice``'s order: each held position's scheduled cash events since its market's
 last bar are booked (``scheduled_position_event``); a resting entry or exit fills against the
-new bar (``execute_resting``); the bar becomes readable and a held position's stop, target or
+new bar (``execute_resting``); the bar becomes readable and every held position's stop, target or
 liquidation level is checked against it (``update_closed_data``); then the unit steps once for
 the slice's instant and its intents rest for the next bar (``mint_intents``). A fill's quantity
 is the sizer receipt's rounded down to the market's lot step, or what the node's venue filled of
-it; below the minimum lot the entry is skipped with its reason. The handler closes only
-positions keyed by the fingerprint its host passed, and the node passes the logic half, so a size
-edit leaves a held position's exits running. An exit acts by its kind: ``close_full`` closes the
-position, ``close_partial`` closes its lot-rounded quantity and keeps the rest held, and
+it; below the minimum lot the entry is skipped with its reason. Positions are held by their own
+id, so a market may hold several, each closed only by an exit that names it. The handler closes
+only positions keyed by the fingerprint its host passed, and the node passes the logic half, so a
+size edit leaves a held position's exits running. An exit acts by its kind: ``close_full`` closes
+the position, ``close_partial`` closes its lot-rounded quantity and keeps the rest held, and
 ``amend_protection`` moves the held stop and target, tightening only. The ``own_position`` surface
-answers each held position as a ``PositionFacts``: its live protection, the bars held, its
-excursions in R and the numbers its entry recorded, so a per-bar exit reads the position and
-never a venue.
+answers every held position on a market as a tuple of ``PositionFacts``: its live protection, the
+bars held, its excursions in R and the numbers its entry recorded, so a per-bar exit reads its
+position and never a venue.
 
 Cash that moves with no fill (swap, financing, funding, dividends, commission) comes from the
 host's cash port as ``CashEvent`` rows and changes the account the unit reads. The node passes
@@ -102,8 +103,13 @@ _R_PLACES: Final[Decimal] = Decimal("0.0001")
 
 @dataclass(frozen=True, slots=True)
 class HeldPosition:
-    """A position the handler holds, with its live protection and what its entry fixed."""
+    """A position the handler holds, with its live protection and what its entry fixed.
 
+    ``market`` is the market it trades, because the table holds positions by their own id: a
+    market may hold more than one where its unit allows it (AD-25).
+    """
+
+    market: str
     position: OwnPosition
     stop: Decimal
     target: Decimal | None
@@ -409,6 +415,8 @@ class UnitSliceHandler:
         self._unit: SteppingUnit | None = None
         self._latest: dict[tuple[str, str], QuoteBar] = {}
         self._held: dict[str, HeldPosition] = {}
+        """Every position this handler holds, by the position's own id, so a second position on
+        one market is held beside the first and never in its place (AD-25)."""
         self._foreign: dict[str, OwnPosition] = dict(seeded or {})
         self._closed: list[ClosedTrade] = []
         self._trades: list[UnitTrade] = []
@@ -517,17 +525,17 @@ class UnitSliceHandler:
         bar's open, the side's closing quote (AD-13). The node's own port closes through its
         scope close."""
         del unit
-        self._close_pending = dict.fromkeys(self._held, why)
+        self._close_pending = {one.position.position_id: why for one in self._held.values()}
 
     def _close_at_open(self, market: str, bar: QuoteBar, frontier: Instant) -> None:
-        """Close the position the unit's exits could not, at this bar's open: one close per held
-        market the port was asked for."""
-        why = self._close_pending.pop(market, None)
-        held = self._held.get(market)
-        if held is None or why is None:
-            return
-        quote = bar.bid if held.position.side is Side.LONG else bar.ask
-        self._close(market, held, FillKind.CLOSE, quote.open, frontier, held.decision_row_id)
+        """Close every position the unit's exits could not, at this bar's open: one close per
+        position the port was asked for on this market."""
+        for position_id, held in self.held_in(market):
+            why = self._close_pending.pop(position_id, None)
+            if why is None:
+                continue
+            quote = bar.bid if held.position.side is Side.LONG else bar.ask
+            self._close(market, held, FillKind.CLOSE, quote.open, frontier, held.decision_row_id)
 
     def _note_faults(self, faults: Sequence[Fault]) -> None:
         """One ``risk_event`` row, and so one card, per root-cause key (AD-23): the same broken
@@ -606,11 +614,9 @@ class UnitSliceHandler:
         record = self._records.get(market)
         if record is None:
             return invalid("market", "a unit adopts a position on its own markets", market=market)
-        if self._position(market) is not None:
-            return policy("market", "a unit holds one position per market", market=market)
         risk = _money(position.side, position.entry_price, entry_stop, position.quantity, record)
-        self._held[market] = HeldPosition(
-            position, stop, target, decision_row_id, {}, entry_stop, risk.copy_abs()
+        self._held[position.position_id] = HeldPosition(
+            market, position, stop, target, decision_row_id, {}, entry_stop, risk.copy_abs()
         )
         return Ok(None)
 
@@ -678,28 +684,24 @@ class UnitSliceHandler:
         fact = None if record is None else rates.get(record.currency)
         return None if fact is None or fact.value is None else _exact(fact.value)
 
-    def _position(self, market: str) -> OwnPosition | None:
-        held = self._held.get(market)
-        return held.position if held is not None else self._foreign.get(market)
+    def held_in(self, market: str) -> tuple[tuple[str, HeldPosition], ...]:
+        """Every position this handler holds on one market, each with its own id, in the order
+        they opened."""
+        return tuple((pid, held) for pid, held in self._held.items() if held.market == market)
 
-    def _facts(self, market: str) -> PositionFacts | None:
-        """The position on ``market`` as its exits read it (AD-13, SWAP E15): its live stop and
-        target, the bars held, its excursions in R and the numbers its entry's row recorded. A
-        seeded position is another unit's, so it carries its identity alone."""
-        held = self._held.get(market)
-        if held is None:
-            foreign = self._foreign.get(market)
-            return (
-                None
-                if foreign is None
-                else PositionFacts(
-                    position_id=foreign.position_id,
-                    side=foreign.side,
-                    quantity=foreign.quantity,
-                    entry_price=foreign.entry_price,
-                    opened_by=foreign.opened_by,
-                )
-            )
+    def open_on(self, market: str) -> tuple[OwnPosition, ...]:
+        """The positions this handler holds on one market, as a host that asks about a market
+        reads them."""
+        return tuple(held.position for _, held in self.held_in(market))
+
+    def market_holding(self, position_id: str) -> str | None:
+        """The market a held position trades, or None when this handler holds no such position."""
+        held = self._held.get(position_id)
+        return None if held is None else held.market
+
+    def _fact(self, held: HeldPosition) -> PositionFacts:
+        """One held position as its exits read it (AD-13, SWAP E15): its live stop and target, the
+        bars held, its excursions in R and the numbers its entry's row recorded."""
         position = held.position
         return PositionFacts(
             position_id=position.position_id,
@@ -714,6 +716,23 @@ class UnitSliceHandler:
             mae_r=held.mae_r,
             numbers_at_entry=held.entry_stamps,
         )
+
+    def _facts(self, market: str) -> tuple[PositionFacts, ...]:
+        """Every position on ``market`` as its exits read it, empty when flat. A seeded position
+        is another unit's, so it carries its identity alone."""
+        found = [self._fact(one) for _, one in self.held_in(market)]
+        foreign = self._foreign.get(market)
+        if foreign is not None:
+            found.append(
+                PositionFacts(
+                    position_id=foreign.position_id,
+                    side=foreign.side,
+                    quantity=foreign.quantity,
+                    entry_price=foreign.entry_price,
+                    opened_by=foreign.opened_by,
+                )
+            )
+        return tuple(found)
 
     @property
     def trades(self) -> tuple[UnitTrade, ...]:
@@ -739,8 +758,12 @@ class UnitSliceHandler:
 
     @property
     def open_positions(self) -> Mapping[str, OwnPosition]:
-        held = {m: h.position for m, h in self._held.items()}
-        return held | {m: p for m, p in self._foreign.items() if m not in held}
+        """Every position this handler holds, by the position's own id, and a seeded one beside
+        them under its id too, so no two positions ever answer one key (AD-25)."""
+        held = {pid: one.position for pid, one in self._held.items()}
+        return held | {
+            p.position_id: p for p in self._foreign.values() if p.position_id not in held
+        }
 
     def update_stream(
         self, stream_id: str, observation: SliceObservation | None, frontier: Instant
@@ -775,14 +798,14 @@ class UnitSliceHandler:
             return Ok(None)
         since = self._carried.get(key)
         self._carried[key] = frontier
-        held = self._held.get(key[1])
-        if self._cash_port is None or held is None or since is None:
+        if self._cash_port is None or since is None:
             return Ok(None)
-        booked = self._cash_port.held(key[1], held.position, since, frontier, bar)
-        if is_refusal(booked):
-            return booked
-        for event in booked.value:
-            self._book(event)
+        for _, held in self.held_in(key[1]):
+            booked = self._cash_port.held(key[1], held.position, since, frontier, bar)
+            if is_refusal(booked):
+                return booked
+            for event in booked.value:
+                self._book(event)
         return Ok(None)
 
     def _book(self, event: CashEvent) -> None:
@@ -830,19 +853,18 @@ class UnitSliceHandler:
             )
         bar = self._bars[key][observation.instant.value_ns]
         self._latest[key] = bar
-        held = self._held.get(key[1])
-        if held is not None:
-            held = _with_excursion(held, bar)
-            self._held[key[1]] = held
-            reached = self._execution.protective(key[1], held, bar)
+        for position_id, held in self.held_in(key[1]):
+            moved = _with_excursion(held, bar)
+            self._held[position_id] = moved
+            reached = self._execution.protective(key[1], moved, bar)
             if reached is not None:
                 self._close(
                     key[1],
-                    held,
+                    moved,
                     reached.kind,
                     reached.price,
                     frontier,
-                    held.decision_row_id,
+                    moved.decision_row_id,
                     gapped=reached.gap,
                 )
         self._close_at_open(key[1], bar, frontier)
@@ -916,12 +938,13 @@ class UnitSliceHandler:
         if wire.get("intent_family") == "entry":
             return cast("str", wire["market_id"])
         ref = cast("Mapping[str, object]", wire["position_ref"])
+        position_id = cast("str", ref["position_id"])
+        mine = self.market_holding(position_id)
+        if mine is not None:
+            return mine
         return next(
-            (m for m, h in self._held.items() if h.position.position_id == ref["position_id"]),
-            next(
-                (m for m, p in self._foreign.items() if p.position_id == ref["position_id"]),
-                None,
-            ),
+            (m for m, p in self._foreign.items() if p.position_id == position_id),
+            None,
         )
 
     def _fill_entry(
@@ -937,9 +960,6 @@ class UnitSliceHandler:
         rate, rate_ts = self._entry_rates.pop(row_id, (None, None))
         record = self._records[market]
         receipt = Decimal(cast("str", wire["quantity"]))
-        if self._position(market) is not None:
-            self._journal.append(Skip(frontier, market, row_id, "a position is open", Decimal(0)))
-            return
         sized = lots(receipt, record)
         if is_refusal(sized):
             reason = str(sized.context.get("reason"))
@@ -961,7 +981,8 @@ class UnitSliceHandler:
             self._opened_by,
             frontier,
         )
-        self._held[market] = HeldPosition(
+        self._held[position.position_id] = HeldPosition(
+            market,
             position,
             stop,
             Decimal(cast("str", targets[0]["price"])) if targets else None,
@@ -1001,8 +1022,8 @@ class UnitSliceHandler:
         exit_ = parsed.value
         if not isinstance(exit_, UnitExitIntent):
             return invalid("intent_family", "an exit rests as a format-3 exit intent")
-        held = self._held.get(market)
-        if held is None or held.position.position_id != exit_.position_ref.position_id:
+        held = self._held.get(exit_.position_ref.position_id)
+        if held is None or held.market != market:
             return policy(
                 "position_ref",
                 "a unit closes only a position its own unit version opened",
@@ -1035,7 +1056,7 @@ class UnitSliceHandler:
                 )
                 if is_refusal(tightens):
                     return tightens
-                self._held[market] = replace(
+                self._held[held.position.position_id] = replace(
                     held,
                     stop=_decimal(stop.value, stop.scale),
                     target=_decimal(targets[0].price.value, targets[0].price.scale)
@@ -1103,13 +1124,13 @@ class UnitSliceHandler:
         self._journal.append(trade)
         rest = position.quantity - closed
         if rest:
-            self._held[market] = replace(
+            self._held[position.position_id] = replace(
                 held,
                 position=replace(position, quantity=rest),
                 realized_r=held.realized_r + trade.r,
             )
             return
-        del self._held[market]
+        del self._held[position.position_id]
         self._closed.append(
             ClosedTrade(
                 trade_id=position.position_id,
