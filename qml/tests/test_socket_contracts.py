@@ -422,16 +422,67 @@ _SESSION = (
 """A session that ends past every shipped halt's default limit; the values are test bounds."""
 
 
+def _moved(seed: Decimal) -> Decimal:
+    """A bound number moved off its seed: doubled, or 1 when the seed is 0. A test value."""
+    return seed * 2 if seed else Decimal(1)
+
+
+def _slot_calls(
+    shipped: _Shipped, params: Mapping[str, Decimal]
+) -> list[tuple[Side, list[Mapping[str, object]]]]:
+    """Each side's evidence, in order, as the host feeds this block's slot with ``params`` as the
+    numbers in force: a sizer each trade's facts, an exit the calls of its use over a run."""
+    if shipped.face.component_type == "sizer":
+        facts: list[Mapping[str, object]] = [
+            {
+                "equity": trade.equity,
+                "entry_price": trade.entry,
+                "stop_price": trade.stop,
+                "record": trade.record,
+                **params,
+            }
+            for trade in _TRADES
+        ]
+        return [(Side.LONG, facts)]
+    use = _exit_use(shipped.face)
+    assert use is not None, shipped.face.pin
+    return [
+        (side, [evidence for _, evidence in _host_calls(use, _run(side), params, side)])
+        for side in (Side.LONG, Side.SHORT)
+    ]
+
+
+def _ignores_moved(shipped: _Shipped) -> list[str]:
+    """K9 6: a block reads every bound number from ``evidence``, and ``make`` only seeds it. A
+    block seeded at the default and told a moved number in ``evidence`` must answer what a block
+    seeded at the moved number answers; one that answers the seed's ignores the move."""
+    breaks: list[str] = []
+    for name, seed in sorted(shipped.params.items()):
+        moved = {**shipped.params, name: _moved(seed)}
+        for side, calls in _slot_calls(shipped, moved):
+            seeded = shipped.block.make(shipped.params, {"series": "m15"}, side)
+            told = shipped.block.make(moved, {"series": "m15"}, side)
+            if any(seeded.update(evidence) != told.update(evidence) for evidence in calls):
+                breaks.append(
+                    f"ignores_moved_number: {name} moved from {seed} to {moved[name]} in "
+                    f"evidence, and the {side.value} answer stayed the seed's"
+                )
+                break
+    return breaks
+
+
 def _breaks(shipped: _Shipped) -> list[str]:
     match shipped.face.component_type:
         case "sizer":
-            return _sizer_breaks(shipped.block, shipped.params)
+            return _sizer_breaks(shipped.block, shipped.params) + _ignores_moved(shipped)
         case "exit":
             use = _exit_use(shipped.face)
             if use is None:
                 return _declares(shipped.face.output.type)
-            return _exit_breaks(use, shipped.block, shipped.params) + _never_acts(
-                use, shipped.block, shipped.params
+            return (
+                _exit_breaks(use, shipped.block, shipped.params)
+                + _never_acts(use, shipped.block, shipped.params)
+                + _ignores_moved(shipped)
             )
         case _:
             return _halt_breaks(shipped.block, shipped.params, _SESSION)
@@ -529,14 +580,41 @@ def _rounds_up(evidence: Mapping[str, object]) -> Size:
     return Size(lots=steps * record.lot_step)
 
 
+_SEED_ONLY: dict[str, list[str]] = {
+    pin: [
+        f"ignores_moved_number: {name} moved from {seed} to {moved} in evidence, and the long "
+        "answer stayed the seed's"
+    ]
+    for pin, name, seed, moved in (
+        ("fixed-fraction-at-stop@1", "fraction", "0.005", "0.010"),
+        ("swing-stop-buffer@1", "buffer", "0.0002", "0.0004"),
+        ("target-r-multiple@1", "multiple", "2", "4"),
+        ("time-exit-bars@1", "bars", "48", "96"),
+    )
+}
+"""The shipped versions that hold the ``make`` value and ignore a moved one (AD-14 step 3). Each
+has a later version that reads ``evidence``, and K9 6 names the old one rather than passing it."""
+
+
 @pytest.mark.parametrize(
     ("pin", "breaks"),
-    [(pin, _FLOAT_BREAKS if pin == _COMPONENT_CONTROL else []) for pin in sorted(_SHIPPED)],
+    [
+        (pin, _FLOAT_BREAKS if pin == _COMPONENT_CONTROL else _SEED_ONLY.get(pin, []))
+        for pin in sorted(_SHIPPED)
+    ],
 )
 def test_every_enrolled_socket_block_answers_its_slot_contract(pin: str, breaks: list[str]) -> None:
     """Every enrolled block answers the contract; the Library fixture is the known-bad control
     that proves a block saved beside the tests is judged with the same messages."""
     assert _breaks(_SHIPPED[pin]) == breaks
+
+
+def test_k9_6_a_block_ignoring_a_moved_number_fails() -> None:
+    assert _ignores_moved(_SHIPPED["fixed-fraction-at-stop@1"]) == [
+        "ignores_moved_number: fraction moved from 0.005 to 0.010 in evidence, and the long "
+        "answer stayed the seed's"
+    ]
+    assert _ignores_moved(_SHIPPED["fixed-fraction-at-stop@2"]) == []
 
 
 _UNBUILT_EXITS = frozenset(
