@@ -823,7 +823,7 @@ class _Core:
 
     def settled(self, market: _Market | None = None) -> dict[str, Decimal]:
         """The unit's numbers, with a market's own settings in place of the unit's default."""
-        own = {} if market is None else market.settings
+        own: Mapping[str, Decimal] = {} if market is None else market.settings
         return (
             dict(self.plan.defaults)
             | dict(own)
@@ -927,7 +927,7 @@ class _Core:
             side.side.value: {d.number for d in self.plan.derived if d.side is side.side}
             for side in self.plan.sides
         }
-        made = self.timer(Side.LONG, None)
+        made = self.timer(Side.LONG)
         timer = made.export_state() if made is not None else None
         markets = cast("Mapping[str, Mapping[str, object]]", snapshot["markets"])
         for m in self.markets:
@@ -974,7 +974,7 @@ class _Core:
             for key, state in cast("Mapping[str, Mapping[str, object]]", saved["blocks"]).items():
                 m.instances[key].import_state(state)
             for pid, state in cast("Mapping[str, Mapping[str, object]]", saved["timers"]).items():
-                stack = self.timer(Side.LONG, m)  # shape_gap refused a timers table with no exit
+                stack = self.timer(Side.LONG)  # shape_gap refused a timers table with no exit cold
                 if stack is not None:
                     stack.import_state(state)
                     m.timers[pid] = stack
@@ -1007,16 +1007,16 @@ class _Core:
         if cached.scope == self.risk.scope:
             self.risk = cached
 
-    def timer(self, side: Side, market: _Market | None) -> ExitStack | None:
-        """The per-bar exits for one position on ``side``, on ``market``'s own numbers, in the
-        compiled order, or ``None`` for a unit with no time exit, which layer E warns of
-        (UT-18)."""
+    def timer(self, side: Side) -> ExitStack | None:
+        """The per-bar exits for one position on ``side``, in the compiled order, or ``None`` for
+        a unit with no time exit, which layer E warns of (UT-18)."""
         slots: list[ExitSlot] = []
-        numbers = self.settled(market)
         for e in self.plan.exits:
             if e.use is not ExitUse.PER_BAR:
                 continue
-            instance = e.binding.block.make(self.params(e.binding, numbers), e.binding.inputs, side)
+            instance = e.binding.block.make(
+                self.params(e.binding, self.plan.defaults), e.binding.inputs, side
+            )
             slots.append(ExitSlot(f"exit.{e.binding.name}", e.binding.pin, instance))
         return None if not slots else ExitStack(side, slots)
 
@@ -1777,7 +1777,7 @@ class _Run:
             return
         stack = m.timers.get(position.position_id)
         if stack is None or stack.side is not position.side:
-            built = self.unit.timer(position.side, m)
+            built = self.unit.timer(position.side)
             if built is None:
                 return
             if stack is not None:  # a restore built the table before it knew the side

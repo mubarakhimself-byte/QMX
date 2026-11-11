@@ -13,6 +13,7 @@ clocks went forward to BST, so a session that read UTC would answer differently 
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import cast
 
@@ -20,7 +21,6 @@ import pytest
 from qmf.core.chrono import Instant
 from qml.compile import CompiledUnit, compile_unit
 from qml.protocol.unit import UnitStep
-
 from test_compile_dummy import _compiled as _dummy_compiled
 from test_compile_dummy import _document, _drive, _instants, _slice
 from test_compile_dummy import _host as _dummy_host
@@ -28,6 +28,7 @@ from test_compile_dummy import _surfaces as _dummy_surfaces
 from test_many_positions import (
     _closes,
     _context_holding,
+    _entries,
     _holding_document,
     _host,
     _one_bar,
@@ -36,7 +37,7 @@ from test_many_positions import (
 )
 
 _S = 1_000_000_000
-_LONDON = {
+_LONDON: dict[str, object] = {
     "name": "london",
     "calendar_ref": "fx-24x5@1",
     "zone": "Europe/London",
@@ -60,7 +61,7 @@ _BST_DAY = {"15:55": 1_743_432_900, "16:05": 1_743_433_500}
 
 
 def _session_unit(
-    session: dict[str, object], numbers: dict[str, object] | None = None
+    session: Mapping[str, object], numbers: Mapping[str, object] | None = None
 ) -> CompiledUnit:
     document = _holding_document(limit=1)
     document["sessions"] = [session]
@@ -85,7 +86,7 @@ def test_a_session_refuses_outside_its_hours(day: dict[str, int]) -> None:
     inside, outside = _drive(_host(compiled, _surfaces(bars, [])), [early, late])
 
     assert ("taken", "all slots hold") in _rows(inside)
-    assert [one.market_id for one in inside.intents] == ["fx.eurusd"]
+    assert [one.market_id for one in _entries(inside)] == ["fx.eurusd"]
     assert _rows(outside) == [
         ("blocked", "outside_session: 16:05 Europe/London is outside london 08:00 to 16:00")
     ]
@@ -95,7 +96,7 @@ def test_a_session_refuses_outside_its_hours(day: dict[str, int]) -> None:
 def test_flat_before_the_close() -> None:
     """A buffer of 15 minutes closes a held trade on the bar at 15:45 with reason
     ``forced_flat``, and leaves it alone on the bar at 15:30."""
-    session = copy.deepcopy(_LONDON) | {"flat_before_close": "flat_buffer"}
+    session = {**copy.deepcopy(_LONDON), "flat_before_close": "flat_buffer"}
     compiled = _session_unit(session, {"flat_buffer": _FLAT_BUFFER})
     held = _position("own-1", "1.09500", "1.09700", compiled)
     at_1530, at_1545 = Instant(_GMT_DAY["15:30"] * _S), Instant((_GMT_DAY["15:30"] + 900) * _S)
