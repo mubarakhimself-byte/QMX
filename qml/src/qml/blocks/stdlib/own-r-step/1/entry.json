@@ -1,0 +1,89 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "own-r-step",
+  "version": 1,
+  "family": "motion",
+  "aliases": [
+    "own R step"
+  ],
+  "origin": "qml",
+  "component_type": "motion",
+  "definition": "Moves a number one step inside its range by the mean R of the unit's own closed trades: toward its cautious side when the mean is below zero, away from it when the mean is above zero.",
+  "boundaries": "A labelled placeholder, owner numbers talk. Moves only inside the number's range, one step at a time, after enough closed trades; a mean of exactly zero leaves the number where it is.",
+  "recognition": "A risk fraction or a target multiple shrinks one step while the unit's own trades lose and grows back one step while they pay.",
+  "eligible_roles": [],
+  "sources": [
+    {
+      "source_ref": "risk-core:round-2/arch/final/SPINE.md#AD-14",
+      "quote": "One rule ships: own-r-step@1, a labelled placeholder that moves its number one step inside its range by the mean R of its own trades, toward cautious when that is below zero.",
+      "dated": "2026-11-07"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "trades",
+      "stream_kind": "trades",
+      "measure": null,
+      "data_level": null
+    },
+    {
+      "port": "current",
+      "stream_kind": "number",
+      "measure": null,
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": null
+  },
+  "parameters": {
+    "min_count": {
+      "measure": "count",
+      "default": "20",
+      "origin": "builder_chosen"
+    },
+    "min": {
+      "measure": "ratio",
+      "default": "0",
+      "origin": "builder_chosen"
+    },
+    "max": {
+      "measure": "ratio",
+      "default": "1",
+      "origin": "builder_chosen"
+    },
+    "step": {
+      "measure": "ratio",
+      "default": "0.0001",
+      "origin": "builder_chosen"
+    },
+    "cautious": {
+      "measure": "count",
+      "default": "-1",
+      "origin": "builder_chosen"
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:66b8883ddbd63f932e73f3b76f142d8df3d61385137485717dc2bc7f65cd4a99"
+}
