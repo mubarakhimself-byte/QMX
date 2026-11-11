@@ -264,6 +264,51 @@ def test_a_restart_mid_day_keeps_the_day_start(tmp_path: Path) -> None:
     assert len(rows) == len(DEPLOYMENTS), f"both units fire on the day's sixth per cent, not {rows}"
 
 
+def test_a_boot_on_a_day_it_did_not_watch_begin_states_no_day_start(tmp_path: Path) -> None:
+    """A node that was down over midnight while the account lost 4.9 per cent states no day start.
+
+    It read the day before at 10,000.00 and stopped. The cash fell to 9,510.00 while it was down, and
+    it boots at noon of the next day with no ``day_start`` row for it. Anchoring on the boot's own
+    read would make the brake need a further full 5 per cent; the day start reads unstated instead,
+    so the brake reads cold.
+    """
+    rig, runtime, _ = two_units(tmp_path)
+    before = runtime.account_brake_equity(b.ACCOUNT)
+    runtime.stop()
+
+    rig.fake.balance_cents = BALANCE - 49_000
+    noon = next_midnight(rig.now[0]) + DAY // 2
+    rig.now[0] = noon
+    again = b.bound_rig(tmp_path, grant=rig.grants.held, broker=rig.fake, at=noon)
+    booted = b.runtime(again)
+    settle(booted)
+    state_balance(again, booted, noon, BALANCE - 49_000)
+    after = booted.account_brake_equity(b.ACCOUNT)
+    booted.stop()
+
+    assert before == (Decimal("10000.00"), Decimal("10000.00")), f"the first day, not {before}"
+    assert after == (Decimal("9510.00"), None), f"no day start for an unwatched day, not {after}"
+
+
+def test_a_clock_stepping_back_keeps_the_day_start(tmp_path: Path) -> None:
+    """A clock that steps back a day and forward again leaves the day's start where it was.
+
+    The account read 10,000.00 at the day's first read and 9,510.00 later that day. The clock then
+    steps back across midnight and forward to the same day: the day still starts at 10,000.00, so
+    the brake still reads 4.9 per cent down rather than a fresh start at 9,510.00.
+    """
+    rig, runtime, at = two_units(tmp_path)
+    state_balance(rig, runtime, at, BALANCE - 49_000)
+    rig.now[0] -= DAY
+    runtime.tick()
+    rig.now[0] += DAY
+    runtime.tick()
+    after = runtime.account_brake_equity(b.ACCOUNT)
+    runtime.stop()
+
+    assert after == (Decimal("9510.00"), Decimal("10000.00")), f"the day's own start, not {after}"
+
+
 def _cents(money: Decimal) -> int:
     """``money`` in the broker's money digits, as the balance the close leaves."""
     return int((money * 100).to_integral_value())
