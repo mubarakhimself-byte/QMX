@@ -76,13 +76,14 @@ def test_every_text_the_node_can_write_has_a_code() -> None:
     }
 
     assert no_code == {}
+    # The handler no longer refuses a fill on a held market, so the walk finds one text fewer.
+    # `journal.py` keeps "a position is open" coded, because an old journal still holds it.
     assert len(found) == 53, "the walk has stopped finding the node's texts"
     assert {
         "the cross-unit hook refused the order",
         "the close could not be built (X)",
         "a position of ours that no unit holds is open on X: X",
         "the venue does not hold this order's stop",
-        "a position is open",
         "stood down, disk: free space is below the node journal guard (X)",
         "the node cannot prove the account is its own: a twin with its tag trades it",
         "halt slot: X answers X",

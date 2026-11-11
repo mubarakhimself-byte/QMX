@@ -348,7 +348,7 @@ def _surfaces(bars: Sequence[QuoteBar], position: OwnPosition | None = None) -> 
         "account": _Fixed(Account(_EQUITY)),
         "own_journal": _Fixed(()),
         f"bars:m15:{_MARKET}": _Latest(bars),
-        f"own_position:{_MARKET}": _Fixed(position),
+        f"own_position:{_MARKET}": _Fixed(() if position is None else (position,)),
     }
 
 

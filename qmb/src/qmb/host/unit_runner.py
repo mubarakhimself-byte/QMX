@@ -526,7 +526,16 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
         records[path.stem] = parsed.value
         terms[path.stem] = cast("Mapping[str, object]", raw)
     compiled = compile_unit(
-        document, CompileContext(sources=sources, entries=entries, records=records)
+        document,
+        CompileContext(
+            sources=sources,
+            entries=entries,
+            records=records,
+            # QMB replays against its own execution, which fills each intent whole and keeps
+            # every position apart, so a backtest runs the same two-position document the node
+            # runs on a hedging account (AD-25).
+            nets_positions=False,
+        ),
     )
     if not isinstance(compiled, CompiledUnit):
         return invalid(

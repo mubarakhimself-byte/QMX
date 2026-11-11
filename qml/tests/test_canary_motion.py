@@ -119,7 +119,7 @@ def _surfaces(journal: Sequence[ClosedTrade]) -> dict[str, _At]:
     }
     for market in _MARKETS:
         surfaces[f"bars:m15:{market}"] = _At(lambda _instant: None)
-        surfaces[f"own_position:{market}"] = _At(lambda _instant: None)
+        surfaces[f"own_position:{market}"] = _At(lambda _instant: ())
     return surfaces
 
 

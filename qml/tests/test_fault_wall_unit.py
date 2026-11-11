@@ -103,7 +103,8 @@ class _Position:
         self._held = held
 
     def at(self, instant: Instant, /) -> object:
-        return self._held(instant)
+        found = self._held(instant)
+        return () if found is None else (found,)
 
 
 def _surfaces(
