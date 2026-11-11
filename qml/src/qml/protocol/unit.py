@@ -1158,6 +1158,16 @@ class HostedUnit:
         wanted = _amount(answer)
         if isinstance(wanted, _Skip):
             return ended(proposal.row, {}, ("sizer: refuse",), wanted.code, wanted.detail)
+        if not isinstance(wanted.value, Decimal) or not wanted.value.is_finite():
+            core.pending_faults.append(Fault(compiled.plan.sizer.pin, FaultPhase.PRICE))
+            core.bench()
+            return ended(
+                proposal.row,
+                {},
+                ("sizer: refuse",),
+                UNIT_FAULT,
+                "the sizer answered no usable amount",
+            )
 
         factor = Decimal(1)
         verdicts: list[str] = ["sizer: none"]
