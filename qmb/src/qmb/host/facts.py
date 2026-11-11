@@ -270,7 +270,9 @@ class CostCells:
     def _key(market: str, record: InstrumentRecord, instant: Instant) -> tuple[str, str, int]:
         return (market, record.venue, instant.value_ns // _HOUR_NS % 24)
 
-    def observe(self, market: str, record: InstrumentRecord, instant: Instant, cost: Decimal) -> None:
+    def observe(
+        self, market: str, record: InstrumentRecord, instant: Instant, cost: Decimal
+    ) -> None:
         """Add one fill's cost, in price, to its cell."""
         key = self._key(market, record, instant)
         cell = self._cells.get(key, CostCell())
