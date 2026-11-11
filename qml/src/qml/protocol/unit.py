@@ -94,6 +94,7 @@ __all__ = [
     "EXIT_FAULT_BARS",
     "FACTOR_OUT_OF_RANGE",
     "FAULT_CLEAN_BARS",
+    "MARKET_PORTS",
     "NEUTRAL",
     "OHLC",
     "PER_TRADE_CAP_SHARE",
@@ -254,6 +255,10 @@ class Account:
     """``market.rate:<quote>`` by the quote currency each converts from, its value the exact
     rational (AD-10 "Currency"). A host supplies one per quote its unit reads; the account's own
     currency takes the ``Fact(1)`` fast path and never looks here."""
+    facts: Mapping[str, Fact] = MappingProxyType({})
+    """The market facts a host measured, by their AD-15 name, ``market.<fact>:<market>``: what a
+    fill there costs, how far past a stop one has filled, and what a lot paid at its last carry.
+    A sizer reads its own market's under the port names in ``MARKET_PORTS``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,6 +546,15 @@ class _Skip:
 
 _SIZER_PORTS: Final[tuple[str, ...]] = ("equity", "entry_price", "stop_price", "record")
 """The evidence a sizer's face declares and the host passes, in the order the receipt names it."""
+MARKET_PORTS: Final[tuple[str, ...]] = ("cost_cell", "gap_factor", "funding")
+"""The market facts a sizer may read beside its four ports, each its ``market.<port>:<market>``
+fact as the host measured it, or absent from the evidence when the host measured none."""
+
+
+def _market_facts(proposal: Proposal, facts: Account) -> dict[str, Fact]:
+    """The proposal's own market's measured facts, by their AD-15 name."""
+    names = (f"market.{port}:{proposal.market_id}" for port in MARKET_PORTS)
+    return {name: facts.facts[name] for name in names if name in facts.facts}
 
 
 def _amount(answer: object) -> Amount | _Skip:
@@ -601,6 +615,7 @@ def _sizing_inputs(proposal: Proposal, facts: Account) -> dict[str, object]:
     rate = _rate(proposal.record, facts, instant)
     if rate is not None:
         inputs[f"market.rate:{proposal.record.currency}"] = rate
+    inputs |= _market_facts(proposal, facts)
     return inputs
 
 
@@ -1129,6 +1144,10 @@ class HostedUnit:
             "entry_price": proposal.entry_price,
             "stop_price": proposal.stop,
             "record": proposal.record,
+        }
+        evidence |= {
+            name.removeprefix("market.").partition(":")[0]: fact
+            for name, fact in _market_facts(proposal, facts).items()
         }
         try:
             answer = market.instances["sizer"].update(evidence | dict(proposal.params))

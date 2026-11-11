@@ -23,7 +23,15 @@ position and never a venue.
 
 Cash that moves with no fill (swap, financing, funding, dividends, commission) comes from the
 host's cash port as ``CashEvent`` rows and changes the account the unit reads. The node passes
-no cash port, because its venue books those itself.
+no cash port, because its venue books those itself. Each event lands on the position it names, so
+a trade carries its own cash and its net R beside its gross R.
+
+Every order fill is a fill record (AD-15, R7): its decision quote (the market's mid when the order
+was decided), its arrival quote (the mid the fill's bar opened at), the price, whether a venue
+filled it only in part, the spread it paid past the arrival quote and its commission. Its cost in
+price lands in the handler's ``CostCells``, which the account surface then answers as
+``market.cost_cell:<market>``, beside ``market.gap_factor`` and ``market.funding``. A stop, target
+or liquidation fill carries no quote and feeds no cell: how far a stop gaps is the gap factor.
 """
 
 from __future__ import annotations
@@ -76,6 +84,7 @@ from qml.unit.model import Side
 from qmb._refuse import invalid, policy
 from qmb.execution.fill import FillKind, Reached
 from qmb.execution.financing import CashEvent, CashKind
+from qmb.host.facts import CostCells, cost_cell_name, funding_name, gap_factor_name
 from qmb.runloop.loop import RestingIntent, SliceObservation
 
 __all__ = [
@@ -99,6 +108,10 @@ __all__ = [
 
 _CENT: Final[Decimal] = Decimal("0.01")
 _R_PLACES: Final[Decimal] = Decimal("0.0001")
+_CARRY: Final[frozenset[CashKind]] = frozenset(
+    {CashKind.SWAP, CashKind.FINANCING, CashKind.FUNDING}
+)
+_PROTECTIVE: Final[frozenset[FillKind]] = frozenset({FillKind.STOP, FillKind.LIQUIDATION})
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +145,10 @@ class HeldPosition:
     holds for its quote."""
     rate_ts: Instant | None = None
     """When that rate was read, so the close can stamp its age without reading a rate again."""
+    cash: Decimal = Decimal(0)
+    """The cash booked on the position since its last close: its commission, swap and funding."""
+    realized_net_r: Decimal = Decimal(0)
+    """The net R the position's partial closes already took."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +165,17 @@ class Fill:
     residue_r: Decimal
     """The share of the receipt's risk the lot rounding left out, in R; 0 on an exit."""
     decision_row_id: str
+    decision_quote: Decimal | None = None
+    """The market's mid at the close of the bar the order was decided on; None on a stop, target
+    or liquidation, which no decision sent."""
+    arrival_quote: Decimal | None = None
+    """The market's mid at the open of the bar the order filled on."""
+    partial: bool = False
+    """The venue filled less than the quantity sent."""
+    spread: Decimal = Decimal(0)
+    """The money the fill paid past its arrival quote, in the record's quote currency."""
+    commission: Decimal = Decimal(0)
+    """The money the fill paid in commission: the cash port's line, else the record's stated."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +220,15 @@ class UnitTrade:
     this is the one rate every money figure is converted by (SPINE section 3, "Money")."""
     rate_age_s: Decimal = Decimal(0)
     """How old that rate was when the position closed, stamped so a reader never reads one."""
+    cash: Decimal = Decimal(0)
+    """The position's cash this close carries: commission, swap and funding, signed."""
+
+    @property
+    def net_r(self) -> Decimal:
+        """``money`` plus ``cash`` over the whole entry's risk; ``r`` is the gross one."""
+        if not self.risk:
+            return self.r
+        return ((self.money + self.cash) / self.risk).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +369,10 @@ def _decimal(value: int, scale: int) -> Decimal:
     return Decimal(value).scaleb(-scale)
 
 
+def _mid(bid: Decimal, ask: Decimal) -> Decimal:
+    return (bid + ask) / 2
+
+
 def _with_excursion(held: HeldPosition, bar: QuoteBar) -> HeldPosition:
     """The position with this bar's reach against and for it, on the side it would close at, and
     the bar added to its count."""
@@ -388,6 +429,7 @@ class UnitSliceHandler:
         rates: RatePort | None = None,
         port: HostPort | None = None,
         streams: Sequence[str] | None = None,
+        costs: CostCells | None = None,
     ) -> None:
         self._streams = tuple(dict.fromkeys((stream, *(streams or ()))))
         """The unit's streams, the primary first: the stream a slice closes on and steps for."""
@@ -421,6 +463,14 @@ class UnitSliceHandler:
         self._noted: set[str] = set()
         """Each brake row a ``risk_event`` has landed for, and each refused entry a ``would_have``
         has landed for, so a fire that holds and a slice driven again write nothing twice."""
+        self.costs = CostCells() if costs is None else costs
+        """The cost cells every order fill this handler records is measured into (AD-15)."""
+        self._quotes: dict[str, Decimal] = {}
+        """Each minted order's decision quote, by its decision row id, until it fills."""
+        self._gaps: dict[str, Decimal] = {}
+        """Each market's worst whole-position loss at a stop or liquidation, in R, at least 1."""
+        self._funding: dict[str, tuple[Decimal, Instant]] = {}
+        """Each market's last carry booking per lot, and when it was booked."""
         self._close_pending: dict[str, str] = {}
         """The held markets the unit asked its host's last fall-through to close at their next
         bar's open, each with the reason it asked (AD-13); a market drops out once its bar comes."""
@@ -456,6 +506,7 @@ class UnitSliceHandler:
         rates: RatePort | None = None,
         port: HostPort | None = None,
         streams: Sequence[str] | None = None,
+        costs: CostCells | None = None,
     ) -> Result[UnitSliceHandler]:
         """A handler whose unit ``host`` built from this handler's read surfaces.
 
@@ -467,7 +518,8 @@ class UnitSliceHandler:
         ``port`` is the host's last fall-through when a held position's exits cannot run; QMB
         leaves it out and closes at the next bar's open itself (AD-13). ``streams`` is every
         stream the unit reads: ``stream`` is the primary, the one a slice closes on, and a
-        host that reads one stream leaves it out.
+        host that reads one stream leaves it out. ``costs`` is where the fills' costs land; a host
+        that names no settings for them leaves it out and gets the starting defaults.
         """
         handler = cls(
             stream=stream,
@@ -482,6 +534,7 @@ class UnitSliceHandler:
             rates=rates,
             port=port,
             streams=streams,
+            costs=costs,
         )
         unit = host(handler.read_surfaces())
         if is_refusal(unit):
@@ -660,9 +713,26 @@ class UnitSliceHandler:
             (_converted(t.money, self._row_rate(t, rates)) for t in self._trades), Fraction(0)
         )
         equity += sum((Fraction(c.money) for c in self._cash), Fraction(0))
+        facts = MappingProxyType(self._market_facts(instant))
         if self._rates is None:
-            return Account(_amount(equity))
-        return Account(_amount(equity), self._rates.currency, MappingProxyType(rates))
+            return Account(_amount(equity), facts=facts)
+        return Account(_amount(equity), self._rates.currency, MappingProxyType(rates), facts)
+
+    def _market_facts(self, instant: Instant) -> dict[str, Fact]:
+        """Each market's measured facts at ``instant``: its cost cell always, its gap factor once
+        a stop has filled there, and its funding once a carry was booked there."""
+        facts: dict[str, Fact] = {}
+        for market, record in self._records.items():
+            facts[cost_cell_name(market)] = self.costs.fact(market, record, instant)
+            gap = self._gaps.get(market)
+            if gap is not None:
+                words = "the worst loss a stop here filled at, in R of that stop"
+                facts[gap_factor_name(market)] = Fact(gap, instant, "open", words)
+            funding = self._funding.get(market)
+            if funding is not None:
+                words = "the money one lot paid or took at this market's last carry"
+                facts[funding_name(market)] = Fact(funding[0], funding[1], "open", words)
+        return facts
 
     def _row_rate(self, trade: UnitTrade, rates: Mapping[str, Fact]) -> Fraction | None:
         """The rate ``trade``'s money converts by: its own stamp, else this call's rate for the
@@ -800,6 +870,12 @@ class UnitSliceHandler:
     def _book(self, event: CashEvent) -> None:
         self._cash.append(event)
         self._journal.append(event)
+        held = self._held.get(event.position_id)
+        if held is None:
+            return
+        self._held[event.position_id] = replace(held, cash=held.cash + event.money)
+        if event.kind in _CARRY and held.position.quantity:
+            self._funding[held.market] = (event.money / held.position.quantity, event.instant)
 
     def execute_resting(
         self,
@@ -887,6 +963,10 @@ class UnitSliceHandler:
             if is_refusal(made):
                 return made
             minted.append(made.value)
+            latest = self._latest.get(key)
+            if latest is not None:
+                quote = _mid(latest.bid.close, latest.ask.close)
+                self._quotes[cast("str", wire["decision_row_id"])] = quote
             if wire["intent_family"] == "entry":
                 row_id = cast("str", wire["decision_row_id"])
                 row = decisions.get(row_id)
@@ -994,13 +1074,31 @@ class UnitSliceHandler:
             receipt,
             residue_r,
             row_id,
+            decision_quote=self._quotes.pop(row_id, None),
+            arrival_quote=_mid(bar.bid.open, bar.ask.open),
+            partial=filled is not None and filled < receipt,
         )
         self._record_fill(fill)
 
     def _record_fill(self, fill: Fill) -> None:
+        """Journal the fill with its costs, measure them into its cost cell, then book its cash."""
+        booked = () if self._cash_port is None else self._cash_port.filled(fill)
+        record = self._records[fill.market_id]
+        paid = -sum((e.money for e in booked if e.kind is CashKind.COMMISSION), Decimal(0))
+        if not paid and record.commission_per_lot is not None:
+            paid = (record.commission_per_lot * fill.quantity).quantize(_CENT, ROUND_HALF_EVEN)
+        if fill.arrival_quote is not None:
+            buys = (fill.kind is FillKind.ENTRY) is (fill.side is Side.LONG)
+            past = fill.price - fill.arrival_quote if buys else fill.arrival_quote - fill.price
+            lot_value = fill.quantity * record.value_per_point
+            spread = (past * lot_value).quantize(_CENT, rounding=ROUND_HALF_EVEN)
+            fill = replace(fill, spread=spread, commission=paid)
+            self.costs.observe(fill.market_id, record, fill.instant, past + paid / lot_value)
+        else:
+            fill = replace(fill, commission=paid)
         self._fills.append(fill)
         self._journal.append(fill)
-        for event in () if self._cash_port is None else self._cash_port.filled(fill):
+        for event in booked:
             self._book(event)
 
     def _fill_exit(
@@ -1021,9 +1119,10 @@ class UnitSliceHandler:
             )
         row_id = exit_.decision_row_id
         price = self._execution.close_price(market, held.position.side, bar)
+        quotes = (self._quotes.pop(row_id, None), _mid(bar.bid.open, bar.ask.open))
         match exit_.action:
             case CloseFull():
-                self._close(market, held, FillKind.CLOSE, price, frontier, row_id)
+                self._close(market, held, FillKind.CLOSE, price, frontier, row_id, quotes=quotes)
             case ClosePartial(quantity=asked):
                 sized = lots(_decimal(asked.value, asked.scale), self._records[market])
                 if is_refusal(sized):
@@ -1038,7 +1137,9 @@ class UnitSliceHandler:
                         asked=str(quantity),
                         held=str(held.position.quantity),
                     )
-                self._close(market, held, FillKind.CLOSE, price, frontier, row_id, quantity)
+                self._close(
+                    market, held, FillKind.CLOSE, price, frontier, row_id, quantity, quotes=quotes
+                )
             case AmendProtection(stop=stop, targets=targets):
                 current = _price(held.stop, exit_.position_ref.instrument)
                 tightens = check_amendment_tightens(
@@ -1066,8 +1167,10 @@ class UnitSliceHandler:
         quantity: Decimal | None = None,
         *,
         gapped: bool = False,
+        quotes: tuple[Decimal | None, Decimal | None] = (None, None),
     ) -> None:
-        """Close ``quantity`` of the held position, or all of it; the rest stays held."""
+        """Close ``quantity`` of the held position, or all of it; the rest stays held. ``quotes``
+        is an order close's decision and arrival quotes; a protective fill has neither."""
         record = self._records[market]
         position = held.position
         closed = position.quantity if quantity is None else quantity
@@ -1088,7 +1191,11 @@ class UnitSliceHandler:
             None,
             Decimal(0),
             row_id,
+            decision_quote=quotes[0],
+            arrival_quote=quotes[1],
         )
+        self._record_fill(fill)
+        held = self._held[position.position_id]
         trade = UnitTrade(
             position.position_id,
             market,
@@ -1108,8 +1215,8 @@ class UnitSliceHandler:
             risk=held.risk,
             rate=held.rate,
             rate_age_s=_age_s(frontier, held.rate_ts),
+            cash=held.cash,
         )
-        self._record_fill(fill)
         self._trades.append(trade)
         self._journal.append(trade)
         rest = position.quantity - closed
@@ -1118,9 +1225,14 @@ class UnitSliceHandler:
                 held,
                 position=replace(position, quantity=rest),
                 realized_r=held.realized_r + trade.r,
+                realized_net_r=held.realized_net_r + trade.net_r,
+                cash=Decimal(0),
             )
             return
         del self._held[position.position_id]
+        gross_r = held.realized_r + trade.r
+        if kind in _PROTECTIVE:
+            self._gaps[market] = max(self._gaps.get(market, Decimal(1)), -gross_r)
         self._closed.append(
             ClosedTrade(
                 trade_id=position.position_id,
@@ -1129,7 +1241,8 @@ class UnitSliceHandler:
                 side=position.side,
                 market_id=market,
                 world="replay",
-                r_after_costs=held.realized_r + trade.r,
+                gross_r=gross_r,
+                net_r=held.realized_net_r + trade.net_r,
                 entry_stamps=held.entry_stamps,
             )
         )

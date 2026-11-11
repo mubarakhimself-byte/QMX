@@ -197,7 +197,8 @@ def _risk_trade(n: int) -> ClosedTrade:
         side=Side.LONG,
         market_id="fx.eurusd",
         world="replay",
-        r_after_costs=Decimal("1.5"),
+        gross_r=Decimal("1.5"),
+        net_r=Decimal("1.5"),
         entry_stamps={"number:risk_fraction": Decimal("0.005")},
     )
 

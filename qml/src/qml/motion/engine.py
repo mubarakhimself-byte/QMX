@@ -59,7 +59,12 @@ class ClosedTrade:
     side: Side
     market_id: str
     world: str
-    r_after_costs: Decimal
+    gross_r: Decimal
+    """The trade's money at fill prices over its 1 R: spread and slippage are in it, cash is not.
+    The logic record and the motion engine read this one."""
+    net_r: Decimal
+    """Money plus the position's cash (commission, swap, funding) over its 1 R. The brakes read
+    this one, so a cost never reads as a healthy trade and is never taken off twice."""
     entry_stamps: Mapping[str, Decimal]
 
 
@@ -81,7 +86,7 @@ class SlowNumber:
 class SlowState:
     value: Decimal
     read: tuple[tuple[str, Decimal, Decimal], ...] = ()
-    """``(trade_id, stamp, r_after_costs)`` of the newest trades read, at most ``window`` deep."""
+    """``(trade_id, stamp, gross_r)`` of the newest trades read, at most ``window`` deep."""
     watermark: tuple[int, str] | None = None
     """``(closed_at ns, trade_id)`` of the last trade read."""
     read_total: int = 0
@@ -153,7 +158,7 @@ def _read(
     if not fresh:
         return state
     rows = tuple(
-        (t.trade_id, t.entry_stamps[number.stamp], t.r_after_costs)
+        (t.trade_id, t.entry_stamps[number.stamp], t.gross_r)
         for t in fresh
         if number.stamp in t.entry_stamps
     )

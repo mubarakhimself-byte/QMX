@@ -186,27 +186,28 @@ def own_facts(trades: Sequence[ClosedTrade], instant: Instant) -> dict[str, obje
 
     ``session_loss_r`` and ``session_fills`` count the trades closed in the instant's session,
     which is the UTC calendar day until sessions compile. ``loss_streak`` counts the losing trades
-    at the end of the journal, and ``losing_day_streak`` the losing days before it.
+    at the end of the journal, and ``losing_day_streak`` the losing days before it. Each reads the
+    trade's net R, its money and cash over its risk, so a brake never reads a cost as a gain.
     """
     rows = sorted(trades, key=lambda trade: (trade.closed_at.value_ns, trade.trade_id))
     today = _day(instant)
     session = [trade for trade in rows if _day(trade.closed_at) == today]
     loss_streak = 0
     for trade in reversed(rows):
-        if trade.r_after_costs >= 0:
+        if trade.net_r >= 0:
             break
         loss_streak += 1
     days: dict[int, Decimal] = {}
     for trade in rows:
         day = _day(trade.closed_at)
-        days[day] = days.get(day, Decimal(0)) + trade.r_after_costs
+        days[day] = days.get(day, Decimal(0)) + trade.net_r
     losing_days = 0
     for day in sorted(days, reverse=True):
         if days[day] >= 0:
             break
         losing_days += 1
     return {
-        "own.session_loss_r": sum((trade.r_after_costs for trade in session), Decimal(0)),
+        "own.session_loss_r": sum((trade.net_r for trade in session), Decimal(0)),
         "own.session_fills": len(session),
         "own.loss_streak": loss_streak,
         "own.losing_day_streak": losing_days,

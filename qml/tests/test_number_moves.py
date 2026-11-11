@@ -89,7 +89,8 @@ def _losses(count: int) -> list[ClosedTrade]:
             side=Side.LONG,
             market_id=_EURUSD,
             world="replay",
-            r_after_costs=_LOSS,
+            gross_r=_LOSS,
+            net_r=_LOSS,
             entry_stamps=stamps,
         )
         for n in range(1, count + 1)

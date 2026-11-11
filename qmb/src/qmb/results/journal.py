@@ -5,7 +5,10 @@ Every record the run's unit and its handler make becomes one typed row of the un
 every reading the unit computed (MIS-10, JR-04), and the run adds its ``calibration``,
 ``state``, ``guard``, ``fill``, ``trade``, ``cash`` and ``data_event`` rows. A trade that a gap
 took past its stop carries ``gap_through_stop`` (RS-13), and each swap, financing, funding,
-dividend or commission line is one ``cash`` row (B10). The rows land as partition
+dividend or commission line is one ``cash`` row (B10). A ``fill`` row is the fill record: an order
+fill's decision and arrival quotes, whether it filled in part, and the spread and commission it
+paid. A ``trade`` row keeps ``r``, the gross R the judge reads, apart from ``net_r``, which takes
+the position's ``cash`` too. The rows land as partition
 files under the run's output folder, and the job hands them to the core as the result's
 ``journal/*`` blobs, so a run's journal is one Library record.
 
@@ -457,9 +460,17 @@ class RunJournal:
             "price": str(fill.price),
             "quantity": str(fill.quantity),
             "residue_r": str(fill.residue_r),
+            "spread": str(fill.spread),
+            "commission": str(fill.commission),
         }
         if fill.receipt_quantity is not None:
             body["receipt_quantity"] = str(fill.receipt_quantity)
+        if fill.decision_quote is not None:
+            body["decision_quote"] = str(fill.decision_quote)
+        if fill.arrival_quote is not None:
+            body["arrival_quote"] = str(fill.arrival_quote)
+        if fill.partial:
+            body["partial"] = True
         self._write("fill", body, self._facts(fill.market_id))
 
     def _skip(self, skip: Skip) -> None:
@@ -551,6 +562,8 @@ class RunJournal:
             "exit_kind": trade.exit_kind.value,
             "money": str(trade.money),
             "r": str(trade.r),
+            "cash": str(trade.cash),
+            "net_r": str(trade.net_r),
         }
         if trade.gap_through_stop:
             body["gap_through_stop"] = True

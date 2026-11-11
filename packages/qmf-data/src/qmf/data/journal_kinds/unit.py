@@ -106,6 +106,7 @@ BY_KINDS: Final[frozenset[str]] = frozenset({"judge", "his_click", "risk_rule", 
 _NEEDS_REASON: Final[frozenset[str]] = frozenset({"skipped", "blocked"})
 _RATIONAL: Final[re.Pattern[str]] = re.compile(r"\A-?\d+/\d+\Z")
 """An exact rational as text: a rate reads ``1/1`` or ``1/150``, never a rounded decimal."""
+_DECIMAL: Final[re.Pattern[str]] = re.compile(r"\A-?\d+(\.\d+)?\Z")
 
 
 def _reason(body: Mapping[str, object]) -> str | None:
@@ -177,16 +178,35 @@ def _receipt(body: Mapping[str, object]) -> str | None:
     return None
 
 
+def _decimals(body: Mapping[str, object], names: tuple[str, ...]) -> str | None:
+    """Each named field, where the row carries it, as decimal text."""
+    for name in names:
+        value = body.get(name)
+        if value is not None and (not isinstance(value, str) or _DECIMAL.fullmatch(value) is None):
+            return f"{name} is a decimal string"
+    return None
+
+
+def _fill(body: Mapping[str, object]) -> str | None:
+    """The fill record (R7), where the row carries it: the decision and arrival quotes, the
+    spread and commission the fill paid, and whether the venue filled it only in part."""
+    partial = body.get("partial")
+    if partial is not None and not isinstance(partial, bool):
+        return "partial is true or false"
+    return _decimals(body, ("decision_quote", "arrival_quote", "spread", "commission"))
+
+
 def _trade(body: Mapping[str, object]) -> str | None:
     """A close's two rate stamps, where it carries them: the account-currency rate its money
-    converts by, exact as ``n/d``, and how old that read was in seconds."""
+    converts by, exact as ``n/d``, and how old that read was in seconds. Its ``net_r`` and
+    ``cash``, where it carries them, are decimal text beside the gross ``r``."""
     rate = body.get("rate")
     if rate is not None and (not isinstance(rate, str) or _RATIONAL.fullmatch(rate) is None):
         return "rate is an exact rational, n/d"
     age = body.get("rate_age_s")
     if age is not None and not isinstance(age, str):
         return "rate_age_s is a decimal string"
-    return None
+    return _decimals(body, ("net_r", "cash"))
 
 
 def _state(body: Mapping[str, object]) -> str | None:
@@ -314,7 +334,7 @@ SPECS: Final[tuple[KindSpec, ...]] = (
         _lifecycle,
     ),
     KindSpec(JournalStream.UNIT, "order", IdRule.SEQUENCE),
-    KindSpec(JournalStream.UNIT, "fill", IdRule.FILL, ("deal_id",)),
+    KindSpec(JournalStream.UNIT, "fill", IdRule.FILL, ("deal_id",), _fill),
     KindSpec(JournalStream.UNIT, "trade", IdRule.TRADE, ("closing_deal_id",), _trade),
     KindSpec(JournalStream.UNIT, "guard", IdRule.SEQUENCE),
     KindSpec(

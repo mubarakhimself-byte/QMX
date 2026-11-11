@@ -94,7 +94,8 @@ def _trade(n: int, strength: str, r: str) -> ClosedTrade:
         side=Side.LONG,
         market_id="fx.eurusd",
         world="replay",
-        r_after_costs=Decimal(r),
+        gross_r=Decimal(r),
+        net_r=Decimal(r),
         entry_stamps={"strength": Decimal(strength)},
     )
 

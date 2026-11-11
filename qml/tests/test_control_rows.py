@@ -93,7 +93,8 @@ def _trade(n: int, r: str, closed_at: Instant) -> ClosedTrade:
         side=Side.LONG,
         market_id=_MARKET,
         world="replay",
-        r_after_costs=Decimal(r),
+        gross_r=Decimal(r),
+        net_r=Decimal(r),
         entry_stamps={},
     )
 

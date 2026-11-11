@@ -307,7 +307,7 @@ def test_a_partial_close_closes_its_lot_rounded_quantity_and_the_rest_stays_held
         (Decimal("0.30"), Decimal("-39.00"), Decimal("-0.1472")),
     ]
     closed = cast("Sequence[ClosedTrade]", handler.read_surfaces()["own_journal"].at(Instant(_T3)))
-    assert [(t.trade_id, t.r_after_costs) for t in closed] == [(_OWN, Decimal("-0.0944"))]
+    assert [(t.trade_id, t.gross_r) for t in closed] == [(_OWN, Decimal("-0.0944"))]
 
 
 def test_a_tightened_stop_is_held_and_fills_without_closing_at_the_amendment() -> None:
