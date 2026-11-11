@@ -3,13 +3,14 @@ publish of every collection through his route, and every page then tells the tru
 clashing save is refused, and an ordinary sentence stays unmatched. Every folder is in pytest's tmp
 folder; no host process starts.
 
-472 pages are 129 stdlib versions, in 114 folders, plus the 104 of the first wave and the 239 of
+474 pages are 131 stdlib versions, in 116 folders, plus the 104 of the first wave and the 239 of
 the port. The audit's older 455 counted 112 stdlib `@1` entries. R05 added `value-above@1` and
 `trend-floor-from-record@2`, R06 added ten session versions and `fixed-fraction-at-stop@2`, and
 RC-12 added `swing-stop-buffer@2`, `target-r-multiple@2` and `time-exit-bars@2`, which are the
 126th to the 128th stdlib versions and the 469th to the 471st pages. RC-21 added `level-factor@1`,
-the 129th stdlib version and the 472nd page. First start lands only the 343: the stdlib is read
-from its files."""
+the 129th stdlib version and the 472nd page. RC-22 added `cushion-rule@1` and `press-gate@1`,
+the 130th and 131st versions and the 473rd and 474th pages. First start lands only the
+343: the stdlib is read from its files."""
 
 from __future__ import annotations
 
@@ -114,9 +115,9 @@ def test_a_fresh_store_lands_and_publishes_with_no_status_none(
     assert [v.annotations.get("status") is None for v in before] == [False] * 343
     assert sum(c["published"] for c in counts) == 343
     assert [c["refused"] for c in counts] == [0] * 5
-    assert len(pages) == 472
+    assert len(pages) == 474
     assert [p["entry_id"] for p in pages if p["status"] is None] == []
-    assert len(list(cast(Path, STDLIB).glob("*/*/entry.json"))) == 129
+    assert len(list(cast(Path, STDLIB).glob("*/*/entry.json"))) == 131
     assert store.annotation_log.read_bytes() == log
 
 

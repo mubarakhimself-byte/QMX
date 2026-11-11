@@ -1016,10 +1016,10 @@ class HostedUnit:
         answered, every fact it read with its source and age, the steps it took and each link's
         verdict. No account fact is read here by the exits.
 
-        Each sizing modifier whose switch is on reads the sizer's evidence and two keys beside it
-        (AD-11): ``cushion``, each clock's realised total and running peak since its anchor, at the
-        row's instant; and ``risk_word``, the fold's word for the unit. A gate's 0 holds every
-        raise behind it at 1.
+        Each sizing modifier whose switch is on reads the sizer's evidence and, beside it (AD-11),
+        ``cushion.<clock>.realised`` and ``cushion.<clock>.peak`` for each clock, the cushion
+        ledger at the row's instant, and ``risk_word``, the fold's word for the unit. A gate's 0
+        holds every raise behind it at 1.
         """
         core = self._core
         compiled = core.compiled
@@ -1079,13 +1079,10 @@ class HostedUnit:
 
         factor = Decimal(1)
         verdicts: list[str] = ["sizer: none"]
-        chain: dict[str, object] = {
-            "cushion": {
-                clock: {"realised": held.realised, "peak": held.peak}
-                for clock, held in core.risk.cushions(proposal.row.instant).items()
-            },
-            "risk_word": core.risk.state(proposal.row.instant).word.value,
-        }
+        chain: dict[str, object] = {"risk_word": core.risk.state(proposal.row.instant).word.value}
+        for clock, held in core.risk.cushions(proposal.row.instant).items():
+            chain[f"cushion.{clock}.realised"] = held.realised
+            chain[f"cushion.{clock}.peak"] = held.peak
         pressing = True
         for modifier in compiled.plan.modifiers:
             if not gate_open(modifier, core.facts):
@@ -1610,8 +1607,8 @@ class _Run:
         """Hand the fold every closed trade knowable now, as the cushion ledger's rows (AD-11).
 
         The fold skips a trade it already holds, so the whole journal is handed on every step and
-        after a restart alike. A trade with no finite R is left out rather than raised, so a bad
-        row a host hands never reaches the exits this step runs.
+        after a restart alike. A trade the fold refuses, one with no finite R, is left out rather
+        than raised, so a bad row a host hands never reaches the exits this step runs.
         """
         if not isinstance(journal, Sequence):
             return
@@ -1620,22 +1617,23 @@ class _Run:
                 trade
                 for trade in cast("Sequence[object]", journal)
                 if isinstance(trade, ClosedTrade)
-                and isinstance(trade.r_after_costs, Decimal)
-                and trade.r_after_costs.is_finite()
                 and trade.closed_at.value_ns <= self.instant.value_ns
             ),
             key=lambda trade: (trade.closed_at.value_ns, trade.trade_id),
         )
         for trade in closed:
-            self.unit.risk.add(
-                {
-                    "kind": "realised",
-                    "scope": self.unit.risk.scope,
-                    "at": trade.closed_at.value_ns,
-                    "id": trade.trade_id,
-                    "r": trade.r_after_costs,
-                }
-            )
+            try:
+                self.unit.risk.add(
+                    {
+                        "kind": "realised",
+                        "scope": self.unit.risk.scope,
+                        "at": trade.closed_at.value_ns,
+                        "id": trade.trade_id,
+                        "r": trade.r_after_costs,
+                    }
+                )
+            except ValueError:
+                continue
 
     def _fold(self, key: str, code: str, verb: Verb, reason: str) -> None:
         """Hand the fold the row this step's brake answer becomes (AD-12, AD-18).

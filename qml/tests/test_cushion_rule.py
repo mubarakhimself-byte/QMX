@@ -13,11 +13,12 @@ while the unit's fold word is not ACTIVE.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from decimal import Decimal
 from typing import Any, cast
 
+import test_price_call as price
 from qmf.core.chrono import Instant
 from qml.blocks.api import Amount
 from qml.compile import CompiledUnit
@@ -33,8 +34,6 @@ from qml.protocol.unit import (
 )
 from qml.receipt import explain_size, stored_row
 from qml.unit.model import Side
-
-import test_price_call as price
 from test_compile_dummy import _compiled, _document
 from test_modifiers import _proposal
 
@@ -84,7 +83,7 @@ def _host(
     *,
     held: tuple[OwnPosition, ...] = (),
     equity: Decimal = price._EQUITY,
-    risk_rows: Sequence[dict[str, object]] = (),
+    risk_rows: Sequence[Mapping[str, object]] = (),
 ) -> HostedUnit:
     surfaces: dict[str, Surface] = {
         **price._surfaces(),
@@ -188,7 +187,7 @@ def test_a_row_switched_off_by_a_fact_reads_neutral() -> None:
 def test_the_press_gate_holds_a_raise_while_the_unit_is_not_active() -> None:
     """REDUCING by a fired row: +100 R would press to 1.5, the gate holds it at 1, a cut stands."""
     compiled = _cushion("fixed", gated=True)
-    reducing = [
+    reducing: list[Mapping[str, object]] = [
         {
             "kind": "risk_event",
             "scope": "unit:run-cushion",

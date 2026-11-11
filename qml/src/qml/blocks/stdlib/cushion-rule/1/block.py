@@ -1,20 +1,22 @@
 """cushion-rule@1: house money and reverse house money as one sizing modifier (AD-11, D13).
 
 The rule reads one cushion ledger, the unit's closed trades in R since an anchor, which the fold
-keeps and the unit hands every modifier as ``cushion``: each clock's ``realised`` total since its
-anchor and the ``peak`` running total since it. The factor is ``1 + strength x cushion / reach``:
-``reach`` is the cushion that moves the size by one whole ``strength``, and the factor is never
-below zero, because a negative size would turn the trade around.
+keeps and the unit hands every modifier as ``cushion.<clock>.realised``, the total since the
+clock's anchor, and ``cushion.<clock>.peak``, the highest running total since it. The factor is
+``1 + strength x cushion / reach``: ``reach`` is the cushion that moves the size by one whole
+``strength``, and the factor is never below zero, because a negative size would turn the trade
+around.
 
-``anchor`` is the one switch between his two ideas. A fixed anchor (0) counts from the anchor itself,
-so the rule presses with winnings and brakes with losses: house money. A running-peak anchor (1)
-counts from the highest running total since the anchor, so the cushion is never above zero and the
-rule only brakes: reverse house money. ``clock`` says when the anchor moves: each UTC day (0) or
-each Monday-start week (1). Only closed trades reach the ledger, so an open profit never presses.
+``anchor`` is the one switch between his two ideas. A fixed anchor (0) counts from the anchor
+itself, so the rule presses with winnings and brakes with losses: house money. A running-peak
+anchor (1) counts from the highest running total since the anchor, so the cushion is never above
+zero and the rule only brakes: reverse house money. ``clock`` says when the anchor moves: each UTC
+day (0) or each Monday-start week (1). Only closed trades reach the ledger, so an open profit
+never presses.
 
 Every number is read from ``evidence`` first, so a moved number reaches the factor; ``make`` only
-seeds it (AD-14 step 3). The rule names no ceiling of its own: a press gate behind it decides when
-a raise may stand.
+seeds it (AD-14 step 3). The rule names no ceiling of its own: a press gate in front of it decides
+when a raise may stand.
 """
 
 from __future__ import annotations
@@ -37,6 +39,12 @@ def _code(choices: tuple[str, ...], code: Decimal) -> str | None:
     if code != code.to_integral_value() or not 0 <= code < len(choices):
         return None
     return choices[int(code)]
+
+
+def _ledger(evidence: Mapping[str, object], clock: str, field: str) -> Decimal | None:
+    """One figure of one clock's cushion ledger, or None when the unit handed none."""
+    value = evidence.get(f"cushion.{clock}.{field}")
+    return value if isinstance(value, Decimal) and value.is_finite() else None
 
 
 class _CushionRule:
@@ -70,14 +78,10 @@ class _CushionRule:
             return None
         anchor = _code(_ANCHORS, anchor_code)
         clock = _code(_CLOCKS, clock_code)
-        ledger = evidence.get("cushion")
-        if anchor is None or clock is None or reach <= 0 or not isinstance(ledger, Mapping):
+        if anchor is None or clock is None or reach <= 0:
             return None
-        held = ledger.get(clock)
-        if not isinstance(held, Mapping):
-            return None
-        realised, peak = held.get("realised"), held.get("peak")
-        if not isinstance(realised, Decimal) or not isinstance(peak, Decimal):
+        realised, peak = _ledger(evidence, clock, "realised"), _ledger(evidence, clock, "peak")
+        if realised is None or peak is None:
             return None
         cushion = realised if anchor == "fixed" else realised - peak
         value = max(_FLOOR, 1 + strength * cushion / reach)

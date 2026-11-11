@@ -248,7 +248,7 @@ def test_every_stdlib_block_acts_or_refuses() -> None:
         "time-exit-bars@1",
         "time-exit-bars@2",
     ]
-    assert len(faces) == 129
+    assert len(faces) == 131
     assert {pin: triggers[pin] for pin in _HOLDS_ON_ITS_CLOCK} == dict.fromkeys(
         _HOLDS_ON_ITS_CLOCK, _FIRED
     )
