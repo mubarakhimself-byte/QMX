@@ -151,3 +151,31 @@ def test_a_market_keeps_its_own_number() -> None:
         "fx.eurusd": ("short", Decimal("1.06889")),
         "metal.xauusd": ("long", Decimal("3231.49")),
     }
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "warm_up", "state_bound"),
+    [
+        ("ema_period", "300", 2721, 1059),
+        ("roc_lookback", "100", 1001, 1219),
+        ("ema_period", "50", 921, 1059),
+    ],
+    ids=["ema-300", "roc-100", "ema-50"],
+)
+def test_a_market_waits_for_its_own_warm_up(
+    name: str, value: str, warm_up: int, state_bound: int
+) -> None:
+    """XAUUSD's own number sizes the unit's warm-up and state bound, because the run builds
+    XAUUSD's blocks on it and the entry gate reads one unit-wide count.
+
+    The dummy at its defaults needs 921 m15 bars (EMA(100) settles at 900, then ROC(20) 21 more)
+    and a bound of 1059. EMA(300) settles at 2700, so 2721. ROC(100) needs 101 after the EMA's 900,
+    so 1001, and holds 160 more observations. A setting below the default leaves EURUSD's 921.
+    """
+    document = _document()
+    cast("list[dict[str, object]]", document["markets"])[1]["settings"] = {name: value}
+
+    compiled = _dummy_compiled(document)
+
+    assert dict(compiled.warm_up) == {"m15": warm_up}
+    assert compiled.state_bound == state_bound
