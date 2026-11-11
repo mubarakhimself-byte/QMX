@@ -182,7 +182,8 @@ SWITCHED_OFF: Final[str] = "off"
 its block is not asked."""
 GATE_MEASURE: Final[str] = "flag"
 """A sizing modifier whose face measures a flag is a gate (AD-11): it answers 1 or 0, the size is
-never multiplied by it, and a 0 holds every row behind it that answers above 1 at 1."""
+never multiplied by it, and a 0 holds every row behind it that answers above 1 at 1. A gate whose
+own switch is off holds them too, so a missing fact never lets a raise through."""
 HELD: Final[str] = "held"
 """The code a raising modifier reads when a gate in front of it is closed: a raise waits, a cut
 stands."""
@@ -1097,6 +1098,8 @@ class HostedUnit:
                     )
                 )
                 verdicts.append(f"modifier {modifier.name}: {SWITCHED_OFF}")
+                if modifier.face.output.measure == GATE_MEASURE:
+                    pressing = False
                 continue
             try:
                 read = market.instances[modifier.key].update(
@@ -1606,22 +1609,19 @@ class _Run:
     def realise(self, journal: object) -> None:
         """Hand the fold every closed trade knowable now, as the cushion ledger's rows (AD-11).
 
-        The fold skips a trade it already holds, so the whole journal is handed on every step and
-        after a restart alike. A trade the fold refuses, one with no finite R, is left out rather
-        than raised, so a bad row a host hands never reaches the exits this step runs.
+        The fold skips a trade it already holds and counts one in any order, so the whole journal
+        is handed on every step and after a restart alike. A trade the fold refuses, one with no
+        finite R or one that overflows the totals, is left out rather than raised, so a bad row a
+        host hands never reaches the exits this step runs.
         """
         if not isinstance(journal, Sequence):
             return
-        closed = sorted(
-            (
-                trade
-                for trade in cast("Sequence[object]", journal)
-                if isinstance(trade, ClosedTrade)
-                and trade.closed_at.value_ns <= self.instant.value_ns
-            ),
-            key=lambda trade: (trade.closed_at.value_ns, trade.trade_id),
-        )
-        for trade in closed:
+        for trade in cast("Sequence[object]", journal):
+            if (
+                not isinstance(trade, ClosedTrade)
+                or trade.closed_at.value_ns > self.instant.value_ns
+            ):
+                continue
             try:
                 self.unit.risk.add(
                     {
@@ -1632,7 +1632,7 @@ class _Run:
                         "r": trade.r_after_costs,
                     }
                 )
-            except ValueError:
+            except (ValueError, ArithmeticError):
                 continue
 
     def _fold(self, key: str, code: str, verb: Verb, reason: str) -> None:

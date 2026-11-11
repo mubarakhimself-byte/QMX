@@ -15,8 +15,9 @@ kinds are read at unit scope:
 ``{"kind": "realised", "scope", "at", "id", "r"}``
     A trade closed, with its R after costs as a ``Decimal`` or its decimal text. These rows are the
     cushion ledger (AD-11, AD-18): for each ``Clock`` the realised total since that clock's anchor
-    and the highest running total since it. They keep a watermark of their own, so a trade folded
-    after a brake row of the same instant is still counted, and they never move the word.
+    and the highest running total since it. The ledger holds the latest week's trades by id and
+    replays them in ``(at, id)`` order, so a trade that arrives after a later one still counts and
+    the totals are the same whatever order the trades arrive in. They never move the word.
 
 `fold` reads all of them at once; `Fold` reads them as they arrive and can be cached. The cache is
 what the snapshot holds: `cached()` is JSON-safe, and `from_cache` reads a cache that does not parse
@@ -82,7 +83,8 @@ class Fold:
         self._since: Instant | None = None
         self._reason = ""
         self._facts: dict[str, tuple[int, int]] = {}
-        self._ledger_through: tuple[int, str] | None = None
+        self._trades: dict[str, tuple[int, Decimal]] = {}
+        """The latest week's closed trades, by id: when each closed and its R."""
         self._ledger: dict[Clock, tuple[int, Decimal, Decimal]] = {}
         """Each clock's anchor id, realised total since it and running peak since it."""
 
@@ -172,17 +174,7 @@ class Fold:
             "since": None if self._since is None else self._since.value_ns,
             "reason": self._reason,
             "facts": {name: [at, limit] for name, (at, limit) in self._facts.items()},
-            "ledger": {
-                "through": (
-                    None
-                    if self._ledger_through is None
-                    else [self._ledger_through[0], self._ledger_through[1]]
-                ),
-                "clocks": {
-                    clock.value: [anchor, str(realised), str(peak)]
-                    for clock, (anchor, realised, peak) in self._ledger.items()
-                },
-            },
+            "ledger": {"trades": [[at, ident, str(r)] for ident, (at, r) in self._trades.items()]},
         }
 
     @classmethod
@@ -210,26 +202,32 @@ class Fold:
                 for name, pair in cast("Mapping[str, list[int]]", facts).items()
             }
             made._word = word
-            made._ledger_through, made._ledger = _ledger_from(body.get("ledger"))
-        except (KeyError, TypeError, ValueError, IndexError, InvalidOperation):
+            made._trades = _trades_from(body.get("ledger"))
+            made._ledger = _replay(made._trades)
+        except (KeyError, TypeError, ValueError, IndexError, ArithmeticError):
             return cls(scope)
         return made
 
     def _realise(self, row: Mapping[str, object], key: tuple[int, str]) -> None:
-        """Add one closed trade to every clock's ledger, unless the ledger already holds it."""
-        if self._ledger_through is not None and key <= self._ledger_through:
+        """Add one closed trade to the ledger, unless it holds that id or the trade is a week gone.
+
+        Raises ``ArithmeticError`` and keeps the ledger as it was when the totals overflow.
+        """
+        at, ident = key
+        if ident in self._trades:
             return
         r = _decimal(row, "r")
-        self._ledger_through = key
-        at = Instant(key[0])
-        for clock in Clock:
-            anchor = anchor_id(clock, at)
-            held = self._ledger.get(clock)
-            realised, peak = (
-                (Decimal(0), Decimal(0)) if held is None or held[0] != anchor else held[1:]
-            )
-            realised += r
-            self._ledger[clock] = (anchor, realised, max(peak, realised))
+        week = anchor_id(Clock.WEEK, Instant(at))
+        held = self._ledger.get(Clock.WEEK)
+        if held is not None and week < held[0]:
+            return
+        trades = {**self._trades, ident: (at, r)}
+        if held is not None and week > held[0]:
+            trades = {
+                i: t for i, t in trades.items() if anchor_id(Clock.WEEK, Instant(t[0])) == week
+            }
+        ledger = _replay(trades)
+        self._trades, self._ledger = trades, ledger
 
     def _fire(self, row: Mapping[str, object], at: int) -> None:
         given = row.get("verb")
@@ -286,24 +284,31 @@ def _decimal(row: Mapping[str, object], field: str) -> Decimal:
     return number
 
 
-def _ledger_from(
-    cache: object,
-) -> tuple[tuple[int, str] | None, dict[Clock, tuple[int, Decimal, Decimal]]]:
-    """A cached ledger read back; a cache written before the ledger existed reads as empty."""
+def _replay(trades: Mapping[str, tuple[int, Decimal]]) -> dict[Clock, tuple[int, Decimal, Decimal]]:
+    """Each clock's ledger at the latest trade's anchor, replayed in ``(at, id)`` order."""
+    if not trades:
+        return {}
+    ordered = sorted((at, ident, r) for ident, (at, r) in trades.items())
+    latest = Instant(ordered[-1][0])
+    ledger: dict[Clock, tuple[int, Decimal, Decimal]] = {}
+    for clock in Clock:
+        anchor = anchor_id(clock, latest)
+        realised = peak = Decimal(0)
+        for at, _, r in ordered:
+            if anchor_id(clock, Instant(at)) == anchor:
+                realised += r
+                peak = max(peak, realised)
+        ledger[clock] = (anchor, realised, peak)
+    return ledger
+
+
+def _trades_from(cache: object) -> dict[str, tuple[int, Decimal]]:
+    """A cached ledger's trades read back; a cache without them reads as an empty ledger."""
     if cache is None:
-        return None, {}
+        return {}
     body = cast("Mapping[str, object]", cache)
-    through = body.get("through")
-    mark = None
-    if through is not None:
-        at, ident = cast("list[object]", through)
-        mark = (int(cast("int", at)), str(ident))
-    clocks = cast("Mapping[str, list[object]]", body.get("clocks", {}))
-    ledger = {
-        Clock(name): (int(cast("int", held[0])), Decimal(str(held[1])), Decimal(str(held[2])))
-        for name, held in clocks.items()
-    }
-    return mark, ledger
+    trades = cast("list[list[object]]", body.get("trades", []))
+    return {str(ident): (int(cast("int", at)), Decimal(str(r))) for at, ident, r in trades}
 
 
 def _verb(given: object) -> Verb:
