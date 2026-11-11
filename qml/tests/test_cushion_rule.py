@@ -13,6 +13,7 @@ while the unit's fold word is not ACTIVE.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from decimal import Decimal
@@ -20,8 +21,10 @@ from typing import Any, cast
 
 import test_price_call as price
 from qmf.core.chrono import Instant
+from qmf.risk.controls import Cushion
 from qml.blocks.api import Amount
 from qml.compile import CompiledUnit
+from qml.fold import Fold
 from qml.motion.engine import ClosedTrade
 from qml.protocol.unit import (
     HostedUnit,
@@ -213,3 +216,104 @@ def test_the_press_gate_holds_a_raise_while_the_unit_is_not_active() -> None:
     ]
     assert held.row.steps["approved"].value == Decimal("1.00")
     assert cut.row.steps["approved"].value == Decimal("0.75")
+
+
+def _realised(at_ns: int, ident: str, r: str) -> dict[str, object]:
+    return {"kind": "realised", "scope": "unit:late", "at": at_ns, "id": ident, "r": r}
+
+
+def test_a_trade_that_reaches_the_ledger_late_is_counted() -> None:
+    """A +2 R win at 02:00 is folded, then a -3 R loss at 01:00 arrives: the day reads -1 R."""
+    day = 20_149 * 24 * _HOUR
+    clock = Instant(day + 3 * _HOUR)
+    win, loss = _realised(day + 2 * _HOUR, "b", "2"), _realised(day + _HOUR, "a", "-3")
+    late = Fold("unit:late")
+    late.extend([win])
+    late.extend([loss, win])
+    restarted = Fold.from_cache(json.loads(json.dumps(late.cached())))
+    restarted.extend([loss, win])
+    same_instant = Fold("unit:late")
+    same_instant.extend([_realised(day + _HOUR, "t9", "2")])
+    same_instant.extend([_realised(day + _HOUR, "t10", "-3"), _realised(day + _HOUR, "t9", "2")])
+
+    assert late.cushions(clock)["day"] == Cushion(realised=Decimal(-1), peak=Decimal(0))
+    assert restarted.cushions(clock)["day"] == Cushion(realised=Decimal(-1), peak=Decimal(0))
+    assert same_instant.cushions(clock)["day"].realised == Decimal(-1)
+
+
+class _Journal:
+    """The unit's own journal surface, which a host appends to between steps."""
+
+    def __init__(self) -> None:
+        self.trades: tuple[ClosedTrade, ...] = ()
+
+    def at(self, instant: Instant, /) -> object:
+        del instant
+        return self.trades
+
+
+def test_a_late_loss_moves_the_factor() -> None:
+    """The unit folds a +2 R win, then the journal gains an earlier -3 R loss: 0.995, not 1.01."""
+    compiled = _cushion("fixed")
+    journal = _Journal()
+    journal.trades = (_trade(2, "2"),)
+    unit = price._ok(
+        construct_unit(
+            compiled,
+            read_surfaces={
+                **price._surfaces(),
+                "account": price._At(price.hosted.Account(price._EQUITY)),
+                "own_journal": journal,
+                "own_position:fx.eurusd": price._At(()),
+            },
+            scope_id="run-cushion",
+            execution_target=price._target(),
+            trace_level=TraceLevel.EVERY_BAR,
+            motion=MotionSwitch.OFF,
+        )
+    )
+    price._ok(unit.on_instant(_START))
+    journal.trades = (_trade(1, "-3"), _trade(2, "2"))
+    price._ok(unit.on_instant(_START))
+
+    factor = explain_size(stored_row(_priced(unit, compiled).row)).factors[0]
+
+    assert (factor.value, factor.reason) == (
+        "0.995",
+        "a cushion of -1 R since the day anchor, fixed, moves the size by 0.995",
+    )
+
+
+def test_a_gate_switched_off_by_a_missing_fact_holds_a_raise() -> None:
+    """REDUCING, the gate bound to an absent fact: +100 R holds at 1.00, never presses to 1.50."""
+    compiled = _cushion("fixed", gated=True)
+    plan = compiled.plan
+    gate = replace(plan.modifiers[0], enabled="group.raise_ok")
+    switched = replace(compiled, plan=replace(plan, modifiers=(gate, plan.modifiers[1])))
+    reducing: list[Mapping[str, object]] = [
+        {
+            "kind": "risk_event",
+            "scope": "unit:run-cushion",
+            "at": _START.value_ns - _HOUR,
+            "id": "cut",
+            "code": "session-loss-limit-halt",
+            "verb": "reduce",
+        }
+    ]
+
+    held = _priced(_host(switched, [_trade(1, "100")], risk_rows=reducing), switched)
+
+    assert [(seen.value, seen.code) for seen in explain_size(stored_row(held.row)).factors] == [
+        ("1", "off"),
+        ("1", "held"),
+    ]
+    assert held.row.steps["approved"].value == Decimal("1.00")
+
+
+def test_a_ledger_overflow_never_ends_the_step() -> None:
+    """Two trades of 9E+999999 R overflow the day's total: that row is skipped, the step runs."""
+    compiled = _cushion("fixed")
+
+    unit = _host(compiled, [_trade(1, "9E+999999"), _trade(2, "9E+999999")])
+
+    assert unit._core.risk.cushions(_START)["day"].realised == Decimal("9E+999999")
