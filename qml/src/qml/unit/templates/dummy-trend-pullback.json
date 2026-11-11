@@ -81,28 +81,31 @@
   "halts": {"position": [], "unit": [], "account": []},
   "reads": [],
   "numbers": {
-    "ema_period": {"kind": "fixed", "measure": "bars", "range": {"min": "20", "max": "300", "step": "1"}, "default": "100", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention"},
-    "roc_lookback": {"kind": "fixed", "measure": "bars", "range": {"min": "5", "max": "100", "step": "1"}, "default": "20", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "builder_chosen"},
+    "ema_period": {"kind": "fixed", "measure": "bars", "range": {"min": "20", "max": "300", "step": "1"}, "default": "100", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention", "owner": "numbers talk", "reason": "the trend line's length, a starting length nobody has argued yet"},
+    "roc_lookback": {"kind": "fixed", "measure": "bars", "range": {"min": "5", "max": "100", "step": "1"}, "default": "20", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "builder_chosen", "owner": "numbers talk", "reason": "how far the rate of change looks back, a starting lookback nobody has argued yet"},
     "min_trend_strength": {
       "kind": "calibrated", "measure": "percent", "range": {"min": "0", "max": "0.0030", "step": "0.0001"}, "default": "0",
       "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20, "at": "market_day_close"}, "min_count": 20, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@2", "rule_params": {"buckets": "5"}},
-      "authority": "motion_inside_range", "origin": "builder_chosen", "applies_to_open_positions": false
+      "authority": "motion_inside_range", "origin": "builder_chosen", "applies_to_open_positions": false,
+      "owner": "numbers talk", "reason": "the floor the trend must clear before an entry, moved from the unit's own closed trades"
     },
-    "rsi_period": {"kind": "fixed", "measure": "bars", "range": {"min": "2", "max": "50", "step": "1"}, "default": "14", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention"},
+    "rsi_period": {"kind": "fixed", "measure": "bars", "range": {"min": "2", "max": "50", "step": "1"}, "default": "14", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention", "owner": "numbers talk", "reason": "the RSI length the trigger reads, 14 being the published Wilder length"},
     "rsi_low": {
       "kind": "derived", "measure": "ratio", "range": {"min": "0", "max": "100", "step": "0.01"}, "default": "30",
       "motion": {"mode": "percentile_of_own_history", "source": "rsi_cross", "rule_params": {"percentile": "20", "window_bars": "500"}},
-      "authority": "motion_inside_range", "origin": "builder_chosen"
+      "authority": "motion_inside_range", "origin": "builder_chosen",
+      "owner": "numbers talk", "reason": "the RSI level a long entry crosses back above, moved by its own history"
     },
     "rsi_high": {
       "kind": "derived", "measure": "ratio", "range": {"min": "0", "max": "100", "step": "0.01"}, "default": "70",
       "motion": {"mode": "percentile_of_own_history", "source": "rsi_cross", "rule_params": {"percentile": "80", "window_bars": "500"}},
-      "authority": "motion_inside_range", "origin": "builder_chosen"
+      "authority": "motion_inside_range", "origin": "builder_chosen",
+      "owner": "numbers talk", "reason": "the RSI level a short entry crosses back below, moved by its own history"
     },
-    "stop_buffer": {"kind": "fixed", "measure": "percent", "range": {"min": "0", "max": "0.01", "step": "0.0001"}, "default": "0.0002", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
-    "target_r": {"kind": "fixed", "measure": "r", "range": {"min": "0.5", "max": "10", "step": "0.1"}, "default": "2", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
-    "time_out_bars": {"kind": "fixed", "measure": "bars", "range": {"min": "1", "max": "1000", "step": "1"}, "default": "48", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"},
-    "risk_fraction": {"kind": "fixed", "measure": "percent", "range": {"min": "0.0001", "max": "0.05", "step": "0.0001"}, "default": "0.005", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder"}
+    "stop_buffer": {"kind": "fixed", "measure": "percent", "range": {"min": "0", "max": "0.01", "step": "0.0001"}, "default": "0.0002", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder", "owner": "numbers talk", "reason": "the room past the swing that keeps the stop out of the bar's noise, a starting buffer"},
+    "target_r": {"kind": "fixed", "measure": "r", "range": {"min": "0.5", "max": "10", "step": "0.1"}, "default": "2", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder", "owner": "numbers talk", "reason": "the profit target in R multiples, a starting multiple"},
+    "time_out_bars": {"kind": "fixed", "measure": "bars", "range": {"min": "1", "max": "1000", "step": "1"}, "default": "48", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder", "owner": "numbers talk", "reason": "how long a position may stay open before the time exit closes it, a starting count"},
+    "risk_fraction": {"kind": "fixed", "measure": "percent", "range": {"min": "0.0001", "max": "0.05", "step": "0.0001"}, "default": "0.005", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "placeholder", "owner": "numbers talk", "reason": "a starting fraction of equity at risk, unargued until the numbers talk"}
   },
   "pins": []
 }

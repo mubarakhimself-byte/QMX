@@ -186,6 +186,36 @@ _PROBES: Final[tuple[_Probe, ...]] = (
         "/numbers/stop_buffer/applies_to_open_positions",
         _put("numbers/stop_buffer/applies_to_open_positions", True),
     ),
+    _Probe(
+        "NumberSpec.derivation",
+        "/numbers/stop_buffer/derivation",
+        _put("numbers/stop_buffer/derivation", "own-r-step@1"),
+    ),
+    _Probe(
+        "NumberSpec.guard",
+        "/numbers/stop_buffer/guard",
+        _put("numbers/stop_buffer/guard", {"revert_after": 3, "freeze_after": 5}),
+    ),
+    _Probe(
+        "NumberSpec.cautious",
+        "/numbers/stop_buffer/cautious",
+        _put("numbers/stop_buffer/cautious", "down"),
+    ),
+    _Probe(
+        "NumberSpec.never_self_tune",
+        "/numbers/min_trend_strength/never_self_tune",
+        _put("numbers/min_trend_strength/never_self_tune", True),
+    ),
+    _Probe(
+        "NumberSpec.stage_values",
+        "/numbers/stop_buffer/stage_values",
+        _put("numbers/stop_buffer/stage_values", {"stage_2": "0.0003"}),
+    ),
+    _Probe(
+        "NumberSpec.authority",
+        "/numbers/stop_buffer/authority",
+        _put("numbers/stop_buffer/authority", "at_anchor"),
+    ),
     _Probe("Motion.source", "/numbers/ema_period/motion/source", _motion(source="trend")),
     _Probe(
         "Motion.rule_params",

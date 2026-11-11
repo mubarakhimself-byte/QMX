@@ -169,6 +169,13 @@ def _motion(found: _Found, where: str, spec: NumberSpec) -> None:
 
 def _number(found: _Found, where: str, spec: NumberSpec) -> None:
     _motion(found, where, spec)
+    if not spec.reason.strip():
+        found.error(
+            ProblemKind.NUMBER_NO_REASON,
+            _at(where, "reason"),
+            "this number gives no reason for its value",
+            "say in one line why it holds this value rather than another",
+        )
     if spec.origin in _UNSETTLED:
         found.warning(
             ProblemKind.UNSETTLED_ORIGIN,
@@ -196,7 +203,7 @@ def _number(found: _Found, where: str, spec: NumberSpec) -> None:
     span_holds = False
     if spec.range is None:
         found.error(
-            ProblemKind.RANGE_MISSING,
+            ProblemKind.NUMBER_NO_RANGE,
             _at(where, "range"),
             f"a {spec.measure.value} number needs a range",
             "add range with min, max and step",

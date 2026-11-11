@@ -39,7 +39,7 @@ __all__ = [
 ]
 
 CHECK_SCHEMA: Final[str] = "qmx.check/1"
-CHECKER_FORMAT_VERSION: Final[int] = 2
+CHECKER_FORMAT_VERSION: Final[int] = 3
 """Bumped by any change that makes a document pass or fail differently."""
 LAYERS: Final[tuple[str, ...]] = ("A", "B", "C", "D", "E", "F")
 AGENT_IMPORTS: Final[frozenset[str]] = frozenset(

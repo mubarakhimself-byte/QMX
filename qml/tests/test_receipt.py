@@ -7,7 +7,12 @@ fraction 0.005, equity 100000, EURUSD's 0.0050 stop distance, and 1.00 lots.
 
 The row hash is pinned as a literal on purpose: it is the receipt's identity, so a change to an
 input, a step or a verdict the size used must change the hash loudly instead of passing. It is
-read from the implementation once, when the row's shape is fixed.
+read from the implementation once, when the row's shape is fixed, and again each time the stack
+under it moved: when the shipped dummy's numbers each gained the reason and owner rc-23 requires,
+because the receipt covers the document's risk half; when this row joined rc-31's second stream at
+compiler format 9, rc-32's position count at compiler format 10, and rc-21's modifier chain at
+compiler format 11. Each value after the first was read from a failing run at the tree that moved
+it.
 """
 
 # pyright: reportPrivateUsage=false
@@ -27,9 +32,9 @@ from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target,
 _EURUSD = "fx.eurusd"
 _STORED_HASH = "fp1:sha256:bf4726a87c3add0c250c60c531a7e6ca5a1addfb0b6acfe69c730b7a2a4fa737"
 """The receipt's identity at compiler format 11. It moved from
-``fp1:sha256:01e3bd10...1bbee0`` because the row's receipt covers ``logic_fp`` and ``risk_fp`` and
-AD-19's format bump moves both halves by design; the size, the steps and every verdict are the
-same, so nothing about the size changed with it."""
+``fp1:sha256:01e3bd10...1bbee0`` because the row's receipt covers ``logic_fp`` and ``risk_fp``:
+the joined document's numbers now carry rc-23's reason and owner, and AD-19's format bump moves
+both halves by design. The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:
