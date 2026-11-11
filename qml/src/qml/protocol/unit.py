@@ -527,13 +527,15 @@ def _amount(answer: object) -> Amount | _Skip:
 
 
 def _usable_factor(value: object, bounds: tuple[object, ...] | None) -> bool:
-    """A modifier's two answer fields, judged here rather than trusted from the block: an exact
-    factor and the range it declares. ``Factor`` states both and validates neither (AD-11)."""
+    """A modifier's two answer fields, judged here rather than trusted from the block: a finite
+    factor and the finite range it declares. ``Factor`` states both and validates neither
+    (AD-11)."""
     return (
         isinstance(value, Decimal)
+        and value.is_finite()
         and isinstance(bounds, tuple)
         and len(bounds) == 2
-        and all(isinstance(bound, Decimal) for bound in bounds)
+        and all(isinstance(bound, Decimal) and bound.is_finite() for bound in bounds)
     )
 
 
