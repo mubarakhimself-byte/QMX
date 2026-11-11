@@ -43,9 +43,12 @@ _HOUR = 3_600 * 10**9
 
 
 def _cushion(anchor: str, *, gated: bool = False) -> CompiledUnit:
-    """The dummy with one `cushion-rule@1` row on a day anchor, and the press gate behind it."""
+    """The dummy with one `cushion-rule@1` row on a day anchor, and the press gate in front."""
     document = cast("dict[str, Any]", _document())
-    rows: list[dict[str, Any]] = [
+    gate: list[dict[str, Any]] = [
+        {"name": "gate", "block": "press-gate@1", "params": {}, "inputs": {}}
+    ]
+    document["modifiers"] = (gate if gated else []) + [
         {
             "name": "cushion",
             "block": "cushion-rule@1",
@@ -58,9 +61,6 @@ def _cushion(anchor: str, *, gated: bool = False) -> CompiledUnit:
             "inputs": {},
         }
     ]
-    if gated:
-        rows.append({"name": "gate", "block": "press-gate@1", "params": {}, "inputs": {}})
-    document["modifiers"] = rows
     return _compiled(document)
 
 
@@ -186,7 +186,7 @@ def test_a_row_switched_off_by_a_fact_reads_neutral() -> None:
 
 
 def test_the_press_gate_holds_a_raise_while_the_unit_is_not_active() -> None:
-    """REDUCING by a fired row: +100 R would press to 1.5, and the gate takes it back to 1."""
+    """REDUCING by a fired row: +100 R would press to 1.5, the gate holds it at 1, a cut stands."""
     compiled = _cushion("fixed", gated=True)
     reducing = [
         {
@@ -203,9 +203,14 @@ def test_the_press_gate_holds_a_raise_while_the_unit_is_not_active() -> None:
     held = _priced(_host(compiled, [_trade(1, "100")], risk_rows=reducing), compiled)
     cut = _priced(_host(compiled, [_trade(1, "-50")], risk_rows=reducing), compiled)
 
-    assert [seen.value for seen in explain_size(stored_row(active.row)).factors] == ["1.5", "1"]
-    assert explain_size(stored_row(held.row)).factors[1].reason == (
-        "pressing waits while the unit is REDUCING"
-    )
+    held_trail = explain_size(stored_row(held.row))
+
+    assert [seen.value for seen in explain_size(stored_row(active.row)).factors] == ["1", "1.5"]
+    assert active.row.steps["approved"].value == Decimal("1.50")
+    assert held_trail.factors[0].reason == "pressing waits while the unit is REDUCING"
+    assert [(seen.value, seen.code) for seen in held_trail.factors] == [
+        ("1", "none"),
+        ("1", "held"),
+    ]
     assert held.row.steps["approved"].value == Decimal("1.00")
     assert cut.row.steps["approved"].value == Decimal("0.75")

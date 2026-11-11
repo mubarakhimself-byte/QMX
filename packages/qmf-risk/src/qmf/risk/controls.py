@@ -12,7 +12,8 @@ importing ``qml`` (AD-21). It imports nothing from ``qml`` and nothing from a ho
 
 It also holds the words a brake leaves behind and the shape the fold answers them in (``StateWord``,
 ``RiskState``), for the same reason: an agent, a card or a host reads a unit's state without
-importing the library that derived it.
+importing the library that derived it. The cushion ledger's shape (``Cushion`` and its
+``Clock``) is here for the same reason, and ``gate_open`` reads the switch of any row.
 
 ``Verb`` has four words. ``no_new_entries`` is the one this build runs: a brake stops entries and
 nothing else, so it can never reach an exit. ``reduce`` and ``flatten`` are stated and refused at
@@ -25,20 +26,24 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
-from typing import Final
+from typing import Final, Protocol
 
 from qmf.core.chrono import Instant
 
 __all__ = [
     "ENTRY_SCOPES",
     "Answer",
+    "Clock",
     "ColdRule",
     "ControlRow",
+    "Cushion",
     "OnFire",
     "Restore",
     "RiskState",
     "StateWord",
+    "Switched",
     "Verb",
+    "anchor_id",
     "gate_open",
     "refuses_entries",
     "word_for",
@@ -174,8 +179,52 @@ def refuses_entries(row: ControlRow, *, shadowed: bool) -> bool:
     return not shadowed and row.verb is Verb.NO_NEW_ENTRIES and row.scope in ENTRY_SCOPES
 
 
-def gate_open(row: ControlRow, facts: Mapping[str, object]) -> bool:
-    """Whether the row's ``enabled`` gate lets it run: a bool, or the fact it names is true."""
+class Switched(Protocol):
+    """Any row with a switch: a control row, a sizing modifier, a later chain link (AD-8)."""
+
+    @property
+    def enabled(self) -> bool | str: ...
+
+
+def gate_open(row: Switched, facts: Mapping[str, object]) -> bool:
+    """Whether the row's ``enabled`` gate lets it run: a bool, or the fact it names is true.
+
+    A fact the row names and the surface does not hold reads closed, so a switch bound to a fact
+    that has not arrived leaves the row off rather than on.
+    """
     if isinstance(row.enabled, bool):
         return row.enabled
     return bool(facts.get(row.enabled))
+
+
+class Clock(StrEnum):
+    """When a cushion's anchor moves: the start of each UTC day, or of each Monday-start week."""
+
+    DAY = "day"
+    WEEK = "week"
+
+
+_NS_PER_DAY: Final[int] = 86_400 * 10**9
+_EPOCH_WEEKDAY: Final[int] = 3
+"""1 January 1970 was a Thursday, three days after a Monday."""
+
+
+def anchor_id(clock: Clock, at: Instant) -> int:
+    """The anchor ``at`` falls in: a pure function of the clock and the time (AD-18), so settling
+    an anchor twice, or after a restart, lands on the same one."""
+    day = at.value_ns // _NS_PER_DAY
+    if clock is Clock.DAY:
+        return day
+    return (day + _EPOCH_WEEKDAY) // 7
+
+
+@dataclass(frozen=True, slots=True)
+class Cushion:
+    """One scope's ledger since its anchor, in R after costs (AD-11, AD-18).
+
+    ``realised`` is what closed trades made since the anchor; ``peak`` is the highest running total
+    since it, zero at the anchor itself. Only closed trades reach it, so open profit never does.
+    """
+
+    realised: Decimal = Decimal(0)
+    peak: Decimal = Decimal(0)

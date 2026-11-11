@@ -1,7 +1,7 @@
 """One fold over plain rows: what a scope's brakes say it is doing, read the same way everywhere.
 
 A row is one thing that happened at one scope, as a plain mapping, so this module imports no host
-and no journal package (AD-21; CHECK B6 says row shapes live in ``qml`` or ``qmf-risk``). Three
+and no journal package (AD-21; CHECK B6 says row shapes live in ``qml`` or ``qmf-risk``). Four
 kinds are read at unit scope:
 
 ``{"kind": "risk_event", "scope", "at", "id", "code", "verb", "reason"}``
@@ -12,6 +12,11 @@ kinds are read at unit scope:
 ``{"kind": "fact", "scope", "at", "id", "name", "limit_ns"}``
     A fact the scope's rows read, and how old it may be. Nothing else is carried: the fold judges
     freshness, a reader reads values from the fact surface.
+``{"kind": "realised", "scope", "at", "id", "r"}``
+    A trade closed, with its R after costs as a ``Decimal`` or its decimal text. These rows are the
+    cushion ledger (AD-11, AD-18): for each ``Clock`` the realised total since that clock's anchor
+    and the highest running total since it. They keep a watermark of their own, so a trade folded
+    after a brake row of the same instant is still counted, and they never move the word.
 
 `fold` reads all of them at once; `Fold` reads them as they arrive and can be cached. The cache is
 what the snapshot holds: `cached()` is JSON-safe, and `from_cache` reads a cache that does not parse
@@ -26,14 +31,23 @@ that began the word, so a brake firing every bar does not reset it.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from decimal import Decimal, InvalidOperation
 from typing import Final, cast
 
 from qmf.core.chrono import Instant
-from qmf.risk.controls import RiskState, StateWord, Verb, word_for
+from qmf.risk.controls import (
+    Clock,
+    Cushion,
+    RiskState,
+    StateWord,
+    Verb,
+    anchor_id,
+    word_for,
+)
 
 __all__ = ["Fold", "fold"]
 
-_KINDS: Final[frozenset[str]] = frozenset({"risk_event", "restore", "fact"})
+_KINDS: Final[frozenset[str]] = frozenset({"risk_event", "restore", "fact", "realised"})
 _DEFAULT_VERB: Final[Verb] = Verb.NO_NEW_ENTRIES
 _RANK: Final[Mapping[StateWord, int]] = {
     StateWord.ACTIVE: 0,
@@ -68,6 +82,9 @@ class Fold:
         self._since: Instant | None = None
         self._reason = ""
         self._facts: dict[str, tuple[int, int]] = {}
+        self._ledger_through: tuple[int, str] | None = None
+        self._ledger: dict[Clock, tuple[int, Decimal, Decimal]] = {}
+        """Each clock's anchor id, realised total since it and running peak since it."""
 
     @property
     def scope(self) -> str:
@@ -84,10 +101,15 @@ class Fold:
             return
         kind = _text(row, "kind")
         if kind not in _KINDS:
-            raise ValueError(f"the fold reads risk_event, restore or fact rows, not {kind!r}")
+            raise ValueError(
+                f"the fold reads risk_event, restore, fact or realised rows, not {kind!r}"
+            )
         at = _int(row, "at")
         ident = _text(row, "id")
         key = (at, ident)
+        if kind == "realised":
+            self._realise(row, key)
+            return
         if self._through is not None and key <= self._through:
             return
         self._through = key
@@ -126,6 +148,21 @@ class Fold:
             stamp=clock,
         )
 
+    def cushions(self, at: Instant) -> Mapping[str, Cushion]:
+        """Each clock's cushion at ``at``, by the clock's name.
+
+        A clock whose anchor has moved since its last realised row reads an empty cushion: nothing
+        has closed since the new anchor, so the cushion starts again from zero.
+        """
+        out: dict[str, Cushion] = {}
+        for clock in Clock:
+            held = self._ledger.get(clock)
+            if held is None or held[0] != anchor_id(clock, at):
+                out[clock.value] = Cushion()
+            else:
+                out[clock.value] = Cushion(realised=held[1], peak=held[2])
+        return out
+
     def cached(self) -> Mapping[str, object]:
         """The state as JSON-safe data, for a snapshot to cache and `from_cache` to read back."""
         return {
@@ -135,6 +172,17 @@ class Fold:
             "since": None if self._since is None else self._since.value_ns,
             "reason": self._reason,
             "facts": {name: [at, limit] for name, (at, limit) in self._facts.items()},
+            "ledger": {
+                "through": (
+                    None
+                    if self._ledger_through is None
+                    else [self._ledger_through[0], self._ledger_through[1]]
+                ),
+                "clocks": {
+                    clock.value: [anchor, str(realised), str(peak)]
+                    for clock, (anchor, realised, peak) in self._ledger.items()
+                },
+            },
         }
 
     @classmethod
@@ -162,9 +210,26 @@ class Fold:
                 for name, pair in cast("Mapping[str, list[int]]", facts).items()
             }
             made._word = word
-        except (KeyError, TypeError, ValueError, IndexError):
+            made._ledger_through, made._ledger = _ledger_from(body.get("ledger"))
+        except (KeyError, TypeError, ValueError, IndexError, InvalidOperation):
             return cls(scope)
         return made
+
+    def _realise(self, row: Mapping[str, object], key: tuple[int, str]) -> None:
+        """Add one closed trade to every clock's ledger, unless the ledger already holds it."""
+        if self._ledger_through is not None and key <= self._ledger_through:
+            return
+        r = _decimal(row, "r")
+        self._ledger_through = key
+        at = Instant(key[0])
+        for clock in Clock:
+            anchor = anchor_id(clock, at)
+            held = self._ledger.get(clock)
+            realised, peak = (
+                (Decimal(0), Decimal(0)) if held is None or held[0] != anchor else held[1:]
+            )
+            realised += r
+            self._ledger[clock] = (anchor, realised, max(peak, realised))
 
     def _fire(self, row: Mapping[str, object], at: int) -> None:
         given = row.get("verb")
@@ -207,6 +272,38 @@ def _int(row: Mapping[str, object], field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"a fold row's {field} is an integer, not {value!r}")
     return value
+
+
+def _decimal(row: Mapping[str, object], field: str) -> Decimal:
+    """A finite ``Decimal``, given as one or as its text; a float never reaches a ledger."""
+    value = row.get(field)
+    try:
+        number = value if isinstance(value, Decimal) else Decimal(cast("str", value))
+    except (InvalidOperation, TypeError):
+        number = None
+    if not isinstance(value, (Decimal, str)) or number is None or not number.is_finite():
+        raise ValueError(f"a fold row's {field} is a finite decimal, not {value!r}")
+    return number
+
+
+def _ledger_from(
+    cache: object,
+) -> tuple[tuple[int, str] | None, dict[Clock, tuple[int, Decimal, Decimal]]]:
+    """A cached ledger read back; a cache written before the ledger existed reads as empty."""
+    if cache is None:
+        return None, {}
+    body = cast("Mapping[str, object]", cache)
+    through = body.get("through")
+    mark = None
+    if through is not None:
+        at, ident = cast("list[object]", through)
+        mark = (int(cast("int", at)), str(ident))
+    clocks = cast("Mapping[str, list[object]]", body.get("clocks", {}))
+    ledger = {
+        Clock(name): (int(cast("int", held[0])), Decimal(str(held[1])), Decimal(str(held[2])))
+        for name, held in clocks.items()
+    }
+    return mark, ledger
 
 
 def _verb(given: object) -> Verb:

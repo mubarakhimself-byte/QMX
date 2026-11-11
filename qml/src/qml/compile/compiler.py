@@ -200,6 +200,9 @@ class BoundBlock:
     params: Mapping[str, NumberParam | ValueParam]
     inputs: Mapping[str, str]
     where: str
+    enabled: bool | str = True
+    """The row's switch, as a control row's (AD-8): a bool, or the name of a fact that gates it.
+    Only a sizing modifier reads it; the document has no field for it yet, so it compiles on."""
 
 
 @dataclass(frozen=True, slots=True)

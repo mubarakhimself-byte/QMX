@@ -39,7 +39,7 @@ from typing import Final, Protocol, cast
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint, fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
-from qmf.risk.controls import ENTRY_SCOPES, Restore, RiskState, Verb
+from qmf.risk.controls import ENTRY_SCOPES, Restore, RiskState, Verb, gate_open
 from qmf.risk.facts import Fact, Stake, open_risk
 from qmf.risk.journal import UNIT_FAULT
 from qmf.risk.paper import ExecutionTarget
@@ -94,6 +94,8 @@ __all__ = [
     "EXIT_FAULT_BARS",
     "FACTOR_OUT_OF_RANGE",
     "FAULT_CLEAN_BARS",
+    "GATE_MEASURE",
+    "HELD",
     "NEUTRAL",
     "OHLC",
     "PER_TRADE_CAP_SHARE",
@@ -101,6 +103,7 @@ __all__ = [
     "SIZE_BAND",
     "SIZE_BAND_MAX_LOTS",
     "STATE_SCHEMA_VERSION",
+    "SWITCHED_OFF",
     "Account",
     "AdmitPort",
     "CalibrationRow",
@@ -174,6 +177,15 @@ reading neutral with its fail mode."""
 NEUTRAL: Final[str] = "neutral"
 """What a sizing modifier that cannot answer reads: a factor of one, never a cut and never a raise.
 It is the modifier's fail mode, stamped on the row beside the reading."""
+SWITCHED_OFF: Final[str] = "off"
+"""The code a sizing modifier reads when its ``enabled`` switch is closed (AD-8): factor one, and
+its block is not asked."""
+GATE_MEASURE: Final[str] = "flag"
+"""A sizing modifier whose face measures a flag is a gate (AD-11): it answers 1 or 0, the size is
+never multiplied by it, and a 0 holds every row behind it that answers above 1 at 1."""
+HELD: Final[str] = "held"
+"""The code a raising modifier reads when a gate in front of it is closed: a raise waits, a cut
+stands."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -749,6 +761,10 @@ class _Core:
         none, not the truth that the scope is up, so the snapshot's cache answers instead."""
         if risk_rows:
             self.risk.extend(risk_rows)
+        self.fact_gated = any(isinstance(m.enabled, str) for m in self.plan.modifiers)
+        """Whether a sizing modifier's switch names a fact, so each step keeps the facts."""
+        self.facts: Mapping[str, object] = {}
+        """The facts the last step read, which a modifier's switch is read against (AD-8)."""
         self.pending: list[StateEvent] = []
         self.pending_faults: list[Fault] = []
         """A fault made outside a step, waiting for the next answer to carry it."""
@@ -999,6 +1015,11 @@ class HostedUnit:
         caller writes it before any order leaves, carrying the whole trail: the sizer that
         answered, every fact it read with its source and age, the steps it took and each link's
         verdict. No account fact is read here by the exits.
+
+        Each sizing modifier whose switch is on reads the sizer's evidence and two keys beside it
+        (AD-11): ``cushion``, each clock's realised total and running peak since its anchor, at the
+        row's instant; and ``risk_word``, the fold's word for the unit. A gate's 0 holds every
+        raise behind it at 1.
         """
         core = self._core
         compiled = core.compiled
@@ -1058,10 +1079,31 @@ class HostedUnit:
 
         factor = Decimal(1)
         verdicts: list[str] = ["sizer: none"]
+        chain: dict[str, object] = {
+            "cushion": {
+                clock: {"realised": held.realised, "peak": held.peak}
+                for clock, held in core.risk.cushions(proposal.row.instant).items()
+            },
+            "risk_word": core.risk.state(proposal.row.instant).word.value,
+        }
+        pressing = True
         for modifier in compiled.plan.modifiers:
+            if not gate_open(modifier, core.facts):
+                readings.append(
+                    ModifierReading(
+                        modifier.name,
+                        modifier.pin,
+                        Decimal(1),
+                        None,
+                        f"the row is off: its switch {modifier.enabled} is not on",
+                        SWITCHED_OFF,
+                    )
+                )
+                verdicts.append(f"modifier {modifier.name}: {SWITCHED_OFF}")
+                continue
             try:
                 read = market.instances[modifier.key].update(
-                    evidence | dict(core.params(modifier, core.settled()))
+                    evidence | chain | dict(core.params(modifier, core.settled()))
                 )
             except Exception:  # a modifier's raise is that block's fault, never a crash
                 core.pending_faults.append(Fault(modifier.pin, FaultPhase.PRICE))
@@ -1118,6 +1160,22 @@ class HostedUnit:
                     FACTOR_OUT_OF_RANGE,
                     read.reason,
                 )
+            if modifier.face.output.measure == GATE_MEASURE:
+                pressing = read.value == 1
+                read = replace(read, value=Decimal(1))
+            elif read.value > 1 and not pressing:
+                readings.append(
+                    ModifierReading(
+                        modifier.name,
+                        modifier.pin,
+                        Decimal(1),
+                        block_range,
+                        f"{read.reason}; held at 1 while a gate in front is closed",
+                        HELD,
+                    )
+                )
+                verdicts.append(f"modifier {modifier.name}: {HELD}")
+                continue
             readings.append(
                 ModifierReading(modifier.name, modifier.pin, read.value, block_range, read.reason)
             )
@@ -1332,6 +1390,7 @@ class _Run:
                 results[m.market_id] = self.update(m, bar, seen[m.market_id])
             except _Fault as fault:
                 self.fault(fault.block, FaultPhase.UPDATE)
+        self.realise(journal)
         self.halt_reason = self.controls(journal, positions)
         for m in self.unit.markets:
             held = positions[m.market_id]
@@ -1390,7 +1449,7 @@ class _Run:
         change. The words this step's entries are refused by come back, or None.
         """
         self.unit.reduce = Decimal(1)
-        if not self.unit.halt_instances:
+        if not self.unit.halt_instances and not self.unit.fact_gated:
             return None
         trades = cast("Sequence[ClosedTrade]", journal if isinstance(journal, Sequence) else ())
         facts: dict[str, object] = own_facts(trades, self.instant)
@@ -1400,6 +1459,7 @@ class _Run:
         equity = getattr(self.surface("account"), "equity", None)
         if isinstance(equity, Decimal):
             facts["account.equity"] = equity
+        self.unit.facts = facts
         run = self.unit.control_runner.run(facts)
         for raised in run.raised:
             # a raise is a fault, not a brake: it moves no risk word, and no restore row lifts one
@@ -1545,6 +1605,37 @@ class _Run:
                 "decision_row_id": row,
             }
         )
+
+    def realise(self, journal: object) -> None:
+        """Hand the fold every closed trade knowable now, as the cushion ledger's rows (AD-11).
+
+        The fold skips a trade it already holds, so the whole journal is handed on every step and
+        after a restart alike. A trade with no finite R is left out rather than raised, so a bad
+        row a host hands never reaches the exits this step runs.
+        """
+        if not isinstance(journal, Sequence):
+            return
+        closed = sorted(
+            (
+                trade
+                for trade in cast("Sequence[object]", journal)
+                if isinstance(trade, ClosedTrade)
+                and isinstance(trade.r_after_costs, Decimal)
+                and trade.r_after_costs.is_finite()
+                and trade.closed_at.value_ns <= self.instant.value_ns
+            ),
+            key=lambda trade: (trade.closed_at.value_ns, trade.trade_id),
+        )
+        for trade in closed:
+            self.unit.risk.add(
+                {
+                    "kind": "realised",
+                    "scope": self.unit.risk.scope,
+                    "at": trade.closed_at.value_ns,
+                    "id": trade.trade_id,
+                    "r": trade.r_after_costs,
+                }
+            )
 
     def _fold(self, key: str, code: str, verb: Verb, reason: str) -> None:
         """Hand the fold the row this step's brake answer becomes (AD-12, AD-18).

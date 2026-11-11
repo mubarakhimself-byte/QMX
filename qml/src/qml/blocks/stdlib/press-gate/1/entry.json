@@ -1,0 +1,54 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "press-gate",
+  "version": 1,
+  "family": "sizing",
+  "aliases": [
+    "raise gate",
+    "press permission"
+  ],
+  "origin": "qml",
+  "owner": "risk-session",
+  "component_type": "filter",
+  "definition": "The gate in front of every raise on the size: pressing is open only while the unit's fold word is ACTIVE.",
+  "boundaries": "A gate measures a flag, so the size is never multiplied by it; a closed gate holds every modifier behind it that answers above 1 at 1, and a cut still stands. Removing the row lets raises through. Its role is `sizing_modifier`.",
+  "recognition": "Pressing waits while the unit is REDUCING, RESTORE, BENCHED, HALTED or UNKNOWN, and the receipt says which.",
+  "eligible_roles": [
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "risk-core:round-2/arch/final/SPINE.md#AD-11",
+      "quote": "the press gate is a block in front",
+      "dated": "2026-11-08"
+    }
+  ],
+  "inputs": [],
+  "output": {
+    "type": "factor",
+    "measure": "flag"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:4a1f62903463c6065ed72e2e95fc34760393668a4148653a74ea3adb70ef5d1f"
+}
