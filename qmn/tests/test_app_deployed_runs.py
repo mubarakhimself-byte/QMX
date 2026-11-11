@@ -501,10 +501,10 @@ def test_a_deploy_before_bind_warms_once_bound(tmp_path: Path) -> None:
     runtime(rig).stop()
 
 
-def test_a_five_minute_unit_is_refused_by_name(tmp_path: Path) -> None:
+def test_a_feed_the_unit_does_not_divide_is_refused_by_name(tmp_path: Path) -> None:
     rig = bound_rig(tmp_path)
     binding.signed_in(rig)
-    rig.door.bar_ns = 300_000_000_000
+    rig.door.bar_ns = 420_000_000_000
     binding.bind(rig)
     binding.tick_quotes(rig)
 
@@ -514,7 +514,7 @@ def test_a_five_minute_unit_is_refused_by_name(tmp_path: Path) -> None:
     refused = shown(rig)["dep-1"]
     assert (refused["state"], refused["detail"]) == (
         "refused",
-        "the unit reads m15 bars and this account's feed builds 5-minute bars",
+        "the unit reads m15 bars and this account's feed builds 7-minute bars that do not divide it",
     )
     runtime(rig).stop()
 

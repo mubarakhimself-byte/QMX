@@ -693,6 +693,7 @@ def bound_rig(
             clock_ns=clock,
             steady_ns=steady_ns,
             image_digest=lambda: DIGEST,
+            bar_ns=BAR,
         )
         made.append(built)
         return built
@@ -1139,7 +1140,7 @@ def test_a_unit_trailing_its_stop_moves_the_ctrader_stop_on_the_first_try(
     play_spots(rig, at, at + BAR)
     unit = runtime.hosted["dep-1"].unit
     assert unit is not None and unit.handler is not None
-    held = unit.handler.open_positions["fx.eurusd"]
+    held = unit.handler.open_on("fx.eurusd")[0]
     named = unit.venue_name(held.position_id)
     venue = cast(CTraderVenue, runtime.venues[ACCOUNT].client)
     first = venue.stop_of(named)

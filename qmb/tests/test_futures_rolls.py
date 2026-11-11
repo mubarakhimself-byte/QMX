@@ -29,7 +29,7 @@ from qmb.runloop.loop import RestingIntent, SliceObservation
 from qmb.runloop.stream import emit_stream_control, record_stream_subscription
 from qmf.core.chrono import Instant
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_ok, is_refusal
-from qml.protocol.unit import OHLC
+from qml.protocol.unit import OHLC, OwnPosition
 
 ROLL_AT = "2025-03-14T00:00:00Z"
 ROLL_NS = 1_741_910_400_000_000_000
@@ -57,7 +57,10 @@ class Watcher:
         self.windows = windows
         self.rest_at_ns = rest_at_ns
         self.seen: list[tuple[str, Decimal, Decimal]] = []
-        self.open_positions: dict[str, object] = {}
+
+    def open_on(self, market: str) -> tuple[OwnPosition, ...]:
+        """This stand-in holds nothing on any market, so only a resting order refuses a roll."""
+        return ()
 
     def update_stream(
         self, stream_id: str, observation: SliceObservation | None, frontier: Instant

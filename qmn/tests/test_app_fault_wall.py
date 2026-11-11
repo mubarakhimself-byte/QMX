@@ -235,7 +235,8 @@ def raise_every_exit(runtime: Runtime, deployment_id: str) -> None:
 def aim_at(runtime: Runtime, deployment_id: str, level: Decimal) -> None:
     """Aim the held position's protective target at ``level``, as the target block could have."""
     handler = handler_of(runtime, deployment_id)
-    handler._held[MARKET] = replace(handler._held[MARKET], target=level)
+    position_id = handler.open_on(MARKET)[0].position_id
+    handler._held[position_id] = replace(handler._held[position_id], target=level)
 
 
 def count_drives(runtime: Runtime) -> dict[str, int]:
@@ -243,10 +244,10 @@ def count_drives(runtime: Runtime) -> dict[str, int]:
     drives: dict[str, int] = {}
     real = runtime._drive_one
 
-    def counted(hosted: _Hosted, bars: Sequence[Bar]) -> None:
+    def counted(hosted: _Hosted, bars: Sequence[Bar], replay: bool = False) -> None:
         deployment_id = hosted.deployment.deployment_id
         drives[deployment_id] = drives.get(deployment_id, 0) + 1
-        real(hosted, bars)
+        real(hosted, bars, replay=replay)
 
     runtime._drive_one = counted
     return drives
@@ -417,7 +418,7 @@ def test_the_exit_fault_streak_survives_a_step_of_the_other_markets_bar(tmp_path
     metal_market = next(one for one in hosted._core.markets if one.market_id == METAL)
 
     def serve(market_id: str, bar: QuoteBar) -> None:
-        handler._latest[market_id] = bar
+        handler._latest[(handler._stream, market_id)] = bar
 
     def step(at: int) -> None:
         answer = hosted.on_instant(Instant(at))

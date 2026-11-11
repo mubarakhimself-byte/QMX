@@ -116,6 +116,8 @@ def _uses(unit: Unit) -> Iterator[_Use]:
         yield _Use(_at("/exit_set", index), binding, None, ())
     if unit.sizer is not None:
         yield _Use("/sizer", unit.sizer, None, ())
+    for index, binding in enumerate(unit.modifiers):
+        yield _Use(_at("/modifiers", index), binding, None, ())
     for scope in ("position", "unit", "account"):
         for index, binding in enumerate(getattr(unit.halts, scope)):
             yield _Use(_at("/halts", scope, index), binding, None, ())

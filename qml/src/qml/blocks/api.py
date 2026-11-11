@@ -20,10 +20,10 @@ its slots explicitly with the same blocks.
 Values that leave a block through a port are exact ``Decimal`` values quantised to
 ``port_quantum_significant_digits``; a block may compute in floats inside.
 
-The risk socket (Part A AD-116, CONTRACTS.md section 4.3) is four slots: ``SizerInstance``,
-``ExitInstance``, ``HaltInstance`` and the host's ``CrossUnitHook``. Today's blocks in them are
-placeholders the risk session replaces; ``qml/tests/test_socket_contracts.py`` holds the
-contract every block in a slot must pass.
+The risk socket (Part A AD-116, CONTRACTS.md section 4.3) is five slots:
+``SizerInstance``, ``ModifierInstance``, ``ExitInstance``, ``HaltInstance`` and the host's
+``CrossUnitHook``. Today's blocks in them are placeholders the risk session replaces;
+``qml/tests/test_socket_contracts.py`` holds the contract every block in a slot must pass.
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ __all__ = [
     "HaltInstance",
     "Instance",
     "Mirroring",
+    "ModifierInstance",
     "Output",
     "OutputType",
     "Parameter",
@@ -136,7 +137,13 @@ class Skip:
 
 @dataclass(frozen=True, slots=True)
 class Factor:
-    """A modifier's answer: a multiplier inside the range it declares, with its reason."""
+    """A modifier's answer: a multiplier inside the range it declares, with its reason.
+
+    ``range`` is the range the block declares for its own answer, so a reader knows what the factor
+    was allowed to be. A factor outside it is refused by name and the modifier reads neutral, which
+    is what ``None`` already means: a modifier with no answer never raises or cuts a size by
+    itself.
+    """
 
     value: Decimal
     range: tuple[Decimal, Decimal]
@@ -211,6 +218,16 @@ class SizerInstance(Instance, Protocol):
     """
 
     def update(self, evidence: Mapping[str, object]) -> Amount | Skip | Size | None: ...
+
+
+class ModifierInstance(Instance, Protocol):
+    """The sizing-modifier slot (AD-11). A modifier reads the same evidence a sizer reads, plus
+    the parameters its row binds, and answers a :class:`Factor` inside the range it declares, or
+    ``None`` when it has no answer yet. The unit multiplies the factors in the order the document
+    writes them and prints each one on the receipt, with its range, its reason and its fail mode.
+    """
+
+    def update(self, evidence: Mapping[str, object]) -> Factor | None: ...
 
 
 class ExitInstance(Instance, Protocol):
@@ -294,6 +311,7 @@ class OutputType(StrEnum):
     PROBABILITY = "probability"
     QUANTITY = "quantity"
     AMOUNT = "amount"
+    FACTOR = "factor"
     EXIT_ACTION = "exit_action"
     CALENDAR_STATE = "calendar_state"
     ENTRY_ORDER = "entry_order"

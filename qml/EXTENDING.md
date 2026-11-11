@@ -9,20 +9,21 @@ for later slices to fill.
 
 ## Socket list
 
-The risk socket is the four slots a host fills. A block in a slot implements the
+The risk socket is the five slots a host fills. A block in a slot implements the
 protocol's `update` method, or `before_order` for the cross-unit hook, and answers with
 the shape beside it.
 
 | Slot | Protocol | Answers | For |
 |---|---|---|---|
 | sizer | `SizerInstance` | `Amount`, `Skip`, `Size` or `None` | The sizer slot. |
+| sizing modifier | `ModifierInstance` | `Factor` or `None` | The sizing-modifier slot (AD-11). |
 | exit | `ExitInstance` | `Decimal`, `Signal`, `ExitAction` or `None` | An exit slot. |
 | halt | `HaltInstance` | `Halt` or `None` | A halt slot, read from unit and account statistics and his limits. |
 | cross-unit hook | `CrossUnitHook` | `Refuse` or `None` | What the host calls before every order, across every unit on the account. |
 
 ## Refused fields
 
-`compiler format 9` refuses these fields by name. The code and the reason are the compiler's
+`compiler format 12` refuses these fields by name. The code and the reason are the compiler's
 own. A dash means the field has no `_shape_problems` refusal: the compiler reads it,
 or the census labels it.
 
@@ -33,31 +34,31 @@ or the census labels it.
 | `Unit.family_id` | - | - | - |
 | `Unit.claim_card` | - | - | - |
 | `Unit.markets` | - | - | - |
-| `Unit.streams` | `/streams` | `streams_not_built` | compiler format 9 runs one stream |
+| `Unit.streams` | `/streams` | `streams_not_built` | compiler format 12 runs each stream once, and this unit names m15 twice |
 | `Unit.direction` | - | - | - |
 | `Unit.logic` | - | - | - |
 | `Unit.exit_set` | - | - | - |
 | `Unit.halts` | - | - | - |
-| `Unit.reads` | `/reads` | `reads_not_built` | compiler format 9 reads no readings |
+| `Unit.reads` | `/reads` | `reads_not_built` | compiler format 12 reads no readings |
 | `Unit.numbers` | - | - | - |
 | `Unit.pins` | - | - | - |
 | `Unit.title` | - | - | - |
 | `Unit.lineage` | - | - | - |
-| `Unit.sessions` | `/sessions` | `sessions_not_built` | compiler format 9 runs no session window, so this unit would trade outside it |
+| `Unit.sessions` | `/sessions` | `sessions_not_built` | compiler format 12 runs no session window, so this unit would trade outside it |
 | `Unit.position_limit` | - | - | - |
 | `Unit.sizer` | - | - | - |
-| `Unit.context_needs` | `/context_needs` | `context_not_built` | compiler format 9 reads no context, so this unit would trade whatever the context is |
-| `Unit.routes` | `/routes` | `routes_not_built` | compiler format 9 takes no route from a unit, so this one would run on the host's own |
+| `Unit.context_needs` | `/context_needs` | `context_not_built` | compiler format 12 reads no context, so this unit would trade whatever the context is |
+| `Unit.routes` | `/routes` | `routes_not_built` | compiler format 12 takes no route from a unit, so this one would run on the host's own |
 | `Unit.baseline` | - | - | - |
-| `Unit.plain_python` | `/plain_python` | `plain_python_not_built` | compiler format 9 runs the unit's slots, so ema@1 would never run |
-| `Unit.modifiers` | `/modifiers` | `modifiers_not_built` | compiler format 9 runs one unmodified size, so these would never apply |
-| `Unit.gates` | `/gates` | `gates_not_built` | compiler format 9 runs no gate slot, so this unit would enter whatever the gate says |
-| `Unit.tolerations` | `/tolerations` | `tolerations_not_built` | compiler format 9 reads no sticker, so nothing would ever need tolerating |
-| `Unit.stages` | `/stages` | `stages_not_built` | compiler format 9 runs one set of rows, not stages |
-| `Unit.risk_locks` | `/risk_locks` | `risk_locks_not_built` | compiler format 9 runs no pod, so a lock would hold nothing |
-| `Unit.recipe` | `/recipe` | `recipe_not_built` | compiler format 9 runs no pod, so this recipe would never be stamped in |
-| `Unit.home_markets` | `/home_markets` | `home_markets_not_built` | compiler format 9 runs every market in /markets, not only these |
-| `Unit.tags` | `/tags` | `tags_not_built` | compiler format 9 groups nothing, so a tag would select nothing |
+| `Unit.plain_python` | `/plain_python` | `plain_python_not_built` | compiler format 12 runs the unit's slots, so ema@1 would never run |
+| `Unit.modifiers` | - | - | - |
+| `Unit.gates` | `/gates` | `gates_not_built` | compiler format 12 runs no gate slot, so this unit would enter whatever the gate says |
+| `Unit.tolerations` | `/tolerations` | `tolerations_not_built` | compiler format 12 reads no sticker, so nothing would ever need tolerating |
+| `Unit.stages` | `/stages` | `stages_not_built` | compiler format 12 runs one set of rows, not stages |
+| `Unit.risk_locks` | `/risk_locks` | `risk_locks_not_built` | compiler format 12 runs no pod, so a lock would hold nothing |
+| `Unit.recipe` | `/recipe` | `recipe_not_built` | compiler format 12 runs no pod, so this recipe would never be stamped in |
+| `Unit.home_markets` | `/home_markets` | `home_markets_not_built` | compiler format 12 runs every market in /markets, not only these |
+| `Unit.tags` | `/tags` | `tags_not_built` | compiler format 12 groups nothing, so a tag would select nothing |
 | `ClaimCard.idea` | - | - | - |
 | `ClaimCard.sources` | - | - | - |
 | `ClaimCard.written_at` | - | - | - |
@@ -68,9 +69,9 @@ or the census labels it.
 | `Source.quote` | - | - | - |
 | `Market.market_id` | - | - | - |
 | `Market.instrument_ref` | - | - | - |
-| `Market.roll` | `/markets/0/roll` | `roll_not_built` | compiler format 9 reads no roll rule, so fx.eurusd would not roll by it |
-| `Market.settings` | `/markets/0/settings` | `settings_not_built` | compiler format 9 runs no setting for one market, so fx.eurusd would read the unit's own numbers |
-| `Market.settings_record` | `/markets/0/settings_record` | `settings_not_built` | compiler format 9 reads no settings record, so fx.eurusd would read the unit's own numbers |
+| `Market.roll` | `/markets/0/roll` | `roll_not_built` | compiler format 12 reads no roll rule, so fx.eurusd would not roll by it |
+| `Market.settings` | `/markets/0/settings` | `settings_not_built` | compiler format 12 runs no setting for one market, so fx.eurusd would read the unit's own numbers |
+| `Market.settings_record` | `/markets/0/settings_record` | `settings_not_built` | compiler format 12 reads no settings record, so fx.eurusd would read the unit's own numbers |
 | `SymbolRef.venue` | - | - | - |
 | `SymbolRef.symbol` | - | - | - |
 | `RootRef.venue` | - | - | - |
@@ -78,12 +79,12 @@ or the census labels it.
 | `Roll.rule` | - | - | - |
 | `Roll.days_before_expiry` | - | - | - |
 | `Stream.name` | - | - | - |
-| `Stream.market` | `/streams/0/market` | `market_not_built` | compiler format 9 runs the one stream on every market in /markets, not on fx.eurusd alone |
+| `Stream.market` | `/streams/0/market` | `market_not_built` | compiler format 12 runs a stream on every market in /markets, not on fx.eurusd alone |
 | `Stream.bar` | - | - | - |
-| `Stream.price` | `/streams/0/price` | `price_not_built` | compiler format 9 runs bid and ask bars, not mid |
-| `Stream.input` | `/streams/0/input` | `input_not_built` | compiler format 9 runs closed bars, not quotes |
+| `Stream.price` | `/streams/0/price` | `price_not_built` | compiler format 12 runs bid and ask bars, not mid |
+| `Stream.input` | `/streams/0/input` | `input_not_built` | compiler format 12 runs closed bars, not quotes |
 | `Stream.derived_from` | - | - | - |
-| `Bar.kind` | `/streams/0/bar` | `bar_not_built` | compiler format 9 runs time bars, not tick |
+| `Bar.kind` | `/streams/0/bar` | `bar_not_built` | compiler format 12 runs time bars, not tick |
 | `Bar.size` | `/streams/0/bar` | `bar_not_built` | m15 replays as 900 second bars, and this stream says 3600 |
 | `Logic.long` | - | - | - |
 | `Logic.short` | - | - | - |
@@ -94,7 +95,7 @@ or the census labels it.
 | `Binding.name` | - | - | - |
 | `Binding.block` | - | - | - |
 | `Binding.params` | - | - | - |
-| `Binding.inputs` | `/sizer/inputs/equity` | `inputs_not_built` | compiler format 9 hands a sizer its equity, prices and record, so it never reads m15.close |
+| `Binding.inputs` | `/sizer/inputs/equity` | `inputs_not_built` | compiler format 12 hands a sizer its equity, prices and record, so it never reads m15.close |
 | `NumberParam.number` | - | - | - |
 | `ValueParam.value` | - | - | - |
 | `Combiner.kind` | - | - | - |
@@ -117,7 +118,7 @@ or the census labels it.
 | `ControlBinding.block` | - | - | - |
 | `ControlBinding.params` | - | - | - |
 | `ControlBinding.inputs` | - | - | - |
-| `ControlBinding.scope` | `/halts/unit/0/scope` | `halt_scope` | compiler format 9 runs a row in the unit list, and this row's scope says position |
+| `ControlBinding.scope` | `/halts/unit/0/scope` | `halt_scope` | compiler format 12 runs a row in the unit list, and this row's scope says position |
 | `ControlBinding.verb` | - | - | - |
 | `ControlBinding.shadow` | - | - | - |
 | `Read.reading` | - | - | - |
@@ -128,29 +129,29 @@ or the census labels it.
 | `NumberSpec.measure` | - | - | - |
 | `NumberSpec.default` | - | - | - |
 | `NumberSpec.motion` | - | - | - |
-| `NumberSpec.authority` | `/numbers/stop_buffer/authority` | `authority_not_built` | compiler format 9 moves no number at an anchor, so stop_buffer would move on its count alone |
+| `NumberSpec.authority` | `/numbers/stop_buffer/authority` | `authority_not_built` | compiler format 12 moves no number at an anchor, so stop_buffer would move on its count alone |
 | `NumberSpec.origin` | - | - | - |
-| `NumberSpec.derivation` | `/numbers/stop_buffer/derivation` | `derivation_not_built` | compiler format 9 runs no derivation, so stop_buffer's value would come from no rule it reads |
+| `NumberSpec.derivation` | `/numbers/stop_buffer/derivation` | `derivation_not_built` | compiler format 12 runs no derivation, so stop_buffer's value would come from no rule it reads |
 | `NumberSpec.owner` | - | - | - |
 | `NumberSpec.reason` | - | - | - |
-| `NumberSpec.cautious` | `/numbers/stop_buffer/cautious` | `cautious_not_built` | compiler format 9 moves a number by its rule and never asks which way is cautious, so stop_buffer's down would decide nothing |
-| `NumberSpec.guard` | `/numbers/stop_buffer/guard` | `guard_not_built` | compiler format 9 reverts and freezes no number, so stop_buffer would keep moving after a trip |
-| `NumberSpec.never_self_tune` | `/numbers/min_trend_strength/never_self_tune` | `never_self_tune_not_built` | compiler format 9 tunes a number by its own motion rule and reads no never_self_tune |
-| `NumberSpec.stage_values` | `/numbers/stop_buffer/stage_values` | `stage_values_not_built` | compiler format 9 runs one set of number values, not a value per stage |
+| `NumberSpec.cautious` | `/numbers/stop_buffer/cautious` | `cautious_not_built` | compiler format 12 moves a number by its rule and never asks which way is cautious, so stop_buffer's down would decide nothing |
+| `NumberSpec.guard` | `/numbers/stop_buffer/guard` | `guard_not_built` | compiler format 12 reverts and freezes no number, so stop_buffer would keep moving after a trip |
+| `NumberSpec.never_self_tune` | `/numbers/min_trend_strength/never_self_tune` | `never_self_tune_not_built` | compiler format 12 tunes a number by its own motion rule and reads no never_self_tune |
+| `NumberSpec.stage_values` | `/numbers/stop_buffer/stage_values` | `stage_values_not_built` | compiler format 12 runs one set of number values, not a value per stage |
 | `NumberSpec.range` | - | - | - |
-| `NumberSpec.applies_to_open_positions` | `/numbers/stop_buffer/applies_to_open_positions` | `open_positions_not_built` | compiler format 9 moves no open position by a number, so stop_buffer would not reach one |
+| `NumberSpec.applies_to_open_positions` | `/numbers/stop_buffer/applies_to_open_positions` | `open_positions_not_built` | compiler format 12 moves no open position by a number, so stop_buffer would not reach one |
 | `Motion.mode` | - | - | - |
-| `Motion.source` | `/numbers/ema_period/motion/source` | `motion_not_built` | compiler format 9 reads no source on a fixed number |
+| `Motion.source` | `/numbers/ema_period/motion/source` | `motion_not_built` | compiler format 12 reads no source on a fixed number |
 | `Motion.scaled_fact` | - | - | - |
-| `Motion.cadence` | `/numbers/ema_period/motion/cadence` | `motion_not_built` | compiler format 9 reads no cadence on a fixed number |
-| `Motion.min_count` | `/numbers/ema_period/motion/min_count` | `motion_not_built` | compiler format 9 reads no min_count on a fixed number |
-| `Motion.shrink_k` | `/numbers/ema_period/motion/shrink_k` | `motion_not_built` | compiler format 9 reads no shrink_k on a fixed number |
-| `Motion.step_limit` | `/numbers/ema_period/motion/step_limit` | `motion_not_built` | compiler format 9 reads no step_limit on a fixed number |
+| `Motion.cadence` | `/numbers/ema_period/motion/cadence` | `motion_not_built` | compiler format 12 reads no cadence on a fixed number |
+| `Motion.min_count` | `/numbers/ema_period/motion/min_count` | `motion_not_built` | compiler format 12 reads no min_count on a fixed number |
+| `Motion.shrink_k` | `/numbers/ema_period/motion/shrink_k` | `motion_not_built` | compiler format 12 reads no shrink_k on a fixed number |
+| `Motion.step_limit` | `/numbers/ema_period/motion/step_limit` | `motion_not_built` | compiler format 12 reads no step_limit on a fixed number |
 | `Motion.window` | - | - | - |
-| `Motion.rule` | `/numbers/ema_period/motion/rule` | `motion_not_built` | compiler format 9 reads no rule on a fixed number |
-| `Motion.rule_params` | `/numbers/ema_period/motion/rule_params` | `motion_not_built` | compiler format 9 reads no rule_params on a fixed number |
-| `Cadence.every_closed_trades` | `/numbers/rsi_low/motion/cadence` | `motion_not_built` | compiler format 9 reads no cadence on a derived number |
-| `Cadence.at` | `/numbers/min_trend_strength/motion/cadence` | `cadence_not_built` | compiler format 9 moves a number every so many closed trades, not at market_day_close |
+| `Motion.rule` | `/numbers/ema_period/motion/rule` | `motion_not_built` | compiler format 12 reads no rule on a fixed number |
+| `Motion.rule_params` | `/numbers/ema_period/motion/rule_params` | `motion_not_built` | compiler format 12 reads no rule_params on a fixed number |
+| `Cadence.every_closed_trades` | `/numbers/rsi_low/motion/cadence` | `motion_not_built` | compiler format 12 reads no cadence on a derived number |
+| `Cadence.at` | `/numbers/min_trend_strength/motion/cadence` | `cadence_not_built` | compiler format 12 moves a number every so many closed trades, not at market_day_close |
 | `Guard.revert_after` | - | - | - |
 | `Guard.freeze_after` | - | - | - |
 | `Range.min` | - | - | - |
@@ -170,7 +171,7 @@ or the census labels it.
 | `Session.windows` | - | - | - |
 | `Window.from` | - | - | - |
 | `Window.to` | - | - | - |
-| `PositionLimit.per_instrument` | `/position_limit` | `limit_not_built` | compiler format 9 holds one position per market |
+| `PositionLimit.per_instrument` | `/position_limit` | `position_limit_nets` | compiler format 12 holds more than one position per market only where the venue keeps them apart, and the venue this unit runs on nets positions |
 | `ContextNeeds.require` | - | - | - |
 | `ContextNeeds.warn` | - | - | - |
 | `ContextNeeds.block` | - | - | - |
@@ -202,11 +203,12 @@ A block answers with one of these shapes. A block's face declares one output typ
 |---|---|---|
 | `Signal` | `state: bool`; `value: Decimal or None` | a context, trigger, confirmation, filter, veto or per-bar exit slot |
 | `Size` | `lots: Decimal or None`; `skip_reason: str or None` | a sizer slot |
+| `Factor` | `value: Decimal`; `range: Decimal or Decimal`; `reason: str` | a sizing-modifier slot |
 | `Halt` | `action: HaltAction`; `scope: Scope`; `reason: str`; `factor: Decimal or None` | a halt slot |
 | `Refuse` | `reason: str` | the cross-unit hook |
 | `EntryOrder` | `kind: str`; `at: str` | an entry-order slot |
 
-The output types are `event`, `level`, `series`, `state`, `probability`, `quantity`, `amount`, `exit_action`, `calendar_state`, `entry_order`.
+The output types are `event`, `level`, `series`, `state`, `probability`, `quantity`, `amount`, `factor`, `exit_action`, `calendar_state`, `entry_order`.
 
 ## Journal kinds
 

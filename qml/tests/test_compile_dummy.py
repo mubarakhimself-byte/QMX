@@ -143,6 +143,12 @@ def _target() -> ExecutionTarget:
     )
 
 
+def _one(position: OwnPosition | None) -> tuple[OwnPosition, ...]:
+    """The unit door's ``own_position`` answers every position on a market, so a fixture that
+    holds one answers one."""
+    return () if position is None else (position,)
+
+
 def _surfaces(
     bars: Mapping[str, Sequence[QuoteBar]],
     journal: Sequence[ClosedTrade] = (),
@@ -154,7 +160,7 @@ def _surfaces(
     }
     for market in _MARKETS:
         surfaces[f"bars:m15:{market}"] = _latest(bars.get(market, ()))
-        surfaces[f"own_position:{market}"] = _At(lambda i, m=market: positions(m, i))
+        surfaces[f"own_position:{market}"] = _At(lambda i, m=market: _one(positions(m, i)))
     return surfaces
 
 
@@ -308,6 +314,7 @@ def adx_above(level: str) -> dict[str, object]:
         "motion": {"mode": "fixed"},
         "authority": "motion_inside_range",
         "origin": "builder_chosen",
+        "reason": "the ADX level the value rule gates at, a stand-in the test sets at 1 and 99",
     }
     for side in cast("dict[str, dict[str, dict[str, dict[str, Any]]]]", document["logic"]).values():
         side["slots"]["context"]["bindings"] += [

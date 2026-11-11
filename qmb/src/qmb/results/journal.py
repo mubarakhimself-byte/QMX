@@ -92,6 +92,7 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("could not be built", "health_stop"),
     ("no unit holds", "health_stop"),
     ("does not hold this order's stop", "health_stop"),
+    ("does not read", "health_stop"),
     # A brake's own words: the row a live one suppresses names the slot, and each shipped halt's
     # words name the slot too, because which brake it was rides the row's code.
     ("halt slot: ", "halt_slot"),

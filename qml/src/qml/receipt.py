@@ -35,7 +35,7 @@ from qml.numbers.convert import RoundRule, to_quantity
 from qml.numbers.records import InstrumentRecord, parse_record
 
 if TYPE_CHECKING:  # the row's shape lives in the unit's own module, which imports this one
-    from qml.protocol.unit import DecisionRow
+    from qml.protocol.unit import DecisionRow, ModifierReading
 
 _AmountKind = Literal["money_at_risk", "notional", "quantity"]
 _FailMode = Literal["open", "closed", "neutral"]
@@ -43,6 +43,7 @@ _FactState = Literal["ok", "stale", "absent", "uncalibrated"]
 
 __all__ = [
     "FactSeen",
+    "FactorSeen",
     "Replay",
     "Step",
     "Trail",
@@ -103,6 +104,19 @@ class Step:
 
 
 @dataclass(frozen=True, slots=True)
+class FactorSeen:
+    """One sizing modifier as the trail prints it (AD-11): its name, the factor it answered, the
+    range it declared, its own reason, the code the row gave the reading, and its fail mode."""
+
+    name: str
+    value: str
+    range: str
+    reason: str
+    code: str
+    fail_mode: str
+
+
+@dataclass(frozen=True, slots=True)
 class Trail:
     """One entry's size trail, in the order it happened."""
 
@@ -117,6 +131,7 @@ class Trail:
     verdicts: tuple[str, ...]
     residue_r: str
     placeholders: tuple[str, ...]
+    factors: tuple[FactorSeen, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,11 +217,30 @@ def _amount_stored(amount: Amount) -> Mapping[str, object]:
     return {"kind": amount.kind, "value": _number(amount.value), "basis": amount.basis}
 
 
+def _modifier_stored(reading: ModifierReading) -> Mapping[str, object]:
+    """One sizing modifier's answer as the row stores it (AD-11): its name and block, the factor it
+    answered, the range it declared, its reason, its code and its fail mode. An absent range is
+    omitted rather than written as a null (CT-05)."""
+    body: dict[str, object] = {
+        "name": reading.name,
+        "pin": reading.pin,
+        "value": _number(reading.value),
+        "reason": reading.reason,
+        "code": reading.code,
+        "fail_mode": reading.fail_mode,
+    }
+    if reading.range is not None:
+        body["range"] = [_number(reading.range[0]), _number(reading.range[1])]
+    return body
+
+
 def stored_row(row: DecisionRow) -> Mapping[str, object]:
     """One decision row as a host journals it: the numbers, the facts it read, the three
-    positions of its size, each link's verdict, and the two fingerprints it was made under.
-    The host adds its own reason code and the readings its blocks produced."""
-    return {
+    positions of its size, each link's verdict, the sizing modifiers and the two fingerprints it
+    was made under. The host adds its own reason code and the readings its blocks produced. A row
+    with no sizing modifiers carries no ``modifiers`` key, so its body is the one it carried
+    before the chain existed."""
+    body: dict[str, object] = {
         "row_id": row.row_id,
         "instant": row.instant.value_ns,
         "market_id": row.market_id,
@@ -225,6 +259,9 @@ def stored_row(row: DecisionRow) -> Mapping[str, object]:
         "placeholders": list(row.placeholders),
         "written_before_send": row.written_before_send,
     }
+    if row.modifiers:
+        body["modifiers"] = [_modifier_stored(reading) for reading in row.modifiers]
+    return body
 
 
 def row_hash(row: Mapping[str, object]) -> str:
@@ -278,7 +315,7 @@ def _seen(name: str, reading: object, row_instant: int) -> FactSeen:
     )
 
 
-_STEP_ORDER: Final[tuple[str, ...]] = ("wanted", "approved", "filled")
+_STEP_ORDER: Final[tuple[str, ...]] = ("wanted", "modified", "reduced", "approved", "filled")
 """The size's own order. A stored body's keys are canonicalised alphabetically on the way in
 (CT-05), so the trail reads the order from here and never from the mapping."""
 
@@ -287,6 +324,27 @@ def _ordered(steps: Mapping[str, object]) -> list[tuple[str, object]]:
     """The steps in the order the size took them, then any the reader does not know."""
     known = [(name, steps[name]) for name in _STEP_ORDER if name in steps]
     return known + [(name, step) for name, step in steps.items() if name not in _STEP_ORDER]
+
+
+def _range_text(value: object) -> str:
+    """A stored modifier's declared range as the trail prints it, or nothing when it had none."""
+    if not isinstance(value, list) or len(cast("list[object]", value)) != 2:
+        return ""
+    low, high = cast("list[object]", value)
+    return f"{low} to {high}"
+
+
+def _factor_seen(reading: object) -> FactorSeen:
+    """One stored modifier as the trail prints it."""
+    body = _map(reading)
+    return FactorSeen(
+        name=str(body.get("name", "")),
+        value=str(body.get("value", "")),
+        range=_range_text(body.get("range")),
+        reason=str(body.get("reason", "")),
+        code=str(body.get("code", "")),
+        fail_mode=str(body.get("fail_mode", "")),
+    )
 
 
 def explain_size(row: Mapping[str, object], fill: Mapping[str, object] | None = None) -> Trail:
@@ -323,12 +381,31 @@ def explain_size(row: Mapping[str, object], fill: Mapping[str, object] | None = 
         placeholders=tuple(
             str(label) for label in cast("list[object]", row.get("placeholders", []))
         ),
+        factors=tuple(
+            _factor_seen(reading) for reading in cast("list[object]", row.get("modifiers", []))
+        ),
     )
 
 
 def _value_of(reading: object) -> Decimal | None:
     value = _map(reading).get("value")
     return None if value is None else Decimal(str(value))
+
+
+_SIZED_STEPS: Final[tuple[str, ...]] = ("wanted", "modified", "reduced")
+"""The steps that state an amount before the converter, in the order the size took them. The last
+one present is the amount the converter spelled, so a replay uses it and a modifier or a brake that
+cut the size is replayed as it was, not as the sizer first answered it."""
+
+
+def _last_sized(steps: Mapping[str, object]) -> Mapping[str, object]:
+    """The last amount step the row stores: the sizer's, or the one a modifier or brake made."""
+    found: Mapping[str, object] = {}
+    for name in _SIZED_STEPS:
+        step = steps.get(name)
+        if isinstance(step, Mapping):
+            found = cast("Mapping[str, object]", step)
+    return found
 
 
 def _one_of(value: object, allowed: tuple[str, ...], default: str) -> str:
@@ -359,12 +436,12 @@ def _rate_of(facts: Mapping[str, object], currency: str) -> Fact | None:
 def replay_decision(row: Mapping[str, object]) -> Replay:
     """Re-run the sizing on the row's own stored inputs and answer the quantity it reaches.
 
-    The sizer is a pinned block, so a row stores the amount it answered; everything after that
-    runs again here, through the same converter the price call used, over the record, the entry,
-    the stop and the rate the row also stored. A row missing an input answers the code naming
-    what it lacks instead of a size."""
+    The sizer and each sizing modifier are pinned blocks, so a row stores the amount each chain
+    link produced; everything after the last one runs again here, through the same converter the
+    price call used, over the record, the entry, the stop and the rate the row also stored. A row
+    missing an input answers the code naming what it lacks instead of a size."""
     digest = row_hash(row)
-    wanted = _map(_map(row.get("steps")).get("wanted"))
+    wanted = _last_sized(_map(row.get("steps")))
     kind = wanted.get("kind")
     value = wanted.get("value")
     if kind is None or value is None:
