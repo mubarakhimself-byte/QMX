@@ -38,6 +38,9 @@ _NODE_KINDS: Final[tuple[str, ...]] = (
     "stand_down",
     "spec_change",
     "protection",
+    # The account's equity at its day's first read, so a restart mid-day reads the day's own start
+    # rather than the first equity it happens to see (RC-29).
+    "day_start",
 )
 
 SPECS: Final[tuple[KindSpec, ...]] = (

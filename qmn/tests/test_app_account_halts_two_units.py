@@ -4,11 +4,13 @@ Two units on one fake-broker account, each risking 300 of it. One stop fills for
 daily limit of 500 on a 10,000 account, which is 3 per cent, and neither unit's row fires. The
 second takes the account's cash to 9,400, which is 6 per cent, and on the next bar both units'
 ``account-daily-loss-halt`` rows fire together, because the number they read is the account's, not
-one unit's book. Their entries stop there and nothing else is refused.
+one unit's book. Their entries stop there and nothing else is refused: the tape prices an entry on
+the bar the brake fires on, the brake refuses it, and no order reaches the venue.
 
 The broker states its cash the way a real one does, moving as positions close: the test states the
 balance each close leaves and the node reads it, so nothing in the brake is handed its answer. The
-two losses land inside one UTC day, so the day start the brake reads is one number.
+two losses and every bar after them land inside one UTC day, so the day start the brake reads is
+one number.
 """
 
 # pyright: reportPrivateUsage=false
@@ -144,19 +146,16 @@ def play_both(rig: b.Bound, runtime: Runtime, at: int, bars: int) -> int:
     return at
 
 
-def drive(rig: b.Bound, runtime: Runtime, at: int, bars: int) -> int:
-    """Advance one bar at a time, quoting the broker's last EURUSD price so no stop crosses.
+def state_balance(rig: b.Bound, runtime: Runtime, at: int, cents: int) -> int:
+    """State the broker's cash, then tick past the node's 15-second re-read so the next bar reads it.
 
-    A brake runs only on a bar the unit steps on, so the test needs bars after it moves the
-    account's cash. Holding the price still leaves every position where it is, so the only number
-    that moves between these bars is the one the brake reads.
+    The node refreshes the account's facts after the pass that drove the units, so a balance stated
+    on the bar that reads it would reach the brake one bar later. The tick lands in the bar already
+    played and steps no unit, so the next bar reads the cash the test stated.
     """
-    for _ in range(bars):
-        at += BAR
-        rig.now[0] = at
-        bid, ask = rig.fake.quotes[b.FakeCTrader.SYMBOLS["EURUSD"][0]]
-        rig.fake.quote("EURUSD", bid, ask, at // 1_000_000)
-        runtime.tick()
+    rig.fake.balance_cents = cents
+    rig.now[0] += 16 * 1_000_000_000
+    runtime.tick()
     return at
 
 
@@ -167,12 +166,13 @@ def held_on(rig: b.Bound, symbol: str) -> list[b.Held]:
 
 
 def test_account_halt_binds_across_two_units(tmp_path: Path) -> None:
-    """300 alone is under the limit; the second fires both units' account brake."""
+    """300 alone is under the limit; the second fires both units' account brake, and the tape's
+    next bar is a real signal no new entry reaches the venue on."""
     rig, runtime, at = two_units(tmp_path)
     assert unit_rows(rig, "risk_event") == [], "no brake row before the account lost anything"
 
-    # The account's day start is the cash its first read of the day found. This test never crosses
-    # the next boundary, so that one number stands for the whole run.
+    # The account's day start is the cash its first read of the day found. Every bar below is played
+    # inside that UTC day, the last of them after the fire, so that one number stands for the run.
     ends = day_opens(at)
     assert held_on(rig, "EURUSD"), "both units hold their entry on the account"
 
@@ -196,13 +196,14 @@ def test_account_halt_binds_across_two_units(tmp_path: Path) -> None:
     # One loss is 3 per cent of the account, under the 5 per cent limit: no unit fires yet.
     one = min(closed)
     assert one < 0, f"a stop's money is a loss, not {one}"
-    rig.fake.balance_cents = BALANCE - _cents(-one)
-    at = drive(rig, runtime, at, 2)
+    at = state_balance(rig, runtime, at, BALANCE - _cents(-one))
+    at = play_both(rig, runtime, at, 1)
     under = [row for row in unit_rows(rig, "risk_event") if row["code"] == CODE]
 
     # The second takes the account 6 per cent down, and the brake binds both units on one bar.
-    rig.fake.balance_cents = BALANCE - _cents(sum((-money for money in closed), Decimal(0)))
-    at = drive(rig, runtime, at, 2)
+    lost = sum((-money for money in closed), Decimal(0))
+    at = state_balance(rig, runtime, at, BALANCE - _cents(lost))
+    at = play_both(rig, runtime, at, 1)
 
     rows = [row for row in unit_rows(rig, "risk_event") if row["code"] == CODE]
     assert under == [], "300 of 10,000 is under the 500 limit, so no unit fires on it"
@@ -215,11 +216,52 @@ def test_account_halt_binds_across_two_units(tmp_path: Path) -> None:
     )
     assert {str(row["verb"]) for row in rows} == {"no_new_entries"}
 
-    # The brake refuses entries and nothing else: no new order leaves for the venue.
+    # The brake refuses entries and nothing else. The tape's next signal is the bar the brake fires
+    # on, so both units price an entry there and the brake answers it with ``no_new_entries``: the
+    # journal names the entry each one refused, and the venue's count is the proof it never left.
+    refused = [
+        row
+        for row in unit_rows(rig, "would_have")
+        if row["code"] == CODE and row["reason"] == "halt_slot"
+    ]
+    at = play_both(rig, runtime, at, 1)
     entries = [name for name, _ in rig.fake.received if name == "ProtoOANewOrderReq"]
     runtime.stop()
 
+    assert sorted(str(row["market_id"]) for row in refused) == [MARKET] * len(DEPLOYMENTS), (
+        f"both units price an entry the brake refuses, not {refused}"
+    )
+    assert at < ends, "the bar the brake must refuse an entry on is still inside the account's day"
     assert len(entries) == len(DEPLOYMENTS), "the brake let no new entry through to the venue"
+
+
+def test_a_restart_mid_day_keeps_the_day_start(tmp_path: Path) -> None:
+    """A node that restarts 4.9 per cent down still measures the account's day, not the restart.
+
+    The day's start is journalled where it is first set, so the restarted process reads it back: the
+    account is 4.9 per cent down before the restart and still 4.9 per cent down after it, and the
+    brake fires on the day's sixth per cent rather than needing another full 5 per cent from the
+    equity the restart found.
+    """
+    rig, runtime, at = two_units(tmp_path)
+    at = state_balance(rig, runtime, at, BALANCE - 49_000)
+    before = runtime.account_brake_equity(b.ACCOUNT)
+    runtime.stop()
+
+    again = b.bound_rig(tmp_path, grant=rig.grants.held, broker=rig.fake, at=rig.now[0])
+    restarted = b.runtime(again)
+    settle(restarted)
+    after = restarted.account_brake_equity(b.ACCOUNT)
+
+    at = state_balance(again, restarted, at, BALANCE - 60_000)
+    at = play_both(again, restarted, at, 4)
+    rows = [row for row in unit_rows(again, "risk_event") if row["code"] == CODE]
+    restarted.stop()
+
+    down, day_start = Decimal("9510.00"), Decimal("10000.00")
+    assert before == (down, day_start), f"the day start before the restart, not {before}"
+    assert after == (down, day_start), f"the restarted process reads the day's own start, not {after}"
+    assert len(rows) == len(DEPLOYMENTS), f"both units fire on the day's sixth per cent, not {rows}"
 
 
 def _cents(money: Decimal) -> int:
