@@ -263,3 +263,18 @@ def test_a_cell_moves_off_uncalibrated_at_its_count() -> None:
 
     assert (first.state, first.value) == ("uncalibrated", Decimal("0.0003"))
     assert (second.state, second.value) == ("ok", Decimal("0.0002"))
+
+
+def test_a_count_below_one_reads_as_one_fill() -> None:
+    """The account the exits' step builds reads every cell, so a count of 0 must not divide by
+    zero: an empty cell reads the stressed 0.0002, and one 0.0003 fill is measured."""
+    record = _record()
+    cells = CostCells(min_fills=0)
+    at = Instant(_T1)
+
+    empty = cells.fact(_M, record, at)
+    cells.observe(_M, record, at, Decimal("0.0003"))
+    measured = cells.fact(_M, record, at)
+
+    assert (empty.state, empty.value) == ("uncalibrated", Decimal("0.0002"))
+    assert (measured.state, measured.value) == ("ok", Decimal("0.0003"))
