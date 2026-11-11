@@ -2384,20 +2384,20 @@ def journalled_resumes(root: Path) -> set[str]:
     return found
 
 
-def journalled_day_starts(root: Path) -> dict[str, tuple[int, Decimal]]:
-    """Each account's day and the equity its ``day_start`` row states, as the newest row has it.
+def journalled_day_starts(root: Path) -> Result[dict[str, tuple[int, Decimal]]]:
+    """Each account's newest day and the equity its first ``day_start`` row for that day states.
 
-    The node writes the pair at the first read of a day, so a process that starts or restarts
-    mid-day states the day's own start instead of re-anchoring it on the equity it finds (RC-29).
-    A journal the volume refuses reads as holding none: a restart then anchors the day on its own
-    first read, which is the hole this closes, not a reason to refuse to start."""
+    The node writes the pair when it watches a day begin, so a process that restarts mid-day states
+    the day's own start instead of re-anchoring it on the equity it finds (RC-29). A folder the
+    volume refuses answers the refusal: reading it as holding none would let a day with a row go
+    unstated or be mistaken for one with none, so the day start waits for a read that works."""
     found: dict[str, tuple[int, Decimal]] = {}
     for folder in stream_folders(root):
         if not folder.name.startswith(f"{JournalStream.NODE.source}.day_start."):
             continue
         lines = read_committed(folder)
         if is_refusal(lines):
-            continue
+            return lines
         for line in lines.value:
             if not isinstance(line, JournalLine):
                 continue
@@ -2415,9 +2415,9 @@ def journalled_day_starts(root: Path) -> dict[str, tuple[int, Decimal]]:
             except InvalidOperation:
                 continue
             held = found.get(account)
-            if held is None or held[0] <= pair[0]:
+            if held is None or held[0] < pair[0]:
                 found[account] = pair
-    return found
+    return Ok(found)
 
 
 def journalled_flattens(root: Path) -> Result[set[str]]:
@@ -2487,13 +2487,15 @@ class Runtime:
         self._accounts: dict[str, LiveAccount] = {}
         self._facts: dict[str, AccountFacts] = {}
         """Each account's facts as the last refresh read them, by account id."""
-        self._day_starts: dict[str, tuple[int, Decimal]] = journalled_day_starts(
-            context.journal_root
-        )
+        self._day_starts: dict[str, tuple[int, Decimal]] | None = None
         """Each account's day and its equity at that day's first read, by account id (RC-29): the
         ``account.day_start_equity`` a daily brake reads, so every unit on the account reads one
-        number. A new day's first read replaces it; the pair is journalled where it is first set, so
-        a set of them read here keeps the day's own start across a restart."""
+        number. Read from the journal at the first read that can read it, None until then."""
+        self._read_days: dict[str, int] = {}
+        """The newest day this process read each account on, so a day is anchored only when this
+        process watched it begin."""
+        self._unwritten: set[str] = set()
+        """Accounts whose held day start the journal refused, written again at the next read."""
         self._resumes_seen = journalled_resumes(context.journal_root)
         self._flattened: set[str] | None = None
         """Every flatten op journalled done; None until the journal could be read."""
@@ -2791,42 +2793,59 @@ class Runtime:
             self._note_day_start(account, now)
 
     def _note_day_start(self, account: str, now: Instant) -> None:
-        """Record the account's equity at its day's first read, journalling it, and replace it on a
-        new day.
+        """Anchor the account's day on its equity when this process watched the day begin.
 
-        The pair is written where it is first set so a node that starts or restarts mid-day states
-        the day's own start rather than the first equity it happens to read (RC-29). A row the
-        journal refuses leaves the pair in memory for this process; the day's next first read
-        writes it again."""
+        A day is anchored only at the first read after this process read the day before, and the
+        pair is journalled there, so a restart mid-day states the day's own start (RC-29). A boot on
+        a day it did not watch begin, with no row for that day, states none: equity read after a
+        loss taken while the node was down is not the day's start, so the brake reads cold. A clock
+        that steps back anchors nothing, and a row the journal refuses is written again at the
+        next read."""
         facts = self._facts.get(account)
         equity = None if facts is None else _stated_decimal(facts.equity.value)
         if equity is None:
             return
         day = now.value_ns // ACCOUNT_DAY_NS
-        held = self._day_starts.get(account)
-        if held is not None and held[0] == day:
+        last = self._read_days.get(account)
+        if last is not None and day < last:
             return
-        self._day_starts[account] = (day, equity)
-        self.journal.append(
+        self._read_days[account] = day
+        if self._day_starts is None:
+            read = journalled_day_starts(self.context.journal_root)
+            if is_refusal(read):
+                return
+            self._day_starts = read.value
+        held = self._day_starts.get(account)
+        if held is None or held[0] < day:
+            if last != day - 1:
+                return
+            held = self._day_starts[account] = (day, equity)
+            self._unwritten.add(account)
+        if held[0] != day or account not in self._unwritten:
+            return
+        written = self.journal.append(
             "day_start",
-            {"account": account, "day": day, "equity": str(equity)},
+            {"account": account, "day": held[0], "equity": str(held[1])},
             RowFacts(ts_recv=self.clock_ns(), clock_ok=False),
         )
+        if not is_refusal(written):
+            self._unwritten.discard(account)
 
     def account_brake_equity(self, account: str) -> tuple[Decimal | None, Decimal | None]:
         """The account's own equity and its day's start, for the ``account`` scope brakes (RC-29).
 
         The node is the only actor that holds several units on one account, so it is the only one
-        that can state the account's figure rather than one unit's book. A day start is stated once
-        a read has recorded it, in this process or an earlier one: a restart reads the journalled
-        pair rather than re-anchoring the day on the equity it finds. Until a read records one, a
-        daily brake reads cold rather than guess.
+        that can state the account's figure rather than one unit's book. A day start is stated only
+        for the day the clock reads, once this process or an earlier one watched that day begin: a
+        restart reads the journalled pair rather than re-anchoring the day on the equity it finds.
+        Otherwise a daily brake reads cold rather than guess.
         """
         facts = self._facts.get(account)
-        start = self._day_starts.get(account)
+        start = None if self._day_starts is None else self._day_starts.get(account)
+        today = self.clock_ns() // ACCOUNT_DAY_NS
         return (
             None if facts is None else _stated_decimal(facts.equity.value),
-            None if start is None else start[1],
+            None if start is None or start[0] != today else start[1],
         )
 
     def account_facts(self, account: str) -> AccountFacts | None:

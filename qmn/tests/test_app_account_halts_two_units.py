@@ -74,11 +74,18 @@ def _deployment(rig: b.Bound, deployment_id: str) -> dict[str, object]:
 
 def two_units(root: Path) -> tuple[b.Bound, Runtime, int]:
     """Two deployments of the brake-carrying dummy on one bound account, both in their first
-    position; the instant their entry bar closed."""
+    position; the instant their entry bar closed.
+
+    The node first reads the account on the evening before, so it watched the account's day begin
+    and anchors the day's start on the day's first read."""
     rig = b.bound_rig(root)
     b.signed_in(rig)
     b.bind(rig)
     runtime = b.runtime(rig)
+    opened = rig.now[0]
+    rig.now[0] = opened // DAY * DAY - BAR
+    runtime.tick()
+    rig.now[0] = opened
     feed = runtime.venues[b.ACCOUNT].feed
     for at, market, bar in base.month().bars:
         if at < base.LIVE_FROM:
