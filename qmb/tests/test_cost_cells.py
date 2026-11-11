@@ -239,7 +239,8 @@ def _lots(cost: object) -> Decimal | None:
 
 def test_the_sizer_reads_a_measured_cell() -> None:
     """A measured 0.0002 cost beside a 0.0050 stop gives 0.96 lots from 500 money at risk, and a
-    measured zero gives 1.00. A missing or malformed cell reads the stressed cost, never zero."""
+    measured zero gives 1.00. A missing, malformed or negative cell reads the stressed cost, never
+    zero: a negative cost is drift or a bad fill price, not a fill that paid nothing."""
     measured = Fact(Decimal("0.0002"), Instant(_T0), "open", "test", "ok")
     nothing = Fact(Decimal(0), Instant(_T0), "open", "test", "ok")
 
@@ -247,7 +248,7 @@ def test_the_sizer_reads_a_measured_cell() -> None:
     assert _lots(nothing) == Decimal("1.00")
     assert _lots(None) == Decimal("0.96")
     assert _lots("0.0002") == Decimal("0.96")
-    assert _lots(Fact(Decimal("-0.0010"), Instant(_T0), "open", "test", "ok")) == Decimal("1.00")
+    assert _lots(Fact(Decimal("-0.0010"), Instant(_T0), "open", "test", "ok")) == Decimal("0.96")
 
 
 def test_a_cell_moves_off_uncalibrated_at_its_count() -> None:
