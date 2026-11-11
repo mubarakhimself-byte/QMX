@@ -961,7 +961,25 @@ def _feeds(bound: BoundBlock, streams: AbstractSet[str]) -> frozenset[str]:
 
 def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
     """The bars each of the unit's streams needs before entries, and the unit's summed state
-    bound. It builds every instance once, so a value no block can run is named at compile.
+    bound. Each market builds its blocks on its own settings over the unit's defaults, and the
+    entry gate reads one count for the whole unit, so the unit needs the most any market needs.
+    """
+    own = sorted({tuple(sorted(market.settings.items())) for market, _ in plan.markets} or {()})
+    need: dict[str, int] = dict.fromkeys(plan.streams, 0)
+    bound = 0
+    for settings in own:
+        warm, total = _warm_at(plan, dict(plan.defaults) | dict(settings), problems)
+        for stream, bars in warm.items():
+            need[stream] = max(need[stream], bars)
+        bound = max(bound, total)
+    return MappingProxyType(need), bound
+
+
+def _warm_at(
+    plan: Plan, numbers: Mapping[str, Decimal], problems: _Problems
+) -> tuple[dict[str, int], int]:
+    """One market's warm-up per stream and summed state bound, on that market's numbers. It
+    builds every instance once, so a value no block can run is named at compile.
 
     A binding is warm at the later of its recorded settle length, at this binding's parameters,
     and the bars its upstream needs plus its own warm-up; a derived number at its source's plus
@@ -975,7 +993,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
     bound_total = 0
 
     def make(b: BoundBlock, side: Side) -> Instance | None:
-        return _built(b.block, _values(b, plan.defaults), b.inputs, side, b.pin, b.where, problems)
+        return _built(b.block, _values(b, numbers), b.inputs, side, b.pin, b.where, problems)
 
     def attribute(key: str) -> None:
         for stream in reads.get(key, frozenset()):
@@ -990,7 +1008,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
                 refs = [f"{side.side.value}.{ref}" for ref in b.inputs.values()]
                 upstream = max((warm.get(ref, 0) for ref in refs), default=0)
                 recorded = b.face.settle
-                settle = recorded.bars_at(_values(b, plan.defaults)) if recorded is not None else 0
+                settle = recorded.bars_at(_values(b, numbers)) if recorded is not None else 0
                 warm[b.key] = max(settle, upstream + instance.warm_up_bars)
                 reads[b.key] = _feeds(b, streams) | frozenset().union(
                     *(reads.get(ref, frozenset()) for ref in refs)
@@ -1038,7 +1056,7 @@ def _warm_up(plan: Plan, problems: _Problems) -> tuple[Mapping[str, int], int]:
             f"/numbers/{s.number.name}/motion",
             problems,
         )
-    return MappingProxyType(dict(need)), bound_total
+    return need, bound_total
 
 
 def _faces(
