@@ -5,6 +5,10 @@ conversion bars skips by ``rate_absent`` and says so on its run stamp, the G che
 JPY-quoting unit, a stale rate never stops an exit, and a close sums in dollars whether its
 entry's rate was stamped at the mint bar or adopted after a restart carried none. The literals
 are the section's Verify, unit block: 500 USD at the stop from equity 100000 at fraction 0.005.
+
+The rc-07 re-review added four: a yen cash event converts before it joins the dollar equity, a
+figure no rate converts is never summed and holds every entry by ``rate_absent``, the run's
+``net_money`` is the account's own move, and a raising rate port fails the entry, not the exit.
 """
 
 # pyright: reportPrivateUsage=false
@@ -21,10 +25,15 @@ from fractions import Fraction
 from pathlib import Path
 from typing import TypeVar, cast
 
+import pytest
 from qmb.execution.fill import BarExecution
+from qmb.execution.financing import CashEvent, CashKind
+from qmb.host import unit_runner
 from qmb.host.facts import RATE_ABSENT, ReplayRates, SliceRates, provided, rate_fact
 from qmb.host.replay import BarWindow, window_size
 from qmb.host.unit_handler import (
+    CashPort,
+    Fill,
     FillKind,
     ListJournal,
     UnitSliceHandler,
@@ -41,6 +50,7 @@ from qmb.runloop import DeclaredStream, SliceObservation, StreamSet, run_slice
 from qmf.core.chrono import Instant
 from qmf.core.identity import AccountRole, VenueId
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
+from qmf.risk.facts import Fact
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import UNIT_INTENT_FORMAT_VERSION
 from qml.blocks.api import EntryFace, parse_entry
@@ -317,6 +327,7 @@ class _Rig:
         *,
         rates: RatePort,
         queued: Mapping[int, tuple[Proposal, ...]],
+        cash: CashPort | None = None,
     ) -> None:
         self.journal = ListJournal()
         self.windows = {market: BarWindow(window_size(loaded.compiled)) for market in loaded.feeds}
@@ -334,15 +345,20 @@ class _Rig:
                 equity=EQUITY,
                 execution=BarExecution(loaded.bar_ns, loaded.costs, loaded.margins),
                 journal=self.journal,
+                cash=cash,
                 rates=rates,
             )
         )
 
 
 def _run_folder(
-    folder: Path, *, rates: RatePort, queued: Mapping[int, tuple[Proposal, ...]]
+    folder: Path,
+    *,
+    rates: RatePort,
+    queued: Mapping[int, tuple[Proposal, ...]],
+    cash: CashPort | None = None,
 ) -> _Rig:
-    return _Rig(_ok(load_unit_folder(folder)), rates=rates, queued=queued)
+    return _Rig(_ok(load_unit_folder(folder)), rates=rates, queued=queued, cash=cash)
 
 
 def _drive(rig: _Rig, series: Mapping[str, Sequence[QuoteBar]]) -> None:
@@ -676,3 +692,233 @@ def test_a_replay_with_the_conversion_bars_says_nothing_about_the_rate(tmp_path:
     fact = rates.rate(loaded.records["fx.usdjpy"], _instant(2))
     assert fact is not None and fact.value == Fraction(1, 150)
     assert rates.rate(loaded.records["fx.eurusd"], _instant(2)) is None
+
+
+class _YenCommission:
+    """A replay's cash book that charges 1050 yen on every entry fill, as a JPY cost line does."""
+
+    def held(
+        self, market: str, position: OwnPosition, since: Instant, until: Instant, bar: QuoteBar, /
+    ) -> Result[tuple[CashEvent, ...]]:
+        del market, position, since, until, bar
+        return Ok(())
+
+    def filled(self, fill: Fill, /) -> tuple[CashEvent, ...]:
+        if fill.kind is not FillKind.ENTRY:
+            return ()
+        return (
+            CashEvent(
+                fill.instant,
+                fill.market_id,
+                fill.position_id,
+                CashKind.COMMISSION,
+                Decimal("-1050.00"),
+                "1050 JPY per fill",
+                f"commission:{fill.position_id}",
+            ),
+        )
+
+
+class _RaisingRates:
+    """A rate port whose every read raises, as a broken feed adapter would."""
+
+    currency = ACCOUNT_CURRENCY
+
+    def rate(self, record: InstrumentRecord, instant: Instant) -> Fact | None:
+        raise RuntimeError(f"no rate for {record.currency} at {instant.value_ns}")
+
+
+def _adopt(rig: _Rig, loaded: LoadedUnit, market: str, entry: str, stop: str) -> None:
+    """Hold a 1.5-lot long the unit opened before a restart, with no rate stamped on it."""
+    position = OwnPosition(
+        f"adopted-{market}",
+        Side.LONG,
+        Decimal("1.5"),
+        Decimal(entry),
+        loaded.compiled.compiled_fingerprint,
+        _instant(0),
+    )
+    _ok(
+        rig.handler.adopt(
+            market,
+            position,
+            stop=Decimal(stop),
+            entry_stop=Decimal(stop),
+            target=None,
+            decision_row_id=f"row-adopted-{market}",
+        )
+    )
+
+
+def test_a_yen_commission_moves_the_dollar_equity_by_its_converted_amount(
+    tmp_path: Path,
+) -> None:
+    bars = _flat("149.99", "150.01", count=2)
+    folder = _folder(
+        tmp_path,
+        markets=[("fx.usdjpy", "USDJPY")],
+        records={"fx.usdjpy": _jpy_record("USDJPY", "usdjpy")},
+        bars={"fx.usdjpy": bars},
+    )
+    loaded = _ok(load_unit_folder(folder))
+    entry = _proposal(
+        loaded.compiled,
+        loaded.records["fx.usdjpy"],
+        market="fx.usdjpy",
+        instant=_instant(0),
+        entry="150.00",
+        stop="149.50",
+        row="row-usdjpy-commission",
+    )
+    rig = _run_folder(
+        folder,
+        rates=ReplayRates(ACCOUNT_CURRENCY, loaded.conversions, loaded.rate_feeds),
+        queued={_instant(0).value_ns: (entry,)},
+        cash=_YenCommission(),
+    )
+    _drive(rig, {"fx.usdjpy": _quote_bars(bars)})
+
+    assert [c.money for c in rig.handler.cash_events] == [Decimal("-1050.00")]
+    assert rig.handler.trades == ()
+    account = cast("Account", rig.handler.read_surfaces()["account"].at(_instant(1)))
+    assert account.equity == Decimal("99993.00")
+
+
+def test_a_close_no_rate_converts_holds_every_entry_and_never_joins_the_equity(
+    tmp_path: Path,
+) -> None:
+    """An adopted USDJPY stop with no rate fact: the exit closes, and the dollar entry beside it
+    skips ``rate_absent`` rather than sizing off a yen loss summed as dollars."""
+    usdjpy: list[Prices] = [
+        (
+            ("149.00", "149.00", "149.00", "149.00"),
+            ("149.20", "149.20", "149.20", "149.20"),
+        ),
+        (
+            ("149.00", "149.00", "149.00", "149.00"),
+            ("149.20", "149.20", "149.20", "149.20"),
+        ),
+    ]
+    eurusd = _flat("1.1000", "1.1002", count=2)
+    folder = _folder(
+        tmp_path,
+        markets=[("fx.eurusd", "EURUSD"), ("fx.usdjpy", "USDJPY")],
+        records={"fx.eurusd": _fixture("eurusd"), "fx.usdjpy": _jpy_record("USDJPY", "usdjpy")},
+        bars={"fx.eurusd": eurusd, "fx.usdjpy": usdjpy},
+    )
+    loaded = _ok(load_unit_folder(folder))
+    dollar_entry = _proposal(
+        loaded.compiled,
+        loaded.records["fx.eurusd"],
+        market="fx.eurusd",
+        instant=_instant(1),
+        entry="1.1000",
+        stop="1.0950",
+        row="row-eurusd-after-the-yen-close",
+    )
+    rig = _run_folder(
+        folder,
+        rates=ReplayRates(ACCOUNT_CURRENCY, loaded.conversions, {}),
+        queued={_instant(1).value_ns: (dollar_entry,)},
+    )
+    _adopt(rig, loaded, "fx.usdjpy", "150.00", "149.50")
+    _drive(rig, {"fx.eurusd": _quote_bars(eurusd), "fx.usdjpy": _quote_bars(usdjpy)})
+
+    trades = [record for record in rig.journal.records if isinstance(record, UnitTrade)]
+    assert [(t.exit_kind, t.money, t.rate) for t in trades] == [
+        (FillKind.STOP, Decimal("-150000.00"), None)
+    ]
+    rows = [record for record in rig.journal.records if isinstance(record, DecisionRow)]
+    assert [(row.row_id, row.outcome, row.reason) for row in rows] == [
+        ("row-eurusd-after-the-yen-close", "skipped", "sizer: rate_absent")
+    ]
+    account = cast("Account", rig.handler.read_surfaces()["account"].at(_instant(1)))
+    assert (account.equity, account.unpriced) == (Decimal("100000"), RATE_ABSENT)
+
+
+def test_the_runs_net_money_is_the_accounts_own_move_in_dollars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One USDJPY stop of 75000 yen at 1/150 reports 500 dollars, not the yen figure."""
+    bars: list[Prices] = [
+        (
+            ("149.99", "149.99", "149.99", "149.99"),
+            ("150.01", "150.01", "150.01", "150.01"),
+        ),
+        (
+            ("150.00", "150.00", "149.00", "149.20"),
+            ("150.00", "150.00", "149.50", "149.60"),
+        ),
+    ]
+    folder = _folder(
+        tmp_path,
+        markets=[("fx.usdjpy", "USDJPY")],
+        records={"fx.usdjpy": _jpy_record("USDJPY", "usdjpy")},
+        bars={"fx.usdjpy": bars},
+    )
+    loaded = _ok(load_unit_folder(folder))
+    entry = _proposal(
+        loaded.compiled,
+        loaded.records["fx.usdjpy"],
+        market="fx.usdjpy",
+        instant=_instant(0),
+        entry="150.00",
+        stop="149.50",
+        row="row-usdjpy-net",
+    )
+    real = unit_runner.construct_unit
+
+    def scripted(compiled: CompiledUnit, **kwargs: object) -> Result[_Scripted]:
+        hosted = real(compiled, **kwargs)  # pyright: ignore[reportArgumentType]
+        if is_refusal(hosted):
+            return hosted
+        return Ok(_Scripted(hosted.value, {_instant(0).value_ns: (entry,)}))
+
+    monkeypatch.setattr(unit_runner, "construct_unit", scripted)
+    result = _ok(run_loaded(loaded, _request(loaded.compiled)))
+
+    assert [(t.exit_kind, t.money, t.rate) for t in result.trades] == [
+        (FillKind.STOP, Decimal("-75000.00"), Fraction(1, 150))
+    ]
+    assert str(result.net_money) == "-500.00"
+
+
+def test_a_raising_rate_port_fails_the_entry_and_the_due_stop_still_closes(
+    tmp_path: Path,
+) -> None:
+    eurusd: list[Prices] = [
+        (
+            ("1.1000", "1.1000", "1.0900", "1.0920"),
+            ("1.1002", "1.1002", "1.0902", "1.0922"),
+        ),
+    ]
+    folder = _folder(
+        tmp_path,
+        markets=[("fx.eurusd", "EURUSD")],
+        records={"fx.eurusd": _fixture("eurusd")},
+        bars={"fx.eurusd": eurusd},
+    )
+    loaded = _ok(load_unit_folder(folder))
+    entry = _proposal(
+        loaded.compiled,
+        loaded.records["fx.eurusd"],
+        market="fx.eurusd",
+        instant=_instant(0),
+        entry="1.0920",
+        stop="1.0870",
+        row="row-eurusd-raising-port",
+    )
+    rig = _run_folder(
+        folder, rates=_RaisingRates(), queued={_instant(0).value_ns: (entry,)}
+    )
+    _adopt(rig, loaded, "fx.eurusd", "1.1000", "1.0950")
+    _drive(rig, {"fx.eurusd": _quote_bars(eurusd)})
+
+    trades = [record for record in rig.journal.records if isinstance(record, UnitTrade)]
+    assert [(t.exit_kind, t.quantity, t.money) for t in trades] == [
+        (FillKind.STOP, Decimal("1.5"), Decimal("-750.00"))
+    ]
+    rows = [record for record in rig.journal.records if isinstance(record, DecisionRow)]
+    assert [(row.row_id, row.outcome, row.reason) for row in rows] == [
+        ("row-eurusd-raising-port", "skipped", "sizer: rate_absent")
+    ]
