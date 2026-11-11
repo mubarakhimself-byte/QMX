@@ -6,9 +6,9 @@ that distance. Two modifiers answer 0.5 and 1.5, so 500 becomes 375 and the venu
 lots. A third reads 3 against a range of 0 to 2, and the row names `factor_out_of_range` while
 that modifier reads neutral with its fail mode.
 
-The last two tests answer the shape `Factor` declares and nothing validates: a float factor, and a
-factor with no range. Each is refused by name with the block on the fault, and the position held on
-the other market still runs its exit on that bar.
+The last three tests answer a shape `Factor` states: a float factor, a factor with no range, and a
+NaN factor, which is type-correct and still unusable. Each is refused by name with the block on the
+fault, benches the unit, and the position held on the other market still runs its exit on that bar.
 """
 
 # pyright: reportPrivateUsage=false
@@ -345,6 +345,8 @@ def test_a_float_factor_keeps_the_held_exit_and_names_the_block() -> None:
 
     assert priced.code == "unit_fault"
     assert priced.intent is None
+    assert unit._core.benched is True, "a fault benches the unit's entries"
+    assert priced.row.reason == "sizer: unit_fault (the modifier odd answered no usable factor)"
     assert [(fault.block, fault.phase.value) for fault in unit._core.pending_faults] == [
         ("level-factor@1", "price")
     ]
@@ -366,6 +368,41 @@ def test_a_factor_with_no_range_keeps_the_held_exit_and_names_the_block() -> Non
 
     assert priced.code == "unit_fault"
     assert priced.intent is None
+    assert unit._core.benched is True, "a fault benches the unit's entries"
+    assert priced.row.reason == "sizer: unit_fault (the modifier odd answered no usable factor)"
+    assert [(fault.block, fault.phase.value) for fault in unit._core.pending_faults] == [
+        ("level-factor@1", "price")
+    ]
+
+
+class _NaN(_Malformed):
+    """A `Factor` whose factor is NaN, built with no cast because `Decimal` is its stated type."""
+
+    def __init__(self) -> None:
+        self._answer = Factor(
+            Decimal("NaN"), (Decimal("0"), Decimal("2")), "the factor is not a number"
+        )
+
+
+def test_a_nan_factor_keeps_the_held_exit_and_names_the_block() -> None:
+    """A NaN factor is refused by name, and the exit on that bar still runs."""
+    unit, instants = _held_unit(_NaN())
+
+    steps = [_ok(unit.on_instant(instant)) for instant in instants[:5]]
+    exits = [
+        (intent.kind.value, intent.reason_code.code)
+        for step in steps
+        for intent in step.intents
+        if isinstance(intent, UnitExitIntent)
+    ]
+    assert exits == [("close_full", "time")], "the held position's exit closes on that bar"
+    assert unit._core.benched is False, "no fault on the held bars has benched the unit yet"
+    priced = unit.price(price._proposal("0.005"), price.hosted.Account(_EQUITY))
+
+    assert priced.code == "unit_fault"
+    assert priced.intent is None
+    assert unit._core.benched is True, "a fault benches the unit's entries"
+    assert priced.row.reason == "sizer: unit_fault (the modifier odd answered no usable factor)"
     assert [(fault.block, fault.phase.value) for fault in unit._core.pending_faults] == [
         ("level-factor@1", "price")
     ]
