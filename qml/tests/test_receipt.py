@@ -9,10 +9,10 @@ The row hash is pinned as a literal on purpose: it is the receipt's identity, so
 input, a step or a verdict the size used must change the hash loudly instead of passing. It is
 read from the implementation once, when the row's shape is fixed, and again each time the stack
 under it moved: when the shipped dummy's numbers each gained the reason and owner rc-23 requires,
-because the receipt covers the document's risk half; when this row joined rc-31's second stream at
-compiler format 9, rc-32's position count at compiler format 10, and rc-21's modifier chain at
-compiler format 11. Each value after the first was read from a failing run at the tree that moved
-it.
+because the receipt covers the document's risk half; when the first join carried rc-31's second
+stream and rc-32's position count in at compiler formats 9 and 10; and when the joins settled this
+row's modifier chain at compiler format 11. Each value after the first was read from a failing run
+at the tree that moved it.
 """
 
 # pyright: reportPrivateUsage=false
