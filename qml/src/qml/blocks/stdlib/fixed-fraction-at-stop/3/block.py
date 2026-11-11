@@ -4,9 +4,10 @@ denominator, as money at risk.
 The money at risk is ``equity * fraction * d / (d + c)``, ``d`` the distance from entry to stop and
 ``c`` the market's cost per fill in price (AD-15). So the loss at the stop plus that cost is the
 fraction of equity, and the one converter spells the venue's quantity from this amount. ``c`` is
-the host's ``market.cost_cell`` fact, held at zero or more, so a cost read only ever shrinks a size.
-A cost the host did not supply, or one that is not a number, reads as the record's stated cost
-stressed, never as zero. The fraction is read from ``evidence`` on every call, so a number that
+the host's ``market.cost_cell`` fact, so a cost read only ever shrinks a size. A cost the host did
+not supply, one that is not a finite number, or one below zero reads as the record's stated cost
+stressed, never as zero: a negative cell is drift or a bad fill price, not a fill that paid
+nothing. The fraction is read from ``evidence`` on every call, so a number that
 moves reaches the size; ``make`` only seeds it (AD-14 step 3).
 """
 
@@ -25,9 +26,9 @@ def _cost(evidence: Mapping[str, object], record: InstrumentRecord) -> Decimal:
     value = getattr(evidence.get("cost_cell"), "value", None)
     if isinstance(value, Fraction):
         value = Decimal(value.numerator) / Decimal(value.denominator)
-    if not isinstance(value, Decimal) or not value.is_finite():
+    if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
         return stressed_cost(record)
-    return max(value, Decimal(0))
+    return value
 
 
 class _FixedFraction:

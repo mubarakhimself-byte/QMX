@@ -32,12 +32,14 @@ from qml.unit.model import Side
 from test_price_call import _EQUITY, _START, _dummy, _record, _sizer_2, _target, _with_sizer
 
 _EURUSD = "fx.eurusd"
-_STORED_HASH = "fp1:sha256:bf5d95dd8320577bb8791cdf18981287f9abfec995b23c60e1c7933f24faee5d"
+_STORED_HASH = "fp1:sha256:43d3a2d31ecdc4679a06d3dbd807c8363af708cd2f6935786ae9a71e3a65322a"
 """The receipt's identity at compiler format 12 with ``fixed-fraction-at-stop@3`` in the stdlib. It
 moved from ``fp1:sha256:43c053de...f3758f2de6d74`` because the row's receipt covers ``logic_fp`` and
 ``risk_fp``, the dummy's helper pins every stdlib entry, and the document's pins are part of both
 halves. With that one pin left out the row hashes to the old value
-(``evidence/rc-28/probe-receipt-pin.log``). The size, the steps and every verdict are the same."""
+(``evidence/rc-28/probe-receipt-pin.log``). It moved again from ``fp1:sha256:bf5d95dd...faee5d``
+when ``@3`` stopped clamping a negative cost cell to zero, which changed that pin's fingerprint.
+The size, the steps and every verdict are the same."""
 
 
 def _proposal(fraction: str) -> hosted.Proposal:

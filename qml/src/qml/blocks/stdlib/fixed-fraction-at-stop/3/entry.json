@@ -10,7 +10,7 @@
   "owner": "risk-session",
   "component_type": "sizer",
   "definition": "Risk a fraction of equity at the stop with the market's cost per fill in the denominator, answered as money at risk so the one converter spells the venue's lots.",
-  "boundaries": "The fraction, whether fixed fractional is the method at all, and how much a cost the unit has not measured is stressed, are the risk session's until the numbers talk. A cost read only shrinks a size; a missing or unreadable cost reads as the record's stated cost, stressed, never as zero.",
+  "boundaries": "The fraction, whether fixed fractional is the method at all, and how much a cost the unit has not measured is stressed, are the risk session's until the numbers talk. A cost read only shrinks a size; a missing, unreadable or negative cost reads as the record's stated cost, stressed, never as zero.",
   "recognition": "Each trade risks the same fraction of equity between entry and stop, counting what a fill costs in that market.",
   "eligible_roles": [
     "sizer"
@@ -101,5 +101,5 @@
     "rule": "constant",
     "observations": 0
   },
-  "fingerprint": "fp1:sha256:5288034186d9b38df383461a2ff7b95386d32d0053017de814f266a534ac4d3c"
+  "fingerprint": "fp1:sha256:558fb325d62b4164c6adc2161f0d4149ba8542a451acb8faf44e60c4042dad85"
 }
