@@ -211,6 +211,7 @@ def record_stored(record: InstrumentRecord) -> Mapping[str, object]:
         ("root", record.root),
         ("rolls_to", record.rolls_to),
         ("funding_interval", record.funding_interval),
+        ("commission_per_lot", record.commission_per_lot),
     )
     for name, value in optional:
         if value is not None:

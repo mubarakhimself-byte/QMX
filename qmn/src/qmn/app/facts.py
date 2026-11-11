@@ -15,6 +15,11 @@ A ``ConversionRef`` names the market by its record's id; this node keys its feed
 recording by the deployment's market id, so ``refs`` maps one to the other once, when the port is
 built.
 
+The cost cells are the node's too, with no second adapter to drift: the node runs QMB's handler,
+which writes each fill into :class:`~qmb.host.facts.CostCells`, so a fill the venue made reads the
+same cost on this node as a replay's fill reads in QMB. The node passes no cash port, so a fill's
+commission is the record's stated one until the venue's deal cash is read.
+
 The currency is named by the caller that binds an account, never defaulted here: the venue states
 its deposit asset by id and nothing on this node turns that id into a name yet.
 """
@@ -26,7 +31,15 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Final, Protocol, runtime_checkable
 
-from qmb.host.facts import RATE_ABSENT, conversions, provided, rate_fact
+from qmb.host.facts import (
+    COST_CELL_MIN_FILLS,
+    RATE_ABSENT,
+    CostCells,
+    conversions,
+    cost_cell_name,
+    provided,
+    rate_fact,
+)
 from qmf.core.chrono import Instant
 from qmf.core.refusal import Result, is_refusal
 from qmf.risk.facts import (
@@ -43,12 +56,15 @@ from qml.protocol.unit import QuoteBar
 __all__ = [
     "BALANCE_READ_S",
     "BALANCE_STALE_S",
+    "COST_CELL_MIN_FILLS",
     "RATE_ABSENT",
     "BalanceSource",
+    "CostCells",
     "FeedRates",
     "LiveAccount",
     "RecordedBars",
     "conversions",
+    "cost_cell_name",
     "provided",
     "rate_fact",
     "refs",

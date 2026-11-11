@@ -15,6 +15,14 @@ one bar each however long the run. The G check's slice is bounded and is driven 
 so ``SliceRates`` reads its bars where they sit. Both answer the same ``rate`` question the
 handler's ``RatePort`` asks.
 
+The cost cells are the third host fact here (AD-15, "Costs are observed facts"). Each fill the one
+handler records is priced against its arrival quote and its commission, and lands in the cell of
+its market, venue and UTC hour. A cell reads ``uncalibrated`` until it has measured
+``COST_CELL_MIN_FILLS`` fills, and until then its value is the measured cost blended with the
+stressed one: the class's pooled cost, never below what the record states, times ``COST_STRESS``.
+One handler serves one host's world, so a handler's cells never mix worlds. The node reads the same
+cells, because it runs the same handler.
+
 This module imports ``qml`` and ``qmf`` only. It never imports the node, and never raises out of
 ``rate``: a bar it cannot price is a fact it does not answer.
 """
@@ -40,15 +48,22 @@ from qmf.risk.facts import (
     rate_name,
 )
 from qml.numbers import ConversionRef, InstrumentRecord
+from qml.numbers.records import COST_STRESS, InstrumentClass, stated_cost
 from qml.protocol.unit import QuoteBar
 
 __all__ = [
+    "COST_CELL_MIN_FILLS",
     "RATE_ABSENT",
     "BarFeed",
+    "CostCell",
+    "CostCells",
     "ReplayAccount",
     "ReplayRates",
     "SliceRates",
     "conversions",
+    "cost_cell_name",
+    "funding_name",
+    "gap_factor_name",
     "provided",
     "rate_fact",
 ]
@@ -56,6 +71,12 @@ __all__ = [
 RATE_ABSENT: Final[str] = "rate_absent"
 """The skip name, and the run stamp, of a market whose conversion bars the host cannot read.
 ``qml/numbers/convert.py`` names the skip and the label repeats the word, so one word reads both."""
+
+COST_CELL_MIN_FILLS: Final[int] = 50
+"""`[costs] cell_min_fills`, starting at 50: the fills a cost cell measures before its own mean is
+read as the cost, the same starting count as `[qmb] calibrated_min_fills`. A labelled placeholder
+for the risk session, owner numbers talk. Range: 1 to 1000."""
+_HOUR_NS: Final[int] = 3_600_000_000_000
 
 BarFeed = Callable[[], Iterator[QuoteBar | TypedRefusal]]
 """One conversion market's closed bars, opened afresh each call, as a run folder keeps them."""
@@ -203,3 +224,84 @@ class SliceRates:
         series = self._bars.get(ref.market_id, ())
         index = bisect.bisect_right(self._stamps.get(ref.market_id, ()), instant.value_ns)
         return None if not index else rate_fact(series[index - 1], ref.invert, "qmb:g")
+
+
+def cost_cell_name(market: str) -> str:
+    """The fact name of one market's cost per fill, in price."""
+    return f"market.cost_cell:{market}"
+
+
+def gap_factor_name(market: str) -> str:
+    """The fact name of the worst loss a stop on one market has filled at, in R of that stop."""
+    return f"market.gap_factor:{market}"
+
+
+def funding_name(market: str) -> str:
+    """The fact name of the money one lot paid or took at one market's last carry booking."""
+    return f"market.funding:{market}"
+
+
+@dataclass(frozen=True, slots=True)
+class CostCell:
+    """What one market cost at one venue in one hour of the day, from the fills measured there."""
+
+    fills: int = 0
+    total: Decimal = Decimal(0)
+    """Every measured fill's cost added up, in price: its spread past the arrival quote and its
+    commission over one lot's value per point."""
+
+
+class CostCells:
+    """One host's cost cells, by market, venue and UTC hour, written from fills (AD-15).
+
+    ``min_fills`` is ``[costs] cell_min_fills`` and ``stress`` is ``[costs] stress_factor``. A host
+    builds one per handler; nothing here reads a venue or a journal.
+    """
+
+    def __init__(
+        self, *, min_fills: int = COST_CELL_MIN_FILLS, stress: Decimal = COST_STRESS
+    ) -> None:
+        self.min_fills = min_fills
+        self.stress = stress
+        self._cells: dict[tuple[str, str, int], CostCell] = {}
+        self._classes: dict[tuple[str, str, int], InstrumentClass] = {}
+
+    @staticmethod
+    def _key(market: str, record: InstrumentRecord, instant: Instant) -> tuple[str, str, int]:
+        return (market, record.venue, instant.value_ns // _HOUR_NS % 24)
+
+    def observe(self, market: str, record: InstrumentRecord, instant: Instant, cost: Decimal) -> None:
+        """Add one fill's cost, in price, to its cell."""
+        key = self._key(market, record, instant)
+        cell = self._cells.get(key, CostCell())
+        self._cells[key] = CostCell(cell.fills + 1, cell.total + cost)
+        self._classes[key] = record.instrument_class
+
+    def cell(self, market: str, record: InstrumentRecord, instant: Instant) -> CostCell:
+        """The cell a fill on ``market`` at ``instant`` lands in, empty before its first fill."""
+        return self._cells.get(self._key(market, record, instant), CostCell())
+
+    def stressed(self, record: InstrumentRecord) -> Decimal:
+        """The cost this host reads for a market it has not measured enough of: every measured
+        fill of the record's class pooled, never below the record's stated cost, stressed."""
+        pooled = [
+            cell
+            for key, cell in self._cells.items()
+            if self._classes[key] is record.instrument_class
+        ]
+        fills = sum(cell.fills for cell in pooled)
+        stated = stated_cost(record)
+        base = stated if not fills else max(stated, sum(c.total for c in pooled) / fills)
+        return base * self.stress
+
+    def fact(self, market: str, record: InstrumentRecord, instant: Instant) -> Fact:
+        """``market.cost_cell:<market>`` at ``instant``: the cell's own mean once it has measured
+        ``min_fills`` fills, and before that its fills blended with the stressed cost for the
+        fills it still lacks, labelled ``uncalibrated``."""
+        cell = self.cell(market, record, instant)
+        source = f"{cell.fills} of {self.min_fills} fills measured at this hour"
+        if cell.fills >= self.min_fills:
+            return Fact(cell.total / cell.fills, instant, "open", source)
+        missing = self.min_fills - cell.fills
+        value = (cell.total + missing * self.stressed(record)) / self.min_fills
+        return Fact(value, instant, "open", source, state="uncalibrated")

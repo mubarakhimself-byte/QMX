@@ -3,6 +3,10 @@
 Part C owns the record and its key list. QML parses the keys it reads into exact values and
 keeps ``data_levels``, ``leverage`` and ``margin`` verbatim for the layers that read them.
 Keys QML does not read are ignored, so a full Part C record parses unchanged.
+
+The record also states what one fill costs before any fill is measured: ``commission_per_lot``,
+and one pip of spread (a tick on a record that states no pip). That stated cost, stressed by
+``COST_STRESS``, is what a sizer reads in place of a cost cell it cannot read (AD-15).
 """
 
 from __future__ import annotations
@@ -19,7 +23,22 @@ from qmf.core.refusal import Ok, Result
 from qml._refuse import invalid
 from qml.unit.schema import DECIMAL_PATTERN
 
-__all__ = ["ConversionRef", "InstrumentClass", "InstrumentRecord", "Pip", "parse_record", "places"]
+__all__ = [
+    "COST_STRESS",
+    "ConversionRef",
+    "InstrumentClass",
+    "InstrumentRecord",
+    "Pip",
+    "parse_record",
+    "places",
+    "stated_cost",
+    "stressed_cost",
+]
+
+COST_STRESS: Final[Decimal] = Decimal(2)
+"""`[costs] stress_factor`, starting at 2: what a cost the unit has not measured enough of is
+multiplied by, so an unmeasured market sizes as if it costs twice what is stated or pooled. A
+labelled placeholder for the risk session, owner numbers talk. Range: 1 to 10."""
 
 
 class InstrumentClass(StrEnum):
@@ -82,6 +101,9 @@ class InstrumentRecord:
     root: str | None = None
     rolls_to: str | None = None
     funding_interval: str | None = None
+    commission_per_lot: Decimal | None = None
+    """Money one lot pays per fill, in the record's quote currency, as the venue states it. None
+    where the record states none; a fill then measures it, or the venue books it."""
     conversions: Mapping[str, ConversionRef] = field(default_factory=dict[str, ConversionRef])
     source: str | None = None
     """Where the record says it comes from: ``shipped`` for the ones that ship with QML, and
@@ -91,6 +113,19 @@ class InstrumentRecord:
     def name(self) -> str:
         """How a problem names this record: venue, symbol and version."""
         return f"{self.venue}:{self.symbol}@{self.record_version}"
+
+
+def stated_cost(record: InstrumentRecord) -> Decimal:
+    """What one fill costs by the record alone, in price: one pip of spread, or one tick where the
+    record states no pip, and its stated commission spread over one lot's value per point."""
+    spread = record.pip.size if record.pip is not None else record.tick_size
+    commission = record.commission_per_lot or Decimal(0)
+    return spread + commission / record.value_per_point
+
+
+def stressed_cost(record: InstrumentRecord, stress: Decimal = COST_STRESS) -> Decimal:
+    """The cost a reader uses when no measured cost can be read: the stated cost, stressed."""
+    return stated_cost(record) * stress
 
 
 def places(number: Decimal) -> int:
@@ -110,6 +145,13 @@ def _positive_decimal(value: object) -> object | None:
     if isinstance(value, str) and re.fullmatch(DECIMAL_PATTERN, value):
         number = Decimal(value)
         return number if number > 0 else None
+    return None
+
+
+def _not_negative_decimal(value: object) -> object | None:
+    if isinstance(value, str) and re.fullmatch(DECIMAL_PATTERN, value):
+        number = Decimal(value)
+        return number if number >= 0 else None
     return None
 
 
@@ -161,6 +203,7 @@ def _conversions(value: object) -> object | None:
 _WANTS: Final[Mapping[_Reader, str]] = {
     _text: "a non-empty string",
     _positive_decimal: 'a positive decimal string such as "0.01"',
+    _not_negative_decimal: 'a decimal string of zero or more such as "7"',
     _whole: "a whole number of zero or more",
     _object: "an object",
     _class: f"one of {', '.join(member.value for member in InstrumentClass)}",
@@ -195,6 +238,7 @@ _KEYS: Final[tuple[tuple[str, str, _Reader, bool], ...]] = (
     ("root", "root", _text, False),
     ("rolls_to", "rolls_to", _text, False),
     ("funding_interval", "funding_interval", _text, False),
+    ("commission_per_lot", "commission_per_lot", _not_negative_decimal, False),
     ("conversions", "conversions", _conversions, False),
     ("source", "source", _text, False),
 )
