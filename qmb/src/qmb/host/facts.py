@@ -293,7 +293,8 @@ class CostCells:
         ]
         fills = sum(cell.fills for cell in pooled)
         stated = stated_cost(record)
-        base = stated if not fills else max(stated, sum(c.total for c in pooled) / fills)
+        total = sum((cell.total for cell in pooled), Decimal(0))
+        base = stated if not fills else max(stated, total / fills)
         return base * self.stress
 
     def fact(self, market: str, record: InstrumentRecord, instant: Instant) -> Fact:

@@ -1035,7 +1035,8 @@ class UnitSliceHandler:
             reason = str(sized.context.get("reason"))
             self._journal.append(Skip(frontier, market, row_id, reason, Decimal(1)))
             return
-        quantity = _decimal(sized.value.value, sized.value.scale) if filled is None else filled
+        sent = _decimal(sized.value.value, sized.value.scale)
+        quantity = sent if filled is None else filled
         residue_r = ((receipt - quantity) / receipt).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)
         side = Side(cast("str", wire["direction"]))
         protection = cast("Mapping[str, object]", wire["protection"])
@@ -1076,7 +1077,7 @@ class UnitSliceHandler:
             row_id,
             decision_quote=self._quotes.pop(row_id, None),
             arrival_quote=_mid(bar.bid.open, bar.ask.open),
-            partial=filled is not None and filled < receipt,
+            partial=quantity < sent,
         )
         self._record_fill(fill)
 

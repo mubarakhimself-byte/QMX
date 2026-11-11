@@ -23,7 +23,7 @@ from qmf.core.fingerprint import Fingerprint
 from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.facts import Fact
 from qmf.risk.unit_intent import UnitIntent
-from qml.blocks.api import Amount, EntryFace, parse_entry
+from qml.blocks.api import Amount, EntryFace, Instance, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, parse_record
@@ -205,7 +205,7 @@ def test_gross_and_net_stay_apart() -> None:
     assert [(t.gross_r, t.net_r) for t in closed] == [(Decimal("1.0000"), Decimal("0.9860"))]
 
 
-def _sizer_v3() -> object:
+def _sizer_v3() -> Instance:
     face = parse_entry((_SIZER / "entry.json").read_bytes())
     assert isinstance(face, EntryFace), face
     lock = [LockEntry(face.entry_id, face.version, face.fingerprint)]
@@ -227,7 +227,7 @@ def _lots(cost: object) -> Decimal | None:
     }
     if cost is not None:
         evidence["cost_cell"] = cost
-    answer = sizer.update(evidence)  # type: ignore[attr-defined]
+    answer = sizer.update(evidence)
     assert isinstance(answer, Amount), answer
     now = Instant(_T0)
     rate = Fact(Decimal(1), now, "open", "the account is in the record's quote currency")
