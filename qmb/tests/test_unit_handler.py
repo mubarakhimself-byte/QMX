@@ -282,6 +282,30 @@ def test_an_entry_keeps_its_minting_rows_stamps_when_another_market_steps_the_un
     ]
 
 
+def test_a_closed_trade_carries_the_sizing_number_it_was_entered_on() -> None:
+    """RC-25: the handler stamps each number in force on the trade, so motion reads the trade."""
+    minting_row = DecisionRow(
+        "row-1",
+        Instant(_T0),
+        _M,
+        Side.LONG,
+        "enter",
+        (SlotOutput("trigger", "trend", "1.08510"),),
+        {"risk_fraction": Decimal("0.005")},
+        "test",
+    )
+
+    handler, _, outcomes = _drive(
+        {_T0: ([_entry("0.50")], [minting_row])}, _four_bars("1.08520", "1.07990")
+    )
+
+    assert all(not is_refusal(o) for o in outcomes)
+    closed = cast("Sequence[ClosedTrade]", handler.read_surfaces()["own_journal"].at(Instant(_T3)))
+    assert [(t.trade_id, t.entry_stamps) for t in closed] == [
+        (_OWN, {"number:risk_fraction": Decimal("0.005"), "trend": Decimal("1.08510")})
+    ]
+
+
 def _four_bars(t2_mid: str, t3_mid: str = "1.08400") -> dict[str, dict[int, QuoteBar]]:
     mids = {_T0: "1.08500", _T1: "1.08520", _T2: t2_mid, _T3: t3_mid}
     return {_M: {at: _bar(at, mid) for at, mid in mids.items()}}

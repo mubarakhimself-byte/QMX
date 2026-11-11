@@ -15,22 +15,31 @@ equity of 100000. The fraction the sizer reads comes from the unit, not from the
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from decimal import Decimal
 from typing import cast
 
+import pytest
 from qmf.core.chrono import Instant
-from qml.compile import CompiledUnit
+from qml.compile import CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.protocol import unit as hosted
-from qml.protocol.unit import Account, CalibrationRow, HostedUnit, Proposal
+from qml.protocol.unit import (
+    Account,
+    CalibrationRow,
+    Fault,
+    FaultPhase,
+    HostedUnit,
+    Proposal,
+)
 from qml.receipt import explain_size, stored_row
 from qml.unit.model import Side
 
 from test_compile_dummy import (
     _START,
     _compiled,
+    _context,
     _document,
     _host,
     _instants,
@@ -45,12 +54,14 @@ _LOSS = Decimal("-0.5")
 _QUARTER_HOUR = 900_000_000_000
 
 
-def _moving_fraction() -> CompiledUnit:
-    """The dummy with ``risk_fraction`` moved by ``own-r-step@1``, cautious toward smaller."""
+def _moving_fraction(start: str = "0.005") -> CompiledUnit:
+    """The dummy with ``risk_fraction`` moved by ``own-r-step@1``, cautious toward smaller, from
+    ``start`` inside its range of 0.0001 to 0.05."""
     document = _document()
     numbers = cast("dict[str, dict[str, object]]", document["numbers"])
     spec = numbers["risk_fraction"]
     spec["kind"] = "calibrated"
+    spec["default"] = start
     spec["motion"] = {
         "mode": "shrink_from_own_trades",
         "source": "own_record",
@@ -79,7 +90,7 @@ def _stamps_at_entry() -> dict[str, Decimal]:
     return dict(row.entry_stamps())
 
 
-def _losses(count: int) -> list[ClosedTrade]:
+def _losses(count: int, r: Decimal = _LOSS) -> list[ClosedTrade]:
     stamps = _stamps_at_entry()
     return [
         ClosedTrade(
@@ -89,7 +100,7 @@ def _losses(count: int) -> list[ClosedTrade]:
             side=Side.LONG,
             market_id=_EURUSD,
             world="replay",
-            r_after_costs=_LOSS,
+            r_after_costs=r,
             entry_stamps=stamps,
         )
         for n in range(1, count + 1)
@@ -161,3 +172,99 @@ def test_explain_size_names_the_row() -> None:
     assert moved.text == f"risk_fraction 0.0049 default 0.005 set by {move.row_id}"
     still = next(seen for seen in trail.numbers if seen.name == "target_r")
     assert still.text == "target_r 2"
+
+
+class _AnswersOutOfRange:
+    """A motion rule out of contract: it answers 0.5 for a fraction whose range ends at 0.05."""
+
+    warm_up_bars = 0
+    state_bound = 0
+
+    def retained(self) -> int:
+        return 0
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal:
+        return Decimal("0.5")
+
+    def export_state(self) -> Mapping[str, object]:
+        return {}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        return None
+
+
+def _drive(unit: HostedUnit) -> tuple[list[CalibrationRow], list[Fault]]:
+    moves: list[CalibrationRow] = []
+    faults: list[Fault] = []
+    for instant in _instants(_slice()):
+        made = _ok(unit.on_instant(instant))
+        moves.extend(row for row in made.calibrations if row.number == "risk_fraction")
+        faults.extend(made.faults)
+    return moves, faults
+
+
+def test_a_move_outside_the_range_keeps_the_old_value_and_faults_the_rule() -> None:
+    unit = _host(_moving_fraction(), _surfaces(_slice(), _losses(20)))
+    unit._core.slow_rules["risk_fraction"] = _AnswersOutOfRange()
+
+    moves, faults = _drive(unit)
+
+    assert moves == []
+    assert unit.calibrated_values["risk_fraction"] == Decimal("0.005")
+    assert Fault("own-r-step@1", FaultPhase.MOTION) in faults
+
+
+@pytest.mark.parametrize(
+    ("start", "r"),
+    [("0.0001", "-0.5"), ("0.05", "0.5")],
+    ids=["losing at the range min", "winning at the range max"],
+)
+def test_own_r_step_holds_at_its_range_edge(start: str, r: str) -> None:
+    unit = _host(_moving_fraction(start), _surfaces(_slice(), _losses(20, Decimal(r))))
+
+    moves, faults = _drive(unit)
+
+    assert (moves, faults) == ([], [])
+    assert unit.calibrated_values["risk_fraction"] == Decimal(start)
+
+
+def test_a_calibrated_brake_number_refuses_until_its_brake_reads_it() -> None:
+    document = _document()
+    numbers = cast("dict[str, dict[str, object]]", document["numbers"])
+    numbers["loss_limit"] = {
+        **{k: v for k, v in numbers["risk_fraction"].items() if k not in ("default", "range")},
+        "kind": "calibrated",
+        "measure": "r",
+        "default": "3",
+        "range": {"min": "1", "max": "5", "step": "0.5"},
+        "motion": {
+            "mode": "shrink_from_own_trades",
+            "source": "own_record",
+            "cadence": {"every_closed_trades": 20},
+            "min_count": 20,
+            "shrink_k": 100,
+            "step_limit": 1,
+            "rule": "own-r-step@1",
+            "rule_params": {"cautious": "-1"},
+        },
+    }
+    document["halts"] = {
+        "position": [],
+        "unit": [
+            {
+                "name": "session_loss",
+                "block": "session-loss-limit-halt@1",
+                "params": {"limit": {"number": "loss_limit"}},
+                "inputs": {},
+                "scope": "unit",
+            }
+        ],
+        "account": [],
+    }
+
+    refused = compile_unit(document, _context())
+
+    assert not isinstance(refused, CompiledUnit)
+    assert [(p.kind, p.where) for p in refused] == [
+        ("motion_not_built", "/numbers/loss_limit/motion")
+    ]
