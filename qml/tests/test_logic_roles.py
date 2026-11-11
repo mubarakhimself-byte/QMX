@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, cast
@@ -211,7 +211,12 @@ def _slot(role: str, *bindings: dict[str, object]) -> dict[str, object]:
     }
 
 
-_EVERY_BAR = {"name": "next_open", "block": "market-next-open@1", "params": {}, "inputs": {}}
+_EVERY_BAR: dict[str, object] = {
+    "name": "next_open",
+    "block": "market-next-open@1",
+    "params": {},
+    "inputs": {},
+}
 _LEVELS = {
     "high_close": _number("ratio", "1.0975", "the close a signal clears, a starting level"),
     "dip_low": _number("ratio", "1.0950", "the low that arms a pullback, a starting level"),
@@ -402,16 +407,9 @@ def test_a_longer_timeout_keeps_the_arm() -> None:
     assert _what(steps) == ["-", "-", "taken"]
 
 
-def _socket_slot(role: str) -> Callable[[Document], None]:
-    def edit(document: Document) -> None:
-        document["logic"]["long"]["slots"]["context"]["role"] = role
-
-    return edit
-
-
 def test_the_census_counts_no_refused_role() -> None:
     """Every logic role compiles in a slot. A socket role there names the section it runs in."""
-    refused = []
+    refused: list[tuple[str, list[tuple[str, str]]]] = []
     for role in Role:
         document = _holding_document(limit=1)
         slots = cast("Document", document["logic"])["long"]["slots"]
