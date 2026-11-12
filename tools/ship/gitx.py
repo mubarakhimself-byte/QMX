@@ -73,7 +73,10 @@ def is_ancestor(repo: Path, older: str, newer: str, timeout: float) -> bool:
 
 
 def patch_id(repo: Path, base: str, head: str, timeout: float) -> str:
-    diff = git(repo, "diff", "--no-renames", "--binary", base, head, timeout=timeout)
+    """`git patch-id --stable` of the whole diff. uv.lock files are left out: landing regenerates
+    them, so their bytes say nothing about whether the reviewed change moved."""
+    diff = git(repo, "diff", "--no-renames", "--binary", base, head, "--", ".",
+               ":(exclude)uv.lock", ":(exclude)**/uv.lock", timeout=timeout)
     if not diff.strip():
         return ""
     out = git(repo, "patch-id", "--stable", input=diff, timeout=timeout)

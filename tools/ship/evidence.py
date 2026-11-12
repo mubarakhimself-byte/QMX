@@ -22,6 +22,18 @@ def end_problem(path: Path, sha: str, dispatch_id: str) -> str | None:
     return None
 
 
+CLEAN = "VERDICT: CLEAN"
+
+
+def verdict_problem(path: Path, sha: str, dispatch_id: str) -> str | None:
+    """None when a review verdict file ends with the right END line and holds the line VERDICT: CLEAN."""
+    problem = end_problem(path, sha, dispatch_id)
+    if problem:
+        return problem
+    lines = [ln.strip() for ln in path.read_text("utf-8", errors="replace").splitlines()]
+    return None if CLEAN in lines else f"{path.name}: no line {CLEAN!r}"
+
+
 def body_without_end(path: Path) -> str:
     lines = path.read_text("utf-8", errors="replace").rstrip().splitlines()
     if lines and lines[-1].startswith("END "):
