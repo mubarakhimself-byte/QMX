@@ -94,7 +94,7 @@ def cmd_recover(a, program, settings):
 def cmd_run_report(a, program, settings):
     from ship.run_report import write_report
 
-    ok, path = write_report(program)
+    ok, path = write_report(program, settings)
     print(path)
     return 0 if ok else 1
 
