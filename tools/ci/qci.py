@@ -131,13 +131,14 @@ def run(
     timeout: float = STEP_TIMEOUT_S,
     env: Mapping[str, str] | None = None,
     stdout_to: Path | None = None,
+    whole_env: bool = False,
 ) -> int:
     print(
         f"$ ({cwd.relative_to(REPO) if cwd.is_relative_to(REPO) else cwd}) {' '.join(argv)}",
         flush=True,
     )
     started = time.monotonic()  # ambient-scan: allow - CI step duration
-    merged = {**os.environ, **(env or {})}
+    merged = dict(env or {}) if whole_env else {**os.environ, **(env or {})}
     if stdout_to is not None:
         stdout_to.parent.mkdir(parents=True, exist_ok=True)
     with stdout_to.open("w", encoding="utf-8") if stdout_to else open(os.devnull, "w") as fh:
@@ -346,7 +347,14 @@ def pytest(
         "--junitxml",
         str(junit),
     ]
-    return run(argv, cwd)
+    return run(argv, cwd, env=test_env(), whole_env=True)
+
+
+def test_env() -> dict[str, str]:
+    """The job's environment without GitLab's own CI_* and GITLAB_* variables. They hold job
+    tokens and proxy settings that the code under test rightly refuses to run beside (the agent
+    harness refuses any name holding PROXY), and no test needs them. `CI` itself stays."""
+    return {k: v for k, v in os.environ.items() if not k.startswith(("CI_", "GITLAB_"))}
 
 
 # ---- jobs -------------------------------------------------------------------------------------

@@ -33,25 +33,36 @@ def main(argv: list[str]) -> int:
     raw = glab(f"projects/{PROJECT}/pipelines/{pipeline}/jobs?per_page=100")
     jobs = cast("list[dict[str, object]]", json.loads(raw))
     reds: set[str] = set()
-    shards = 0
+    read: list[str] = []
+    missing: list[str] = []
     for job in jobs:
-        if not str(job["name"]).startswith(("suite-", "tests-")):
+        name = str(job["name"])
+        if not name.startswith(("suite-", "tests-")):
             continue
-        shards += 1
+        finished = job["status"] == "success" or job.get("failure_reason") == "script_failure"
+        if not finished:
+            missing.append(f"{name} ({job['status']}, {job.get('failure_reason')})")
+            continue
+        read.append(name)
         archive = zipfile.ZipFile(
             io.BytesIO(glab(f"projects/{PROJECT}/jobs/{job['id']}/artifacts"))
         )
-        for name in archive.namelist():
-            if name.startswith("ci-out/reds-") and name.endswith(".txt"):
-                text = archive.read(name).decode("utf-8")
+        for entry in archive.namelist():
+            if entry.startswith("ci-out/reds-") and entry.endswith(".txt"):
+                text = archive.read(entry).decode("utf-8")
                 reds.update(line for line in text.splitlines() if line)
-    header = (
-        f"# Tests red on pipeline {pipeline} ({shards} shards). Key: system|unit|test id.\n"
-        "# A red listed here does not block; any other red does. This list may only shrink.\n"
-    )
+    lines = [
+        f"Tests red on pipeline {pipeline}. Key: system|unit|test id.",
+        "A red listed here does not block; any other red does. This list may only shrink.",
+        f"Shards read: {', '.join(sorted(read)) or 'none'}.",
+        "Shards that did not finish, so their reds are not listed: "
+        + (", ".join(sorted(missing)) or "none")
+        + ".",
+    ]
+    header = "".join(f"# {line}\n" for line in lines)
     target = REPO / "ci" / "baselines" / "known-reds.txt"
     target.write_text(header + "".join(f"{r}\n" for r in sorted(reds)), "utf-8", newline="\n")
-    print(f"{len(reds)} known reds from {shards} shards -> {target.relative_to(REPO)}")
+    print(f"{len(reds)} known reds from {len(read)} shards ({len(missing)} unfinished)")
     return 0
 
 
