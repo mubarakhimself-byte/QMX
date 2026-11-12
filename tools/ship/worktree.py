@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
-from ship.gitx import GitError, git, registered, remote_sha
+from ship.gitx import GitError, git, git_rc, registered, remote_sha
 from ship.proc import stop_processes_under
 from ship.settings import Settings
 
@@ -71,6 +72,34 @@ def remove_worktree(repo: Path, wt: Path, branch: str, remote: str, settings: Se
     except GitError as exc:
         return f"{wt}: git worktree remove failed: {exc}"
     return None
+
+
+def checkout_copy(repo: Path, path: Path, sha: str, settings: Settings) -> Path:
+    """A detached check copy at `sha`, reused between runs so a package setup (a venv) survives."""
+    t = settings.git_timeout_s
+    if registered(repo, path, t):
+        git(path, "reset", "-q", "--hard", timeout=t)
+        git(path, "clean", "-q", "-fd", timeout=t)
+        git(path, "checkout", "-q", "--detach", sha, timeout=t)
+        return path
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    git(repo, "worktree", "prune", timeout=t)
+    git(repo, "worktree", "add", "-q", "--detach", str(path), sha, timeout=t)
+    return path
+
+
+def drop_copy(repo: Path, path: Path, settings: Settings) -> None:
+    """Remove a detached check copy. It sits at a pushed sha and holds no work of its own, so when
+    test leftovers make `git worktree remove` refuse, the folder is deleted and the entry pruned."""
+    t = settings.git_timeout_s
+    if registered(repo, path, t):
+        stop_processes_under(path)
+        if git_rc(repo, "worktree", "remove", str(path), timeout=t) == 0:
+            return
+    shutil.rmtree(path, ignore_errors=True)
+    git(repo, "worktree", "prune", timeout=t)
 
 
 def note_leftover(leftovers: Path, text: str) -> None:

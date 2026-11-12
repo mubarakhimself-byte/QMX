@@ -40,7 +40,7 @@ TRANSITIONS: dict[Status, frozenset[Status]] = {
     S.HELD: frozenset({S.READY, S.RED, S.DEAD, S.PARKED}),
     S.DEAD: frozenset({S.HELD, S.PARKED}),
     S.READY: frozenset({S.CHECKED, S.RED, S.HELD, S.DEAD, S.PARKED}),
-    S.RED: frozenset({S.HELD, S.DEAD, S.PARKED}),
+    S.RED: frozenset({S.RED, S.CHECKED, S.HELD, S.DEAD, S.PARKED}),
     S.CHECKED: frozenset({S.CHECKED, S.RED, S.LANDED, S.HELD, S.DEAD, S.PARKED}),
     S.LANDED: frozenset(),
     S.PARKED: frozenset(),

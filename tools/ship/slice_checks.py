@@ -1,0 +1,170 @@
+"""slice_checks: every check a ready slice must pass at its head, on this machine.
+
+Writes checks/<id>/<head8>/: one log per check, each ending in its PASS, FAIL or NOTRUN line, and
+summary.txt with the same lines. One FAIL anywhere moves the slice to `red`; otherwise `checked`.
+
+Checks: `git diff --check`, case-only path collisions, then per touched package its setup, lint,
+types and tests at the head, and fail-at-parent: each new test case must fail at the parent on an
+assertion (an import, collection or other error does not count) and pass at the head.
+"""
+
+from __future__ import annotations
+
+import shutil
+import sys
+from collections import Counter
+from pathlib import Path, PurePosixPath
+
+from ship import state as st
+from ship.gitx import changed_files, git, git_rc
+from ship.layout import Program
+from ship.settings import Settings
+from ship.state import Status
+from ship.suite import Outcome, Package, load_packages, package_of, run_tests, touched
+from ship.wrapper import run_timed
+from ship.worktree import checkout_copy
+
+CHECKABLE = frozenset({Status.READY, Status.CHECKED, Status.RED})
+
+
+def is_test_module(path: str) -> bool:
+    name = PurePosixPath(path).name
+    return name.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py"))
+
+
+def is_test_support(path: str) -> bool:
+    parts = PurePosixPath(path).parts
+    return path.endswith(".py") and (is_test_module(path) or parts[-1] == "conftest.py"
+                                     or any(p in ("tests", "test") for p in parts[:-1]))
+
+
+class Recorder:
+    def __init__(self, out: Path, slice_id: str, head: str):
+        self.out, self.slice_id, self.head8 = out, slice_id, head[:8]
+        self.lines: list[str] = []
+
+    def record(self, verdict: str, check: str, detail: str = "", log: Path | None = None) -> None:
+        line = f"{verdict} {check} {self.slice_id} {self.head8}" + (f" {detail}" if detail else "")
+        self.lines.append(line)
+        target = log or self.out / f"{check}.log"
+        with open(target, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(line + "\n")
+
+    @property
+    def red(self) -> bool:
+        return any(ln.startswith("FAIL ") for ln in self.lines)
+
+
+def fail_at_parent(rec: Recorder, package: Package, modules: list[str], support: list[str], repo: Path,
+                   head: str, parent: str, head_copy: Path, parent_copy: Path, settings: Settings,
+                   program: Program, heartbeat: Path) -> None:
+    name = f"fail-at-parent-{package.label}"
+    log = rec.out / f"{name}.log"
+    t = settings.git_timeout_s
+    rel = [package.rel(m) for m in modules]
+    at_parent = [package.rel(m) for m in modules if git_rc(repo, "cat-file", "-e", f"{parent}:{m}", timeout=t) == 0]
+    before = run_tests(parent_copy, package, at_parent, rec.out / f"{name}-parent-own.log",
+                       settings.check_timeout_s, settings, program.tmp, heartbeat).outcomes if at_parent else {}
+    for path in support:
+        target = parent_copy / path
+        if git_rc(repo, "cat-file", "-e", f"{head}:{path}", timeout=t) == 0:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(git(repo, "show", f"{head}:{path}", timeout=t).encode("utf-8"))
+        else:
+            target.unlink(missing_ok=True)
+    parent_run = run_tests(parent_copy, package, rel, rec.out / f"{name}-parent.log", settings.check_timeout_s,
+                           settings, program.tmp, heartbeat)
+    head_run = run_tests(head_copy, package, rel, rec.out / f"{name}-head.log", settings.check_timeout_s,
+                         settings, program.tmp, heartbeat)
+    if not head_run.junit_ok or not parent_run.junit_ok:
+        rec.record("FAIL", name, "no JUnit report from the test command", log)
+        return
+    new = sorted(k for k in head_run.outcomes if k not in before and "::::" not in k)
+    if not new:
+        rec.record("NOTRUN", name, "no new test cases in the changed test files", log)
+        return
+    bad = []
+    with open(log, "a", encoding="utf-8", newline="\n") as fh:
+        for test_id in new:
+            at_p = parent_run.outcomes.get(test_id)
+            at_h = head_run.outcomes[test_id]
+            fh.write(f"{test_id} parent={at_p or 'not collected'} head={at_h}\n")
+            if at_p != Outcome.ASSERTION:
+                bad.append(f"{test_id} at parent: {at_p or 'not collected (import or collection error)'}")
+            if at_h != Outcome.PASSED:
+                bad.append(f"{test_id} at head: {at_h}")
+    if bad:
+        rec.record("FAIL", name, f"{len(bad)} of {len(new)} new tests: " + "; ".join(bad), log)
+    else:
+        rec.record("PASS", name, f"{len(new)} new tests fail at the parent on an assertion and pass at the head", log)
+
+
+def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[bool, list[str]]:
+    state = st.load(program)
+    sl = state.slices[slice_id]
+    if sl.status not in CHECKABLE or not sl.head or not sl.parent:
+        return False, [f"{slice_id} is {sl.status}; checks run on a ready slice"]
+    repo, head, parent = Path(state.repo), sl.head, sl.parent
+    out = program.checks(slice_id, head)
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    rec = Recorder(out, slice_id, head)
+    beat = program.heartbeat(slice_id)
+    t = settings.git_timeout_s
+    git(repo, "fetch", "-q", state.remote, timeout=t)
+
+    whitespace = git(repo, "diff", "--check", parent, head, timeout=t, check=False)
+    (out / "diff-check.log").write_text(whitespace, "utf-8", newline="\n")
+    rec.record("FAIL" if whitespace.strip() else "PASS", "diff-check")
+
+    names = git(repo, "ls-tree", "-r", "--name-only", head, timeout=t).splitlines()
+    clashes = sorted(n for n, c in Counter(x.casefold() for x in names).items() if c > 1)
+    rec.record("FAIL" if clashes else "PASS", "case-collision", ", ".join(clashes))
+
+    files = changed_files(repo, parent, head, t)
+    packages = load_packages(program)
+    head_copy = checkout_copy(repo, program.tmp / f"check-{slice_id}-head", head, settings)
+    parent_copy = checkout_copy(repo, program.tmp / f"check-{slice_id}-parent", parent, settings)
+    support = [f for f in files if is_test_support(f)]
+    for package in touched(packages, files):
+        for copy in (head_copy, parent_copy):
+            if package.setup:
+                where = "head" if copy == head_copy else "parent"
+                done = run_timed(list(package.setup), copy / package.root, out / f"setup-{package.label}-{where}.log",
+                                 settings.check_timeout_s, settings, program.tmp, beat)
+                rec.record("PASS" if done.rc == 0 else "FAIL", f"setup-{package.label}-{where}",
+                           f"rc={done.rc}", done.log)
+        for kind in ("lint", "types"):
+            argv = getattr(package, kind)
+            name = f"{kind}-{package.label}"
+            if not argv:
+                rec.record("NOTRUN", name, "no command in checks.toml")
+                continue
+            done = run_timed(list(argv), head_copy / package.root, out / f"{name}.log", settings.check_timeout_s,
+                             settings, program.tmp, beat)
+            rec.record("PASS" if done.rc == 0 else "FAIL", name, f"rc={done.rc}", done.log)
+        name = f"test-{package.label}"
+        run = run_tests(head_copy, package, [], out / f"{name}.log", settings.check_timeout_s, settings,
+                        program.tmp, beat)
+        detail = f"rc={run.run.rc} red={len(run.red())}" + ("" if run.junit_ok else " no JUnit report")
+        rec.record("PASS" if run.clean else "FAIL", name, detail, run.run.log)
+        modules = [f for f in files if is_test_module(f) and package_of(packages, f) == package
+                   and git_rc(repo, "cat-file", "-e", f"{head}:{f}", timeout=t) == 0]
+        if modules:
+            fail_at_parent(rec, package, modules, support, repo, head, parent, head_copy, parent_copy,
+                           settings, program, beat)
+    other = "linux" if sys.platform == "win32" else "windows"
+    rec.record("NOTRUN", other, f"this machine is {sys.platform}; {other} checks run in CI later")
+    rec.record("NOTRUN", "mutation", "mutation testing is not built")
+    (out / "summary.txt").write_text("\n".join(rec.lines) + "\n", "utf-8", newline="\n")
+
+    with st.locked(program) as fresh:
+        now = fresh.slices[slice_id]
+        if now.head == head and now.status in CHECKABLE:
+            fails = [ln for ln in rec.lines if ln.startswith("FAIL ")]
+            if fails:
+                fresh.move(slice_id, Status.RED, f"slice_checks: {len(fails)} FAIL at {head[:8]}")
+            else:
+                fresh.move(slice_id, Status.CHECKED, f"slice_checks green at {head[:8]}")
+    return not rec.red, rec.lines
+
