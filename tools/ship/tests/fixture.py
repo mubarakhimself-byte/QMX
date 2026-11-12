@@ -49,7 +49,7 @@ BRIEF = """\
 
 ```fact F1
 $ git grep -c "def add" -- pkg/app.py
-1
+pkg/app.py:1
 ```
 
 ```fact SAFETY exit=1
