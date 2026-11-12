@@ -61,7 +61,7 @@ $ git grep -n "keyring" -- pkg
 class RepoCase(unittest.TestCase):
     """Each test gets a fresh remote, clone, build branch `build/t`, and program folder."""
 
-    build = "build/t"
+    build_branch = "build/t"
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
@@ -82,7 +82,7 @@ class RepoCase(unittest.TestCase):
         write(self.repo / "pkg" / "tests" / "test_app.py", TEST_APP)
         self.commit("initial")
         sh(self.repo, "git", "push", "-q", "-u", "origin", "main")
-        sh(self.repo, "git", "push", "-q", "origin", f"main:refs/heads/{self.build}")
+        sh(self.repo, "git", "push", "-q", "origin", f"main:refs/heads/{self.build_branch}")
         self.wt_root = root / "wt"
         self.wt_root.mkdir()
         self.program = Program(root / "program")
@@ -100,7 +100,7 @@ class RepoCase(unittest.TestCase):
             heartbeat_interval_s = 1
             power_settle_s = 5
             """).replace("'", '"'))
-        init_state(self.program.dir, self.repo, self.build, self.wt_root, "origin")
+        init_state(self.program.dir, self.repo, self.build_branch, self.wt_root, "origin")
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -112,4 +112,4 @@ class RepoCase(unittest.TestCase):
         return sh(cwd, "git", "rev-parse", "HEAD")
 
     def tip(self) -> str:
-        return sh(self.repo, "git", "ls-remote", "origin", f"refs/heads/{self.build}").split()[0]
+        return sh(self.repo, "git", "ls-remote", "origin", f"refs/heads/{self.build_branch}").split()[0]
