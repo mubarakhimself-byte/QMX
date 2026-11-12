@@ -133,11 +133,15 @@ class State:
         """Park a slice and mark every pending slice that needs it, directly or not, blocked-by it."""
         self.move(slice_id, S.PARKED, f"{cause}: {detail}")
         self.events[-1]["cause"] = str(cause)
+        return self.block_dependents(slice_id, f"needs {slice_id}")
+
+    def block_dependents(self, slice_id: str, reason: str) -> list[str]:
+        """Mark every pending slice that needs `slice_id`, directly or not, blocked-by it."""
         blocked = []
         for dep_id in self.dependents(slice_id):
             dep = self.slices[dep_id]
             if dep.status == S.PENDING:
-                self.move(dep_id, S.BLOCKED_BY, f"needs {slice_id}")
+                self.move(dep_id, S.BLOCKED_BY, reason)
                 dep.blocked_by = slice_id
                 blocked.append(dep_id)
         return blocked
