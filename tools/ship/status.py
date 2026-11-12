@@ -12,6 +12,7 @@ import datetime as dt
 from pathlib import Path
 
 from ship import state as st
+from ship.dispatch import prebuild_problem
 from ship.gitx import GitError, remote_sha
 from ship.layout import Program
 from ship.settings import Settings
@@ -47,7 +48,11 @@ def status(program: Program, settings: Settings, now: dt.datetime | None = None)
                 lines.append(f"UP {sl.id} {quiet / 60:.0f} min since last sign of life")
         held = state.held_count()
         startable = sorted(s.id for s in state.slices.values() if s.status == Status.PENDING
-                           and all(state.slices[d].status == Status.LANDED for d in s.depends_on))
+                           and all(state.slices[d].status == Status.LANDED for d in s.depends_on)
+                           and not prebuild_problem(state, s.id))
+        now_list = [sid for sid in startable if state.ahead(sid) <= 0]
+        early = [sid for sid in startable if state.ahead(sid) == 1]
+        progress = checkpoint_line(state)
         breaker = state.breaker_tripped(settings.breaker_parks)
         usage = state.usage_reset_at
     if program.hold.exists():
@@ -57,5 +62,26 @@ def status(program: Program, settings: Settings, now: dt.datetime | None = None)
     if breaker:
         ok = False
         lines.append(f"BREAKER tripped: {settings.breaker_parks} quality parks in a row; stop the run")
-    lines.append(f"SEATS {held} of {settings.seats} held; could start: {startable}")
+    if progress:
+        lines.append(progress)
+    lines.append(f"SEATS {held} of {settings.seats} held; could start: {now_list}")
+    if early:
+        lines.append(f"PREBUILD could start: {early}")
     return ok, lines
+
+
+def checkpoint_line(state: st.State) -> str | None:
+    """Where the open checkpoint stands. `built` means every slice is landed, parked or blocked-by."""
+    current = state.open_checkpoint()
+    if current is None:
+        return None
+    mine = [s for s in state.slices.values() if s.checkpoint == current]
+    landed = sum(s.status == Status.LANDED for s in mine)
+    stopped = sum(s.status in (Status.PARKED, Status.BLOCKED_BY) for s in mine)
+    pending = sum(s.status == Status.PENDING for s in mine)
+    flying = len(mine) - landed - stopped - pending
+    name = current or "(one checkpoint)"
+    if flying or pending:
+        return (f"CHECKPOINT {name} open: {landed} landed, {flying} in flight, {pending} pending, "
+                f"{stopped} parked or blocked")
+    return f"CHECKPOINT {name} built: {landed} landed, {stopped} parked or blocked; start its review"

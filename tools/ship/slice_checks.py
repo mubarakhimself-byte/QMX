@@ -4,8 +4,10 @@ Writes checks/<id>/<head8>/: one log per check, each ending in its PASS, FAIL or
 summary.txt with the same lines. One FAIL anywhere moves the slice to `red`; otherwise `checked`.
 
 Checks: `git diff --check`, case-only path collisions, then per touched package its setup, lint,
-types and tests at the head, and fail-at-parent: each new test case must fail at the parent on an
-assertion (an import, collection or other error does not count) and pass at the head.
+types and tests at the head; fail-at-parent: each new test case must fail at the parent on an
+assertion (an import, collection or other error does not count) and pass at the head; Vulture and
+Skylos, failing only on a finding in the slice's files that is neither at the parent nor in the
+baseline (see quality.py). Last, the brief's SAFETY fact at the head.
 """
 
 from __future__ import annotations
@@ -16,8 +18,11 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 
 from ship import state as st
+from ship.dispatch import run_facts
 from ship.gitx import changed_files, git, git_rc
 from ship.layout import Program
+from ship.plan import PlanError, read_brief_facts
+from ship.quality import check_package
 from ship.settings import Settings
 from ship.state import Status
 from ship.suite import Outcome, Package, load_packages, package_of, run_tests, touched
@@ -99,6 +104,22 @@ def fail_at_parent(rec: Recorder, package: Package, modules: list[str], support:
         rec.record("PASS", name, f"{len(new)} new tests fail at the parent on an assertion and pass at the head", log)
 
 
+def safety_at_head(program: Program, slice_id: str, head_copy: Path, out: Path,
+                   settings: Settings) -> tuple[str, str, str]:
+    """The brief's SAFETY fact, rerun at the head: the fixed line the slice depends on still holds."""
+    try:
+        facts = [f for f in read_brief_facts(program.brief(slice_id)) if f.id == "SAFETY"]
+    except PlanError as exc:
+        return "FAIL", "safety", f"brief unreadable: {exc}"
+    if not facts:
+        return "NOTRUN", "safety", "the brief has no SAFETY fact"
+    (line,) = run_facts(facts, head_copy, settings)
+    (out / "safety.log").write_text(line + "\n", "utf-8", newline="\n")
+    if line.startswith("PASS"):
+        return "PASS", "safety", "the SAFETY fact gives the brief's output at the head"
+    return "FAIL", "safety", "the SAFETY fact differs at the head, see safety.log"
+
+
 def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[bool, list[str]]:
     state = st.load(program)
     sl = state.slices[slice_id]
@@ -153,9 +174,15 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
         if modules:
             fail_at_parent(rec, package, modules, support, repo, head, parent, head_copy, parent_copy,
                            settings, program, beat)
+        mine = [f for f in files if package_of(packages, f) == package]
+        for tool in ("vulture", "skylos"):
+            verdict, detail = check_package(tool, package, head_copy, parent_copy, mine, out, "slice", settings,
+                                            program, beat)
+            rec.record(verdict, f"quality-{tool}-{package.label}", detail)
+    rec.record(*safety_at_head(program, slice_id, head_copy, out, settings))
     other = "linux" if sys.platform == "win32" else "windows"
     rec.record("NOTRUN", other, f"this machine is {sys.platform}; {other} checks run in CI later")
-    rec.record("NOTRUN", "mutation", "mutation testing is not built")
+    rec.record("NOTRUN", "mutation", "mutmut runs on the changed functions at the checkpoint (ship quality)")
     (out / "summary.txt").write_text("\n".join(rec.lines) + "\n", "utf-8", newline="\n")
 
     with st.locked(program) as fresh:

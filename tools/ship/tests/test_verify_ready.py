@@ -19,19 +19,40 @@ class VerifyReady(RepoCase):
         self.d = dispatch(self.program, "s1", self.settings)
         self.wt = self.wt_root / "slice-s1"
 
-    def build(self, extra=None, push=True, end=True):
+    def build(self, extra=None, push=True, end=True, pr="TRACE: s1 -> P1 -> S1\n\nShipped by Mubarak.\n",
+              message="s1: mul"):
         write(self.wt / "pkg" / "mul.py", MUL)
         write(self.wt / "pkg" / "tests" / "test_mul.py", TEST_MUL)
         for path, text in (extra or {}).items():
             write(self.wt / path, text)
-        sha = self.commit("s1: mul", self.wt)
+        sha = self.commit(message, self.wt)
         if push:
             sh(self.wt, "git", "push", "-q", "-u", "origin", "slice/s1")
         evidence = self.program.evidence("s1", 1)
-        for name in ("how.md", "red.log", "report.md"):
+        for name in ("how.md", "red.log", "report.md", "pr.md"):
             tail = f"END {sha} {self.d.dispatch_id}\n" if end else ""
-            write(evidence / name, f"# {name}\nbody\n{tail}")
+            write(evidence / name, f"# {name}\nbody\n{pr if name == 'pr.md' else ''}{tail}")
         return sha
+
+    def test_pr_body_needs_its_trace_line_and_no_credit_line(self):
+        sha = self.build(pr="TRACE: s2 -> P1 -> S1\nCo-Authored-By: Someone <x@y>\n",
+                         message="s1: mul\n\nGenerated with a tool")
+        ok, lines = verify_ready(self.program, "s1", sha, self.settings)
+        self.assertFalse(ok)
+        self.assertEqual(lines, [
+            "pr.md: no line 'TRACE: s1 -> <plan ids> -> <ask>'",
+            "pr.md: credit line 'Co-Authored-By: Someone <x@y>'",
+            f"commit {sha[:8]}: credit line 'Generated with a tool'",
+        ])
+        self.assertEqual(self.prs(), [])
+
+    def test_trace_must_end_in_the_slices_ask(self):
+        with st.locked(self.program) as state:
+            state.slices["s1"].ask = "S2"
+        sha = self.build()
+        ok, lines = verify_ready(self.program, "s1", sha, self.settings)
+        self.assertFalse(ok)
+        self.assertEqual(lines, ["pr.md: TRACE ends in 'S1', the slice serves 'S2'"])
 
     def prs(self):
         path = self.repo / ".git" / "fake-gh.json"
@@ -43,7 +64,7 @@ class VerifyReady(RepoCase):
         self.assertTrue(ok, lines)
         (pr,) = self.prs()
         self.assertEqual((pr["baseRefName"], pr["head"], pr["title"]), ("build/t", "slice/s1", "s1: Multiply"))
-        self.assertEqual(pr["body"], "# report.md\nbody\n")
+        self.assertEqual(pr["body"], "# pr.md\nbody\nTRACE: s1 -> P1 -> S1\n\nShipped by Mubarak.\n")
         sl = st.load(self.program).slices["s1"]
         self.assertEqual((sl.status, sl.head, sl.pr), (Status.READY, sha, "https://github.test/pr/1"))
 
@@ -63,6 +84,7 @@ class VerifyReady(RepoCase):
             "evidence how.md: last line is 'body', want " + repr(f"END {sha} {self.d.dispatch_id}"),
             "evidence red.log: last line is 'body', want " + repr(f"END {sha} {self.d.dispatch_id}"),
             "evidence report.md: last line is 'body', want " + repr(f"END {sha} {self.d.dispatch_id}"),
+            "evidence pr.md: last line is 'Shipped by Mubarak.', want " + repr(f"END {sha} {self.d.dispatch_id}"),
             "files outside the brief: ['pkg/app.py']",
         ])
 

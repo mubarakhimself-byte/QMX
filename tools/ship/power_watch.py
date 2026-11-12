@@ -100,6 +100,19 @@ def _event(program: Program, kind: str, **detail: object) -> None:
             state.log(kind, None, **detail)
 
 
+def power_report(program: Program, settings: Settings, now: float | None = None) -> tuple[int, list[str]]:
+    """Read-only, for sessions that do not run the watcher (the checkpoint review). Exit 2: no watcher
+    has written power.json lately, start one. Exit 1: HOLD, wait and retry on the next tick. Exit 0: go."""
+    now = time.time() if now is None else now
+    watched = program.power.exists() and now - program.power.stat().st_mtime < settings.watcher_stale_s
+    lines = ["WATCHER running" if watched else "NO WATCHER: start `ship power_watch` in the background"]
+    if program.hold.exists():
+        lines.append(f"HOLD {program.hold.read_text('utf-8').strip()}")
+    else:
+        lines.append("CLEAR")
+    return (0 if lines[1] == "CLEAR" else 1) if watched else 2, lines
+
+
 def watch(program: Program, settings: Settings, once: bool = False) -> int:
     while True:
         line = step(program, settings, on_mains(), time.time(), lambda: probe_network(program, settings))

@@ -85,6 +85,55 @@ def cmd_power_watch(a, program, settings):
     return watch(program, settings, once=a.once)
 
 
+def cmd_power(a, program, settings):
+    from ship.power_watch import power_report
+
+    rc, lines = power_report(program, settings)
+    for line in lines:
+        print(line)
+    return rc
+
+
+def cmd_merged(a, program, settings):
+    from ship import state as st
+
+    try:
+        with st.locked(program) as state:
+            print(state.mark_merged(a.checkpoint))
+    except st.StateError as exc:
+        print(f"REFUSED {exc}")
+        return 1
+    return 0
+
+
+def cmd_quality(a, program, settings):
+    from ship.quality import checkpoint_quality
+
+    return _lines(*checkpoint_quality(program, settings, a.base, _tools(a.tools)))
+
+
+def cmd_baseline(a, program, settings):
+    from ship.quality import baseline
+
+    part = None
+    if a.part:
+        k, _, n = a.part.partition("/")
+        part = (int(k), int(n))
+        if not 1 <= part[0] <= part[1]:
+            raise SystemExit(f"--part {a.part}: want K/N with 1 <= K <= N")
+    return _lines(*baseline(program, settings, a.at, _tools(a.tools), part))
+
+
+def _tools(text: str) -> tuple[str, ...]:
+    from ship.quality import TOOLS
+
+    tools = tuple(t.strip() for t in text.split(",") if t.strip())
+    unknown = sorted(set(tools) - set(TOOLS))
+    if unknown:
+        raise SystemExit(f"--tools: unknown {unknown}; known {list(TOOLS)}")
+    return tools
+
+
 def cmd_recover(a, program, settings):
     from ship.recover import recover
 
@@ -162,6 +211,12 @@ def parser() -> argparse.ArgumentParser:
     add("nightly", cmd_nightly)
     add("bisect-step", cmd_bisect_step, (["--ids"], {"required": True}))
     add("power_watch", cmd_power_watch, (["--once"], {"action": "store_true"}))
+    add("power", cmd_power)
+    add("merged", cmd_merged, (["checkpoint"], {}))
+    add("quality", cmd_quality, (["--from"], {"required": True, "dest": "base"}),
+        (["--tools"], {"default": "vulture,skylos,mutmut"}))
+    add("baseline", cmd_baseline, (["--at"], {}), (["--tools"], {"default": "vulture,skylos,mutmut"}),
+        (["--part"], {}))
     add("recover", cmd_recover, (["--usage-reset"], {}))
     add("run_report", cmd_run_report)
     add("preflight", cmd_preflight, (["--protection-push-test"], {"action": "store_true"}))

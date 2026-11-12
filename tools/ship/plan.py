@@ -10,6 +10,7 @@ from pathlib import Path
 from ship.state import Slice
 
 SLICE_COLUMNS = {"id": "id", "name": "name", "depends on": "depends_on", "files": "files", "size": "size"}
+OPTIONAL_COLUMNS = {"ask": "ask", "stop": "checkpoint", "checkpoint": "checkpoint"}
 NONE_WORDS = {"", "-", "none", "n/a"}
 
 
@@ -27,6 +28,11 @@ def _items(cell: str) -> list[str]:
     return [part.strip().strip("`").strip() for part in cell.split(",") if part.strip().strip("`").strip()]
 
 
+def _optional(cell: str) -> str:
+    cell = cell.strip().strip("`").strip()
+    return "" if cell.casefold() in NONE_WORDS else cell
+
+
 def parse_slices(text: str) -> list[Slice]:
     """The first markdown table whose header holds the columns id, name, depends on, files, size."""
     lines = text.splitlines()
@@ -37,6 +43,7 @@ def parse_slices(text: str) -> list[Slice]:
         if not set(SLICE_COLUMNS) <= set(header):
             continue
         index = {SLICE_COLUMNS[name]: header.index(name) for name in SLICE_COLUMNS}
+        extra = {field: header.index(name) for name, field in OPTIONAL_COLUMNS.items() if name in header}
         slices = []
         for row in lines[i + 2 :]:
             if not row.lstrip().startswith("|"):
@@ -50,6 +57,7 @@ def parse_slices(text: str) -> list[Slice]:
                     depends_on=_items(cells[index["depends_on"]]),
                     files=[f.replace("\\", "/") for f in _items(cells[index["files"]])],
                     size=cells[index["size"]],
+                    **{field: _optional(cells[i]) for field, i in extra.items()},
                 )
             )
         ids = [s.id for s in slices]

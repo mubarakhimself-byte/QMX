@@ -1,10 +1,12 @@
-"""land: put a batch of checked, reviewed slices on the build branch.
+"""land: put a batch of checked slices on the build branch.
 
 In a detached landing copy at the build tip, each slice in dependency order is squashed into one
-commit. A uv.lock conflict is resolved by regenerating the lock, never by hand-merging. The slice's
-review carries over only when its `git patch-id` is unchanged and no file it touches was changed by
-a slice that landed after its dispatch; otherwise the script writes the range-diff and waits for a
-range verdict. Then it runs the tests of every package the batch and the slices landed since touched,
+commit. A uv.lock conflict is resolved by regenerating the lock, never by hand-merging. A slice whose
+checkpoint is after the open one (pre-built during a review) is held until that checkpoint merges.
+The slice's checks carry over only when its `git patch-id` is unchanged and no file it touches was
+changed by a slice that landed after its dispatch; otherwise the rebased commit goes back to `ready`
+for slice_checks (RECHECK). With `slice_verdict_required` on, a CLEAN slice verdict is also needed,
+and a changed patch waits for a range verdict on the range-diff the script writes. Then it runs the tests of every package the batch and the slices landed since touched,
 blocks only on reds missing from baseline-reds.txt, fast-forwards the build branch, rewrites the
 baseline, marks the slices landed, closes their PRs, and removes each slice worktree once its remote
 branch equals its local head (never --force).
@@ -37,6 +39,10 @@ def _order(state: st.State, ids: list[str]) -> list[str]:
         ordered.extend(ready or pending)
         pending = [i for i in pending if i not in ordered]
     return ordered
+
+
+def rebased_ref(slice_id: str) -> str:
+    return f"refs/ship/rebased/{slice_id}"
 
 
 def _lock_dirs(files: list[str]) -> set[str]:
@@ -101,6 +107,11 @@ class Landing:
         overlap = sorted(since & mine)
         if before == after and not overlap:
             return True
+        why = "patch-id changed" if before != after else "same patch-id"
+        why += f", overlap with slices landed since: {overlap}" if overlap else ""
+        if not self.settings.slice_verdict_required:
+            self.recheck(sl, cur, new, why.removeprefix("same patch-id, "))
+            return False
         range_verdict = self.program.range_verdict(sl.id, after)
         if not verdict_problem(range_verdict, sl.head, sl.holder.dispatch_id):
             self.say(f"RANGE-OK {sl.id}: range verdict {range_verdict.name} is CLEAN")
@@ -109,10 +120,18 @@ class Landing:
         self.program.review_dir.mkdir(parents=True, exist_ok=True)
         path = self.program.review_dir / f"{sl.id}-range-{after[:8]}.diff"
         path.write_text(diff, "utf-8", newline="\n")
-        why = "patch-id changed" if before != after else "same patch-id"
-        why += f", overlap with slices landed since: {overlap}" if overlap else ""
         self.say(f"REVIEW {sl.id}: {why}; range-diff at {path}; a CLEAN verdict at {range_verdict} lands it")
         return False
+
+    def recheck(self, sl: st.Slice, cur: str, new: str, why: str) -> None:
+        """Without slice verdicts, a rebase that changed the slice sends the rebased commit back through
+        slice_checks. A ref keeps the commit; the next landing finds the patch unchanged and lands it."""
+        with st.locked(self.program) as state:
+            git(Path(state.repo), "update-ref", rebased_ref(sl.id), new, timeout=self.settings.git_timeout_s)
+            fresh = state.slices[sl.id]
+            fresh.parent, fresh.head = cur, new
+            state.move(sl.id, Status.READY, f"land: {why}; slice_checks again at the rebased head {new[:8]}")
+        self.say(f"RECHECK {sl.id}: {why}; run slice_checks {sl.id} on the rebased head {new[:8]}")
 
     def _red(self, slice_id: str, reason: str) -> None:
         with st.locked(self.program) as state:
@@ -123,14 +142,20 @@ class Landing:
         program, settings, t = self.program, self.settings, self.settings.git_timeout_s
         state = st.load(program)
         repo = Path(state.repo)
-        wanted = ids or [s.id for s in state.slices.values() if s.status == Status.CHECKED]
+        checked = [s.id for s in state.slices.values() if s.status == Status.CHECKED]
+        held = [sid for sid in checked if state.ahead(sid) > 0]
+        if held and not ids:
+            self.say(f"HELD {held} until checkpoint {state.open_checkpoint()} merges")
+        wanted = ids or [sid for sid in checked if sid not in held]
         candidates = []
         for sid in _order(state, wanted):
             sl = state.slices[sid]
             problem = None
             if sl.status != Status.CHECKED or not sl.head:
                 problem = f"is {sl.status}, not checked"
-            else:
+            elif state.ahead(sid) > 0:
+                problem = f"checkpoint {sl.checkpoint} lands after checkpoint {state.open_checkpoint()} merges"
+            elif settings.slice_verdict_required:
                 problem = verdict_problem(program.verdict(sid, sl.head), sl.head, sl.holder.dispatch_id)
             if problem:
                 self.say(f"SKIP {sid}: {problem}")
@@ -201,6 +226,7 @@ class Landing:
         for sid in included:
             sl = state.slices[sid]
             self.say(f"PASS land-{sid} landed as {commits[sid]}")
+            git(repo, "update-ref", "-d", rebased_ref(sid), timeout=t, check=False)
             if sl.pr:
                 run([*settings.gh, "pr", "close", sl.pr, "--comment",
                      f"Landed on {state.build_branch} as {commits[sid]}."], repo, t, check=False)

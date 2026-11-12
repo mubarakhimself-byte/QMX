@@ -1,5 +1,6 @@
 """dispatch: give a slice a seat. Refuses on a hold, a pending usage reset, no free seat, an unlanded
-dependency, or files that overlap an in-flight slice. A first attempt reruns the brief's facts against
+dependency, files that overlap an in-flight slice, or a checkpoint too far ahead: only the next
+checkpoint after the open one may be pre-built, and only on files the open checkpoint does not touch. A first attempt reruns the brief's facts against
 the build-branch tip and parks the slice on any mismatch. A fix round or a restart saves leftovers as
 a patch and resets the worktree to the last pushed sha. Records the holder in state.json."""
 
@@ -57,6 +58,19 @@ def run_facts(facts: list[Fact], cwd: Path, settings: Settings) -> list[str]:
     return lines
 
 
+def prebuild_problem(state: st.State, slice_id: str) -> str | None:
+    """A slice of the next checkpoint may be built while the open one builds or is reviewed, but only on
+    files the open checkpoint does not touch, because its review's fix batch may change those."""
+    ahead, current, sl = state.ahead(slice_id), state.open_checkpoint(), state.slices[slice_id]
+    if ahead > 1:
+        return f"{slice_id} is in checkpoint {sl.checkpoint}, {ahead} ahead of the open checkpoint {current}"
+    if ahead == 1:
+        clash = overlaps(sl.files, state.checkpoint_files(current))
+        if clash:
+            return f"pre-build: files overlap checkpoint {current}, which is building or in review: {clash}"
+    return None
+
+
 def _usage_wait(state: st.State) -> str | None:
     if not state.usage_reset_at:
         return None
@@ -95,6 +109,9 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
         unlanded = [d for d in sl.depends_on if state.slices[d].status != Status.LANDED]
         if unlanded:
             raise Refused(f"{slice_id} waits on {unlanded}")
+        problem = prebuild_problem(state, slice_id)
+        if problem:
+            raise Refused(problem)
         if state.held_count() >= settings.seats:
             raise Refused(f"no free seat: {state.held_count()} of {settings.seats} held")
         clashes = [f"{other.id}: {a} ~ {b}" for other in state.slices.values()

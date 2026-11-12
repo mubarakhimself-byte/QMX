@@ -32,6 +32,12 @@ class Package:
     lint: tuple[str, ...] = ()
     types: tuple[str, ...] = ()
     test: tuple[str, ...] = DEFAULT_TEST
+    vulture: tuple[tuple[str, ...], ...] = ()  # quality tools: each a list of argv, run in order
+    skylos: tuple[tuple[str, ...], ...] = ()
+    mutmut: tuple[tuple[str, ...], ...] = ()
+
+    def quality(self, tool: str) -> tuple[tuple[str, ...], ...]:
+        return getattr(self, tool)
 
     @property
     def label(self) -> str:
@@ -50,12 +56,20 @@ def load_packages(program: Program) -> list[Package]:
     raw = tomllib.loads(program.checks_toml.read_text("utf-8")).get("package", [])
     packages = []
     for item in raw:
-        unknown = set(item) - {"root", "setup", "lint", "types", "test"}
+        unknown = set(item) - {"root", "setup", "lint", "types", "test", *QUALITY_KEYS}
         if unknown:
             raise SystemExit(f"checks.toml: unknown keys {sorted(unknown)} in package {item.get('root')}")
-        packages.append(Package(**{k: tuple(v) if isinstance(v, list) else v.replace("\\", "/").rstrip("/") or "."
-                                   for k, v in item.items()}))
+        values = {}
+        for k, v in item.items():
+            if k in QUALITY_KEYS:
+                values[k] = tuple(tuple(a) for a in v) if v and isinstance(v[0], list) else (tuple(v),)
+            else:
+                values[k] = tuple(v) if isinstance(v, list) else v.replace("\\", "/").rstrip("/") or "."
+        packages.append(Package(**values))
     return packages
+
+
+QUALITY_KEYS = ("vulture", "skylos", "mutmut")
 
 
 def package_of(packages: list[Package], path: str) -> Package | None:

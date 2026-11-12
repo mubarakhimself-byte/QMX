@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from ship import state as st
-from ship.power_watch import on_mains, on_mains_linux, probe_network, step
+from ship.power_watch import on_mains, on_mains_linux, power_report, probe_network, step
 from ship.settings import load_settings
 from ship.tests.fixture import RepoCase, write
 
@@ -44,6 +44,16 @@ class PowerSteps(RepoCase):
         write(self.program.hold, "operator: stop\n")
         self.assertEqual(self.go(True, 0), "MAINS")
         self.assertEqual(self.program.hold.read_text("utf-8"), "operator: stop\n")
+
+    def test_power_report_says_whether_a_watcher_runs_and_whether_to_wait(self):
+        self.assertEqual(power_report(self.program, self.settings, now=1000.0),
+                         (2, ["NO WATCHER: start `ship power_watch` in the background", "CLEAR"]))
+        self.go(False, 10)
+        mtime = self.program.power.stat().st_mtime
+        rc, lines = power_report(self.program, self.settings, now=mtime + 60)
+        self.assertEqual((rc, lines[0]), (1, "WATCHER running"))
+        self.assertTrue(lines[1].startswith("HOLD power: on battery since"))
+        self.assertEqual(power_report(self.program, self.settings, now=mtime + 301)[0], 2)
 
     def test_github_probe_reaches_the_real_remote(self):
         settings = load_settings(self.program.dir)

@@ -6,6 +6,7 @@ from pathlib import Path
 from ship import state as st
 from ship.land import land
 from ship.settings import load_settings
+from ship.slice_checks import slice_checks
 from ship.state import Status
 from ship.tests.fixture import RepoCase, sh, write
 
@@ -52,7 +53,18 @@ class Land(LandCase):
         self.assertEqual([p["state"] for p in prs], ["CLOSED", "CLOSED"])
         self.assertIn("PASS land-tests", "\n".join(lines))
 
-    def test_slice_without_clean_verdict_is_skipped(self):
+    def verdicts_required(self):
+        self.setting("slice_verdict_required = true")
+        self.settings = load_settings(self.program.dir)
+
+    def test_checked_slice_lands_without_a_verdict_by_default(self):
+        self.checked("s1", {"pkg/mul.py": MUL}, clean=False)
+        ok, lines = land(self.program, ["s1"], self.settings)
+        self.assertTrue(ok, lines)
+        self.assertEqual(self.build_log(), ["s1: Multiply", "initial"])
+
+    def test_slice_without_clean_verdict_is_skipped_when_verdicts_are_required(self):
+        self.verdicts_required()
         head = self.checked("s1", {"pkg/mul.py": MUL}, clean=False)
         ok, lines = land(self.program, ["s1"], self.settings)
         self.assertFalse(ok)
@@ -72,7 +84,8 @@ class Land(LandCase):
         self.assertIn("BASELINE removed ['.::pkg.tests.test_app::test_add']", lines)
         self.assertEqual(self.program.baseline_reds.read_text("utf-8"), ".::pkg.tests.test_mul::test_mul\n")
 
-    def test_overlap_with_slice_landed_since_needs_range_review(self):
+    def test_overlap_with_slice_landed_since_needs_range_review_when_verdicts_are_required(self):
+        self.verdicts_required()
         write(self.repo / "pkg" / "shared.py", LONG_APP)
         self.commit("shared file")
         sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
@@ -98,6 +111,35 @@ class Land(LandCase):
         self.assertTrue(ok, lines)
         self.assertEqual(sh(self.repo, "git", "show", f"origin/{self.build_branch}:pkg/shared.py").splitlines()[::31],
                          ["TOP = 1", "BOTTOM = 1"])
+
+    def test_rebase_that_changes_the_patch_sends_the_slice_back_to_its_checks(self):
+        write(self.repo / "pkg" / "shared.py", LONG_APP)
+        self.commit("shared file")
+        sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
+        with st.locked(self.program) as state:
+            state.slices["s1"].files.append("pkg/shared.py")
+        self.checked("s1", {"pkg/shared.py": "TOP = 1\n" + LONG_APP}, clean=False)
+        with st.locked(self.program) as state:
+            state.slices["s1"].files.remove("pkg/shared.py")
+            state.slices["s2"].files.append("pkg/shared.py")
+        self.checked("s2", {"pkg/shared.py": LONG_APP + "BOTTOM = 1\n"}, clean=False)
+        self.assertTrue(land(self.program, ["s1"], self.settings)[0])
+        after_s1 = self.tip()
+        ok, lines = land(self.program, ["s2"], self.settings)
+        self.assertFalse(ok)
+        (recheck,) = [ln for ln in lines if ln.startswith("RECHECK s2")]
+        sl = st.load(self.program).slices["s2"]
+        self.assertEqual((sl.status, sl.parent), (Status.READY, after_s1))
+        self.assertEqual(recheck, f"RECHECK s2: overlap with slices landed since: ['pkg/shared.py']; "
+                                  f"run slice_checks s2 on the rebased head {sl.head[:8]}")
+        self.assertEqual(sh(self.repo, "git", "rev-parse", f"{sl.head}~1"), after_s1)
+        ok, lines = slice_checks(self.program, "s2", self.settings)
+        self.assertTrue(ok, lines)
+        ok, lines = land(self.program, ["s2"], self.settings)
+        self.assertTrue(ok, lines)
+        self.assertEqual(sh(self.repo, "git", "show", f"origin/{self.build_branch}:pkg/shared.py").splitlines()[::31],
+                         ["TOP = 1", "BOTTOM = 1"])
+        self.assertEqual(sh(self.repo, "git", "for-each-ref", "refs/ship/"), "")
 
     def test_pyproject_change_regenerates_uv_lock(self):
         regen = write(self.root / "regen.py", "open('uv.lock', 'w').write('regenerated\\n')\n")

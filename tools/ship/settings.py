@@ -33,7 +33,11 @@ class Settings:
     keep_awake_poll_s: int = 30  # the keep-awake helper checks its flag this often
     teardown_wait_s: int = 120  # how long teardown waits for the keep-awake helper to exit
     updates_paused_min_h: float = 12  # Windows updates must stay paused at least this long
-    evidence_required: tuple[str, ...] = ("how.md", "red.log", "report.md")
+    evidence_required: tuple[str, ...] = ("how.md", "red.log", "report.md", "pr.md")
+    slice_verdict_required: bool = False  # land wants a CLEAN slice verdict; off: machine checks gate, review is at checkpoints
+    quality_dir: str = ""  # quality baselines and BACKLOG.md; "" means <worktree_root>/ship-quality, shared by programs
+    quality_timeout_s: int = 3600  # one Skylos, Vulture or mutmut command
+    watcher_stale_s: int = 300  # power.json older than this means no power_watch is running
     data_env_vars: tuple[str, ...] = ("QMX_HOME", "QMX_DATA_DIR")  # pointed at the run's temp folder
     strip_env_prefixes: tuple[str, ...] = ("CLAUDE", "ANTHROPIC")  # removed from every test run
     gh: tuple[str, ...] = ("gh",)

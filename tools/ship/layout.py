@@ -91,6 +91,9 @@ class Program:
     def nightly(self, tip: str) -> Path:
         return self.checks_root / "_nightly" / tip[:8]
 
+    def quality(self, tip: str) -> Path:
+        return self.checks_root / "_quality" / tip[:8]
+
     def landing(self, batch: str) -> Path:
         return self.checks_root / "_land" / batch
 

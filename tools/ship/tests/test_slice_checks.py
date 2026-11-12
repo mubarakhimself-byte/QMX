@@ -37,12 +37,23 @@ class SliceChecks(RepoCase):
             f"NOTRUN types-root s1 {h8} no command in checks.toml",
             f"PASS test-root s1 {h8} rc=0 red=0",
             f"PASS fail-at-parent-root s1 {h8} 1 new tests fail at the parent on an assertion and pass at the head",
+            f"NOTRUN quality-vulture-root s1 {h8} no command in checks.toml",
+            f"NOTRUN quality-skylos-root s1 {h8} no command in checks.toml",
+            f"PASS safety s1 {h8} the SAFETY fact gives the brief's output at the head",
             *[ln for ln in self.summary(head) if ln.startswith("NOTRUN linux") or ln.startswith("NOTRUN windows")],
-            f"NOTRUN mutation s1 {h8} mutation testing is not built",
+            f"NOTRUN mutation s1 {h8} mutmut runs on the changed functions at the checkpoint (ship quality)",
         ])
         self.assertEqual(st.load(self.program).slices["s1"].status, Status.CHECKED)
         log = (self.program.checks("s1", head) / "fail-at-parent-root.log").read_text("utf-8")
         self.assertIn(".::pkg.tests.test_mul::test_mul parent=assertion-failure head=passed", log)
+
+    def test_safety_fact_that_changes_at_the_head_fails(self):
+        head = self.make_ready("s1", {"pkg/mul.py": "import keyring\n" + MUL, "pkg/tests/test_mul.py": REAL_TEST})
+        ok, lines = slice_checks(self.program, "s1", self.settings)
+        self.assertFalse(ok)
+        self.assertIn(f"FAIL safety s1 {head[:8]} the SAFETY fact differs at the head, see safety.log", lines)
+        log = (self.program.checks("s1", head) / "safety.log").read_text("utf-8")
+        self.assertIn("pkg/mul.py:1:import keyring", log)
 
     def test_import_error_at_parent_does_not_count(self):
         head = self.make_ready("s1", {"pkg/mul.py": MUL, "pkg/tests/test_mul.py": VACUOUS_TEST})

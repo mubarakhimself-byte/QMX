@@ -1,10 +1,12 @@
-"""verify_ready: run when a builder replies READY <sha>. Five checks, then the PR with an explicit base.
+"""verify_ready: run when a builder replies READY <sha>. Six checks, then the PR with an explicit base.
 
 1. the remote slice branch equals the reported sha;
 2. the sha descends from the slice's parent;
 3. the diff from the parent is not empty;
 4. each required evidence file ends `END <sha> <dispatch id>`;
-5. the changed files match the brief's files, and none overlaps another in-flight slice.
+5. the builder's PR body `pr.md` holds `TRACE: <slice> -> <plan ids> -> <ask>`, ending in the slice's
+   ask when SLICES.md names one, and neither it nor any commit message carries a credit line;
+6. the changed files match the brief's files, and none overlaps another in-flight slice.
 
 Any failure moves the slice to `red` (BLOCKED). On success the script opens the PR (or adopts the open
 one), confirms its base is the build branch and its head is the sha, and moves the slice to `ready`.
@@ -13,6 +15,7 @@ one), confirms its base is the build branch and its head is the sha, and moves t
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -46,6 +49,10 @@ def problems(program: Program, state: st.State, slice_id: str, sha: str, setting
         problem = end_problem(evidence / name, sha, sl.holder.dispatch_id)
         if problem:
             found.append(f"evidence {problem}")
+    found += pr_problems(evidence / "pr.md", sl)
+    for line in git(repo, "log", "--format=%H%x09%B%x00", f"{sl.parent}..{sha}", timeout=t).split("\0"):
+        short, _, body = line.strip().partition("\t")
+        found += [f"commit {short[:8]}: credit line {c!r}" for c in credit_lines(body)]
     extra = outside(sl.files, files)
     if extra:
         found.append(f"files outside the brief: {extra}")
@@ -54,6 +61,29 @@ def problems(program: Program, state: st.State, slice_id: str, sha: str, setting
             clash = overlaps(files, other.files)
             if clash:
                 found.append(f"changed files overlap in-flight {other.id}: {clash}")
+    return found
+
+
+CREDIT = re.compile(r"co-authored-by:|generated with", re.I)
+
+
+def credit_lines(text: str) -> list[str]:
+    """Model or tool credit lines. PRs and commits carry none."""
+    return [ln.strip() for ln in text.splitlines() if CREDIT.search(ln)]
+
+
+def pr_problems(path: Path, sl: st.Slice) -> list[str]:
+    """The builder's PR body names its chain (`TRACE: <slice> -> <plan ids> -> <ask>`) and credits no model."""
+    if not path.is_file():
+        return []
+    text = path.read_text("utf-8", errors="replace")
+    found = []
+    trace = [ln.strip() for ln in text.splitlines() if ln.strip().startswith(f"TRACE: {sl.id} -> ")]
+    if not trace:
+        found.append(f"pr.md: no line 'TRACE: {sl.id} -> <plan ids> -> <ask>'")
+    elif sl.ask and trace[0].rsplit("->", 1)[-1].strip() != sl.ask:
+        found.append(f"pr.md: TRACE ends in {trace[0].rsplit('->', 1)[-1].strip()!r}, the slice serves {sl.ask!r}")
+    found += [f"pr.md: credit line {c!r}" for c in credit_lines(text)]
     return found
 
 

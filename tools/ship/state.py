@@ -41,7 +41,7 @@ TRANSITIONS: dict[Status, frozenset[Status]] = {
     S.DEAD: frozenset({S.HELD, S.PARKED}),
     S.READY: frozenset({S.CHECKED, S.RED, S.HELD, S.DEAD, S.PARKED}),
     S.RED: frozenset({S.RED, S.CHECKED, S.HELD, S.DEAD, S.PARKED}),
-    S.CHECKED: frozenset({S.CHECKED, S.RED, S.LANDED, S.HELD, S.DEAD, S.PARKED}),
+    S.CHECKED: frozenset({S.CHECKED, S.READY, S.RED, S.LANDED, S.HELD, S.DEAD, S.PARKED}),
     S.LANDED: frozenset(),
     S.PARKED: frozenset(),
     S.BLOCKED_BY: frozenset(),
@@ -83,6 +83,8 @@ class Slice:
     depends_on: list[str]
     files: list[str]
     size: str = ""
+    ask: str = ""  # the SCOPE.md ask it serves, from SLICES.md's `ask` column
+    checkpoint: str = ""  # the stop point it lands in, from SLICES.md's `stop` column; "" when there is none
     status: Status = S.PENDING
     reason: str = ""
     blocked_by: str | None = None
@@ -113,6 +115,7 @@ class State:
     usage_reset_at: str | None = None
     last_green: str | None = None  # build tip of the last green nightly
     nightly: dict = dataclasses.field(default_factory=dict)
+    merged: list[str] = dataclasses.field(default_factory=list)  # checkpoints merged into the target, in order
     schema: int = SCHEMA
 
     def worktree(self, slice_id: str) -> Path:
@@ -168,6 +171,38 @@ class State:
             elif event["to"] == S.PARKED and event.get("cause") in QUALITY_CAUSES:
                 run += 1
         return run >= limit
+
+    def checkpoints(self) -> list[str]:
+        """Checkpoint ids in the order SLICES.md first names them."""
+        return list(dict.fromkeys(sl.checkpoint for sl in self.slices.values()))
+
+    def open_checkpoint(self) -> str | None:
+        """The first checkpoint not merged yet: its slices build and land now."""
+        return next((c for c in self.checkpoints() if c not in self.merged), None)
+
+    def ahead(self, slice_id: str) -> int:
+        """How far the slice's checkpoint sits after the open one. 1 may be pre-built but not landed."""
+        order, current = self.checkpoints(), self.open_checkpoint()
+        if current is None:
+            return 0
+        return order.index(self.slices[slice_id].checkpoint) - order.index(current)
+
+    def checkpoint_files(self, checkpoint: str) -> list[str]:
+        return [f for sl in self.slices.values() if sl.checkpoint == checkpoint for f in sl.files]
+
+    def mark_merged(self, checkpoint: str) -> str:
+        """Record a checkpoint merged into the target. Run twice, the second run changes nothing."""
+        if checkpoint in self.merged:
+            return f"checkpoint {checkpoint} was already recorded merged"
+        current = self.open_checkpoint()
+        if checkpoint != current:
+            raise StateError(f"checkpoint {checkpoint} is not the open one ({current})")
+        busy = sorted(s.id for s in self.slices.values() if s.checkpoint == checkpoint and s.status in IN_FLIGHT)
+        if busy:
+            raise StateError(f"checkpoint {checkpoint} still has slices in flight: {busy}")
+        self.merged.append(checkpoint)
+        self.log("merged", None, checkpoint=checkpoint)
+        return f"checkpoint {checkpoint} merged; {self.open_checkpoint() or 'no checkpoint'} is open"
 
     def held_count(self) -> int:
         return sum(1 for sl in self.slices.values() if sl.status == S.HELD)

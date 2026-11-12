@@ -9,6 +9,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from ship import state as st
 from ship.layout import Program
 from ship.plan import init_state
 
@@ -112,6 +113,18 @@ class RepoCase(unittest.TestCase):
         sh(cwd, "git", "commit", "-q", "-m", message)
         return sh(cwd, "git", "rev-parse", "HEAD")
 
+    def use_slices(self, table: str, briefs: list[str]) -> None:
+        """Replace SLICES.md before any dispatch and start state.json again from it."""
+        write(self.program.slices_md, table)
+        for sid in briefs:
+            write(self.program.brief(sid), BRIEF)
+        self.program.state.unlink()
+        init_state(self.program.dir, self.repo, self.build_branch, self.wt_root, "origin")
+
+    def setting(self, line: str) -> None:
+        path = self.program.dir / "ship.toml"
+        path.write_text(path.read_text("utf-8") + line + "\n", "utf-8")
+
     def tip(self) -> str:
         return sh(self.repo, "git", "ls-remote", "origin", f"refs/heads/{self.build_branch}").split()[0]
 
@@ -129,7 +142,9 @@ class RepoCase(unittest.TestCase):
         sha = self.commit(f"{sid}: work", wt)
         sh(wt, "git", "push", "-q", "-u", "origin", got.branch)
         for name in settings.evidence_required:
-            write(self.program.evidence(sid, got.attempt) / name, f"{name}\nEND {sha} {got.dispatch_id}\n")
+            ask = st.load(self.program).slices[sid].ask or "S1"
+            body = f"{name}\nTRACE: {sid} -> P1 -> {ask}\n" if name == "pr.md" else f"{name}\n"
+            write(self.program.evidence(sid, got.attempt) / name, f"{body}END {sha} {got.dispatch_id}\n")
         ok, lines = verify_ready(self.program, sid, sha, settings)
         if not ok:
             raise AssertionError(lines)
