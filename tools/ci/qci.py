@@ -367,19 +367,41 @@ def job_tests(system: str) -> int:
     grouped: dict[ci_units.Unit, list[str]] = {}
     for f in mine:
         grouped.setdefault(f.unit, []).append(f.path)
-    for workspace in sorted({u.workspace for u in grouped}):
+    for workspace in sorted({w for u in grouped for w in ci_units.workspaces_for(u)}):
         sync(workspace)
-    failed: list[str] = []
+    crashed: list[str] = []
+    reds: list[str] = []
     for unit, paths in sorted(grouped.items(), key=lambda item: item[0].root):
         stem = f"{system}-{index}-{unit.root.replace('/', '_')}"
         for serial in (False, True):
             junit = OUT / "junit" / f"{stem}{'-serial' if serial else ''}.xml"
             rc = pytest(REPO / unit.cwd, sorted(paths), junit, serial=serial)
-            if rc not in (0, 5):
-                failed.append(f"{unit.root}{' (serial)' if serial else ''}: rc={rc}")
-    for line in failed:
-        print(f"FAIL {line}")
-    return 1 if failed else 0
+            if rc not in (0, 1, 5) or (rc == 1 and not junit.exists()):
+                crashed.append(f"{unit.root}{' (serial)' if serial else ''}: pytest rc={rc}")
+            reds += [
+                red_key(system, unit, test_id)
+                for test_id, outcome in outcomes(junit).items()
+                if outcome in ("assertion", "failed", "error")
+            ]
+    return tests_verdict(f"{system}-{index}", reds, crashed)
+
+
+def red_key(system: str, unit: ci_units.Unit, test_id: str) -> str:
+    return f"{system}|{unit.root}|{test_id}"
+
+
+def tests_verdict(name: str, reds: list[str], crashed: list[str]) -> int:
+    """Reds listed in ci/baselines/known-reds.txt (red on engine/base when it was taken) are
+    reported and do not block; any other red, or a pytest that crashed, does."""
+    known = set(ratchet.read_baseline(BASELINES / "known-reds.txt"))
+    new = sorted(r for r in set(reds) if r not in known)
+    lines = [f"{len(set(reds))} red tests, {len(new)} not in known-reds.txt"]
+    lines += [f"FAIL {c}" for c in crashed]
+    lines += [f"NEW RED {r}" for r in new]
+    lines += [f"known red {r}" for r in sorted(set(reds) & known)]
+    (OUT / f"reds-{name}.txt").write_text("".join(f"{r}\n" for r in sorted(set(reds))), "utf-8")
+    print("\n".join(lines))
+    return 1 if new or crashed else 0
 
 
 def job_lint() -> int:
@@ -446,7 +468,7 @@ def job_fail_at_parent() -> int:
         return 0
     parent_copy = Path(tempfile.mkdtemp(prefix="qmx-parent-")) / "repo"
     git("worktree", "add", "--detach", str(parent_copy), base)
-    for workspace in sorted({u.workspace for u in by_unit}):
+    for workspace in sorted({w for u in by_unit for w in ci_units.workspaces_for(u)}):
         sync(workspace)
         sync(workspace, root=parent_copy)
     problems: list[ratchet.Finding] = []

@@ -35,7 +35,6 @@ variables:
   UV_VERSION: "0.12.6"
   UV_LINK_MODE: copy
   UV_PYTHON_DOWNLOADS: automatic
-  FORCE_COLOR: "0"
 
 default:
   interruptible: true
@@ -80,7 +79,10 @@ default:
 lint:
   extends: [.linux, .slice-deep-release]
   stage: check
-  script: [python tools/ci/qci.py lint]
+  script:
+    # pyright runs on Node; pyright-python's own Node download fails on this image.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends nodejs > /dev/null
+    - python tools/ci/qci.py lint
 
 vulture:
   extends: [.linux, .slice-deep-release]

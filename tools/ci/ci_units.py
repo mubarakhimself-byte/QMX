@@ -191,3 +191,11 @@ def is_test_support(path: str) -> bool:
         or parts[-1] == "conftest.py"
         or any(p in ("tests", "test") for p in parts[:-1])
     )
+
+
+def workspaces_for(unit: Unit) -> tuple[str, ...]:
+    """The environments a unit's tests need. The workspace tools and QA suites also drive the
+    agents workspace through `uv run --project qmx-agents --no-sync`, so it must be synced too."""
+    if unit.workspace == ROOT_WS and (unit.root == "tools" or unit.root.startswith("qa")):
+        return (ROOT_WS, AGENTS_WS)
+    return (unit.workspace,)
