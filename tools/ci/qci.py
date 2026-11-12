@@ -16,6 +16,7 @@ import enum
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -68,6 +69,16 @@ SKYLOS_BLOCKING = frozenset(
     }
 )
 SKYLOS_NOTES_ONLY_PREFIX = ("unused_", "quality", "forgotten", "circular_dependencies")
+# The finding lists in Skylos's JSON (skylos/commands/scan_cmd.py, _DIFF_FINDING_CATEGORIES).
+# Other top-level lists, such as `whitelisted` and `suppressed`, are not findings.
+SKYLOS_FINDING_CATEGORIES = frozenset(
+    {
+        *("unused_functions", "unused_imports", "unused_classes", "unused_variables"),
+        *("unused_parameters", "unused_files", "unused_fixtures", "unused_exports", "forgotten"),
+        *("danger", "reliability", "ai_defects", "quality", "secrets", "custom_rules"),
+        *("circular_dependencies", "dependency_vulnerabilities", "publisher_change_findings"),
+    }
+)
 SKYLOS_BLOCKING_SEVERITY = frozenset({"critical", "high"})
 SMOKE_PORT = 18766
 
@@ -79,6 +90,7 @@ class Level(enum.StrEnum):
     GATE = "gate"  # merge request into engine/base
     RELEASE = "release"  # tag v*
     WALK = "walk"  # one part of the scheduled whole-repo mutation walk
+    BASELINE = "baseline"  # rewrite ci/baselines from this commit; the files are job artifacts
 
 
 Scope = Literal["touched", "all"]
@@ -126,29 +138,40 @@ def run(
     )
     started = time.monotonic()  # ambient-scan: allow - CI step duration
     merged = {**os.environ, **(env or {})}
-    try:
-        if stdout_to is None:
-            rc = subprocess.run(
-                list(argv), cwd=cwd, env=merged, timeout=timeout, check=False
-            ).returncode
-        else:
-            stdout_to.parent.mkdir(parents=True, exist_ok=True)
-            with stdout_to.open("w", encoding="utf-8") as fh:
-                rc = subprocess.run(
-                    list(argv),
-                    cwd=cwd,
-                    env=merged,
-                    timeout=timeout,
-                    check=False,
-                    stdout=fh,
-                    stderr=subprocess.STDOUT,
-                ).returncode
-    except subprocess.TimeoutExpired:
-        print(f"TIMEOUT after {timeout:.0f}s", flush=True)
-        rc = 124
+    if stdout_to is not None:
+        stdout_to.parent.mkdir(parents=True, exist_ok=True)
+    with stdout_to.open("w", encoding="utf-8") if stdout_to else open(os.devnull, "w") as fh:
+        child = subprocess.Popen(
+            list(argv),
+            cwd=cwd,
+            env=merged,
+            stdout=fh if stdout_to else None,
+            stderr=subprocess.STDOUT if stdout_to else None,
+            start_new_session=os.name != "nt",
+        )
+        try:
+            rc = child.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            kill_tree(child)
+            print(f"TIMEOUT after {timeout:.0f}s; stopped the process tree", flush=True)
+            rc = 124
     elapsed = time.monotonic() - started  # ambient-scan: allow - CI step duration
     print(f"  -> rc={rc} in {elapsed:.0f}s", flush=True)
     return rc
+
+
+def kill_tree(child: subprocess.Popen[bytes]) -> None:
+    """Stop a timed-out step and everything it started, so no tool outlives its step."""
+    if os.name == "nt":
+        subprocess.run(
+            [shutil.which("taskkill") or "taskkill", "/T", "/F", "/PID", str(child.pid)],
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+    else:
+        os.killpg(child.pid, signal.SIGKILL)
+    child.wait(timeout=60)
 
 
 def uv() -> str:
@@ -240,7 +263,7 @@ def base_for(lvl: Level, at: str) -> str | None:
             if before and before != ZERO_SHA and git_ok("cat-file", "-e", before):
                 return before
             return merge_base(at, f"refs/remotes/origin/{ENGINE}")
-        case Level.DEEP | Level.WALK | Level.GATE:
+        case Level.DEEP | Level.WALK | Level.GATE | Level.BASELINE:
             return merge_base(at, f"refs/remotes/origin/{ENGINE}")
         case Level.RELEASE:
             return previous_release(at)
@@ -542,7 +565,8 @@ def ratchet_verdict(tool: str, found: list[ratchet.Finding], scope: list[str] | 
     report += [("BLOCK " if f.blocking else "note  ") + f.text() for f in fresh]
     (OUT / f"{tool}-new.txt").write_text("\n".join(report) + "\n", "utf-8")
     ratchet.write_junit(OUT / "junit" / f"{tool}.xml", tool, fresh)
-    print("\n".join(report))
+    print("\n".join(line for line in report if not line.startswith("note")))
+    print(f"(notes, which do not block, are in ci-out/{tool}-new.txt)")
     return 1 if blocking else 0
 
 
@@ -583,6 +607,12 @@ def vulture_findings() -> list[ratchet.Finding]:
     return found
 
 
+def keep_baseline(name: str) -> None:
+    """Copy a rewritten baseline into ci-out/baselines, so a CI job hands it over as an artifact."""
+    (OUT / "baselines").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(BASELINES / name, OUT / "baselines" / name)
+
+
 def job_vulture(write_baseline: bool) -> int:
     lvl = level()
     at = head()
@@ -594,6 +624,7 @@ def job_vulture(write_baseline: bool) -> int:
             f"Vulture {VULTURE} --min-confidence 80 over {' '.join(VULTURE_PATHS)}.\n"
             f"Taken at {at[:10]}. Key: path|rule|message; line numbers are left out.",
         )
+        keep_baseline("vulture.txt")
         print(f"wrote {len(found)} findings to ci/baselines/vulture.txt")
         return 0
     scope = changed_files(base_for(lvl, at), at) if lvl == Level.SLICE else None
@@ -645,7 +676,7 @@ def skylos_findings(report: Path) -> list[ratchet.Finding]:
     root = REPO.as_posix() + "/"
     found: list[ratchet.Finding] = []
     for category, items in sorted(data.items()):
-        if not isinstance(items, list):
+        if category not in SKYLOS_FINDING_CATEGORIES or not isinstance(items, list):
             continue
         for raw in cast("list[object]", items):
             if not isinstance(raw, dict):
@@ -715,6 +746,7 @@ def job_skylos(write_baseline: bool) -> int:
             f"Skylos {SKYLOS} `skylos . -a --no-upload`, scope from [tool.skylos].\n"
             f"Taken at {at[:10]}. Key: path|category:rule|name; line numbers are left out.",
         )
+        keep_baseline("skylos.txt")
         print(f"wrote {len(found)} findings to ci/baselines/skylos.txt")
         return 0
     scope = changed_files(base, at) if base is not None else None
@@ -858,7 +890,7 @@ def job_mutmut() -> int:
     )
     for line in broken:
         print(f"FAIL {line}")
-    if lvl == Level.WALK or os.environ.get("QMX_MUTATE_MODULES"):
+    if lvl in (Level.WALK, Level.BASELINE) or os.environ.get("QMX_MUTATE_MODULES"):
         print(f"{len(found)} surviving mutants recorded (walk: not a gate)")
         return 1 if broken else 0
     verdict = ratchet_verdict(f"mutmut-{shard}", found, None) if found else 0
@@ -958,9 +990,9 @@ def main(argv: list[str] | None = None) -> int:
             case "fail-at-parent":
                 return job_fail_at_parent()
             case "vulture":
-                return job_vulture(args.write_baseline)
+                return job_vulture(args.write_baseline or level() == Level.BASELINE)
             case "skylos":
-                return job_skylos(args.write_baseline)
+                return job_skylos(args.write_baseline or level() == Level.BASELINE)
             case "mutmut":
                 return job_mutmut()
             case "verdict":

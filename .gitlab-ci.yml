@@ -9,6 +9,8 @@
 #   gate     merge request into engine/base: passes only if a green deep run tested its head.
 #   release  tag v*: everything in deep plus a smoke start of the host on Linux and Windows.
 #   walk     scheduled: one part of the whole-repo mutmut walk (QMX_WALK_PART, QMX_WALK_PARTS).
+#   baseline on demand: Vulture and Skylos rewrite ci/baselines (artifact ci-out/baselines), and
+#            mutmut runs the modules in QMX_MUTATE_MODULES (comma-separated), as a walk.
 # Any level can be forced with the QMX_LEVEL variable (glab ci run --variables, a push option, a
 # schedule). QMX_BASE overrides the commit changes are measured from.
 
@@ -70,7 +72,7 @@ default:
 
 .slice-deep-release:
   rules:
-    - if: $QMX_LEVEL =~ /^(slice|deep|release)$/
+    - if: $QMX_LEVEL =~ /^(slice|deep|release|baseline)$/
 
 .deep-release:
   rules:
@@ -78,6 +80,8 @@ default:
 
 lint:
   extends: [.linux, .slice-deep-release]
+  rules:
+    - if: $QMX_LEVEL =~ /^(slice|deep|release)$/
   stage: check
   script:
     # pyright runs on Node; pyright-python's own Node download fails on this image.
@@ -144,7 +148,7 @@ mutmut-walk:
   parallel: 3
   timeout: 90m
   rules:
-    - if: $QMX_LEVEL == "walk"
+    - if: $QMX_LEVEL =~ /^(walk|baseline)$/
   script: [python tools/ci/qci.py mutmut]
 
 smoke-linux:

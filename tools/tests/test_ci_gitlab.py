@@ -161,3 +161,13 @@ def test_skylos_blocks_security_and_high_findings_but_only_notes_dead_code(tmp_p
         ("qmn/src/b.py", "unused_functions:unused_functions", False),
         ("qmn/src/c.py", "quality:SKY-Q301", False),
     }
+
+
+def test_skylos_lists_that_are_not_findings_are_ignored(tmp_path: Path) -> None:
+    report = tmp_path / "skylos.json"
+    report.write_text(
+        '{"whitelisted": [{"file": "a.py", "line": 1, "name": "BLOCKED", "severity": "HIGH"}],'
+        ' "suppressed": [{"file": "b.py", "line": 2, "name": "x"}], "danger": []}',
+        "utf-8",
+    )
+    assert qci.skylos_findings(report) == []
