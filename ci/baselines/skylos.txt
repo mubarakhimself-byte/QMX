@@ -1,0 +1,5 @@
+# Skylos 5.6.0 `skylos . -a --no-upload`, scope from [tool.skylos]. NO BASELINE TAKEN YET (12 November 2026).
+# The whole-repo scan did not finish: GitLab stopped it at 29 minutes for the compute quota (pipeline 3061228415),
+# on Windows it ran past its 40-minute step limit at low CPU, and in WSL (7.8 GB) the kernel killed it for memory.
+# A slice scan with --diff-base finished in 15 minutes with 0 findings (pipeline 3061223199).
+# Rewrite this file by pushing ci/gitlab to a baseline/** branch once minutes are bought.
