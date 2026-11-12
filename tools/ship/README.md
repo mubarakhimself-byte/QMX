@@ -10,7 +10,7 @@ Run any command as:
 python tools/ship <command> --program <program folder> [arguments]
 ```
 
-The program folder is the planner's handoff (`PROGRAM.md`, `SLICES.md`, `slices/<id>/BRIEF.md`, ...). The scripts add their run files to it.
+The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slices/<id>/BRIEF.md`, ...). The scripts add their run files to it.
 
 ## Commands
 
@@ -23,10 +23,14 @@ The program folder is the planner's handoff (`PROGRAM.md`, `SLICES.md`, `slices/
 | `dispatch <id>` | `state.json`, `HOLD`, `slices/<id>/BRIEF.md`, the build tip | the worktree, `evidence/<id>/<attempt>/facts.log`, `leftover.patch`, `state.json` | 0 dispatched (JSON), 2 refused, 3 parked |
 | `timed --slice <id> --log L [--timeout S] -- <argv>` | nothing | the log, `heartbeat/<id>` | the command's exit code, 124 on timeout |
 | `verify_ready <id> <sha>` | `state.json`, remote, `evidence/<id>/<attempt>/` | the PR, `state.json` | 0 ready, 1 blocked |
-| `slice_checks <id>` | `state.json`, `checks.toml`, head and parent | `checks/<id>/<head8>/`, `state.json` | 0 green, 1 red |
-| `land [<id> ...]` | `state.json`, `review/`, `checks.toml`, `baseline-reds.txt` | the build branch, `baseline-reds.txt`, `review/<id>-range-*.diff`, `checks/_land/<batch>/`, `leftovers.md`, `state.json` | 0 all landed, 1 otherwise |
+| `slice_checks <id>` | `state.json`, `checks.toml`, the brief, head and parent, the quality baselines | `checks/<id>/<head8>/`, `state.json` | 0 green, 1 red |
+| `land [<id> ...]` | `state.json`, `checks.toml`, `baseline-reds.txt`, `review/` (verdict mode only) | the build branch, `baseline-reds.txt`, `refs/ship/rebased/<id>`, `checks/_land/<batch>/`, `leftovers.md`, `state.json` | 0 all landed, 1 otherwise |
 | `nightly` | `state.json`, `checks.toml`, `baseline-reds.txt` | `checks/_nightly/<tip8>/`, `baseline-reds.txt` on the first run, `state.json` | 0 green, 1 red |
+| `quality --from <sha> [--tools vulture,skylos,mutmut]` | `state.json`, `checks.toml`, the quality baselines | `checks/_quality/<tip8>/` | 0 no new finding, 1 otherwise |
+| `baseline [--at REF] [--tools ...] [--part K/N]` | `checks.toml`, the code at REF (default the build tip) | `<quality dir>/baseline-<tool>.tsv`, `BACKLOG.md`, `runs/` | 0, 1 when a tool did not run |
+| `merged <checkpoint>` | `state.json` | `state.json` (`merged`) | 0 recorded or already, 1 refused |
 | `power_watch [--once]` | the power line, the remote | `HOLD`, `power.json`, `state.json` events | 0 |
+| `power` | `power.json`, `HOLD` | nothing | 0 go, 1 HOLD (wait), 2 no watcher (start one) |
 | `recover [--usage-reset ISO]` | `state.json`, worktrees, remote | `evidence/<id>/<attempt>/leftover.patch`, worktrees, `state.json` | 0 |
 | `park <id> --cause dispute\|manual --why TEXT` | `state.json` | `state.json` | 0 |
 | `run_report` | `state.json`, `checks/` | `RUN-REPORT.md` | 0, 1 if the counts do not add up |
@@ -37,15 +41,30 @@ The program folder is the planner's handoff (`PROGRAM.md`, `SLICES.md`, `slices/
 
 ## How the coordinator uses them
 
+There is no AI reviewer per slice: machine checks gate each slice, and all AI review happens in the checkpoint review session every 5 to 8 slices (`slice_verdict_required` turns the old per-slice verdict back on).
+
 1. Once per run: `init`, then `preflight`. Fix every FAIL line it prints and run it again. It arms nothing until every check passes. Start `power_watch` in the background.
 2. On every wake and every 600-second tick: `recover` if the session just started, then `main-check` and `status`. Stop on `MAIN CHANGED` or `BREAKER`. A `STALE` slice gets `recover`, then `dispatch` again (a restart).
-3. Fill free seats: `dispatch <id>` for each slice in `status`'s "could start" list. Exit 2 means refused (the reason is printed); exit 3 means parked.
+3. Fill free seats: `dispatch <id>` for each slice in `status`'s "could start" list, then its `PREBUILD` list. Exit 2 means refused (the reason is printed); exit 3 means parked.
 4. A builder replies `READY <sha>`: `verify_ready <id> <sha>`. Exit 1 is BLOCKED; send a fix round with `dispatch <id>`.
-5. After ready: `slice_checks <id>`. Red sends a fix round. Green goes to a fresh reviewer, who writes `review/<id>-<head8>.md`.
-6. A review with blockers: `dispatch <id>` starts round 2 (it parks the slice itself after `max_attempts`). An open `DISPUTE` after round 2: `park <id> --cause dispute --why ...`.
-7. Clean reviews: `land` (all checked slices with a CLEAN verdict) or `land <ids>`. A `REVIEW` line means a fresh reviewer reads the named range-diff and writes the named range verdict; then `land` again.
-8. Nightly and at each stop point: `nightly`.
-9. End of run: `run_report`, then `teardown`. Add only a "Waits on you" section under the report.
+5. After ready: `slice_checks <id>`. Red sends a fix round with the summary. Green goes to `land`.
+6. `land` (every checked slice of the open checkpoint) or `land <ids>`. `HELD` names pre-built slices that wait for the open checkpoint to merge. `RECHECK <id>` means the rebase changed the slice: run `slice_checks <id>` again (it checks the rebased commit), then `land`.
+7. `status` prints `CHECKPOINT <X> built` when every slice of the open checkpoint is landed, parked or blocked-by: the checkpoint review starts. It runs `nightly` and `quality --from <checkpoint start>` (Windows, the whole suite), merges, and records `merged <X>`, after which the pre-built slices land.
+8. End of run: `run_report`, then `teardown`. Add only a "Waits on you" section under the report.
+
+### Checkpoints and pre-building
+
+A slice's checkpoint is SLICES.md's `stop` column (`checkpoint` is read too); with neither, the program is one checkpoint. The open checkpoint is the first, in table order, not recorded by `merged`. A slice of the next checkpoint may be dispatched before then (pre-built), but only when its files overlap no slice of the open checkpoint, which is building or in review and may get a fix batch. Two checkpoints ahead is refused. A pre-built slice passes its checks and waits in `checked`; `land` holds it until `merged <open>`.
+
+### Quality ratchet
+
+Skylos, Vulture and mutmut run through `quality.py`. Only a NEW finding blocks. A finding is keyed by tool, file and the tool's words (never the line), and is known when it is in the baseline file or, for Vulture and Skylos, already at the commit the work started from. Every baseline finding is a row in `BACKLOG.md` for a later fixer and never blocks, so no agent loops on old findings.
+
+- Per slice, in `slice_checks`: Vulture and Skylos over each touched package at the head and the parent; only findings in the slice's changed files count. Both tools are fast.
+- Per checkpoint, `quality --from <sha>`: the same at the build tip against `<sha>`, plus mutmut on every function holding a changed line (mutmut 3 mutates whole functions, so that is its finest grain).
+- `baseline` once (it is not taken yet), then mutmut in parts on a schedule: `baseline --tools mutmut --part K/N` replaces only that part's rows. Rows keep their first-seen date; a rerun at the same commit changes nothing.
+
+The quality folder is the `quality_dir` setting, by default `<worktree_root>/ship-quality`, shared by every program. Only `baseline` writes the baseline files, so one program's fixes never make another program's old findings look new.
 
 ## Formats
 
@@ -54,12 +73,12 @@ The program folder is the planner's handoff (`PROGRAM.md`, `SLICES.md`, `slices/
 The first markdown table with these columns, in any order:
 
 ```
-| id | name | depends on | files | size |
-|---|---|---|---|---|
-| rc-35 | Exit ladder | rc-34 | qmx/risk/exits.py, qmx/risk/tests/ | M |
+| id | name | ask | stop | lane | depends on | files | size |
+|---|---|---|---|---|---|---|---|
+| rc-35 | Exit ladder | S2 | A | L1 | rc-34 | qmx/risk/exits.py, qmx/risk/tests/ | M |
 ```
 
-`depends on` is a comma list or `-`. `files` is a comma list of paths, folders (`dir/` or `dir/**`) and globs (`*`, `?`, `**`). Two slices overlap when one pattern can name a file of the other, compared case-insensitively. Globs compare by their literal prefix, which over-reports on purpose.
+`id`, `name`, `depends on`, `files` and `size` are required. `ask` (the SCOPE.md ask, checked against the PR's `TRACE:` line) and `stop` (the checkpoint) are read when present; `lane` and any other column are ignored. `depends on` is a comma list or `-`. `files` is a comma list of paths, folders (`dir/` or `dir/**`) and globs (`*`, `?`, `**`). Two slices overlap when one pattern can name a file of the other, compared case-insensitively. Globs compare by their literal prefix, which over-reports on purpose.
 
 ### Brief facts
 
@@ -76,11 +95,15 @@ $ git grep -n "keyring" -- qmx/risk
 ```
 ````
 
-The command is split like a POSIX shell line and run without a shell, so pipes and redirections do not work; use `python -c` for anything longer. Write paths with forward slashes. Output is compared after CRLF becomes LF, trailing spaces leave each line, and trailing blank lines leave the end. `dispatch` runs the facts in the new worktree at the build tip on a slice's first attempt only; a fix round's worktree holds the builder's changes, so the facts would no longer describe the tip.
+The command is split like a POSIX shell line and run without a shell, so pipes and redirections do not work; use `python -c` for anything longer. Write paths with forward slashes. Output is compared after CRLF becomes LF, trailing spaces leave each line, and trailing blank lines leave the end. `dispatch` runs the facts in the new worktree at the build tip on a slice's first attempt only (`facts.log`, the SAFETY fact included); a fix round's worktree holds the builder's changes, so the facts would no longer describe the tip. `slice_checks` reruns the SAFETY fact at the head.
 
-### Evidence and verdicts
+### Evidence and the PR body
 
-Every evidence and verdict file a script accepts ends with the line `END <full 40-character sha> <dispatch id>`. The dispatch id comes from `dispatch`'s JSON. `verify_ready` requires `how.md`, `red.log` and `report.md` (the `evidence_required` setting) in `evidence/<id>/<attempt>/`. The PR body is `pr.md` from that folder when present, else `report.md`, with the END line removed.
+Every evidence file a script accepts ends with the line `END <full 40-character sha> <dispatch id>`. The dispatch id comes from `dispatch`'s JSON. `verify_ready` requires `how.md`, `red.log`, `report.md` and `pr.md` (the `evidence_required` setting) in `evidence/<id>/<attempt>/`.
+
+`pr.md` is the PR body the builder writes from its brief's section 11, in PR body v2's shape. It must hold the line `TRACE: <slice id> -> <plan ids> -> <ask>`, ending in the slice's `ask` when SLICES.md gives one. Neither it nor any commit message of the slice may carry a credit line (`Co-Authored-By:`, `Generated with`). The PR is opened from `pr.md` with the END line removed.
+
+### Verdicts (only with `slice_verdict_required`)
 
 A review verdict is `review/<id>-<head8>.md`. It holds the line `VERDICT: CLEAN` to pass, and ends with the END line for the head it reviewed. A range verdict after a landing rebase is `review/<id>-range-<patchid8>.md`, with the same two lines; `land` prints its exact path.
 
@@ -93,7 +116,12 @@ setup = ["uv", "sync", "--frozen"]
 lint = ["uv", "run", "--no-sync", "ruff", "check", "."]
 types = ["uv", "run", "--no-sync", "pyright"]
 test = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml={junit}", "{tests}"]
+vulture = ["uv", "run", "--no-sync", "vulture", "."]
+skylos = ["python", "-m", "skylos.cli", ".", "-a", "--no-upload", "--json"]
+mutmut = [["wsl", "-d", "Ubuntu-24.04", "--", "mutmut", "run", "{mutants}"], ["wsl", "-d", "Ubuntu-24.04", "--", "mutmut", "results"]]
 ```
+
+`vulture`, `skylos` and `mutmut` are optional: one argv, or a list of argv run in order. Their outputs are read as Vulture's text lines, Skylos's `--json` report (the flags the repo's `skylos.yml` uses), and mutmut 3's `results` lines (`<name>: survived`). `{mutants}` becomes mutmut 3 name globs, one per function to mutate. mutmut 3 needs `fork`, so on Windows it runs under WSL; the `wsl` lines above are an example, not tested here. A package without a tool's command gets a `NOTRUN` line for it.
 
 Each command runs from the package root through the timed wrapper. In `test`, `{junit}` becomes the JUnit XML path and `{tests}` the test files (none means the whole package). A changed file belongs to the package with the longest matching root. Without `checks.toml` there is one package, `.`, tested with `python -m pytest`. A package without `lint` or `types` gets a `NOTRUN` line.
 
@@ -119,9 +147,11 @@ Every lint, types and test command runs through `wrapper.run_timed`, and builder
   "usage_reset_at": null,
   "last_green": null,
   "nightly": {},
+  "merged": ["A"],
   "slices": {
     "rc-35": {
       "id": "rc-35", "name": "Exit ladder", "depends_on": ["rc-34"], "files": ["qmx/risk/exits.py"], "size": "M",
+      "ask": "S2", "checkpoint": "B",
       "status": "held", "reason": "first rc-35-a1-r0-20261112T220000", "blocked_by": null,
       "attempts": 1, "restarts": 0,
       "holder": {"dispatch_id": "rc-35-a1-r0-20261112T220000", "attempt": 1, "restart": 0, "started": "2026-11-12T22:00:00+00:00"},
@@ -142,7 +172,7 @@ Every lint, types and test command runs through `wrapper.run_timed`, and builder
 | `dead` | the holder died; the next dispatch is a restart | `held`, `parked` |
 | `ready` | `verify_ready` passed, PR open | `checked`, `red`, `held`, `dead`, `parked` |
 | `red` | blocked at ready, checks or landing; awaits a fix round | `red`, `checked`, `held`, `dead`, `parked` |
-| `checked` | slice checks green at `head` | `checked`, `red`, `landed`, `held`, `dead`, `parked` |
+| `checked` | slice checks green at `head` | `checked`, `ready` (a landing rebase changed it), `red`, `landed`, `held`, `dead`, `parked` |
 | `landed` | on the build branch | none |
 | `parked` | stopped for this run; `reason` starts with the cause | none |
 | `blocked-by` | a dependency parked or was bisected as the nightly culprit; see `blocked_by` | none |
@@ -190,7 +220,11 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `keep_awake_poll_s` | 30 | the keep-awake helper |
 | `teardown_wait_s` | 120 | teardown waiting for the helper to exit |
 | `updates_paused_min_h` | 12 | preflight |
-| `evidence_required` | `how.md`, `red.log`, `report.md` | verify_ready |
+| `evidence_required` | `how.md`, `red.log`, `report.md`, `pr.md` | verify_ready |
+| `slice_verdict_required` | false | land: also want a CLEAN slice verdict, and a range verdict after a changed rebase |
+| `quality_dir` | `""` (`<worktree_root>/ship-quality`) | quality, baseline, slice_checks |
+| `quality_timeout_s` | 3600 | one Skylos, Vulture or mutmut command |
+| `watcher_stale_s` | 300 | power: `power.json` older than this means no watcher runs |
 | `data_env_vars` | `QMX_HOME`, `QMX_DATA_DIR` | the wrapper |
 | `strip_env_prefixes` | `CLAUDE`, `ANTHROPIC` | the wrapper |
 | `gh` | `gh` | verify_ready, land |
@@ -205,8 +239,8 @@ Numbers refer to `tracker/shipping-method/EDGE-CASES-2026-11-12.md`.
 |---|---|
 | 1. agent writes in the main checkout | `hook`, `main-check` |
 | 2. his click not enforced | `preflight --protection-push-test` (off by default) |
-| 3. landing rebase changes behaviour | `land`: patch-id and overlap, range-diff, union of packages |
-| 4. half-written or stale proof | END line in `verify_ready` and `land`; evidence per attempt |
+| 3. landing rebase changes behaviour | `land`: patch-id and overlap send the rebased commit back to `slice_checks` (RECHECK), union of packages |
+| 4. half-written or stale proof | END line in `verify_ready`; evidence per attempt |
 | 5. READY but GitHub does not match | `verify_ready` |
 | 6. brief wrong about the code | `dispatch` facts, park as `brief-mismatch` |
 | 7. run report lies by omission | `run_report` |
@@ -224,7 +258,9 @@ Numbers refer to `tracker/shipping-method/EDGE-CASES-2026-11-12.md`.
 | 22. tests reach real credentials | the wrapper's fake keyring and credential guard |
 | 23. nightly red with no suspect | `nightly` bisect |
 
-Not owned here: 11 (the coordinator's context) and 19 (spawning skills in briefs) are rules for the coordinator and the planner. Not built: 20 (mutation testing); from 14, the machine-wide pytest worker slot file, `flaky.tsv`, and per-run ports (tests should bind port 0); from 22, the money scan's grep for keyring calls, which belongs in a package's `lint` command in `checks.toml`.
+| 20. tests that cannot fail | fail-at-parent in `slice_checks`; mutmut on changed functions in `quality` at each checkpoint |
+
+Not owned here: 11 (the coordinator's context) and 19 (spawning skills in briefs) are rules for the coordinator and the planner. Not built: from 14, the machine-wide pytest worker slot file, `flaky.tsv`, and per-run ports (tests should bind port 0); from 22, the money scan's grep for keyring calls, which belongs in a package's `lint` command in `checks.toml`.
 
 ## Tests
 
@@ -233,4 +269,4 @@ cd tools
 python -m unittest discover -s ship/tests -t .
 ```
 
-The tests build real git repositories (a bare remote and a clone) in temp folders. Only `gh` is replaced, by `tests/fake_gh.py`; `pytest` must be installed for the slice-check, landing and nightly tests.
+The tests build real git repositories (a bare remote and a clone) in temp folders. Only `gh` is replaced, by `tests/fake_gh.py`, and Vulture and mutmut, by `tests/fake_tools.py`, which prints their real output shapes; `pytest` must be installed for the slice-check, landing, nightly and quality tests.
