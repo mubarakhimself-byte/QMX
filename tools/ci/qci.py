@@ -86,7 +86,7 @@ SMOKE_PORT = 18766
 class Level(enum.StrEnum):
     SLICE = "slice"  # push to slice/**
     LAND = "land"  # push to build/**
-    DEEP = "deep"  # a checkpoint (stop point): `glab ci run -b <branch> --variables QMX_LEVEL:deep`
+    DEEP = "deep"  # a checkpoint (stop point), started by hand: `glab ci run -b <branch>`
     GATE = "gate"  # merge request into engine/base
     RELEASE = "release"  # tag v*
     WALK = "walk"  # one part of the scheduled whole-repo mutation walk
@@ -770,6 +770,8 @@ def mutable_packages() -> list[str]:
 def mutate_targets(lvl: Level, at: str) -> list[ci_mutate.Target]:
     packages = mutable_packages()
     named = [m for m in os.environ.get("QMX_MUTATE_MODULES", "").split(",") if m]
+    if not named and lvl == Level.BASELINE:
+        named = ratchet.read_baseline(BASELINES / "mutmut-modules.txt")
     everything = ci_mutate.all_targets(REPO, packages)
     if named:
         return [t for t in everything if t.module in named]
@@ -921,7 +923,7 @@ def job_mr_gate() -> int:
     )
     token = {"JOB-TOKEN": os.environ["CI_JOB_TOKEN"]}
     request = urllib.request.Request(url, headers=token)  # noqa: S310 - GitLab's own API
-    how = f"run it with: glab ci run -b {branch} --variables QMX_LEVEL:deep, then rerun this job"
+    how = f"start one with: glab ci run -b {branch}, then rerun this job"
     try:
         with urllib.request.urlopen(request, timeout=60) as answer:  # noqa: S310 - GitLab's own API
             verdict = json.loads(answer.read().decode("utf-8"))

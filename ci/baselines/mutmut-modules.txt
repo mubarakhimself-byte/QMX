@@ -1,0 +1,11 @@
+# Modules a baseline pipeline mutates in full: the money, exit and kill-line modules.
+qmf.core.exact
+qmf.core.chrono
+qmf.risk.sizing
+qmf.risk.exit_policy
+qmn.order.door
+qmn.order.path
+qmn.ledger.binding_ledger
+qmn.ledger.virtual
+qmn.reconcile.residuals
+qmn.capital.kill_line

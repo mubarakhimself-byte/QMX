@@ -1,18 +1,18 @@
 # QMX CI on GitLab. Which jobs a pipeline holds follows QMX_LEVEL; what each job does at that level
-# lives in tools/ci/qci.py. Levels:
+# lives in tools/ci/qci.py. Levels, and what starts each:
 #   slice    push to slice/**: Linux only. Format, lint and types of touched folders, touched tests,
 #            fail-at-parent, Vulture and Skylos (only new findings in changed files block).
 #   land     push to build/**: touched tests on Linux and Windows.
-#   deep     a checkpoint: `glab ci run -b <branch> --variables QMX_LEVEL:deep`. The full suite on
-#            Linux and Windows, lint, Vulture, Skylos, and mutmut on functions changed since
-#            engine/base. Ends in deep-verdict, which the merge-request gate reads.
+#   deep     a checkpoint, started by hand: `glab ci run -b <branch>`. The full suite on Linux and
+#            Windows, lint, Vulture, Skylos, and mutmut on functions changed since engine/base.
+#            Ends in deep-verdict, which the merge-request gate reads.
 #   gate     merge request into engine/base: passes only if a green deep run tested its head.
 #   release  tag v*: everything in deep plus a smoke start of the host on Linux and Windows.
-#   walk     scheduled: one part of the whole-repo mutmut walk (QMX_WALK_PART, QMX_WALK_PARTS).
-#   baseline on demand: Vulture and Skylos rewrite ci/baselines (artifact ci-out/baselines), and
-#            mutmut runs the modules in QMX_MUTATE_MODULES (comma-separated), as a walk.
-# Any level can be forced with the QMX_LEVEL variable (glab ci run --variables, a push option, a
-# schedule). QMX_BASE overrides the commit changes are measured from.
+#   walk     a pipeline schedule: one part of the whole-repo mutmut walk, chosen by pipeline number.
+#   baseline push to baseline/**: Vulture and Skylos rewrite ci/baselines (artifact
+#            ci-out/baselines), and mutmut runs the modules in ci/baselines/mutmut-modules.txt.
+# The project does not let pipelines take variables (Settings > CI/CD > Variables, minimum role),
+# so the trigger picks the level. Where variables are allowed, QMX_LEVEL forces a level.
 
 workflow:
   name: "$QMX_LEVEL $CI_COMMIT_REF_NAME"
@@ -22,10 +22,16 @@ workflow:
       variables: {QMX_LEVEL: gate}
     - if: $CI_COMMIT_TAG =~ /^v/
       variables: {QMX_LEVEL: release}
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      variables: {QMX_LEVEL: walk}
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^slice\//
       variables: {QMX_LEVEL: slice}
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^build\//
       variables: {QMX_LEVEL: land}
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^baseline\//
+      variables: {QMX_LEVEL: baseline}
+    - if: $CI_PIPELINE_SOURCE =~ /^(api|web)$/ && $CI_COMMIT_BRANCH
+      variables: {QMX_LEVEL: deep}
     - when: never
 
 stages: [check, test, verdict]
