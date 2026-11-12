@@ -1,6 +1,5 @@
 import unittest
 
-from ship import state as st
 from ship.armed import Change, arm, read, teardown
 from ship.preflight import check_fake_keyring, check_gitattributes, main_check, preflight, protection_push_test, \
     snapshot_main

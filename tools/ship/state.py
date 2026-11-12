@@ -227,7 +227,7 @@ def locked(program: Program) -> Iterator[State]:
             except (OSError, ValueError):
                 owner = 0
             if owner == os.getpid():
-                raise StateError("state.lock taken twice by one process")
+                raise StateError("state.lock taken twice by one process") from None
             young = _age_s(program.lock) < 10  # the creator may not have written its pid yet
             if (owner and pid_alive(owner)) or (not owner and young):
                 time.sleep(0.2)
