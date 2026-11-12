@@ -59,7 +59,7 @@ class Landing:
             if not (copy / d / "uv.lock").exists() and not (copy / d / "pyproject.toml").exists():
                 continue
             done = run_timed(list(self.settings.lock_cmd), copy / d, self.out / f"lock-{d.replace('/', '-')}.log",
-                             self.settings.check_timeout_s, self.settings, self.program.tmp)
+                             self.settings.check_timeout_s, self.settings, self.program.runs)
             if done.rc != 0:
                 return False
             git(copy, "add", "--", str(PurePosixPath(d) / "uv.lock"), timeout=self.settings.git_timeout_s)
@@ -163,7 +163,7 @@ class Landing:
 
         files = sorted({f for sid in included for f in changed_files(repo, state.slices[sid].parent, cur, t)})
         packages = touched(load_packages(program), files)
-        runs = run_packages(copy, packages, self.out, settings.land_timeout_s, settings, program.tmp)
+        runs = run_packages(copy, packages, self.out, settings.land_timeout_s, settings, program.runs)
         reds = set().union(*(r.red() for r in runs.values())) if runs else set()
         broken = [root for root, r in runs.items() if not r.junit_ok]
         baseline = read_baseline(program.baseline_reds)

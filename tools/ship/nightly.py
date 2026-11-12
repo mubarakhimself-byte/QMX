@@ -51,10 +51,10 @@ def bisect_step(program: Program, checkout: Path, ids_file: Path, settings: Sett
             from ship.wrapper import run_timed
 
             if run_timed(list(package.setup), checkout / package.root, out / f"{sha[:8]}-setup-{package.label}.log",
-                         settings.bisect_step_timeout_s, settings, program.tmp).rc != 0:
+                         settings.bisect_step_timeout_s, settings, program.runs).rc != 0:
                 return 125
         result = run_tests(checkout, package, modules, out / f"{sha[:8]}-{package.label}.log",
-                           settings.bisect_step_timeout_s, settings, program.tmp)
+                           settings.bisect_step_timeout_s, settings, program.runs)
         if not result.junit_ok:
             return 125
         red = red or bool(set(mine) & result.red())
@@ -71,7 +71,7 @@ def nightly(program: Program, settings: Settings) -> tuple[bool, list[str]]:
     lines: list[str] = []
     copy = checkout_copy(repo, program.tmp / "nightly", tip, settings)
     try:
-        runs = run_packages(copy, load_packages(program), out, settings.nightly_timeout_s, settings, program.tmp)
+        runs = run_packages(copy, load_packages(program), out, settings.nightly_timeout_s, settings, program.runs)
         broken = sorted(root for root, r in runs.items() if not r.junit_ok)
         reds = set().union(*(r.red() for r in runs.values())) if runs else set()
         if broken:

@@ -59,6 +59,11 @@ class Program:
         return self.dir / "tmp"
 
     @property
+    def runs(self) -> Path:
+        """Per-run temp and data folders the timed wrapper makes and deletes."""
+        return self.dir / "runs"
+
+    @property
     def review_dir(self) -> Path:
         return self.dir / "review"
 

@@ -64,7 +64,7 @@ def fail_at_parent(rec: Recorder, package: Package, modules: list[str], support:
     rel = [package.rel(m) for m in modules]
     at_parent = [package.rel(m) for m in modules if git_rc(repo, "cat-file", "-e", f"{parent}:{m}", timeout=t) == 0]
     before = run_tests(parent_copy, package, at_parent, rec.out / f"{name}-parent-own.log",
-                       settings.check_timeout_s, settings, program.tmp, heartbeat).outcomes if at_parent else {}
+                       settings.check_timeout_s, settings, program.runs, heartbeat).outcomes if at_parent else {}
     for path in support:
         target = parent_copy / path
         if git_rc(repo, "cat-file", "-e", f"{head}:{path}", timeout=t) == 0:
@@ -73,9 +73,9 @@ def fail_at_parent(rec: Recorder, package: Package, modules: list[str], support:
         else:
             target.unlink(missing_ok=True)
     parent_run = run_tests(parent_copy, package, rel, rec.out / f"{name}-parent.log", settings.check_timeout_s,
-                           settings, program.tmp, heartbeat)
+                           settings, program.runs, heartbeat)
     head_run = run_tests(head_copy, package, rel, rec.out / f"{name}-head.log", settings.check_timeout_s,
-                         settings, program.tmp, heartbeat)
+                         settings, program.runs, heartbeat)
     if not head_run.junit_ok or not parent_run.junit_ok:
         rec.record("FAIL", name, "no JUnit report from the test command", log)
         return
@@ -131,7 +131,7 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
             if package.setup:
                 where = "head" if copy == head_copy else "parent"
                 done = run_timed(list(package.setup), copy / package.root, out / f"setup-{package.label}-{where}.log",
-                                 settings.check_timeout_s, settings, program.tmp, beat)
+                                 settings.check_timeout_s, settings, program.runs, beat)
                 rec.record("PASS" if done.rc == 0 else "FAIL", f"setup-{package.label}-{where}",
                            f"rc={done.rc}", done.log)
         for kind in ("lint", "types"):
@@ -141,11 +141,11 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
                 rec.record("NOTRUN", name, "no command in checks.toml")
                 continue
             done = run_timed(list(argv), head_copy / package.root, out / f"{name}.log", settings.check_timeout_s,
-                             settings, program.tmp, beat)
+                             settings, program.runs, beat)
             rec.record("PASS" if done.rc == 0 else "FAIL", name, f"rc={done.rc}", done.log)
         name = f"test-{package.label}"
         run = run_tests(head_copy, package, [], out / f"{name}.log", settings.check_timeout_s, settings,
-                        program.tmp, beat)
+                        program.runs, beat)
         detail = f"rc={run.run.rc} red={len(run.red())}" + ("" if run.junit_ok else " no JUnit report")
         rec.record("PASS" if run.clean else "FAIL", name, detail, run.run.log)
         modules = [f for f in files if is_test_module(f) and package_of(packages, f) == package

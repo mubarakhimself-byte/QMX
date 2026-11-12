@@ -99,6 +99,7 @@ class RepoCase(unittest.TestCase):
             gh = [{PY!r}, {str(FAKE_GH)!r}]
             heartbeat_interval_s = 1
             power_settle_s = 5
+            keep_awake_poll_s = 1
             """).replace("'", '"'))
         init_state(self.program.dir, self.repo, self.build_branch, self.wt_root, "origin")
 

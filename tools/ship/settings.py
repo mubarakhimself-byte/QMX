@@ -32,6 +32,7 @@ class Settings:
     internet_probe: str = "1.1.1.1:443"  # host:port a TCP connect must reach
     keep_awake_poll_s: int = 30  # the keep-awake helper checks its flag this often
     teardown_wait_s: int = 120  # how long teardown waits for the keep-awake helper to exit
+    updates_paused_min_h: float = 12  # Windows updates must stay paused at least this long
     evidence_required: tuple[str, ...] = ("how.md", "red.log", "report.md")
     data_env_vars: tuple[str, ...] = ("QMX_HOME", "QMX_DATA_DIR")  # pointed at the run's temp folder
     strip_env_prefixes: tuple[str, ...] = ("CLAUDE", "ANTHROPIC")  # removed from every test run

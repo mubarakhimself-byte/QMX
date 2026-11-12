@@ -56,7 +56,7 @@ def cmd_timed(a, program, settings):
 
     argv = a.argv[1:] if a.argv[:1] == ["--"] else a.argv
     result = run_timed(argv, Path.cwd(), Path(a.log), a.timeout or settings.check_timeout_s, settings,
-                       program.tmp, program.heartbeat(a.slice))
+                       program.runs, program.heartbeat(a.slice))
     print(f"EXIT rc={result.rc} seconds={result.seconds:.0f}" + (" timeout" if result.timed_out else ""))
     return result.rc
 
