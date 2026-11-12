@@ -1,0 +1,182 @@
+# QMX CI on GitLab. Which jobs a pipeline holds follows QMX_LEVEL; what each job does at that level
+# lives in tools/ci/qci.py. Levels:
+#   slice    push to slice/**: Linux only. Format, lint and types of touched folders, touched tests,
+#            fail-at-parent, Vulture and Skylos (only new findings in changed files block).
+#   land     push to build/**: touched tests on Linux and Windows.
+#   deep     a checkpoint: `glab ci run -b <branch> --variables QMX_LEVEL:deep`. The full suite on
+#            Linux and Windows, lint, Vulture, Skylos, and mutmut on functions changed since
+#            engine/base. Ends in deep-verdict, which the merge-request gate reads.
+#   gate     merge request into engine/base: passes only if a green deep run tested its head.
+#   release  tag v*: everything in deep plus a smoke start of the host on Linux and Windows.
+#   walk     scheduled: one part of the whole-repo mutmut walk (QMX_WALK_PART, QMX_WALK_PARTS).
+# Any level can be forced with the QMX_LEVEL variable (glab ci run --variables, a push option, a
+# schedule). QMX_BASE overrides the commit changes are measured from.
+
+workflow:
+  name: "$QMX_LEVEL $CI_COMMIT_REF_NAME"
+  rules:
+    - if: $QMX_LEVEL
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "engine/base"
+      variables: {QMX_LEVEL: gate}
+    - if: $CI_COMMIT_TAG =~ /^v/
+      variables: {QMX_LEVEL: release}
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^slice\//
+      variables: {QMX_LEVEL: slice}
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^build\//
+      variables: {QMX_LEVEL: land}
+    - when: never
+
+stages: [check, test, verdict]
+
+variables:
+  GIT_DEPTH: "0"
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  UV_VERSION: "0.12.6"
+  UV_LINK_MODE: copy
+  UV_PYTHON_DOWNLOADS: automatic
+  FORCE_COLOR: "0"
+
+default:
+  interruptible: true
+  timeout: 60m
+
+.linux:
+  image: python:3.14-bookworm
+  tags: [saas-linux-small-amd64]
+  needs: []
+  before_script:
+    - python -m pip install --quiet --disable-pip-version-check --root-user-action=ignore "uv==$UV_VERSION"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths: [ci-out/]
+    reports:
+      junit: ci-out/junit/*.xml
+
+.windows:
+  tags: [saas-windows-medium-amd64]
+  needs: []
+  before_script:
+    - $env:UV_UNMANAGED_INSTALL = "$env:CI_PROJECT_DIR\.uv-bin"
+    - irm "https://astral.sh/uv/$env:UV_VERSION/install.ps1" | iex
+    - $env:Path = "$env:CI_PROJECT_DIR\.uv-bin;$env:Path"
+    - git config --global core.longpaths true
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths: [ci-out/]
+    reports:
+      junit: ci-out/junit/*.xml
+
+.slice-deep-release:
+  rules:
+    - if: $QMX_LEVEL =~ /^(slice|deep|release)$/
+
+.deep-release:
+  rules:
+    - if: $QMX_LEVEL =~ /^(deep|release)$/
+
+lint:
+  extends: [.linux, .slice-deep-release]
+  stage: check
+  script: [python tools/ci/qci.py lint]
+
+vulture:
+  extends: [.linux, .slice-deep-release]
+  stage: check
+  script: [python tools/ci/qci.py vulture]
+
+skylos:
+  extends: [.linux, .slice-deep-release]
+  stage: check
+  script: [python tools/ci/qci.py skylos]
+
+fail-at-parent:
+  extends: .linux
+  stage: check
+  rules:
+    - if: $QMX_LEVEL == "slice"
+  script: [python tools/ci/qci.py fail-at-parent]
+
+tests-linux:
+  extends: .linux
+  stage: test
+  parallel: 3
+  rules:
+    - if: $QMX_LEVEL =~ /^(slice|land)$/
+  script: [python tools/ci/qci.py tests --os linux]
+
+tests-windows:
+  extends: .windows
+  stage: test
+  parallel: 3
+  rules:
+    - if: $QMX_LEVEL == "land"
+  script: [uv run --no-project --python 3.14 python tools/ci/qci.py tests --os windows]
+
+suite-linux:
+  extends: [.linux, .deep-release]
+  stage: test
+  parallel: 8
+  timeout: 90m
+  script: [python tools/ci/qci.py tests --os linux]
+
+suite-windows:
+  extends: [.windows, .deep-release]
+  stage: test
+  parallel: 8
+  timeout: 90m
+  script: [uv run --no-project --python 3.14 python tools/ci/qci.py tests --os windows]
+
+mutmut:
+  extends: [.linux, .deep-release]
+  stage: test
+  parallel: 2
+  timeout: 90m
+  script: [python tools/ci/qci.py mutmut]
+
+mutmut-walk:
+  extends: .linux
+  stage: test
+  parallel: 3
+  timeout: 90m
+  rules:
+    - if: $QMX_LEVEL == "walk"
+  script: [python tools/ci/qci.py mutmut]
+
+smoke-linux:
+  extends: .linux
+  stage: test
+  rules:
+    - if: $QMX_LEVEL == "release"
+  script: [python tools/ci/qci.py smoke]
+
+smoke-windows:
+  extends: .windows
+  stage: test
+  rules:
+    - if: $QMX_LEVEL == "release"
+  script: [uv run --no-project --python 3.14 python tools/ci/qci.py smoke]
+
+deep-verdict:
+  extends: .linux
+  stage: verdict
+  rules:
+    - if: $QMX_LEVEL == "deep"
+  needs: [lint, vulture, skylos, suite-linux, suite-windows, mutmut]
+  before_script: []
+  script: [python tools/ci/qci.py verdict]
+  artifacts:
+    expire_in: 90 days
+    paths: [ci-out/verdict.json]
+
+mr-gate:
+  extends: .linux
+  stage: verdict
+  rules:
+    - if: $QMX_LEVEL == "gate"
+  before_script: []
+  variables:
+    GIT_DEPTH: "1"
+  script: [python tools/ci/qci.py mr-gate]
