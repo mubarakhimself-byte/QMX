@@ -551,10 +551,13 @@ def job_fail_at_parent() -> int:
     return 1 if problems else 0
 
 
-def ratchet_verdict(tool: str, found: list[ratchet.Finding], scope: list[str] | None) -> int:
+def ratchet_verdict(
+    tool: str, found: list[ratchet.Finding], scope: list[str] | None, report_as: str = ""
+) -> int:
     """New findings beyond `ci/baselines/<tool>.txt`. With a scope (a slice), only new findings in
     the changed files block."""
     fresh = ratchet.new_findings(found, ratchet.read_baseline(BASELINES / f"{tool}.txt"))
+    tool = report_as or tool
     if scope is not None:
         wanted = set(scope)
         fresh = [dataclasses.replace(f, blocking=f.blocking and f.path in wanted) for f in fresh]
@@ -805,7 +808,17 @@ MUTMUT_PYTEST = ["-n", "0", "-p", "no:cacheprovider", "-q"]
 
 def stage_mutmut(package: Path, files: list[str]) -> None:
     """Write [tool.mutmut] (and a pytest anchor, if the package has none) into this disposable
-    checkout's package pyproject, so mutmut runs from the package with its own tests."""
+    checkout's package pyproject, so mutmut runs from the package with its own tests.
+
+    mutmut runs the tests from `<package>/mutants/tests`, one level deeper than they live. A
+    top-level package's tests that find the repo as `parents[2]` then land on the package itself,
+    so each repo folder they may read is linked into the package (Linux CI checkout only)."""
+    if package.parent == REPO and os.name != "nt":
+        for item in sorted(REPO.iterdir()):
+            link = package / item.name
+            wanted = item.is_dir() and item != package and not item.name.startswith(".")
+            if wanted and not link.exists():
+                link.symlink_to(Path("..") / item.name, target_is_directory=True)
     pyproject = package / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     config = tomllib.loads(text)
@@ -895,7 +908,7 @@ def job_mutmut() -> int:
     if lvl in (Level.WALK, Level.BASELINE) or os.environ.get("QMX_MUTATE_MODULES"):
         print(f"{len(found)} surviving mutants recorded (walk: not a gate)")
         return 1 if broken else 0
-    verdict = ratchet_verdict(f"mutmut-{shard}", found, None) if found else 0
+    verdict = ratchet_verdict("mutmut", found, None, f"mutmut-{shard}") if found else 0
     return 1 if broken or verdict else 0
 
 
