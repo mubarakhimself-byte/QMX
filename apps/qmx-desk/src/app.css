@@ -1,0 +1,354 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Three looks, one token set. Colour is kept for meaning in all of them:
+ *   --live (blue)  --paper (amber)  --needs (violet, waiting on you)
+ *   --up (green)   --down (red)     --run (cyan, working)
+ *
+ * night     Night desk  true black, rounded flat widgets, hairlines
+ * terminal  Terminal    the trading-terminal feel: square, tight, title bars
+ */
+:root {
+  --live: oklch(0.72 0.15 250);
+  --paper: oklch(0.82 0.14 78);
+  --needs: oklch(0.74 0.16 300);
+  --up: oklch(0.8 0.16 155);
+  --down: oklch(0.7 0.19 25);
+  --run: oklch(0.82 0.11 205);
+  --idle: oklch(0.52 0.005 260);
+  --hue: 260;
+}
+
+:root,
+[data-look="night"] {
+  --radius: 0.5rem;
+  --gap: 0.625rem;
+  --qmx-sans: "Archivo Variable", system-ui, sans-serif;
+  --qmx-display: "Archivo Variable", system-ui, sans-serif;
+  --qmx-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --qmx-stretch: 92%;
+  --qmx-display-stretch: 112%;
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.96 0 0);
+  --panel: oklch(0.125 0.002 260);
+  --panel-2: oklch(0.17 0.003 260);
+  --popover: oklch(0.16 0.003 260);
+  --primary: oklch(0.97 0 0);
+  --primary-foreground: oklch(0.12 0 0);
+  --secondary: oklch(0.2 0.003 260);
+  --muted: oklch(0.2 0.003 260);
+  --muted-foreground: oklch(0.67 0.005 260);
+  --accent: oklch(0.22 0.004 260);
+  --destructive: oklch(0.66 0.2 25);
+  --border: oklch(0.235 0.004 260);
+  --input: oklch(0.26 0.004 260);
+  --ring: oklch(0.7 0 0);
+}
+
+[data-look="terminal"] {
+  --radius: 0.125rem;
+  --gap: 3px;
+  --qmx-stretch: 84%;
+  --qmx-display-stretch: 84%;
+  --panel: oklch(0.085 0.004 250);
+  --panel-2: oklch(0.2 0.02 250);
+  --border: oklch(0.27 0.012 250);
+  --muted-foreground: oklch(0.7 0.01 250);
+  --accent: oklch(0.2 0.012 250);
+}
+
+:root,
+[data-look] {
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --secondary-foreground: var(--foreground);
+  --accent-foreground: var(--foreground);
+}
+
+@theme inline {
+  --font-sans: var(--qmx-sans);
+  --font-display: var(--qmx-display);
+  --font-mono: var(--qmx-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-live: var(--live);
+  --color-paper: var(--paper);
+  --color-needs: var(--needs);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-run: var(--run);
+  --color-idle: var(--idle);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    font-size: 17px;
+  }
+  html[data-text="large"] {
+    font-size: 19px;
+  }
+  html[data-text="larger"] {
+    font-size: 21px;
+  }
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    background: #050505;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--foreground) 18%, transparent);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-stretch: 100%;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .app {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-stretch: var(--qmx-stretch);
+  }
+  .display {
+    font-family: var(--font-display);
+    font-stretch: var(--qmx-display-stretch);
+    letter-spacing: -0.02em;
+  }
+  /* A flat control you can press. */
+  .press {
+    @apply text-muted-foreground hover:text-foreground hover:bg-accent inline-flex items-center justify-center rounded-md transition-colors duration-150;
+  }
+  /* A control that holds a selection (navigation, toggles). */
+  .key {
+    @apply text-muted-foreground hover:text-foreground inline-flex items-center justify-center rounded-md transition-colors duration-150;
+  }
+  .press:active,
+  .key:active {
+    transform: scale(0.97);
+  }
+  .surface {
+    @apply bg-panel border-border rounded-lg border;
+  }
+  .well {
+    @apply border-border rounded-md border;
+  }
+  .dot {
+    @apply inline-block size-2 shrink-0 rounded-full bg-current;
+  }
+
+  /* Night desk: selected controls invert to white. */
+  [data-look="night"] .key[data-on="true"] {
+    background: var(--foreground);
+    color: var(--background);
+  }
+  [data-look="night"] .press[data-on="true"] {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+
+  /* Terminal: every widget gets a title bar; type is tight and upper-case. */
+  [data-look="terminal"] .surface > header {
+    background: var(--panel-2);
+    height: 2rem;
+  }
+  [data-look="terminal"] .surface > header h3 {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  [data-look="terminal"] .key[data-on="true"] {
+    background: var(--foreground);
+    color: var(--background);
+  }
+  [data-look="terminal"] .press[data-on="true"] {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+  [data-look="terminal"] .surface th {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  [data-look="terminal"] .surface td,
+  [data-look="terminal"] .surface li > button {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+  }
+
+  /* variant-picker harness chrome: fixed spec, never themed. */
+  .proto-picker {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(10, 10, 10, 0.82);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    backdrop-filter: blur(12px) saturate(1.4);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+      0 8px 24px rgba(0, 0, 0, 0.24),
+      0 2px 6px rgba(0, 0, 0, 0.12);
+    font-family:
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+    font-size: 13px;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .proto-picker-highlight {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    height: 28px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    will-change: transform;
+  }
+  .proto-picker[data-ready] .proto-picker-highlight {
+    transition:
+      transform 250ms cubic-bezier(0.23, 1, 0.32, 1),
+      width 250ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .proto-picker[data-ready] .proto-picker-highlight {
+      transition: none;
+    }
+  }
+  .proto-picker-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font: inherit;
+    cursor: pointer;
+    transition: color 150ms ease-out;
+  }
+  .proto-picker-item:hover {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .proto-picker-item:active {
+    transform: scale(0.97);
+  }
+  .proto-picker-item:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: 2px;
+  }
+  .proto-picker-item[data-active] {
+    color: #fff;
+  }
+  .proto-picker-divider {
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  /* Second harness pill for look, state and text size. Same chrome, left side. */
+  .proto-picker[data-side="left"] {
+    left: 24px;
+    transform: none;
+  }
+  .proto-picker[data-side="left"] .proto-picker-item[data-active] {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.proto-picker[data-side="right"] {
+  left: auto;
+  right: 24px;
+  transform: none;
+}
+.proto-picker[data-side="right"] .proto-picker-item[data-active] {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* A row you can pick from a list. Quieter than a key: lists are long. */
+.pick {
+  color: var(--muted-foreground);
+  transition: background-color 150ms ease-out;
+}
+.pick:hover {
+  background: color-mix(in oklch, var(--accent) 60%, transparent);
+}
+.pick[data-on="true"] {
+  background: var(--accent);
+}
+

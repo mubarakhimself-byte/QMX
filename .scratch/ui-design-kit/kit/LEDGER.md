@@ -283,3 +283,17 @@ These need his word. Each has a proposal ready; none blocks the design sessions 
 - T3 Code: liked for being easy on the eye, but "we might actually not use it. There are issues." (11-10). Status: open.
 - The unfinished T3 Code tour (every page, the sub-agent test) is left to the design sessions if they want it. Status: later.
 - Dribbble counts as an inspiration source (11-09). Status: decided.
+
+## Backlog: asked for in October, never built (2026-11-10)
+
+His note on these: "some things are not really that useful anymore because they may contradict with what you're planning to build." Treat each as a candidate. Check it against the current backend and the new design before building it.
+
+- Expand a widget into a detail tab. Status: open.
+- Widget history (time travel). Status: open.
+- Open apps on the rail under a divider. Status: open.
+- Top menus that change per mini app. Status: open.
+- The Factory-style settings page from the storyboard; settings per app. Status: open.
+- A real terminal and a real browser in the preview pane. Status: open.
+- Live streams of sub-agents and workflow agents. Status: open.
+
+Source for each: `INTENT.md`, "Drawn or asked for, never built".
