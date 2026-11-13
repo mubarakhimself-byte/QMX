@@ -250,6 +250,44 @@ def cmd_records(a):
     return _lines(not clashes, [f"CLASH {c}" for c in clashes] or [f"FREE {a.prefix}"])
 
 
+# U04: index v2 parser and ship phase
+def cmd_phase(a):
+    from ship import phase
+
+    if a.words:
+        return _lines(True, list(phase.WORDS))
+    if a.all:
+        if not a.plans:
+            raise SystemExit("ship phase --all needs --plans")
+        blocks = [phase.read(Program(f.resolve()), load_settings(f)) for f in phase.all_programs(a.plans)]
+        for n, block in enumerate(blocks):
+            if n:
+                print()
+            for key, value in block.items():
+                print(f"{key}: {value}")
+        return 0
+    if not a.program:
+        raise SystemExit("ship phase needs --program, --all --plans, or --words")
+    program = Program(a.program.resolve())
+    if a.set:
+        if not (a.status and a.by):
+            raise SystemExit("ship phase --set needs --status and --by")
+        record = phase.set_phase(program, a.set, a.status, a.by)
+        return _lines(True, [f"{k}: {v}" for k, v in record.items()])
+    return _lines(True, [f"{k}: {v}" for k, v in phase.read(program, load_settings(program.dir)).items()])
+
+
+def cmd_gate(a, program, settings):
+    from ship.program import ProgramError, set_gate
+
+    try:
+        print(set_gate(program, a.name, a.by, a.source, a.advance))
+    except ProgramError as exc:
+        print(f"REFUSED {exc}")
+        return 1
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -303,6 +341,12 @@ def parser() -> argparse.ArgumentParser:
     add_plain("records", cmd_records, (["action"], {"choices": ["init", "commit", "prefix"]}),
               (["prefix"], {"nargs": "?"}), (["--plans"], {"required": True, "type": Path}), (["--repo"], {}),
               (["--remote"], {"default": "origin"}), (["-m", "--message"], {}))
+    # U04: index v2 parser and ship phase
+    add_plain("phase", cmd_phase, (["--program"], {"type": Path}), (["--all"], {"action": "store_true"}),
+              (["--plans"], {"type": Path}), (["--set"], {}), (["--status"], {"choices": ["running", "done", "waits"]}),
+              (["--by"], {}), (["--words"], {"action": "store_true"}))
+    add("gate", cmd_gate, (["name"], {}), (["--by"], {"required": True}), (["--source"], {"required": True}),
+        (["--advance"], {"action": "store_true"}))
     return p
 
 
