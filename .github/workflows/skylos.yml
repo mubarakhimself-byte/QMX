@@ -1,0 +1,180 @@
+name: Skylos
+# Gates integration, immutable factory candidates, and main-bound pull requests.
+# The scan starts at the repository ROOT and subtracts by NAME
+# (`[tool.skylos] exclude` in pyproject.toml); it is never an include-list, so a
+# top-level folder a later epic adds (qmb/, qml/, ...) is in
+# scope the moment it lands, with no edit here. Languages are auto-detected by file
+# extension in one pass, so the TypeScript and Rust that arrive later are covered
+# the same way; no language is ever named, deliberately.
+#
+# FREE TIER ONLY. Nothing here reaches Skylos Cloud: no `--upload` (and
+# `--no-upload` is passed explicitly), no `id-token` permission so GitHub OIDC
+# cannot bind a cloud project, no `skylos sync pull`, no `skylos defend`, no
+# `--verify` (the CLI's single PRO-gated flag). The scan, the AI-defect checks,
+# `cicd annotate` and `cicd gate` all run locally on the runner and cost nothing.
+#
+# The CLI is driven directly rather than through the `duriantaco/skylos` composite
+# action. That action runs an unconditional "Upload to Skylos Dashboard" step the
+# caller cannot switch off, and it exposes neither `-a` nor the repo-wide
+# exclusions this project's scope ruling needs.
+# Superseded by qmx-ci.yml, which runs these checks through tools/ci/qci.py. Kept, started by
+# hand only, because tests (tools/tests/test_readiness_gate.py, test_mutation_workflow.py) and the
+# node's QA evidence matrix (qmn/src/qmn/host/qa_debt_matrix.py) read this file.
+on:
+  workflow_dispatch:
+
+# Workflow-level permissions stay minimal (read-only). The job below writes
+# nothing: GitHub annotations are emitted as workflow commands on stdout, which
+# need no token and no write scope at all.
+permissions:
+  contents: read
+
+jobs:
+  skylos:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    # A whole-repo scan with the dependency (OSV.dev) and AI-defect (package
+    # registry) checks makes network calls, so it needs more headroom than the
+    # old packages-only scan.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0; Node 24
+        with:
+          fetch-depth: 0
+          # Nothing here pushes; do not leave the checkout token on disk for later steps.
+          persist-credentials: false
+
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c  # v6.0.0; Node 24
+        with:
+          # The interpreter that RUNS Skylos, not the interpreter this project
+          # targets (that is CPython 3.14, pinned in .python-version). 3.12 is
+          # chosen because every Skylos tree-sitter dependency ships a wheel for
+          # it, so the install never falls back to a source build.
+          python-version: '3.12'
+
+      - name: Install Skylos
+        # Pinned: the gate must render the same verdict on every re-run.
+        run: python -m pip install --disable-pip-version-check "skylos==4.33.2"
+
+      - name: Scope the tree and declare our own package names
+        # Everything here is DERIVED from pyproject.toml and from the workspace
+        # layout itself, so [tool.skylos] stays the single source of truth and a
+        # namespace a later epic adds is covered the day it lands.
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import pathlib
+          import sys
+          import tomllib
+
+          root = pathlib.Path(".")
+          config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+          excluded = set(config["tool"]["skylos"]["exclude"])
+
+          # CLOSE THE ONE HOLE IN THE EXCLUDE LIST - surgically.
+          #
+          # Skylos honours [tool.skylos].exclude everywhere except one place: the
+          # prompt-injection pass ALSO probes a hard-coded set of high-priority
+          # locations - "", "docs", "prompt(s)", "config(s)", ".github", ".continue" -
+          # for AGENTS.md / CLAUDE.md / README.md and friends, and that probe reads no
+          # exclude list at all (skylos/analyzer.py). That is why docs/AGENTS.md was
+          # flagged CRITICAL with "docs" sitting in the exclude list. Passing --exclude
+          # on the CLI changes nothing: it feeds the very set the probe ignores. Only
+          # removing the file from this checkout binds.
+          #
+          # Round 2 deleted the whole excluded trees, and that was too blunt: the
+          # diff-aware AI-defect rules read git, not the working tree, so wiping a tree
+          # read as "every CLI flag in it was deleted in this diff" and invented 51
+          # SKY-A104 findings. So we delete only what the probe can actually reach - the
+          # agent-instruction basenames inside excluded trees. Today that is exactly one
+          # file, and it is markdown, so no diff-aware rule has anything to say about it.
+          #
+          # Coupled to skylos==4.33.2 (pinned above). If a later version widens that
+          # probe, the leak returns as a visible CI failure, never as a silent hole.
+          # Safe by construction: this checkout is disposable and nothing is pushed from
+          # this job (persist-credentials: false, permissions contents: read).
+          probe_names = {
+              "readme.md", "readme.rst", "readme.txt", "security.md",
+              "contributing.md", "contributing.rst", "prompt.md", "prompts.md",
+              "prompts.yaml", "prompts.yml", "agents.md", "claude.md",
+              ".cursorrules", ".clinerules", ".windsurfrules",
+          }
+          for name in sorted(excluded):
+              tree = root / name
+              if not tree.is_dir():
+                  continue
+              for candidate in sorted(tree.rglob("*")):
+                  if candidate.is_file() and candidate.name.lower() in probe_names:
+                      candidate.unlink()
+                      print(f"removed from scan: {candidate.as_posix()}", file=sys.stderr)
+
+          # DECLARE our own importable names.
+          #
+          # The dependency-hallucination rule (SKY-D222) resolves every import root
+          # against PyPI and calls anything missing a hallucination. It only counts a
+          # name as local when it sits at the repository root, so this workspace's
+          # namespace packages (packages/*/src/qmf) and the top-level tool modules that
+          # the pytest pythonpath exposes are invisible to it. They are first-party and
+          # deliberately never published, so we name them - which teaches the rule our
+          # vocabulary and leaves it fully armed for everything else.
+          # */src covers top-level apps (qmb/, qml/, qmn/); */*/src covers
+          # packages/*/src and extensions/*/src. Deeper trees (e.g. qmx-agents)
+          # stay on the floor set below until their layout is stable.
+          namespaces = {
+              child.name
+              for src in list(root.glob("*/src")) + list(root.glob("*/*/src"))
+              for child in src.iterdir()
+              if child.is_dir() and not child.name.startswith((".", "_"))
+          }
+          tool_modules = {
+              module.stem
+              for module in root.glob("tools/*.py")
+              if not module.stem.startswith("_")
+          }
+          # A floor for namespaces that later epics introduce, so the first commit that
+          # adds one cannot re-trip this before its src/ tree exists.
+          floor = {"qmf", "qmb", "qml", "qmn", "qma"}
+          allow = sorted(namespaces | tool_modules | floor)
+          print(f"first-party names: {allow}", file=sys.stderr)
+          print("SKYLOS_PRIVATE_DEPS_ALLOW=" + ",".join(allow))
+          PY
+
+      - name: Scan
+        run: |
+          set +e
+          # -a is the full local audit: dead code + security/dangerous flow +
+          # secrets + quality + dependency CVEs + the evidence-backed AI-defect
+          # checks. Scope and exclusions come from [tool.skylos] in pyproject.toml,
+          # so this command is the same one a developer runs locally.
+          python -m skylos.cli . -a --no-upload --json > skylos-report.json
+          status=$?
+          set -e
+          # 0 = clean, 1 = findings (the Gate step below is what decides). Any
+          # other code means the run itself broke, and a fail-closed gate must
+          # never read a broken run as a clean one.
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+            echo "::error::Skylos scan exited $status; refusing to treat that as a clean result"
+            exit "$status"
+          fi
+
+      - name: Annotate the commit and PR
+        if: always()
+        # Reporting, not enforcement: annotations must never be the reason a job
+        # goes red, and must never hide the real failure underneath them. The
+        # Gate step is the only thing that blocks.
+        run: python -m skylos.cli cicd annotate --input skylos-report.json --max 50 || true
+
+      - name: Gate
+        # Fail-closed. Thresholds live in [tool.skylos.gate] in pyproject.toml;
+        # a nonzero exit here fails the job, and an incomplete analysis exits 2
+        # rather than passing.
+        run: python -m skylos.cli cicd gate --input skylos-report.json --summary
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0; Node 24
+        if: always()
+        with:
+          name: skylos-report
+          path: skylos-report.json
+          if-no-files-found: error
+          retention-days: 30
