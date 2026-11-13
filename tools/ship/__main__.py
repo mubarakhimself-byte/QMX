@@ -221,6 +221,35 @@ def cmd_hook(a, program, settings):
     return hook_main(program, sys.stdin.read())
 
 
+# U03: plans worktree and records
+def cmd_records(a):
+    from ship import records
+    from ship.layout import records_of
+    from ship.settings import Settings
+
+    settings, plans = Settings(), a.plans.resolve()
+    if a.action == "init":
+        if not a.repo:
+            raise SystemExit("ship records init needs --repo")
+        try:
+            lines = records.init(Path(a.repo), plans, a.remote, settings)
+        except records.RecordsError as exc:
+            print(f"REFUSED {exc}")
+            return 1
+        return _lines(True, lines)
+    if a.action == "commit":
+        if not a.message:
+            raise SystemExit("ship records commit needs -m MESSAGE")
+        lines: list[str] = []
+        with records.locked(records_of(plans)):
+            sha = records.commit(plans, a.message, settings, remote=a.remote, lines=lines)
+        return _lines(True, lines + [f"COMMIT {sha}" if sha else "NOTHING to commit"])
+    if not (a.repo and a.prefix):
+        raise SystemExit("ship records prefix needs --repo and a prefix")
+    clashes = records.prefix_clashes(plans, Path(a.repo), a.remote, a.prefix, settings)
+    return _lines(not clashes, [f"CLASH {c}" for c in clashes] or [f"FREE {a.prefix}"])
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -231,6 +260,14 @@ def parser() -> argparse.ArgumentParser:
         for arg in args:
             s.add_argument(*arg[0], **arg[1])
         s.set_defaults(fn=fn)
+        return s
+
+    def add_plain(name, fn, *args):
+        """A command that takes no --program; `fn(a)` gets the parsed arguments only."""
+        s = sub.add_parser(name)
+        for arg in args:
+            s.add_argument(*arg[0], **arg[1])
+        s.set_defaults(fn=fn, plain=True)
         return s
 
     add("init", cmd_init, (["--repo"], {"required": True}), (["--build-branch"], {"required": True}),
@@ -262,11 +299,17 @@ def parser() -> argparse.ArgumentParser:
     add("park", cmd_park, (["slice"], {}), (["--cause"], {"choices": ["manual", "dispute"], "required": True}),
         (["--why"], {"required": True}))
     add("hook", cmd_hook)
+    # U03: plans worktree and records
+    add_plain("records", cmd_records, (["action"], {"choices": ["init", "commit", "prefix"]}),
+              (["prefix"], {"nargs": "?"}), (["--plans"], {"required": True, "type": Path}), (["--repo"], {}),
+              (["--remote"], {"default": "origin"}), (["-m", "--message"], {}))
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     a = parser().parse_args(argv)
+    if getattr(a, "plain", False):
+        return a.fn(a)
     program = Program(a.program.resolve())
     return a.fn(a, program, load_settings(program.dir))
 

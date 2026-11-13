@@ -105,3 +105,78 @@ class Program:
 
     def range_verdict(self, slice_id: str, patch_id: str) -> Path:
         return self.review_dir / f"{slice_id}-range-{patch_id[:8]}.md"
+
+    @property
+    def project_file(self) -> Path:
+        """PROGRAM.yaml, the program's one index (ship.program reads it)."""
+        return self.dir / "PROGRAM.yaml"
+
+    @property
+    def phase_file(self) -> Path:
+        """phase.json, written only by `ship phase --set`."""
+        return self.dir / "phase.json"
+
+    @property
+    def chain_lock(self) -> Path:
+        """One conveyor per program; alive while its pid runs."""
+        return self.dir / "chain.lock"
+
+    @property
+    def waiting(self) -> Path:
+        """Questions for him while a planning gate is open, as `- [ ]` lines."""
+        return self.dir / "WAITING.md"
+
+    @property
+    def waits(self) -> Path:
+        """Questions for him during the run, as `- [ ]` lines."""
+        return self.notes_dir / "WAITS-ON-YOU.md"
+
+    @property
+    def workers(self) -> Path:
+        """One folder per headless run."""
+        return self.dir / "workers"
+
+    def stop_note(self, stop: str) -> Path:
+        """Written by `ship run` when a stop is built: from, tip, landed, parked."""
+        return self.notes_dir / f"stop-{stop}.json"
+
+    def stop_review(self, stop: str) -> Path:
+        return self.dir / "stop-review" / stop
+
+    def merge_note(self, stop: str) -> Path:
+        return self.dir / "merge" / f"{stop}.md"
+
+
+@dataclasses.dataclass(frozen=True)
+class Records:
+    """The shared records on branch `plans`, under `<plans>/_records/`."""
+
+    dir: Path
+
+    @property
+    def backlog(self) -> Path:
+        return self.dir / "BACKLOG.tsv"
+
+    @property
+    def backlog_md(self) -> Path:
+        return self.dir / "BACKLOG.md"
+
+    @property
+    def removed(self) -> Path:
+        return self.dir / "REMOVED.md"
+
+    @property
+    def prefixes(self) -> Path:
+        return self.dir / "PREFIXES.md"
+
+    @property
+    def claims(self) -> Path:
+        return self.dir / "CLAIMS.tsv"
+
+    @property
+    def lock(self) -> Path:
+        return self.dir / "records.lock"
+
+
+def records_of(plans: Path) -> Records:
+    return Records(plans / "_records")
