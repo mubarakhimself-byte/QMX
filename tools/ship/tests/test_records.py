@@ -174,5 +174,103 @@ class Lock(unittest.TestCase):
                 self.assertEqual(rec.lock.read_text("utf-8"), str(os.getpid()))
 
 
+class PrefixSources(RecordsCase):
+    """D-L4: every place a prefix can already be in use."""
+
+    def clashes(self, prefix):
+        return records.prefix_clashes(self.plans, self.repo, "origin", prefix, self.settings)
+
+    def test_a_backticked_id_is_found(self):
+        self.init()
+        write(self.plans / "x" / "SLICES.md", "| id | name |\n|---|---|\n| `ab-01` | First |\n")
+        self.assertEqual(self.clashes("ab"), ["x/SLICES.md: ab-01"])
+
+    def test_a_registered_prefix_is_found(self):
+        self.init()
+        self.assertEqual(self.clashes("rc"), ["_records/PREFIXES.md: - rc: risk build (rc-01 to rc-69), 2026-11"])
+        self.assertEqual(self.clashes("r"), [])
+
+    def test_an_old_programs_slices_under_a_tracker_folder_is_found(self):
+        self.init()
+        write(self.root / "risk-plan" / "tracker" / "risk-core" / "SLICES.md",
+              "| id | name |\n|---|---|\n| `qq-07` | Old one |\n")
+        self.assertEqual(self.clashes("qq"), ["risk-plan/tracker/risk-core/SLICES.md: qq-07"])
+
+    def test_a_local_slice_branch_is_found(self):
+        self.init()
+        sh(self.repo, "git", "branch", "slice/lo-01")
+        self.assertEqual(self.clashes("lo"), ["local slice/lo-01"])
+
+
+class PlansBranchBothSides(RecordsCase):
+    """D-L5: a local and a remote plans branch."""
+
+    def second_clone(self):
+        other = self.root / "other"
+        sh(self.root, "git", "clone", "-q", str(self.remote), str(other))
+        for key, value in (("user.name", "ship test"), ("user.email", "ship@test.invalid")):
+            sh(other, "git", "config", key, value)
+        return other
+
+    def test_a_local_branch_behind_the_remote_follows_it(self):
+        self.init()
+        old = self.remote_plans()
+        other = self.second_clone()
+        sh(other, "git", "fetch", "-q", "origin", "plans:plans")
+        plans2 = self.root / "plans2"
+        records.init(other, plans2, "origin", self.settings)
+        write(plans2 / "p1" / "SCOPE.md", "# scope\n")
+        new = records.commit(plans2, "p1: scope", self.settings)
+        sh(self.repo, "git", "worktree", "remove", str(self.plans))
+        self.assertEqual(sh(self.repo, "git", "rev-parse", "refs/heads/plans"), old)
+        lines = self.init()
+        self.assertEqual(lines[0], f"WORKTREE {self.plans} on origin/plans {new[:8]} (the local branch followed it)")
+        self.assertEqual(sh(self.plans, "git", "rev-parse", "HEAD"), new)
+
+    def test_diverged_branches_are_refused(self):
+        self.init()
+        other = self.second_clone()
+        sh(other, "git", "fetch", "-q", "origin", "plans:plans")
+        plans2 = self.root / "plans2"
+        records.init(other, plans2, "origin", self.settings)
+        write(plans2 / "p1" / "SCOPE.md", "# theirs\n")
+        records.commit(plans2, "p1: theirs", self.settings)
+        write(self.plans / "p2" / "SCOPE.md", "# mine\n")
+        records.commit(self.plans, "p2: mine", self.settings, push=False)
+        sh(self.repo, "git", "worktree", "remove", str(self.plans))
+        with self.assertRaisesRegex(records.RecordsError, "have diverged; nothing was changed"):
+            self.init()
+        self.assertFalse(self.plans.exists())
+
+    def test_the_seed_commit_waits_for_the_records_lock(self):
+        self.init()
+        records_of(self.plans).backlog.unlink()
+        sh(self.plans, "git", "commit", "-q", "-am", "drop a seed")
+        lock = records_of(self.plans).lock
+        holder = subprocess.Popen([sys.executable, "-c", HOLDER_SLEEP, str(TOOLS), str(lock.parent)])
+        self.addCleanup(holder.kill)
+        deadline = time.time() + 30
+        while not lock.exists() and time.time() < deadline:
+            time.sleep(0.05)
+        started = time.time()
+        lines = self.init()
+        waited = time.time() - started
+        self.assertEqual(holder.wait(timeout=30), 0)
+        self.assertGreater(waited, 1.0, "init committed while another writer held records.lock")
+        self.assertIn("SEEDED _records/BACKLOG.tsv", lines)
+        self.assertFalse(lock.exists())
+
+
+HOLDER_SLEEP = textwrap.dedent("""\
+    import sys, time
+    sys.path.insert(0, sys.argv[1])
+    from pathlib import Path
+    from ship import records
+    from ship.layout import Records
+    with records.locked(Records(Path(sys.argv[2]))):
+        time.sleep(2)
+    """)
+
+
 if __name__ == "__main__":
     unittest.main()

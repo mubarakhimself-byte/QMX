@@ -24,8 +24,8 @@ def cmd_init(a, program, settings):
     from ship.plan import init_state
 
     if settings.ci == "github" and not a.build_branch.startswith("build/"):
-        print(f"REFUSED build branch {a.build_branch}: qmx-ci runs its land level on build/** only; "
-              "name it build/<name>, or set ci = \"local\" in ship.toml")
+        print(f"REFUSED build branch {a.build_branch}: with ci = \"github\" (set in ship.toml) qmx-ci runs its "
+              "land level on build/** only; name it build/<name>, or leave ci at its default, \"local\"")
         return 1
     print(init_state(program.dir, Path(a.repo), a.build_branch, Path(a.worktree_root), a.remote))
     return 0

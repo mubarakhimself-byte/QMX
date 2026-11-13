@@ -41,6 +41,11 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `run_report` | `state.json`, `checks/` | `RUN-REPORT.md` | 0, 1 if the counts do not add up |
 | `teardown` | `ARMED.md` | the machine, `ARMED.md` (keeps only what is still there) | 0 all gone, 1 otherwise |
 | `hook` | hook JSON on stdin, `state.json` | nothing | 0 allow, 2 refuse |
+| `records init --repo R --plans P [--remote origin]` (no `--program`) | the remote's `plans` branch | the plans worktree, `_records/` seed files, one commit under `records.lock` | 0, 1 refused (another branch there, a full folder in the way, or a local `plans` that diverged from the remote) |
+| `records commit --plans P -m MSG` | the plans worktree | one commit on `plans`, pushed (an unreachable push stays local) | 0 |
+| `records prefix --plans P --repo R <prefix>` | `PREFIXES.md`, `<plans>/*/SLICES.md`, old programs' `SLICES.md` under `<worktree root>/*/tracker/`, slice branches (remote and local) | nothing | 0 free, 1 and one `CLASH` line each |
+| `phase --program P` / `--all --plans P` / `--set PHASE --status S --by WHO` / `--words` (no `--program` needed for `--all` and `--words`) | `PROGRAM.yaml`, `phase.json`, `state.json`, the stop notes, verdicts and merge notes, `chain.lock`, `WAITING.md`, `notes/WAITS-ON-YOU.md` | `phase.json` (`--set` only) | 0 |
+| `gate <name> --by WHO --source SRC [--advance]` | `PROGRAM.yaml` | the `gates:` block of `PROGRAM.yaml` | 0, 1 when the program's kind has no such gate |
 | `run [--once]` | `state.json`, `SLICES.md` (lanes), `run.json`, `BUILDER.md` in `prompt_dir`, the remote | workers, `chain.lock`, `run.json`, `notes/run.log`, `notes/WAITS-ON-YOU.md`, `notes/CHAIN-ISSUES.md`, `notes/stop-<X>.json` | 0 built or nothing left, 10 waits, 11 lock held, 1 breaker or main changed |
 | `unpark <id> --why TEXT` | `state.json` | `state.json`; removes `notes/stop-<X>.json` | 0, 1 refused (checkpoint merged, not open, or a quality park) |
 | `spike [--parent\|--child]` | the real `claude` CLI (haiku, three tiny runs) | `workers/spike/SPIKE.md`, `roles/RESULT-SHAPE.md` | 0 all seven probes pass, 1 otherwise |
@@ -185,7 +190,7 @@ routes until nothing runs. `verify_ready` exits 3 and changes nothing when the r
 
 ## CI on GitHub
 
-`ci = "github"` (the default) uses qmx-ci (`.github/workflows/qmx-ci.yml` on `origin`; every `gh` call names the repo with `-R github_repo`, because the checkout has other GitHub remotes). Its levels follow the branch names these scripts push: every slice branch is `slice/<id>` (qmx-ci level `slice`, Linux) and the build branch must be `build/<name>` (level `land`, touched tests on Linux and Windows); `init` refuses any other build branch name with `ci = "github"`. Each push is one ref (GitHub sends no event for a push of more than 3 refs).
+`ci = "github"` (set in `ship.toml`; the default is `"local"` until qmx-ci is on the target branch) uses qmx-ci (`.github/workflows/qmx-ci.yml` on `origin`; every `gh` call names the repo with `-R github_repo`, because the checkout has other GitHub remotes). Its levels follow the branch names these scripts push: every slice branch is `slice/<id>` (qmx-ci level `slice`, Linux) and the build branch must be `build/<name>` (level `land`, touched tests on Linux and Windows); `init` refuses any other build branch name with `ci = "github"`. Each push is one ref (GitHub sends no event for a push of more than 3 refs).
 
 | Level | What starts it | What the scripts do with it | Blocks |
 |---|---|---|---|
@@ -198,7 +203,7 @@ Builders never wait on any of this: `slice_checks`, `land` and `status` read wha
 
 **The deep run.** `nightly` calls `ci start`, then `ci status --wait`. `ci start` attaches instead of dispatching when `state.json` holds a run for the same tip that was not cancelled, or when GitHub already lists a deep `workflow_dispatch` run on that tip (a crash between the dispatch and the record); `--fresh` dispatches anyway. `ci status` exits 2 while the run is going and prints the new reds finished shards already show (`SO-FAR`). A finished run is judged once: its lines go to `checks/_nightly/<tip8>/summary.txt` and later calls read them back. New reds on this machine's system are bisected locally as before; reds only on the other system are reported with the slices landed since the last green tip as suspects. `nightly --no-wait` returns after the dispatch, for a coordinator that polls with `ci status`.
 
-**Fallback.** When `ci start` cannot reach GitHub (no `gh`, no network, gh signed out) or the workflow file is not at the tip, `nightly` prints `CI github unavailable: <why>; the local run stands in` and runs the whole suite on this machine. `ci = "local"` in `ship.toml` always runs locally and reads no GitHub evidence.
+**Fallback.** When `ci start` cannot reach GitHub (no `gh`, no network, gh signed out) or the workflow file is not at the tip, `nightly` prints `CI github unavailable: <why>; the local run stands in` and runs the whole suite on this machine. `ci = "local"`, the default, always runs locally and reads no GitHub evidence.
 
 **Power cut or restart.** The deep run lives on GitHub. `recover` prints `CI deep <run> ... re-attached` for a recorded run with no result, and `nightly` or `ci start` attach to it; nothing dispatches a second run for the same tip. While GitHub is unreachable, `ci status` exits 2 and a `--wait` watcher keeps polling until `ci_wait_timeout_s`.
 
@@ -301,7 +306,7 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `gh` | `gh` | verify_ready, land |
 | `lock_cmd` | `uv lock` | land |
 | `protected_branches` | `main`, `integration`, `engine/base` | the protection push test |
-| `ci` | `github` | `github` or `local`; see "CI on GitHub" |
+| `ci` | `local` | `github` or `local`; see "CI on GitHub" |
 | `github_repo` | `mubarakhimself-byte/QMX` | `-R` on every gh call |
 | `ci_workflow` | `qmx-ci.yml` | ci |
 | `ci_gate_base` | `engine/base` | ci gate: the checkpoint PR's base |

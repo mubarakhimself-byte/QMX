@@ -1,6 +1,7 @@
 """The plans worktree and the shared records: one branch, `plans`, checked out beside the code.
 
-`init` makes the worktree (from the remote's `plans` when it has one, else as a new orphan branch) and
+`init` makes the worktree (from the remote's `plans` when it has one, refusing a local `plans` that has
+diverged from it; else as a new orphan branch) and
 seeds `_records/`: BACKLOG.tsv, CLAIMS.tsv, REMOVED.md and PREFIXES.md (formats in FACTORY-DESIGN
 11.5). Run twice, the second run changes nothing. Every records write is one commit on `plans` made
 under `records.lock`; `commit` pushes it, and a push that cannot reach the remote leaves the commit
@@ -11,11 +12,12 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import time
 from pathlib import Path
 from typing import Iterator
 
-from ship.gitx import GitError, git, git_rc, remote_sha, worktrees
+from ship.gitx import GitError, git, git_rc, is_ancestor, remote_sha, worktrees
 from ship.layout import Records, records_of
 from ship.proc import pid_alive
 from ship.settings import Settings
@@ -88,7 +90,21 @@ def init(repo: Path, plans: Path, remote: str, settings: Settings) -> list[str]:
         on_remote = remote_sha(repo, remote, BRANCH, t)
         if on_remote:
             git(repo, "fetch", "-q", remote, f"+refs/heads/{BRANCH}:refs/remotes/{remote}/{BRANCH}", timeout=t)
-        if has_local:
+        if has_local and on_remote:
+            local = git(repo, "rev-parse", f"refs/heads/{BRANCH}", timeout=t).strip()
+            if local == on_remote or is_ancestor(repo, local, on_remote, t):
+                git(repo, "branch", "-f", BRANCH, on_remote, timeout=t)  # the remote one wins (D-L5)
+                git(repo, "worktree", "add", "-q", str(plans), BRANCH, timeout=t)
+                lines.append(f"WORKTREE {plans} on {remote}/{BRANCH} {on_remote[:8]} (the local branch followed it)")
+            elif is_ancestor(repo, on_remote, local, t):
+                git(repo, "worktree", "add", "-q", str(plans), BRANCH, timeout=t)
+                lines.append(f"WORKTREE {plans} on the local {BRANCH} {local[:8]}, ahead of {remote}; "
+                             "the next records commit pushes it")
+            else:
+                raise RecordsError(f"the local {BRANCH} {local[:8]} and {remote}/{BRANCH} {on_remote[:8]} have "
+                                   f"diverged; nothing was changed. Compare them (git log {BRANCH}...{remote}/{BRANCH}) "
+                                   f"and move the local branch away before running init again")
+        elif has_local:
             git(repo, "worktree", "add", "-q", str(plans), BRANCH, timeout=t)
             lines.append(f"WORKTREE {plans} on the local {BRANCH} branch")
         elif on_remote:
@@ -99,19 +115,24 @@ def init(repo: Path, plans: Path, remote: str, settings: Settings) -> list[str]:
             lines.append(f"WORKTREE {plans} on a new orphan branch {BRANCH}")
     else:
         lines.append(f"WORKTREE {plans} already on {BRANCH}")
-    written = []
-    for path, text in seed_files(plans).items():
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, "utf-8", newline="\n")
-            written.append(path.relative_to(plans).as_posix())
-    if not written:
+    seeds = seed_files(plans)
+    if all(path.exists() for path in seeds):
         lines.append("UNCHANGED every seed file is there")
         return lines
-    lines.append(f"SEEDED {', '.join(written)}")
-    sha = commit(plans, "records: seed the plans branch", settings, remote=remote, lines=lines)
-    if sha:
-        lines.append(f"COMMIT {sha[:8]}")
+    with locked(records_of(plans)):  # the seed commit is a records write like any other (D-L5)
+        written = []
+        for path, text in seeds.items():
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, "utf-8", newline="\n")
+                written.append(path.relative_to(plans).as_posix())
+        if not written:
+            lines.append("UNCHANGED every seed file is there")
+            return lines
+        lines.append(f"SEEDED {', '.join(written)}")
+        sha = commit(plans, "records: seed the plans branch", settings, remote=remote, lines=lines)
+        if sha:
+            lines.append(f"COMMIT {sha[:8]}")
     return lines
 
 
@@ -176,22 +197,44 @@ def commit(plans: Path, message: str, settings: Settings, push: bool = True, rem
     return sha
 
 
-def prefix_clashes(plans: Path, repo: Path, remote: str, prefix: str, settings: Settings) -> list[str]:
-    """Every use of `prefix` already made: SLICES.md rows under the plans worktree whose id starts
-    `<prefix>-`, and remote slice branches `slice/<prefix>-*`."""
-    found = []
-    for path in sorted(plans.glob("*/SLICES.md")):
-        for row in path.read_text("utf-8", errors="replace").splitlines():
-            row = row.strip()
-            if not row.startswith("|"):
-                continue
-            first = row.strip("|").split("|")[0].strip()
+REGISTERED = re.compile(r"^\s*[-*]\s*`?([A-Za-z0-9_.]+)`?\s*:")
+
+
+def _table_ids(path: Path, prefix: str) -> list[str]:
+    """First cells of the markdown table rows in `path` whose id (backticks stripped) starts `<prefix>-`."""
+    ids = []
+    for row in path.read_text("utf-8", errors="replace").splitlines():
+        row = row.strip()
+        if row.startswith("|"):
+            first = row.strip("|").split("|")[0].strip().strip("`").strip()
             if first.startswith(f"{prefix}-"):
-                found.append(f"{path.relative_to(plans).as_posix()}: {first}")
+                ids.append(first)
+    return ids
+
+
+def prefix_clashes(plans: Path, repo: Path, remote: str, prefix: str, settings: Settings) -> list[str]:
+    """Every use of `prefix` already made (D-L4): a registration line in PREFIXES.md, SLICES.md rows
+    under the plans worktree, SLICES.md rows of old programs under `<worktree root>/*/tracker/`
+    (the plans worktree's parent is the worktree root), and slice branches `slice/<prefix>-*`, remote
+    and local. Backticked ids count."""
+    found = []
+    registry = records_of(plans).prefixes
+    if registry.exists():
+        for line in registry.read_text("utf-8", errors="replace").splitlines():
+            m = REGISTERED.match(line)
+            if m and m.group(1) == prefix:
+                found.append(f"_records/PREFIXES.md: {line.strip()}")
+    for path in sorted(plans.glob("*/SLICES.md")):
+        found += [f"{path.relative_to(plans).as_posix()}: {sid}" for sid in _table_ids(path, prefix)]
+    root = plans.resolve().parent
+    for path in sorted(root.glob("*/tracker/**/SLICES.md")):
+        found += [f"{path.relative_to(root).as_posix()}: {sid}" for sid in _table_ids(path, prefix)]
     pattern = f"{settings.slice_branch_prefix}{prefix}-*"
     out = git(repo, "ls-remote", "--heads", remote, pattern, timeout=settings.git_timeout_s)
     for line in out.splitlines():
         _, _, ref = line.partition("\t")
         if ref.strip():
             found.append(f"{remote} {ref.strip().removeprefix('refs/heads/')}")
+    local = git(repo, "branch", "--list", "--format=%(refname:short)", pattern, timeout=settings.git_timeout_s)
+    found += [f"local {name.strip()}" for name in local.splitlines() if name.strip()]
     return found

@@ -1,6 +1,6 @@
 """nightly: the whole suite at the build tip, and on a new red, `git bisect run` over the landed slices.
 
-With `ci = "github"` (the default) the whole suite runs on GitHub: `ci.start` dispatches qmx-ci's
+With `ci = "github"` (set in ship.toml; the default is "local") the whole suite runs on GitHub: `ci.start` dispatches qmx-ci's
 deep run on the tip (or re-attaches to the one already recorded or running for it), and `ci_status`
 reads it when it finishes. Its test shards come back in `suite.run_packages`'s shape; every other
 job of the run (lint, Vulture, Skylos, mutmut) must be green too, and a deep run must leave a
