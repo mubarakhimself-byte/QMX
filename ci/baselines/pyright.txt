@@ -1,0 +1,70 @@
+# pyright errors from each folder's own config, run on linux, over . qmx-agents qmx-agents/packages/qma-harness qmx-agents/packages/qmx-apps qmx-agents/packages/qmx-broker qmx-agents/packages/qmx-control qmx-agents/packages/qmx-engine qmx-agents/packages/qmx-home qmx-agents/packages/qmx-host qmx-agents/packages/qmx-hub qmx-agents/packages/qmx-judge qmx-agents/packages/qmx-ledger qmx-agents/packages/qmx-library qmx-agents/packages/qmx-memory qmx-agents/packages/qmx-remote qmx-agents/packages/qmx-router qmx-agents/packages/qmx-tools.
+# Taken at 05e9e5dc9e. Key: path|rule|message, numbers in the message replaced by #; line numbers are left out.
+qmx-agents/packages/qma-harness/src/qma/harness/procs.py|reportAttributeAccessIssue|"WinError" is not a known attribute of module "ctypes"
+qmx-agents/packages/qma-harness/src/qma/harness/procs.py|reportAttributeAccessIssue|"get_last_error" is not a known attribute of module "ctypes"
+qmx-agents/packages/qma-harness/src/qma/harness/procs.py|reportUnknownMemberType|Type of "WinError" is unknown
+qmx-agents/packages/qma-harness/src/qma/harness/procs.py|reportUnknownMemberType|Type of "get_last_error" is unknown
+qmx-agents/packages/qma-harness/src/qma/harness/procs.py|reportUnknownVariableType|Type of "error" is unknown
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportAttributeAccessIssue|"WinDLL" is not a known attribute of module "ctypes"
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportAttributeAccessIssue|"get_last_error" is not a known attribute of module "ctypes"
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportUnknownArgumentType|Argument type is partially unknown Argument corresponds to parameter "handler" in function "signal" Argument type is "(*_: Unknown) -> Any"
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportUnknownLambdaType|Type of parameter "_" is partially unknown
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportUnknownMemberType|Type of "NtResumeProcess" is unknown
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportUnknownMemberType|Type of "WinDLL" is unknown
+qmx-agents/packages/qma-harness/src/qma/launcher.py|reportUnknownMemberType|Type of "get_last_error" is unknown
+qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py|reportAttributeAccessIssue|"CREATE_NO_WINDOW" is not a known attribute of module "subprocess"
+qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py|reportUnknownArgumentType|Argument type is partially unknown Argument corresponds to parameter "creationflags" in function "__init__" Argument type is "Unknown | Literal[#]"
+qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py|reportUnknownMemberType|Type of "CREATE_NO_WINDOW" is unknown
+qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py|reportUnusedImport|Import "Isolation" is not accessed
+qmx-agents/packages/qmx-apps/tests/test_data_reads.py|reportUnknownVariableType|Type of "WINDOWS" is partially unknown Type of "WINDOWS" is "set[Unknown]"
+qmx-agents/packages/qmx-engine/src/qmx_engine/nodes/script.py|reportAttributeAccessIssue|"CREATE_NEW_PROCESS_GROUP" is not a known attribute of module "subprocess"
+qmx-agents/packages/qmx-engine/src/qmx_engine/nodes/script.py|reportUnknownArgumentType|Argument type is partially unknown Argument corresponds to parameter "creationflags" in function "create_subprocess_exec" Argument type is "Unknown | Literal[#]"
+qmx-agents/packages/qmx-engine/src/qmx_engine/nodes/script.py|reportUnknownMemberType|Type of "CREATE_NEW_PROCESS_GROUP" is unknown
+qmx-agents/packages/qmx-engine/tests/test_zones.py|reportAttributeAccessIssue|"CreateJunction" is not a known attribute of module "_winapi"
+qmx-agents/packages/qmx-engine/tests/test_zones.py|reportUnknownMemberType|Type of "CreateJunction" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportAttributeAccessIssue|"WinDLL" is not a known attribute of module "ctypes"
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "CloseHandle" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "GetExitCodeProcess" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "GetProcessTimes" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "OpenProcess" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "OpenProcess" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "OpenProcess" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownMemberType|Type of "WinDLL" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownVariableType|Type of "handle" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/backup/restore.py|reportUnknownVariableType|Type of "kernel#" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportAttributeAccessIssue|"FormatError" is not a known attribute of module "ctypes"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportAttributeAccessIssue|"O_BINARY" is not a known attribute of module "os"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportAttributeAccessIssue|"WinDLL" is not a known attribute of module "ctypes"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportAttributeAccessIssue|"WinDLL" is not a known attribute of module "ctypes"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportAttributeAccessIssue|"get_last_error" is not a known attribute of module "ctypes"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportAttributeAccessIssue|"open_osfhandle" is not a known attribute of module "msvcrt"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownArgumentType|Argument type is unknown Argument corresponds to parameter "args" in function "__init__"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownArgumentType|Argument type is unknown Argument corresponds to parameter "fd" in function "fdopen"
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "CloseHandle" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "CreateFileW" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "FormatError" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "O_BINARY" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "WinDLL" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "WinDLL" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "get_last_error" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "open_osfhandle" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownMemberType|Type of "strip" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownVariableType|Type of "create" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownVariableType|Type of "descriptor" is unknown
+qmx-agents/packages/qmx-home/src/qmx_home/files.py|reportUnknownVariableType|Type of "error" is unknown
+qmx-agents/packages/qmx-home/tests/test_backup_plan.py|reportUnknownMemberType|Type of "CreateJunction" is unknown
+qmx-agents/packages/qmx-host/src/qmx_host/app_logs.py|reportArgumentType|Argument of type "dict[str, JsonValue] | dict[str, str]" cannot be assigned to parameter "fields" of type "dict[str, JsonValue]" in function "_read_event" Type "dict[str, JsonValue] | dict[str, str]" is not assignable to type "dict[str, JsonValue]" "dict[str, str]" is not assignable to "dict[str, JsonValue]" Type parameter "_VT@dict" is invariant, but "str" is not the same as "JsonValue" Consider switching from "dict" to "Mapping" which is covariant in the value type
+qmx-agents/packages/qmx-host/src/qmx_host/host.py|reportArgumentType|Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "funding" of type "Mapping[str, str]" in function "__init__" Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, str]" "object" is not assignable to "Mapping[str, str]"
+qmx-agents/packages/qmx-host/src/qmx_host/host.py|reportArgumentType|Argument of type "Any | object | dict[Unknown, Unknown]" cannot be assigned to parameter "profiles" of type "Mapping[str, JsonObject]" in function "__init__" Type "Any | object | dict[Unknown, Unknown]" is not assignable to type "Mapping[str, JsonObject]" "object" is not assignable to "Mapping[str, JsonObject]"
+qmx-agents/packages/qmx-host/src/qmx_host/host.py|reportOperatorIssue|Operator "not in" not supported for types "str" and "Any | object | dict[Unknown, Unknown]" Operator "not in" not supported for types "str" and "object"
+qmx-agents/packages/qmx-host/src/qmx_host/host.py|reportUnknownArgumentType|Argument type is partially unknown Argument corresponds to parameter "value" in function "_maps_to" Argument type is "Any | object | dict[Unknown, Unknown]"
+qmx-agents/packages/qmx-host/src/qmx_host/host.py|reportUnknownVariableType|Type of "funding" is partially unknown Type of "funding" is "Any | object | dict[Unknown, Unknown]"
+qmx-agents/packages/qmx-host/src/qmx_host/host.py|reportUnknownVariableType|Type of "profiles" is partially unknown Type of "profiles" is "Any | object | dict[Unknown, Unknown]"
+qmx-agents/packages/qmx-host/tests/test_app_logs.py|reportDeprecated|The function "contextmanager" is deprecated Annotating the return type as `-> Iterator[Foo]` with `@contextmanager` is deprecated. Use `-> Generator[Foo]` instead.
+qmx-agents/packages/qmx-host/tests/test_heartbeats_loop.py|reportUnknownArgumentType|Argument type is partially unknown Argument corresponds to parameter "value" in function "setattr" Argument type is "(_settings: Unknown) -> ClockFacts"
+qmx-agents/packages/qmx-host/tests/test_heartbeats_loop.py|reportUnknownLambdaType|Type of parameter "_settings" is unknown
+qmx-agents/packages/qmx-host/tests/test_heartbeats_loop.py|reportUnnecessaryCast|Unnecessary "cast" call; type is already "Any"
+qmx-agents/packages/qmx-host/tests/test_vault_acl.py|reportAttributeAccessIssue|"_owner_of" is not a known attribute of module "qmx_host.vault_acl"
+qmx-agents/packages/qmx-host/tests/test_vault_acl.py|reportUnknownMemberType|Type of "_owner_of" is unknown
+qmx-agents/packages/qmx-host/tests/test_vault_acl.py|reportUnknownVariableType|Return type, "Unknown | Literal['S-#-#-#-#-#-#-#']", is partially unknown
+qmx-agents/packages/qmx-host/tests/test_vault_acl.py|reportUnknownVariableType|Type of "owner_of" is unknown
