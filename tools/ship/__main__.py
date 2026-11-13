@@ -350,6 +350,23 @@ def cmd_facts(a, program, settings):
     return _lines(*facts_at(program, a.tip, settings, only))
 
 
+# U09: trace and the checkpoint review
+def cmd_trace(a, program, settings):
+    from ship.trace import TraceError, trace
+
+    try:
+        return _lines(*trace(program, a.stop, settings))
+    except TraceError as exc:
+        print(f"REFUSED {exc}")
+        return 1
+
+
+def cmd_review(a, program, settings):
+    from ship.review import review
+
+    return review(program, a.stop, settings, a.round)
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -417,6 +434,9 @@ def parser() -> argparse.ArgumentParser:
     add("unpark", cmd_unpark, (["slice"], {}), (["--why"], {"required": True}))
     # U08: arm checks
     add("facts", cmd_facts, (["--tip"], {"required": True}), (["--slices"], {}))
+    # U09: trace and the checkpoint review
+    add("trace", cmd_trace, (["--stop"], {"required": True}))
+    add("review", cmd_review, (["stop"], {}), (["--round"], {"type": int, "choices": [1, 2]}))
     return p
 
 

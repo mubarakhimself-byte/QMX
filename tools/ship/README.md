@@ -40,7 +40,7 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `park <id> --cause dispute\|manual --why TEXT` | `state.json` | `state.json` | 0 |
 | `run_report` | `state.json`, `checks/` | `RUN-REPORT.md` | 0, 1 if the counts do not add up |
 | `teardown` | `ARMED.md` | the machine, `ARMED.md` (keeps only what is still there) | 0 all gone, 1 otherwise |
-| `hook` | hook JSON on stdin, `state.json` | nothing | 0 allow, 2 refuse |
+| `hook` | hook JSON on stdin, `state.json`, `SHIP_ROLE` and the role's path variables (`SHIP_NOTES`, `SHIP_STOP`, `SHIP_WORKTREE`, `SHIP_BRANCH`, `SHIP_REPO`; the table is in `hook.py`) | nothing | 0 allow, 2 refuse (an unknown role, a missing variable or any error refuses) |
 | `records init --repo R --plans P [--remote origin]` (no `--program`) | the remote's `plans` branch | the plans worktree, `_records/` seed files, one commit under `records.lock` | 0, 1 refused (another branch there, a full folder in the way, or a local `plans` that diverged from the remote) |
 | `records commit --plans P -m MSG` | the plans worktree | one commit on `plans`, pushed (an unreachable push stays local) | 0 |
 | `records prefix --plans P --repo R <prefix>` | `PREFIXES.md`, `<plans>/*/SLICES.md`, old programs' `SLICES.md` under `<worktree root>/*/tracker/`, slice branches (remote and local) | nothing | 0 free, 1 and one `CLASH` line each |
@@ -49,6 +49,8 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `run [--once]` | `state.json`, `SLICES.md` (lanes), `run.json`, `BUILDER.md` in `prompt_dir`, the remote | workers, `chain.lock`, `run.json`, `notes/run.log`, `notes/WAITS-ON-YOU.md`, `notes/CHAIN-ISSUES.md`, `notes/stop-<X>.json` | 0 built or nothing left, 10 waits, 11 lock held, 1 breaker or main changed |
 | `unpark <id> --why TEXT` | `state.json`, `stop-review/<X>/` | `state.json`; removes `notes/stop-<X>.json` | 0, 1 refused (checkpoint merged, not open, its review started, or a quality park) |
 | `spike [--parent\|--child\|--recheck]` | the real `claude` CLI (haiku, three tiny runs; `--recheck`: probes 2, 3 and 7 under the isolation flags plus one opus and one fable model probe) | `workers/spike/SPIKE.md`, `roles/RESULT-SHAPE.md`; `--recheck` appends to `roles/SPIKE.md` | 0 all probes pass, 1 otherwise |
+| `trace --stop X` | `PROGRAM.yaml` (`chains`), `state.json`, the briefs' `Chain:` and section 7a lines, `git log --first-parent from..tip`, `checks/`, `REMOVED.md` (the program's and `_records/`), `evidence/*/*/report.md`, `notes/CHAIN-ISSUES.md` | `stop-review/X/MAP.md` | 0, 1 on an unchained commit, a scenario with no passing test, or a failed removal guard |
+| `review X [--round 1\|2]` | `notes/stop-X.json` (round 2: the fix program's), the readers' notes, the deep run, the verdict file | `START.json`, `review-run.json`, `MAP.md`, reader checkouts (dropped at the end), workers, `merge/X.md` (`EMPTY` only), `notes/WAITS-ON-YOU.md` | 0 CLEAN (or empty), 2 BLOCKED, 10 waits, 11 lock held |
 
 `bisect-step` is internal: `nightly` hands it to `git bisect run`.
 

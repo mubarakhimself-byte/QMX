@@ -94,7 +94,10 @@ def load_roles(settings: Settings, profile: dict | None = None) -> dict[str, Rol
     roles = {}
     for name, row in raw.items():
         row = {**row, **{k: v for k, v in over.get(name, {}).items() if k in ("model", "effort", "fallback")}}
-        roles[name] = Role(name, row["model"], row["effort"], bool(row["agent_tool"]), float(row["timeout_s"]),
+        timeout = float(row["timeout_s"])
+        if settings.worker_timeout_s > 0:
+            timeout = min(timeout, float(settings.worker_timeout_s))
+        roles[name] = Role(name, row["model"], row["effort"], bool(row["agent_tool"]), timeout,
                            ROLES_DIR / row["settings"], row.get("fallback"))
     return roles
 

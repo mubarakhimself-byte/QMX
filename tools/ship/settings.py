@@ -70,6 +70,8 @@ class Settings:
     # U08: arm checks
     disk_warn_gb: float = 20  # preflight warns (never refuses) below this much free space on the worktree drive
     main_check_ignore: tuple[str, ...] = ("tracker", ".claude")  # never stop a run, even under a code root
+    # U09: trace and the checkpoint review
+    worker_timeout_s: float = 0  # > 0 caps every worker role's time limit (tests and drills); 0 keeps roles.toml's
 
 
 def repo_args(settings: Settings) -> list[str]:

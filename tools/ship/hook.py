@@ -19,6 +19,27 @@ Bash commands are read segment by segment (split on `&&`, `||`, `;`, `|` and new
 The hook input does not say which agent is calling, so the allowed set is the union over held slices:
 it stops writes to the main checkout and to anything outside the run, not one builder writing into
 another held builder's worktree.
+
+Roles (D-L16, FACTORY-DESIGN 11.3). The launcher puts `SHIP_ROLE` in every worker's environment, and the
+hook process inherits it. `builder` and `fixer` (and no role at all, the hook's first callers) get the
+held-slice rules above. Every other role writes only its own paths, named below from `SHIP_STOP`,
+`SHIP_NOTES` and `SHIP_WORKTREE`, and runs no git that writes, except `docs` inside its docs worktree,
+pushing only `SHIP_BRANCH`. A role the table does not know, or a role whose path variable is missing,
+refuses every write.
+
+| Role | Writes |
+|---|---|
+| reader, fault-reader | the one notes file `SHIP_NOTES` |
+| verdict | `stop-review/<SHIP_STOP>/`, `merge/`, the sibling `<program>-fix-<SHIP_STOP>/` |
+| grounding | `plan-review/grounding.md`, `grounding/REPORT.md` |
+| plan-review | `plan-review/` |
+| planner-fix, later-handoff, sweep-handoff | the plan files of the program folder |
+| challenger, audit-judge, answer-linker | `CHALLENGE.md`, `AUDIT.md`, `CAN-CHANGE.md`, `decisions/proposed/` |
+| audit-intent, audit-reader, audit-screen | `INTENT.md`, `readers/`, `AUDIT-SCREEN.md` (one each) |
+| docs | its docs worktree `SHIP_WORKTREE` |
+
+The main checkout comes from `state.json`, else `SHIP_REPO`. A non-builder role with neither gets every
+Bash command refused: the guard cannot tell what names the main checkout.
 """
 
 from __future__ import annotations
@@ -64,17 +85,67 @@ def inside(path: str, root: str) -> bool:
     return p == r or p.startswith(r.rstrip(os.sep) + os.sep)
 
 
-class Run:
-    """What the guard knows: held worktrees (with their slice branches), writable roots, the main checkout."""
+SLICE_ROLES = ("builder", "fixer", "")
+PLAN_FILES = ("PROGRAM.yaml", "SCOPE.md", "GROUND.md", "CHALLENGE.md", "PLAN.md", "ANNEAL-LOG.md", "EDGE-CASES.md",
+              "CAN-CHANGE.md", "REMOVED.md", "SLICES.md", "checks.toml", "WAITING.md", "decisions", "arch", "slices",
+              "plan-review/FIXES.applied.md", "plan-review/FIXES.md")
 
-    def __init__(self, program: Program):
-        state = st.load(program)
-        held = [s for s in state.slices.values() if s.status == Status.HELD]
-        self.branches = {str(state.worktree(s.id)): s.branch for s in held}
+
+def role_paths(program: Program, role: str, env) -> tuple[list[str], dict[str, str]]:
+    """(writable roots, {worktree: the branch it may push}) for a role that is not a builder.
+    Raises KeyError for a role the table does not know, ValueError for a missing path variable."""
+    d = program.dir
+
+    def need(name: str) -> str:
+        value = (env.get(name) or "").strip()
+        if not value:
+            raise ValueError(f"role {role} needs {name} in its environment")
+        return value
+
+    if role in ("reader", "fault-reader"):
+        return [need("SHIP_NOTES")], {}
+    if role == "verdict":
+        stop = need("SHIP_STOP")
+        return [str(program.stop_review(stop)), str(d / "merge"), str(d.parent / f"{d.name}-fix-{stop}")], {}
+    if role == "grounding":
+        return [str(d / "plan-review" / "grounding.md"), str(d / "grounding" / "REPORT.md")], {}
+    if role == "plan-review":
+        return [str(d / "plan-review")], {}
+    if role in ("planner-fix", "later-handoff", "sweep-handoff"):
+        return [str(d / name) for name in PLAN_FILES], {}
+    if role in ("challenger", "audit-judge", "answer-linker"):
+        return [str(d / name) for name in ("CHALLENGE.md", "AUDIT.md", "CAN-CHANGE.md", "decisions/proposed")], {}
+    if role == "audit-intent":
+        return [str(d / "INTENT.md")], {}
+    if role == "audit-reader":
+        return [str(d / "readers")], {}
+    if role == "audit-screen":
+        return [str(d / "AUDIT-SCREEN.md")], {}
+    if role == "docs":
+        tree = need("SHIP_WORKTREE")
+        return [tree], {tree: need("SHIP_BRANCH")}
+    raise KeyError(f"role {role!r} is not in the hook's table")
+
+
+class Run:
+    """What the guard knows: held worktrees (with their branches), writable roots, the main checkout."""
+
+    def __init__(self, program: Program, env=None):
+        env = os.environ if env is None else env
+        self.role = (env.get("SHIP_ROLE") or "").strip()
+        if self.role in SLICE_ROLES:
+            state = st.load(program)
+            held = [s for s in state.slices.values() if s.status == Status.HELD]
+            self.branches = {str(state.worktree(s.id)): s.branch for s in held}
+            self.worktrees = list(self.branches)
+            evidence = [str(program.evidence(s.id, s.attempts)) for s in held]
+            self.roots = self.worktrees + evidence + [str(program.review_dir), str(program.notes_dir)]
+            self.repo = state.repo
+            return
+        self.roots, self.branches = role_paths(program, self.role, env)
         self.worktrees = list(self.branches)
-        evidence = [str(program.evidence(s.id, s.attempts)) for s in held]
-        self.roots = self.worktrees + evidence + [str(program.review_dir), str(program.notes_dir)]
-        self.repo = state.repo
+        self.repo = st.load(program).repo if program.state.exists() else ""
+        self.repo = self.repo or (env.get("SHIP_REPO") or "").strip()
 
     def worktree_of(self, where: str) -> str | None:
         return next((w for w in self.worktrees if inside(where, w)), None)
@@ -180,6 +251,9 @@ def _path_tokens(tokens: list[str]) -> list[str]:
 
 
 def bash_problem(run: Run, command: str, cwd: str) -> str | None:
+    if not run.repo:
+        return (f"ship hook: Bash refused: role {run.role} has no state.json and no SHIP_REPO, so the guard "
+                "cannot tell what names the main checkout")
     low = command.lower().replace("\\", "/")
     for word in SECRET_WORDS:
         if word in low:
@@ -213,6 +287,8 @@ def bash_problem(run: Run, command: str, cwd: str) -> str | None:
         tree = run.worktree_of(where) if where else None
         if tree is None:
             shown = where or "a --git-dir or --work-tree folder"
+            if run.role not in SLICE_ROLES:
+                return f"ship hook: git {sub} in {shown} refused; role {run.role} runs no git that writes there"
             if sub == "commit":
                 return f"ship hook: git commit in {shown} refused; commit only in your own slice worktree"
             return f"ship hook: git {sub} in {shown} refused; git writes only in your own slice worktree"
@@ -232,13 +308,15 @@ def decide(program: Program, event: dict) -> str | None:
         return None
     try:
         run = Run(program)
-    except Exception as exc:  # noqa: BLE001 - an unreadable state.json refuses, whatever is wrong with it
-        return f"ship hook: cannot read state.json ({exc!r}); refusing writes until it can"
+    except Exception as exc:  # noqa: BLE001 - an unknown role or an unreadable state.json refuses
+        return f"ship hook: cannot tell what this worker may write ({exc!r}); refusing writes until it can"
     if tool in FILE_TOOLS:
         target = os.path.join(cwd, data.get(FILE_TOOLS[tool], ""))
         if any(inside(target, r) for r in run.roots):
             return None
-        return f"ship hook: {tool} to {target} refused; write only in your worktree or evidence folder"
+        if run.role in SLICE_ROLES:
+            return f"ship hook: {tool} to {target} refused; write only in your worktree or evidence folder"
+        return f"ship hook: {tool} to {target} refused; role {run.role} writes only {', '.join(run.roots)}"
     return bash_problem(run, str(data.get("command", "")), cwd)
 
 
