@@ -23,6 +23,10 @@ def _lines(ok: bool, lines: list[str]) -> int:
 def cmd_init(a, program, settings):
     from ship.plan import init_state
 
+    if settings.ci == "github" and not a.build_branch.startswith("build/"):
+        print(f"REFUSED build branch {a.build_branch}: qmx-ci runs its land level on build/** only; "
+              "name it build/<name>, or set ci = \"local\" in ship.toml")
+        return 1
     print(init_state(program.dir, Path(a.repo), a.build_branch, Path(a.worktree_root), a.remote))
     return 0
 
@@ -70,7 +74,36 @@ def cmd_land(a, program, settings):
 def cmd_nightly(a, program, settings):
     from ship.nightly import nightly
 
-    return _lines(*nightly(program, settings))
+    ok, lines = nightly(program, settings, wait=not a.no_wait)
+    for line in lines:
+        print(line)
+    return {True: 0, False: 1, None: 2}[ok]
+
+
+def cmd_ci(a, program, settings):
+    from ship import ci
+    from ship.nightly import ci_status
+
+    if a.action == "start":
+        try:
+            lines = ci.start(program, settings, level=a.level, fresh=a.fresh)
+        except ci.Unavailable as exc:
+            print(f"UNAVAILABLE {exc}; ship nightly runs locally instead")
+            return 1
+        rc = 0
+    elif a.action == "status":
+        step = lambda: ci_status(program, settings)
+        rc, lines = ci.wait(step, settings) if a.wait else step()
+    elif a.action == "gate":
+        step = lambda: ci.gate(program, settings, a.pr)
+        rc, lines = ci.wait(step, settings) if a.wait else step()
+    else:
+        if not a.run_id:
+            raise SystemExit("ship ci read needs a run id")
+        rc, lines = ci.report(program, settings, a.run_id)
+    for line in lines:
+        print(line)
+    return rc
 
 
 def cmd_bisect_step(a, program, settings):
@@ -208,7 +241,10 @@ def parser() -> argparse.ArgumentParser:
     add("timed", cmd_timed, (["--slice"], {"required": True}), (["--log"], {"required": True}),
         (["--timeout"], {"type": float}), (["argv"], {"nargs": argparse.REMAINDER}))
     add("land", cmd_land, (["slices"], {"nargs": "*"}))
-    add("nightly", cmd_nightly)
+    add("nightly", cmd_nightly, (["--no-wait"], {"action": "store_true"}))
+    add("ci", cmd_ci, (["action"], {"choices": ["start", "status", "gate", "read"]}),
+        (["run_id"], {"nargs": "?"}), (["--level"], {"default": "deep"}),
+        (["--fresh"], {"action": "store_true"}), (["--wait"], {"action": "store_true"}), (["--pr"], {}))
     add("bisect-step", cmd_bisect_step, (["--ids"], {"required": True}))
     add("power_watch", cmd_power_watch, (["--once"], {"action": "store_true"}))
     add("power", cmd_power)

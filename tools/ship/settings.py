@@ -43,6 +43,22 @@ class Settings:
     gh: tuple[str, ...] = ("gh",)
     lock_cmd: tuple[str, ...] = ("uv", "lock")  # regenerates a uv.lock after a landing rebase
     protected_branches: tuple[str, ...] = ("main", "integration", "engine/base")
+    # CI (ci.py). "github": qmx-ci on GitHub Actions runs the checkpoint deep run and gives Linux
+    # evidence for slices and landings; "local": this machine only. github falls back to local by
+    # itself when gh or GitHub cannot be reached, or the workflow is not on the branch.
+    ci: str = "local"  # off by default until qmx-ci is on the target branch; a program opts in in ship.toml
+    github_repo: str = "mubarakhimself-byte/QMX"  # every gh call names it; the checkout has other remotes
+    ci_workflow: str = "qmx-ci.yml"
+    ci_gate_base: str = "engine/base"  # the branch the checkpoint PR targets; its gate job reads the deep run
+    ci_poll_s: int = 120  # how often a --wait watcher reads a run
+    ci_wait_timeout_s: int = 43200  # a --wait watcher gives up (exit 2) after this; the run goes on
+    ci_find_s: int = 180  # after a dispatch, how long to look for the new run in the listing
+    ci_slice_grace_s: int = 3600  # land waits this long after slice_checks for the Linux slice run
+
+
+def repo_args(settings: Settings) -> list[str]:
+    """`-R owner/name` for every gh call: the checkout has more than one GitHub remote."""
+    return ["-R", settings.github_repo] if settings.github_repo else []
 
 
 def load_settings(program_dir: Path) -> Settings:
@@ -55,4 +71,9 @@ def load_settings(program_dir: Path) -> Settings:
     if unknown:
         raise SystemExit(f"ship.toml: unknown settings {unknown}")
     values = {k: tuple(v) if isinstance(v, list) else v for k, v in raw.items()}
+    if values.get("ci", "github") not in CI_BACKENDS:
+        raise SystemExit(f"ship.toml: ci = {values['ci']!r}; want one of {list(CI_BACKENDS)}")
     return Settings(**values)
+
+
+CI_BACKENDS = ("github", "local")

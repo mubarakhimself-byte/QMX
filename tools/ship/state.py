@@ -98,6 +98,9 @@ class Slice:
     landed_sha: str | None = None
     seen_sha: str | None = None  # last remote sha `status` saw, for liveness
     seen_at: str | None = None
+    # The Linux slice run on GitHub: {"sha": the pushed head it ran on, "linux": pass|fail|pending|notrun,
+    # "url": the run}. "pending" after landing means the checkpoint reads it again.
+    ci: dict = dataclasses.field(default_factory=dict)
 
     @property
     def branch(self) -> str:
@@ -116,6 +119,9 @@ class State:
     last_green: str | None = None  # build tip of the last green nightly
     nightly: dict = dataclasses.field(default_factory=dict)
     merged: list[str] = dataclasses.field(default_factory=list)  # checkpoints merged into the target, in order
+    # GitHub runs: "deep" {tip, run_id, url, level, result}, "land" [{tip, batch, slices, result, url}],
+    # "gate" {run_id: reruns}. See ci.py.
+    ci: dict = dataclasses.field(default_factory=dict)
     schema: int = SCHEMA
 
     def worktree(self, slice_id: str) -> Path:

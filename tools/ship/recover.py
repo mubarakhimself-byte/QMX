@@ -13,7 +13,7 @@ from ship import state as st
 from ship.layout import Program
 from ship.settings import Settings
 from ship.state import Status
-from ship.gitx import registered
+from ship.gitx import GitError, registered
 from ship.worktree import fetch_branch, save_and_reset
 
 
@@ -42,4 +42,21 @@ def recover(program: Program, settings: Settings, usage_reset: str | None = None
                 continue
             saved = save_and_reset(wt, target, program.evidence(sl.id, sl.attempts) / "leftover.patch", settings)
             lines.append(f"RESET {sl.id} to {target[:8]}" + (f", leftovers in {saved}" if saved else ""))
+        deep = state.ci.get("deep") or {}
+        if settings.ci == "github" and deep.get("run_id") and deep.get("result") is None:
+            lines.append(reattach(state, settings, deep))
     return lines
+
+
+def reattach(state: st.State, settings: Settings, deep: dict) -> str:
+    """A GitHub run survives a power cut: point at it again, never dispatch a second one."""
+    from ship.ci import gh_for, short
+
+    level = deep.get("level", "deep")
+    try:
+        got = gh_for(state, settings).view(deep["run_id"])
+    except GitError as exc:
+        return (f"CI {level} {deep['run_id']} on {deep['tip'][:8]} recorded; GitHub unreachable "
+                f"({short(exc)}); ship ci status retries, nothing new dispatched")
+    said = " ".join(x for x in (got.get("status"), got.get("conclusion")) if x)
+    return f"CI {level} {deep['run_id']} on {deep['tip'][:8]} re-attached: {said} {got.get('url')}; ship ci status --wait reads it"

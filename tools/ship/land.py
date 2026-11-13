@@ -17,13 +17,14 @@ from __future__ import annotations
 import datetime as dt
 from pathlib import Path, PurePosixPath
 
+from ship import ci
 from ship import state as st
 from ship.evidence import verdict_problem
 from ship.gitx import GitError, changed_files, git, git_rc, patch_id, remote_sha, run
 from ship.layout import Program
-from ship.settings import Settings
+from ship.settings import Settings, repo_args
 from ship.state import Status
-from ship.suite import load_packages, read_baseline, run_packages, touched, write_baseline
+from ship.suite import baseline_for, canon, load_packages, run_packages, touched, write_baseline
 from ship.worktree import checkout_copy, drop_copy, note_leftover, remove_worktree
 from ship.wrapper import run_timed
 
@@ -129,9 +130,29 @@ class Landing:
         with st.locked(self.program) as state:
             git(Path(state.repo), "update-ref", rebased_ref(sl.id), new, timeout=self.settings.git_timeout_s)
             fresh = state.slices[sl.id]
+            fresh.ci.setdefault("sha", fresh.head)  # the Linux slice run ran on the pushed head, not this one
+            fresh.ci["rebased"] = new
             fresh.parent, fresh.head = cur, new
             state.move(sl.id, Status.READY, f"land: {why}; slice_checks again at the rebased head {new[:8]}")
         self.say(f"RECHECK {sl.id}: {why}; run slice_checks {sl.id} on the rebased head {new[:8]}")
+
+    def linux_allows(self, state: st.State, sl: st.Slice) -> bool:
+        """With ci = "github": a red Linux slice run sends the slice back (red); a pending one waits
+        up to ci_slice_grace_s after slice_checks, then lands with Linux recorded as pending."""
+        if self.settings.ci != "github":
+            return True
+        action, line, rec = ci.linux_gate(state, self.settings, sl, dt.datetime.now(dt.timezone.utc))
+        if action == "red":
+            with st.locked(self.program) as fresh:
+                fresh.slices[sl.id].ci = rec
+            self._red(sl.id, f"land: {line}")
+            return False
+        with st.locked(self.program) as fresh:
+            fresh.slices[sl.id].ci = rec
+        sl.ci = rec
+        if line:
+            self.say(line)
+        return action == "land"
 
     def _red(self, slice_id: str, reason: str) -> None:
         with st.locked(self.program) as state:
@@ -159,7 +180,7 @@ class Landing:
                 problem = verdict_problem(program.verdict(sid, sl.head), sl.head, sl.holder.dispatch_id)
             if problem:
                 self.say(f"SKIP {sid}: {problem}")
-            else:
+            elif self.linux_allows(state, sl):
                 candidates.append(sid)
         if not candidates:
             return self.finish(False)
@@ -191,8 +212,8 @@ class Landing:
         runs = run_packages(copy, packages, self.out, settings.land_timeout_s, settings, program.runs)
         reds = set().union(*(r.red() for r in runs.values())) if runs else set()
         broken = [root for root, r in runs.items() if not r.junit_ok]
-        baseline = read_baseline(program.baseline_reds)
-        new_reds = sorted(reds - baseline)
+        baseline = baseline_for(program, repo, cur, t)
+        new_reds = baseline.new(reds)
         if new_reds or broken:
             self.say(f"FAIL land-tests {self.batch} batch {included}: new reds {new_reds}"
                      + (f", no JUnit report from {broken}" if broken else ""))
@@ -211,10 +232,13 @@ class Landing:
             drop_copy(repo, copy, settings)
             return self.finish(False)
         passed = set().union(*(set(r.outcomes) - r.red() for r in runs.values())) if runs else set()
-        fixed = baseline & passed
-        if fixed:
-            write_baseline(program.baseline_reds, baseline - fixed)
-            self.say(f"BASELINE removed {sorted(fixed)}")
+        fixed = baseline.known(passed)
+        if fixed and baseline.mirrored:
+            self.say(f"NOTE known reds pass now {fixed}; shrink {baseline.source.split(' at ')[0]} with pull_reds.py")
+        elif fixed:
+            gone = {canon(f) for f in fixed}
+            write_baseline(program.baseline_reds, {r for r in read_lines(program) if canon(r) not in gone})
+            self.say(f"BASELINE removed {fixed}")
         drop_copy(repo, copy, settings)
 
         with st.locked(program) as fresh:
@@ -223,13 +247,16 @@ class Landing:
                 sl.landed_sha = commits[sid]
                 sl.patch_id = patch_id(repo, commits[sid] + "~1", commits[sid], t)
                 fresh.move(sid, Status.LANDED, f"landed as {commits[sid][:8]} on {fresh.build_branch}")
+            if settings.ci == "github":
+                ci.record_landing(fresh, cur, self.batch, included)
         for sid in included:
             sl = state.slices[sid]
             self.say(f"PASS land-{sid} landed as {commits[sid]}")
             git(repo, "update-ref", "-d", rebased_ref(sid), timeout=t, check=False)
             if sl.pr:
                 run([*settings.gh, "pr", "close", sl.pr, "--comment",
-                     f"Landed on {state.build_branch} as {commits[sid]}."], repo, t, check=False)
+                     f"Landed on {state.build_branch} as {commits[sid]}.", *repo_args(settings)], repo, t,
+                    check=False)
             problem = remove_worktree(repo, state.worktree(sid), sl.branch, state.remote, settings)
             if problem:
                 note_leftover(program.leftovers, problem)
@@ -241,6 +268,12 @@ class Landing:
     def finish(self, ok: bool) -> bool:
         (self.out / "summary.txt").write_text("\n".join(self.lines) + "\n", "utf-8", newline="\n")
         return ok
+
+
+def read_lines(program: Program) -> set[str]:
+    from ship.suite import read_baseline
+
+    return read_baseline(program.baseline_reds)
 
 
 def land(program: Program, ids: list[str] | None, settings: Settings) -> tuple[bool, list[str]]:

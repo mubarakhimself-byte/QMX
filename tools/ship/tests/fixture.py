@@ -101,6 +101,8 @@ class RepoCase(unittest.TestCase):
             heartbeat_interval_s = 1
             power_settle_s = 5
             keep_awake_poll_s = 1
+            ci = "local"
+            github_repo = "owner/qmx"
             """).replace("'", '"'))
         init_state(self.program.dir, self.repo, self.build_branch, self.wt_root, "origin")
 

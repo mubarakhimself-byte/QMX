@@ -24,7 +24,7 @@ from ship.evidence import body_without_end, end_problem
 from ship.gitx import GitError, changed_files, git, is_ancestor, remote_sha, run
 from ship.layout import Program
 from ship.plan import outside, overlaps
-from ship.settings import Settings
+from ship.settings import Settings, repo_args
 from ship.state import IN_FLIGHT, Status
 
 
@@ -88,7 +88,7 @@ def pr_problems(path: Path, sl: st.Slice) -> list[str]:
 
 
 def _gh(settings: Settings, repo: Path, *args: str) -> str:
-    return run([*settings.gh, *args], repo, settings.git_timeout_s).stdout
+    return run([*settings.gh, *args, *repo_args(settings)], repo, settings.git_timeout_s).stdout
 
 
 def open_pr(program: Program, state: st.State, slice_id: str, sha: str, settings: Settings) -> str:

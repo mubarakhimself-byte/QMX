@@ -64,6 +64,10 @@ def status(program: Program, settings: Settings, now: dt.datetime | None = None)
         lines.append(f"BREAKER tripped: {settings.breaker_parks} quality parks in a row; stop the run")
     if progress:
         lines.append(progress)
+    if settings.ci == "github":
+        from ship.ci import land_runs
+
+        lines += land_runs(program, settings)
     lines.append(f"SEATS {held} of {settings.seats} held; could start: {now_list}")
     if early:
         lines.append(f"PREBUILD could start: {early}")

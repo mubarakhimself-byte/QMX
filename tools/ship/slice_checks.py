@@ -7,16 +7,23 @@ Checks: `git diff --check`, case-only path collisions, then per touched package 
 types and tests at the head; fail-at-parent: each new test case must fail at the parent on an
 assertion (an import, collection or other error does not count) and pass at the head; Vulture and
 Skylos, failing only on a finding in the slice's files that is neither at the parent nor in the
-baseline (see quality.py). Last, the brief's SAFETY fact at the head.
+baseline (see quality.py). Last, the brief's SAFETY fact at the head. A touched package's test run
+fails only on a red missing from the shared baseline (CI's known-reds.txt at the head, see suite.py),
+so a red qmx-ci accepts is accepted here too.
+
+With `ci = "github"`, the Linux line is qmx-ci's slice run on the pushed head: PASS, FAIL (red), or
+PENDING while it queues or runs; land reads it again before landing (ci.linux_gate).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import shutil
 import sys
 from collections import Counter
 from pathlib import Path, PurePosixPath
 
+from ship import ci
 from ship import state as st
 from ship.dispatch import run_facts
 from ship.gitx import changed_files, git, git_rc
@@ -25,7 +32,7 @@ from ship.plan import PlanError, read_brief_facts
 from ship.quality import check_package
 from ship.settings import Settings
 from ship.state import Status
-from ship.suite import Outcome, Package, load_packages, package_of, run_tests, touched
+from ship.suite import Outcome, Package, baseline_for, load_packages, package_of, run_tests, touched
 from ship.wrapper import run_timed
 from ship.worktree import checkout_copy
 
@@ -147,6 +154,7 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
     head_copy = checkout_copy(repo, program.tmp / f"check-{slice_id}-head", head, settings)
     parent_copy = checkout_copy(repo, program.tmp / f"check-{slice_id}-parent", parent, settings)
     support = [f for f in files if is_test_support(f)]
+    baseline = baseline_for(program, repo, head, t)
     for package in touched(packages, files):
         for copy in (head_copy, parent_copy):
             if package.setup:
@@ -167,8 +175,11 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
         name = f"test-{package.label}"
         run = run_tests(head_copy, package, [], out / f"{name}.log", settings.check_timeout_s, settings,
                         program.runs, beat)
-        detail = f"rc={run.run.rc} red={len(run.red())}" + ("" if run.junit_ok else " no JUnit report")
-        rec.record("PASS" if run.clean else "FAIL", name, detail, run.run.log)
+        known = baseline.known(run.red())
+        detail = (f"rc={run.run.rc} red={len(run.red())}" + (f" known={len(known)}" if known else "")
+                  + ("" if run.junit_ok else " no JUnit report"))
+        green = run.junit_ok and not baseline.new(run.red()) and (run.run.rc == 0 or bool(known))
+        rec.record("PASS" if green else "FAIL", name, detail, run.run.log)
         modules = [f for f in files if is_test_module(f) and package_of(packages, f) == package
                    and git_rc(repo, "cat-file", "-e", f"{head}:{f}", timeout=t) == 0]
         if modules:
@@ -181,12 +192,21 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
             rec.record(verdict, f"quality-{tool}-{package.label}", detail)
     rec.record(*safety_at_head(program, slice_id, head_copy, out, settings))
     other = "linux" if sys.platform == "win32" else "windows"
-    rec.record("NOTRUN", other, f"this machine is {sys.platform}; {other} checks run in CI later")
+    linux = None
+    if settings.ci == "github":
+        sha = sl.ci.get("sha") if sl.ci.get("rebased") == head else head
+        linux = ci.slice_linux(state, settings, dataclasses.replace(sl, ci={"sha": sha}))
+        rec.record(linux[0], "linux", " ".join(x for x in linux[1:] if x))
+    if other == "windows" or linux is None:
+        rec.record("NOTRUN", other, f"this machine is {sys.platform}; {other} checks run in CI later")
     rec.record("NOTRUN", "mutation", "mutmut runs on the changed functions at the checkpoint (ship quality)")
     (out / "summary.txt").write_text("\n".join(rec.lines) + "\n", "utf-8", newline="\n")
 
     with st.locked(program) as fresh:
         now = fresh.slices[slice_id]
+        if now.head == head and linux is not None:
+            sha = now.ci.get("sha") if now.ci.get("rebased") == head else head
+            now.ci = {**now.ci, "sha": sha, "linux": linux[0].lower(), "url": linux[2]}
         if now.head == head and now.status in CHECKABLE:
             fails = [ln for ln in rec.lines if ln.startswith("FAIL ")]
             if fails:
