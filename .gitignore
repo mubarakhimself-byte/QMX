@@ -1,0 +1,7 @@
+*/checks/
+*/runs/
+*/tmp/
+*/heartbeat/
+*/workers/*/stdout.log
+*.lock
+*.tmp
