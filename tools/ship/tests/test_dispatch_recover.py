@@ -1,4 +1,6 @@
 import dataclasses
+import datetime as dt
+import re
 import unittest
 
 from ship import state as st
@@ -90,6 +92,7 @@ class FixRounds(DispatchCase):
 
 class Recover(DispatchCase):
     def test_dead_seat_leftovers_saved_reset_to_pushed_and_restart_counted(self):
+        future = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=1)).isoformat(timespec="seconds")
         self.go("s1")
         wt = self.wt_root / "slice-s1"
         write(wt / "pkg" / "mul.py", "def mul(a, b):\n    return a * b\n")
@@ -100,8 +103,8 @@ class Recover(DispatchCase):
         write(wt / "pkg" / "mul.py", "UNCOMMITTED = 1\n")
         write(wt / "pkg" / "new_untracked.py", "UNTRACKED = 1\n")
 
-        lines = recover(self.program, self.settings, usage_reset="2026-11-13T05:00:00+00:00")
-        self.assertEqual(lines[:2], ["USAGE reset at 2026-11-13T05:00:00+00:00", "DEAD s1"])
+        lines = recover(self.program, self.settings, usage_reset=future)
+        self.assertEqual(lines[:2], ["USAGE reset at " + future, "DEAD s1"])
         patch = (self.program.evidence("s1", 1) / "leftover.patch").read_text("utf-8")
         for text in ("UNPUSHED = 1", "UNCOMMITTED = 1", "UNTRACKED = 1"):
             self.assertIn(text, patch)
@@ -112,8 +115,8 @@ class Recover(DispatchCase):
                          ["facts.log", "leftover.patch"])
 
         state = st.load(self.program)
-        self.assertEqual(state.usage_reset_at, "2026-11-13T05:00:00+00:00")
-        with self.assertRaisesRegex(Refused, "usage limit resets at 2026-11-13"):
+        self.assertEqual(state.usage_reset_at, future)
+        with self.assertRaisesRegex(Refused, "usage limit resets at " + re.escape(future[:10])):
             self.go("s1")
         with st.locked(self.program) as state:
             state.usage_reset_at = "2020-01-01T00:00:00+00:00"
