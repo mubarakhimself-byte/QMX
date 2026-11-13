@@ -72,6 +72,8 @@ class Settings:
     main_check_ignore: tuple[str, ...] = ("tracker", ".claude")  # never stop a run, even under a code root
     # U09: trace and the checkpoint review
     worker_timeout_s: float = 0  # > 0 caps every worker role's time limit (tests and drills); 0 keeps roles.toml's
+    # U38: claims, locks and the worker pool
+    merge_queue_stale_s: int = 900  # a merge waiter that has not asked again for this long loses its place
 
 
 def repo_args(settings: Settings) -> list[str]:

@@ -92,7 +92,8 @@ def child(program: Program, settings: Settings) -> int:
     cwd = _fresh(program, "child")
     prompt = ("Use no tools. Reply with exactly one line: the word DONE, a space, then your current "
               "working directory exactly as your environment states it.")
-    handle = ln.launch(spike_role(), prompt, cwd, program, "spike-child", settings, label="child")
+    while (handle := ln.launch(spike_role(), prompt, cwd, program, "spike-child", settings, label="child")) is None:
+        time.sleep(2)
     while (got := handle.poll()) is None:
         time.sleep(2)
     (folder(program) / "child.json").write_text(json.dumps(

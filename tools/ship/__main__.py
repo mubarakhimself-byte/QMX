@@ -377,6 +377,34 @@ def cmd_merge(a, program, settings):
     return rc
 
 
+# U38: claims, the merge queue and the worker pool
+def cmd_claims(a, program, settings):
+    from ship import claims as cl
+    from ship import program as prog
+
+    claims = cl.for_program(program, settings)
+    if not claims.active:
+        print(f"NOCLAIMS no {claims.records.claims}: the program folder is not in a plans worktree")
+        return 0
+    name = program.dir.name
+    if a.action == "claim":
+        found = claims.claim(name, cl.slice_files(program))
+        lines = [f"CLAIM {r.program} {r.pattern}" for r in claims.live() if r.program == name and r.kind == "claim"]
+        lines += [f"blocked-by claim {other}: {mine} ~ {theirs}" for mine, other, theirs in found]
+    elif a.action == "notice":
+        area = [str(x) for x in prog.load(program).area] if program.project_file.exists() else []
+        claims.notice(name, area)
+        lines = [f"NOTICE {name} {x}" for x in area]
+    elif a.action == "release":
+        lines = [f"RELEASED {claims.release(name)} patterns of {name}"]
+    elif a.action == "sweep":
+        lines = claims.sweep() or ["SWEPT nothing"]
+    else:
+        lines = [f"{r.program}\t{r.kind}\t{r.pattern}\t{r.since}" for r in claims.live()] or ["NONE live"]
+    lines += claims.lines
+    return _lines(True, lines)
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -449,6 +477,8 @@ def parser() -> argparse.ArgumentParser:
     add("review", cmd_review, (["stop"], {}), (["--round"], {"type": int, "choices": [1, 2]}))
     # U10: merge as a script
     add("merge", cmd_merge, (["stop"], {}))
+    # U38: claims, the merge queue and the worker pool
+    add("claims", cmd_claims, (["action"], {"choices": ["claim", "notice", "release", "sweep", "list"]}))
     return p
 
 

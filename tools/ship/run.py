@@ -224,6 +224,8 @@ class Build:
         self.started_any = False
         self.roles = ln.load_roles(settings)
         self.prompt = prompt_dir(settings) / "BUILDER.md"
+        self.claims = None  # ship.claims.Claims beside the program; None until start()
+        self.claim_blocked: dict[str, str] = {}  # slice -> the program whose live claim names one of its files
 
     # -- start and stop --
 
@@ -245,6 +247,33 @@ class Build:
                 lines += recover(self.program, self.settings, only=sid)
             except GitError as exc:
                 lines.append(f"RECOVER {sid} unreachable: {exc}; again next tick")
+        return lines + self.claim_files()
+
+    def claim_files(self) -> list[str]:
+        """U38: sweep the claims of finished programs, then claim every file this program's slices name."""
+        from ship import claims as cl
+
+        self.claims = cl.for_program(self.program, self.settings)
+        if not self.claims.active:
+            return []
+        lines = self.claims.sweep()
+        found = self.claims.claim(self.program.dir.name, cl.slice_files(self.program))
+        lines.append(f"CLAIMED the files of {self.program.dir.name}; {len(found)} overlap other programs")
+        return lines
+
+    def claim_waits(self, state: st.State) -> list[str]:
+        """Pending slices whose files another live program claims wait; it is not a park, not an attempt."""
+        from ship import claims as cl
+
+        if self.claims is None or not self.claims.active:
+            return []
+        pending = [s for s in state.slices.values() if s.status == Status.PENDING]
+        found = self.claims.overlaps_now(self.program.dir.name, [f for s in pending for f in s.files])
+        now = cl.blocked_slices(pending, found)
+        lines = [f"WAIT {sid} blocked-by claim {other}" for sid, other in sorted(now.items())
+                 if self.claim_blocked.get(sid) != other]
+        lines += [f"CLAIM-FREE {sid}: the claim on its files is gone" for sid in sorted(set(self.claim_blocked) - set(now))]
+        self.claim_blocked = now
         return lines
 
     def stop_children(self) -> None:
@@ -311,6 +340,7 @@ class Build:
             return self.finish(lines, 1)
         if not hold:
             lines += self.start_scripts()
+            lines += self.claim_waits(st.load(self.program))
             if not usage and not (self.once and self.ticks > 1):
                 lines += self.fill_seats()
         lines += self.stop_note()
@@ -618,27 +648,36 @@ class Build:
             os._exit(137)
 
     def fill_seats(self) -> list[str]:
+        from ship import locks, profile
         from ship.dispatch import Parked, Refused, dispatch
 
         state = st.load(self.program)
         order = self.seat_order(state)
+        pool = locks.Pool(self.settings, profile.of_program(self.program.dir, self.settings)["pool"]["workers"])
         lines = []
         for sid in order:
             if sid in self.workers or self._script_for(sid) or sid in self.memo.verify:
                 continue
             fix = self.memo.fix.get(sid)
+            slot = pool.take()
+            if slot is None:
+                lines.append(f"POOL every worker seat on this machine is taken; {sid} waits")
+                break
             try:
                 got = dispatch(self.program, sid, self.settings)
             except Refused as exc:
+                slot.release()
                 if "no free seat" in str(exc):
                     break
                 lines.append(f"SKIP {sid}: {exc}")
                 continue
             except GitError as exc:
+                slot.release()
                 lines.append(f"SKIP {sid}: remote unreachable ({exc})")
                 continue
             self.started_any = True
             if isinstance(got, Parked):
+                slot.release()
                 self.memo.fix.pop(sid, None)
                 lines.append(f"PARK {sid}: {got.reason}")
                 if got.reason.startswith("brief-mismatch"):
@@ -647,7 +686,7 @@ class Build:
                     self.wait_line(f"{sid} parked: {got.reason}")
                 continue
             self.memo.fix.pop(sid, None)
-            lines.append(self.start_worker(got, fix))
+            lines.append(self.start_worker(got, fix, slot))
         return lines
 
     def seat_order(self, state: st.State) -> list[str]:
@@ -656,12 +695,12 @@ class Build:
         dead = [s.id for s in state.slices.values() if s.status == Status.DEAD]
         fixes = [s.id for s in state.slices.values()
                  if s.status == Status.RED or (s.id in self.memo.fix and s.status in (Status.CHECKED, Status.READY))]
-        pending = [s.id for s in state.slices.values() if s.status == Status.PENDING]
+        pending = [s.id for s in state.slices.values() if s.status == Status.PENDING and s.id not in self.claim_blocked]
         now = [sid for sid in pending if state.ahead(sid) <= 0]
         early = [sid for sid in pending if state.ahead(sid) == 1]
         return dead + fixes + by_lane(now, lanes) + by_lane(early, lanes)
 
-    def start_worker(self, got, fix: dict | None) -> str:
+    def start_worker(self, got, fix: dict | None, slot=None) -> str:
         kind = "fixer" if got.kind == "fix" else "builder"
         leftover_line = (f"The previous holder's unpushed changes are saved in `{got.leftover}`; reapply only what "
                          f"still fits, with `git -C {got.worktree} apply`." if got.leftover else "Nothing was left over.")
@@ -677,7 +716,9 @@ class Build:
         prompt = render(self.prompt, values)
         env = {"SHIP_SLICE": got.slice, "SHIP_EVIDENCE": got.evidence, "SHIP_DISPATCH_ID": got.dispatch_id}
         handle = ln.launch(self.roles[kind], prompt, Path(got.worktree), self.program, got.dispatch_id,
-                           self.settings, extra_env=env, label=got.slice)
+                           self.settings, extra_env=env, label=got.slice, slot=slot)
+        if handle is None:  # only a Fable builder could get here: its seat is taken; the seat is recovered
+            return f"WAIT {got.slice}: its worker could not start (the Fable seat is taken); restarts next tick"
         self.workers[got.slice] = Worker(got.slice, kind, handle)
         return f"START {kind} {got.slice} {got.kind} {got.dispatch_id} pid {handle.pid}"
 

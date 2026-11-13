@@ -233,6 +233,7 @@ class Handle:
         self._started = time.monotonic()
         self.created = proc_created(child.pid)  # with the pid, names this run exactly (chain.lock)
         self.result: Result | None = None
+        self.held: list = []  # the pool slot and, for a Fable role, the Fable seat; released when it ends
 
     @property
     def pid(self) -> int:
@@ -249,6 +250,12 @@ class Handle:
                 self.child.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 pass
+        self._release()
+
+    def _release(self) -> None:
+        for lock in self.held:
+            lock.release()
+        self.held = []
 
     def poll(self) -> Result | None:
         if self.result is not None:
@@ -278,6 +285,7 @@ class Handle:
 
     def _finish(self, got: Result) -> Result:
         self.result = got
+        self._release()
         record = {**dataclasses.asdict(got), "role": self.role.name, "name": self.name, "pid": self.pid,
                   "asked_model": self.role.model, "ended": clock.now().isoformat(timespec="seconds")}
         tmp = self.folder / "result.json.tmp"
@@ -287,9 +295,26 @@ class Handle:
 
 
 def launch(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str, settings: Settings,
-           extra_env: dict[str, str] | None = None, label: str | None = None) -> Handle:
+           extra_env: dict[str, str] | None = None, label: str | None = None, slot=None) -> Handle | None:
     """Start one worker. `label` (a slice id) names it in `--name "<role>: <program> <label>"`;
-    without one the worker id does."""
+    without one the worker id does.
+
+    It first takes a seat of the machine-wide worker pool (or uses `slot`, taken by the caller), and for
+    a role whose model starts `fable` the one Fable seat (U38, FACTORY-DESIGN 11.6). When either is not
+    free it starts nothing and returns None; the caller tries again next tick."""
+    from ship import locks, profile
+
+    if slot is None:
+        slot = locks.Pool(settings, profile.of_program(program.dir, settings)["pool"]["workers"]).take()
+        if slot is None:
+            return None
+    held = [slot]
+    if role.model.casefold().startswith("fable"):
+        seat = locks.fable_lock(settings)
+        if not seat.try_take(program=program.dir.name, worker_id=worker_id):
+            slot.release()
+            return None
+        held.append(seat)
     folder = program.workers / worker_id
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "prompt.md").write_text(prompt, "utf-8", newline="\n")
@@ -305,11 +330,17 @@ def launch(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str,
     except OSError as exc:
         out.close()
         err.close()
+        for lock in held:
+            lock.release()
         raise LaunchError(f"could not start {argv[0]}: {exc}") from exc
+    for lock in held:
+        lock.note_worker(child.pid)
     (folder / "started.json").write_text(json.dumps(
         {"pid": child.pid, "session": session_id, "name": name, "role": role.name, "cwd": str(cwd), "argv": argv,
          "started": clock.now().isoformat(timespec="seconds")}, indent=2) + "\n", "utf-8", newline="\n")
-    return Handle(role, folder, child, session_id, name, settings, (out, err))
+    handle = Handle(role, folder, child, session_id, name, settings, (out, err))
+    handle.held = held
+    return handle
 
 
 class LaunchError(Exception):
@@ -318,8 +349,9 @@ class LaunchError(Exception):
 
 def run(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str, settings: Settings,
         extra_env: dict[str, str] | None = None, label: str | None = None, poll_s: float = 2.0) -> Result:
-    """Launch, then poll every `poll_s` seconds until the run ends."""
-    handle = launch(role, prompt, cwd, program, worker_id, settings, extra_env, label)
+    """Launch (waiting for a free seat), then poll every `poll_s` seconds until the run ends."""
+    while (handle := launch(role, prompt, cwd, program, worker_id, settings, extra_env, label)) is None:
+        time.sleep(poll_s)
     while True:
         got = handle.poll()
         if got is not None:

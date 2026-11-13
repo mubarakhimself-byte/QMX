@@ -24,8 +24,16 @@
    `MERGED <target sha>`; the stop is recorded merged; the stop's rows of the program's `REMOVED.md`
    move to `_records/REMOVED.md` with `Status: removed <sha>`, under `records.lock`, in one commit.
 
+Step 0 (U38): the project's merge lock, `<factory_home>/run/merge-<project>.lock`, with its queue. When it
+is not this program's turn the exit is 11 and the conveyor asks again next tick, keeping its place. After a
+moved target is merged in, every `shared_generated` file that has a generator in the profile
+(`[generators]`, pattern = argv run from the repo root) is rebuilt and committed (`ratchet: prune <n> rows`
+under `ci/baselines/`, else `contract: regenerate <pattern>`). After step 8 the claims of the merged stop's
+slices, and of its fix program, are released.
+
 The target is the setting `ci_gate_base` (the branch the checkpoint PR targets). Exit: 0 merged or
-already merged, 2 refused by the gate or a fix program written, 3 unreachable (try again), 10 waits.
+already merged, 2 refused by the gate or a fix program written, 3 unreachable (try again), 10 waits,
+11 another program is merging (asked again next tick).
 """
 
 from __future__ import annotations
@@ -64,6 +72,8 @@ class Merge:
         self.note = program.merge_note(stop)
         self.lines: list[str] = []
         self.t = settings.git_timeout_s
+        self.lock = None
+        self.profile: dict = {}
 
     def say(self, line: str) -> None:
         self.lines.append(line)
@@ -89,6 +99,8 @@ class Merge:
                 self.record_merged(key)
             self.say(f"ALREADY stop {self.stop} merged: {MERGED.search(text).group(1)}")
             return 0
+        if not self.take_lock():
+            return 11
         reviewed = self.reviewed_tip()
         if reviewed is None:
             return 10
@@ -145,6 +157,40 @@ class Merge:
             return 2
         return self.finish(key, reviewed, build_tip, pr, target_tip)
 
+    def take_lock(self) -> bool:
+        from ship import locks, profile
+
+        self.profile = profile.of_program(self.program.dir, self.settings)
+        self.lock = locks.merge_lock(str(self.profile["project"].get("name") or "qmx"), self.settings)
+        if self.lock.ask(self.program.dir.name, self.stop):
+            self.say(f"LOCK {self.lock.path.name} taken")
+            return True
+        self.say(f"QUEUED {self.lock.read().get('program') or 'a program'} is merging; queue {self.lock.waiting()}")
+        return False
+
+    def generate(self, copy: Path) -> None:
+        """Rebuild the shared generated files after a merge of the target, by script, one commit each."""
+        from ship.plan import matches
+
+        for pattern, argv in (self.profile.get("generators") or {}).items():
+            log = self.program.tmp / "merge-logs" / f"gen-{re.sub(r'[^A-Za-z0-9]+', '-', pattern)}.log"
+            if run_timed(list(argv), copy, log, self.settings.check_timeout_s, self.settings, self.program.runs).rc != 0:
+                self.say(f"GENERATOR {pattern} failed (see {log}); the files stay as merged, CI's drift check judges")
+                continue
+            status = git(copy, "status", "--porcelain", "--untracked-files=all", timeout=self.t).splitlines()
+            changed = [line[3:].strip().strip('"') for line in status if matches(pattern, line[3:].strip().strip('"'))]
+            if not changed:
+                continue
+            git(copy, "add", "--", *changed, timeout=self.t)
+            if pattern.startswith("ci/baselines"):
+                numstat = git(copy, "diff", "--cached", "--numstat", timeout=self.t).splitlines()
+                gone = sum(int(x.split()[1]) for x in numstat if x.split() and x.split()[1].isdigit())
+                message = f"ratchet: prune {gone} rows"
+            else:
+                message = f"contract: regenerate {pattern}"
+            git(copy, "commit", "-q", "--no-verify", "-m", message, timeout=self.t)
+            self.say(f"GENERATED {message}")
+
     def verdicts(self) -> list[tuple[str, str, Path]]:
         """(word, END sha, file) in review order: round 1, round 2, then the fix folder's own."""
         fix = self.program.dir.parent / f"{self.program.dir.name}-fix-{self.stop}"
@@ -195,6 +241,7 @@ class Merge:
             locks |= {str(PurePosixPath(f).parent) for f in touched if PurePosixPath(f).name in LOCK_INPUTS}
             if locks and not self.regenerate_locks(copy, locks):
                 return self.wait(f"stop {self.stop}: uv.lock could not be regenerated after merging {self.target}")
+            self.generate(copy)
             new = git(copy, "rev-parse", "HEAD", timeout=self.t).strip()
             try:
                 git(copy, "push", "-q", self.state.remote, f"HEAD:refs/heads/{self.state.build_branch}", timeout=self.t)
@@ -281,8 +328,20 @@ class Merge:
         self.note.write_text("\n".join(body) + "\n", "utf-8", newline="\n")
         self.record_merged(key)
         self.lines += self.move_removed(target_tip)
+        self.release_claims()
         self.say(f"MERGED stop {self.stop} into {self.target} at {target_tip}")
         return 0
+
+    def release_claims(self) -> None:
+        from ship import claims as cl
+
+        claims = cl.for_program(self.program, self.settings)
+        if not claims.active:
+            return
+        files = [f for s in self.state.slices.values() if (s.checkpoint or self.stop) == self.stop for f in s.files]
+        n = claims.release(self.program.dir.name, files)
+        n += claims.release(f"{self.program.dir.name}-fix-{self.stop}")
+        self.say(f"CLAIMS released {n} patterns of stop {self.stop}")
 
     def record_merged(self, key: str) -> None:
         try:
@@ -407,4 +466,7 @@ def merge(program: Program, stop: str, settings: Settings) -> tuple[int, list[st
     except Unreachable as exc:
         job.say(f"UNREACHABLE {exc}; nothing more changed, try again later")
         rc = 3
+    finally:
+        if job.lock is not None:
+            job.lock.release()
     return rc, job.lines

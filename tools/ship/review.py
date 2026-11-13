@@ -490,6 +490,8 @@ class Checkpoint:
         handle = ln.launch(self.roles[reader.role], prompt, copy, self.program,
                            f"stop-{self.stop}-r{self.round}-{reader.name}-{n}", self.settings, extra_env=env,
                            label=f"{self.stop} {reader.name}")
+        if handle is None:
+            return [f"WAIT {reader.name}: no free worker seat (or the Fable seat is taken)"]
         self.handles[reader.name] = handle
         return [f"START {reader.role} {reader.name} pid {handle.pid}"]
 
@@ -569,6 +571,8 @@ class Checkpoint:
         handle = ln.launch(self.roles["verdict"], prompt, self.program.dir, self.program,
                            f"stop-{self.stop}-r{self.round}-verdict-{n}", self.settings, extra_env=env,
                            label=f"{self.stop} verdict")
+        if handle is None:
+            return ["WAIT verdict: no free worker seat"]
         self.handles["verdict"] = handle
         return [f"START verdict pid {handle.pid}"]
 

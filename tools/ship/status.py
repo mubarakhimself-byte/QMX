@@ -55,6 +55,11 @@ def status(program: Program, settings: Settings, now: dt.datetime | None = None)
         progress = checkpoint_line(state)
         breaker = state.breaker_tripped(settings.breaker_parks)
         usage = state.usage_reset_at
+        pending = [s for s in state.slices.values() if s.status == Status.PENDING]
+    claim_waits = _claim_waits(program, settings, pending)
+    lines += [f"WAIT {sid} blocked-by claim {other}" for sid, other in sorted(claim_waits.items())]
+    now_list = [sid for sid in now_list if sid not in claim_waits]
+    early = [sid for sid in early if sid not in claim_waits]
     if program.hold.exists():
         lines.append(f"HOLD {program.hold.read_text('utf-8').strip()}")
     if usage and dt.datetime.fromisoformat(usage) > now:
@@ -72,6 +77,17 @@ def status(program: Program, settings: Settings, now: dt.datetime | None = None)
     if early:
         lines.append(f"PREBUILD could start: {early}")
     return ok, lines
+
+
+def _claim_waits(program: Program, settings: Settings, pending: list) -> dict[str, str]:
+    """U38: pending slices whose files another live program claims (no claims list: none)."""
+    from ship import claims as cl
+
+    claims = cl.for_program(program, settings)
+    if not claims.active:
+        return {}
+    found = claims.overlaps_now(program.dir.name, [f for s in pending for f in s.files])
+    return cl.blocked_slices(pending, found)
 
 
 def checkpoint_line(state: st.State) -> str | None:
