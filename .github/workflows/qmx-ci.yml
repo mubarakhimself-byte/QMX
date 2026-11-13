@@ -64,7 +64,6 @@ env:
   UV_VERSION: "0.12.6"
   UV_LINK_MODE: copy
   UV_PYTHON_DOWNLOADS: automatic
-  RCLONE_VERSION: "1.75.1"
 
 jobs:
   level:
@@ -149,10 +148,7 @@ jobs:
       QMX_SHARDS: 3
     steps:
       - *checkout
-      - &setup-rclone
-        uses: ./.github/actions/qmx-setup
-        with:
-          rclone: "true"
+      - *setup
       - run: python tools/ci/qci.py tests --os linux
       - *upload
 
@@ -174,7 +170,7 @@ jobs:
         name: Allow long paths
         run: git config --system core.longpaths true
       - *checkout
-      - *setup-rclone
+      - *setup
       - run: python tools/ci/qci.py tests --os windows
       - *upload
 
@@ -193,7 +189,7 @@ jobs:
       QMX_SHARDS: 8
     steps:
       - *checkout
-      - *setup-rclone
+      - *setup
       - run: python tools/ci/qci.py tests --os linux
       - *upload
 
@@ -213,7 +209,7 @@ jobs:
     steps:
       - *longpaths
       - *checkout
-      - *setup-rclone
+      - *setup
       - run: python tools/ci/qci.py tests --os windows
       - *upload
 

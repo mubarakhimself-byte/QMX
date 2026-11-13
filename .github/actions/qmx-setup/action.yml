@@ -1,9 +1,7 @@
 name: QMX CI setup
-description: Python 3.14 and pinned uv for tools/ci/qci.py; rclone for the test shards.
-inputs:
-  rclone:
-    description: Install rclone, which the qmx-home backup tests drive.
-    default: "false"
+description: Python 3.14 and pinned uv for tools/ci/qci.py.
+# No rclone: the qmx-home tests were baselined without it on GitLab, and with rclone 1.75.1 on PATH
+# seven other tests turn red (deep run 43472106038, suite-linux 6).
 runs:
   using: composite
   steps:
@@ -13,17 +11,3 @@ runs:
     - name: Install uv (pinned, as on GitLab)
       shell: bash
       run: python -m pip install --quiet --disable-pip-version-check "uv==${UV_VERSION}"
-    - name: Install rclone (Linux)
-      if: inputs.rclone == 'true' && runner.os == 'Linux'
-      shell: bash
-      run: |
-        curl --fail --silent --show-error --location "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-amd64.zip" -o "$RUNNER_TEMP/rclone.zip"
-        unzip -q "$RUNNER_TEMP/rclone.zip" -d "$RUNNER_TEMP/rclone"
-        echo "$RUNNER_TEMP/rclone/rclone-v${RCLONE_VERSION}-linux-amd64" >> "$GITHUB_PATH"
-    - name: Install rclone (Windows)
-      if: inputs.rclone == 'true' && runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        Invoke-WebRequest "https://downloads.rclone.org/v$env:RCLONE_VERSION/rclone-v$env:RCLONE_VERSION-windows-amd64.zip" -OutFile "$env:RUNNER_TEMP/rclone.zip"
-        Expand-Archive -LiteralPath "$env:RUNNER_TEMP/rclone.zip" -DestinationPath "$env:RUNNER_TEMP/rclone"
-        "$env:RUNNER_TEMP/rclone/rclone-v$env:RCLONE_VERSION-windows-amd64" | Out-File -FilePath $env:GITHUB_PATH -Append
