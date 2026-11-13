@@ -90,6 +90,7 @@ class Slice:
     blocked_by: str | None = None
     attempts: int = 0  # quality rounds started; parks and the breaker read only this
     restarts: int = 0  # infra restarts (crash, usage limit, power); never parks a slice
+    deaths: int = 0  # builder runs that died or replied with no contract line; max_restarts of them park it
     holder: Holder | None = None
     parent: str | None = None  # build-branch tip the slice branch was cut from
     head: str | None = None  # sha verify_ready accepted
@@ -159,7 +160,7 @@ class State:
         if cause not in (ParkCause.MANUAL, ParkCause.BRIEF_MISMATCH):
             raise StateError(f"{slice_id} was parked for {cause}; only manual and brief-mismatch parks are unparked")
         self.move(slice_id, S.PENDING, f"unparked: {why}")
-        sl.reason, sl.holder, sl.restarts = "", None, 0
+        sl.reason, sl.holder, sl.restarts, sl.deaths = "", None, 0, 0
         freed = []
         for dep_id in self.dependents(slice_id):
             dep = self.slices[dep_id]

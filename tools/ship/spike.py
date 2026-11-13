@@ -252,3 +252,41 @@ def spike(program: Program, settings: Settings) -> tuple[bool, list[str]]:
     if summary:
         (ln.ROLES_DIR / "RESULT-SHAPE.md").write_text(result_shape(program, settings), "utf-8", newline="\n")
     return all(ok for _, ok, _ in results), lines + [f"SPIKE {folder(program) / 'SPIKE.md'}"]
+
+
+def probe_model(program: Program, settings: Settings, model: str, effort: str,
+                fallback: str | None = None) -> tuple[str, bool, str]:
+    """A one-line run on a role's real model (D-L15): it answers, and the result names the model."""
+    role = ln.Role(f"spike-{model}", model, effort, False, 600, ln.ROLES_DIR / "builder.json", fallback)
+    cwd = _fresh(program, model.replace("/", "-"))
+    got = ln.run(role, "Use no tools. Reply with exactly one line: DONE ok", cwd, program, f"spike-model-{model}",
+                 settings, label=model)
+    asked = any(ln.same_model(model, m) for m in got.models)
+    ok = got.kind == "ok" and (asked or got.fell_back)
+    how = f"fell back ({got.note})" if got.fell_back else ("ran as asked" if asked else "ran on another model")
+    return (f"model {model} effort {effort}" + (f" fallback {fallback}" if fallback else ""), ok,
+            f"kind {got.kind}; modelUsage {got.models}; {how}; text {got.text[-80:]!r}")
+
+
+def recheck(program: Program, settings: Settings) -> tuple[bool, list[str]]:
+    """The K2 fix-round reruns under the isolation flags (D-L10, D-L11, D-L15): probes 2, 3 and 7, and one
+    model probe each for opus at effort high and for fable with its fallback. Appends to roles/SPIKE.md."""
+    folder(program).mkdir(parents=True, exist_ok=True)
+    rows = [probe_hook(program, settings), probe_prompts(program, settings)]
+    auth, auth_raw = probe_auth(program, settings)
+    hook_run = ln._json_object((program.workers / "spike-hook" / "stdout.log").read_text("utf-8", errors="replace")) or {}
+    logged_in = bool(hook_run.get("modelUsage")) and not hook_run.get("is_error")
+    rows.append((7, auth[1] and logged_in, auth[2] + f"; a run under --setting-sources project,local and the env "
+                                                     f"allow-list answered on the plan login: {logged_in}"))
+    rows.append(probe_model(program, settings, "claude-opus-5-5", "high"))
+    rows.append(probe_model(program, settings, "fable", "high", "claude-opus-5-5"))
+    lines = [f"{'PASS' if ok else 'FAIL'} {n} {detail}" for n, ok, detail in rows]
+    raws = "\n".join(_raw(program, w) for w in ("spike-hook", "spike-perm", "spike-model-claude-opus-5-5",
+                                                  "spike-model-fable")) + "\n" + auth_raw
+    body = (f"\n## Recheck {time.strftime('%Y-%m-%d %H:%M:%S')}: the K2 fix round's isolation\n\n"
+            "Every run below adds `--setting-sources project,local --strict-mcp-config`, gets only the allow-listed "
+            "environment, and uses the narrowed `builder.json` whose hook ends `|| exit 2`.\n\n"
+            + "\n".join(lines) + "\n\n### Raw\n\n" + raws)
+    with open(ln.ROLES_DIR / "SPIKE.md", "a", encoding="utf-8", newline="\n") as out:
+        out.write(body)
+    return all(ok for _, ok, _ in rows), lines

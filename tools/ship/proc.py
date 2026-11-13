@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 WINDOWS = sys.platform == "win32"
@@ -36,6 +37,58 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def created(pid: int) -> float | None:
+    """When the process started, in seconds since the epoch, or None when it is gone. With the pid this
+    names one process exactly: a pid the system reused has another creation time."""
+    if pid <= 0:
+        return None
+    if WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return None
+        try:
+            times = [wintypes.FILETIME() for _ in range(4)]
+            if not kernel32.GetProcessTimes(handle, *[ctypes.byref(x) for x in times]):
+                return None
+            ticks = (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime  # 100 ns since 1601
+            return round(ticks / 1e7 - 11644473600, 3)
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return round(boot_time() + int(fields[19]) / os.sysconf("SC_CLK_TCK"), 3)
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def boot_time() -> float:
+    """When this machine last started, in seconds since the epoch."""
+    if WINDOWS:
+        import ctypes
+
+        ctypes.windll.kernel32.GetTickCount64.restype = ctypes.c_ulonglong
+        return time.time() - ctypes.windll.kernel32.GetTickCount64() / 1000
+    try:
+        for line in Path("/proc/stat").read_text().splitlines():
+            if line.startswith("btime "):
+                return float(line.split()[1])
+    except OSError:
+        pass
+    return 0.0
+
+
+def same_process(pid: int, when: float | None) -> bool:
+    """True only for the process that had this pid at creation time `when` (to the millisecond)."""
+    if not pid or when is None:
+        return False
+    now = created(pid)
+    return now is not None and abs(now - float(when)) < 0.01
+
+
 def popen_group_kwargs() -> dict:
     """Start a child in its own group so a timeout can stop the child and everything it started."""
     if WINDOWS:
@@ -43,9 +96,13 @@ def popen_group_kwargs() -> dict:
     return {"start_new_session": True}
 
 
-def kill_tree(pid: int) -> None:
+def kill_tree(pid: int, timeout: float = 60) -> None:
     if WINDOWS:
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            pass
         return
     try:
         os.killpg(pid, signal.SIGKILL)

@@ -38,7 +38,8 @@ from ship import launch as ln
 from ship import state as st
 from ship.gitx import GitError, remote_sha
 from ship.layout import Program
-from ship.proc import kill_tree, pid_alive, popen_group_kwargs
+from ship.proc import boot_time, kill_tree, pid_alive, popen_group_kwargs, same_process
+from ship.proc import created as proc_created
 from ship.settings import Settings
 from ship.state import ParkCause, Status
 
@@ -71,12 +72,18 @@ def prompt_dir(settings: Settings) -> Path:
 
 
 class ChainLock:
-    """One conveyor per program (FACTORY-DESIGN 11.6): create-exclusive, pid inside, taken over when dead.
-    A dead holder's children (its workers and scripts) are stopped before the take-over."""
+    """One conveyor per program (FACTORY-DESIGN 11.6): create-exclusive, pid and creation time inside,
+    taken over when its holder is gone (D-L14).
+
+    A holder is alive only when its pid still names the same process (same creation time); a lock written
+    before the machine last started is stale whatever its pids say. A dead holder's children are stopped
+    before the take-over, each only on an exact pid and creation-time match, so a reused pid is never
+    killed. A stale lock from before a reboot is taken over with no kill at all."""
 
     def __init__(self, program: Program, step: str):
         self.program, self.step = program, step
-        self.started = clock.now().isoformat(timespec="seconds")
+        self.started = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")  # real time, not the test clock
+        self.created = proc_created(os.getpid())
         self.mine = False
 
     def read(self) -> dict:
@@ -97,20 +104,23 @@ class ChainLock:
             except FileExistsError:
                 held = self.read()
                 pid = int(held.get("pid") or 0)
-                if pid == os.getpid():
+                if pid == os.getpid() and same_process(pid, held.get("created")):
                     self.mine = True
                     return True
+                if before_boot(held.get("started")):
+                    path.unlink(missing_ok=True)  # written before the last start: nothing it names is ours
+                    continue
                 young = time.time() - path.stat().st_mtime < 10 if path.exists() else False
-                if (pid and pid_alive(pid)) or (not pid and young):
+                if holder_alive(pid, held.get("created")) or (not pid and young):
                     return False
                 for child in held.get("children", []):
-                    if child.get("pid") and pid_alive(int(child["pid"])):
+                    if same_process(int(child.get("pid") or 0), child.get("created")):
                         kill_tree(int(child["pid"]))
                 path.unlink(missing_ok=True)
 
     def _body(self, children: list[dict]) -> dict:
-        return {"pid": os.getpid(), "started": self.started, "program": self.program.dir.name, "step": self.step,
-                "children": children}
+        return {"pid": os.getpid(), "created": self.created, "started": self.started,
+                "program": self.program.dir.name, "step": self.step, "children": children}
 
     def refresh(self, children: list[dict]) -> None:
         tmp = self.program.chain_lock.with_suffix(".lock.tmp")
@@ -121,6 +131,26 @@ class ChainLock:
         if self.mine and int(self.read().get("pid") or 0) == os.getpid():
             self.program.chain_lock.unlink(missing_ok=True)
         self.mine = False
+
+
+def before_boot(started: str | None) -> bool:
+    """The lock was written before this machine last started."""
+    if not started:
+        return False
+    try:
+        when = dt.datetime.fromisoformat(started)
+    except ValueError:
+        return False
+    when = when if when.tzinfo else when.replace(tzinfo=dt.timezone.utc)
+    return when.timestamp() < boot_time() - 1
+
+
+def holder_alive(pid: int, created: float | None) -> bool:
+    """The lock's holder still runs: its pid names the process that wrote it. An old lock with no
+    creation time falls back to the pid alone (the boot check above still applies)."""
+    if not pid:
+        return False
+    return same_process(pid, created) if created is not None else pid_alive(pid)
 
 
 # ---- children ---------------------------------------------------------------------------------------
@@ -136,6 +166,8 @@ class Script:
     log: Path
     started: str
     args: tuple[str, ...] = ()
+    created: float | None = None
+    began: float = dataclasses.field(default_factory=time.monotonic)
 
     def done(self) -> int | None:
         return self.proc.poll()
@@ -225,9 +257,10 @@ class Build:
         self.scripts.clear()
 
     def children(self) -> list[dict]:
-        rows = [{"pid": w.handle.pid, "role": w.kind, "id": w.slice, "session": w.handle.session_id,
-                 "started": w.handle.folder.name} for w in self.workers.values()]
-        rows += [{"pid": s.proc.pid, "role": s.name, "id": s.slice, "started": s.started} for s in self.scripts]
+        rows = [{"pid": w.handle.pid, "created": w.handle.created, "role": w.kind, "id": w.slice,
+                 "session": w.handle.session_id, "started": w.handle.folder.name} for w in self.workers.values()]
+        rows += [{"pid": s.proc.pid, "created": s.created, "role": s.name, "id": s.slice, "started": s.started}
+                 for s in self.scripts]
         return rows
 
     def busy(self) -> bool:
@@ -403,17 +436,18 @@ class Build:
             lines += recover(self.program, self.settings, only=sid)
         except GitError as exc:
             return [f"RECOVER {sid} unreachable: {exc}; again next tick"]
-        state = st.load(self.program)
-        deaths = state.slices[sid].restarts + 1
+        with st.locked(self.program) as state:  # a usage limit is not a death (D-L12)
+            sl = state.slices[sid]
+            sl.deaths += 1
+            deaths = sl.deaths
+            if deaths >= self.settings.max_restarts and sl.status in (Status.HELD, Status.DEAD):
+                state.park(sid, ParkCause.MANUAL, f"its builder died {deaths} times, last {why}")
         if deaths < self.settings.max_restarts:
-            return lines + [f"RESTART {sid} ({why}); restart {deaths} of {self.settings.max_restarts - 1}"]
-        with st.locked(self.program) as state:
-            if state.slices[sid].status in (Status.HELD, Status.DEAD):
-                state.park(sid, ParkCause.MANUAL, f"restarted {deaths} times, last {why}")
+            return lines + [f"RESTART {sid} ({why}); death {deaths} of {self.settings.max_restarts}"]
         tail = last_lines(worker.handle.stdout)
         self.wait_line(f"{sid} parked: its builder died {deaths} times ({why}); last output in "
                        f"{worker.handle.stdout}", tail)
-        return lines + [f"PARK {sid}: restarted {deaths} times"]
+        return lines + [f"PARK {sid}: its builder died {deaths} times"]
 
     def blocked(self, sid: str, value: str) -> list[str]:
         word = value.split()[0] if value.split() else ""
@@ -430,6 +464,16 @@ class Build:
         lines = []
         for script in list(self.scripts):
             rc = script.done()
+            limit = self.script_limit(script.name)
+            if rc is None and time.monotonic() - script.began > limit:
+                kill_tree(script.proc.pid)
+                try:
+                    script.proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    pass
+                self.scripts.remove(script)
+                lines.append(f"SCRIPT {script.name} {script.slice} killed after {limit:.0f}s; again next tick")
+                continue  # a killed script leaves state.json as it was, so the next tick starts it again
             if rc is None:
                 continue
             self.scripts.remove(script)
@@ -442,6 +486,11 @@ class Build:
             elif script.name == "land":
                 lines += self.after_land(script, rc, out)
         return lines
+
+    def script_limit(self, name: str) -> float:
+        s = self.settings
+        return {"verify_ready": s.verify_timeout_s, "slice_checks": s.slice_checks_timeout_s,
+                "land": s.land_run_timeout_s}.get(name, s.land_run_timeout_s)
 
     def after_verify(self, sid: str, rc: int, out: list[str]) -> list[str]:
         if rc in (0, 1):
@@ -528,7 +577,7 @@ class Build:
             proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
                                     **popen_group_kwargs())
         script = Script(name, sid, proc, log, clock.now().isoformat(timespec="seconds"),
-                        tuple(a for a in args if name == "land"))
+                        tuple(a for a in args if name == "land"), proc_created(proc.pid))
         self.scripts.append(script)
         self.started_any = True
         return script

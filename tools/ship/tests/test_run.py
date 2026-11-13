@@ -1,5 +1,6 @@
 """ship run end to end on a scratch repo: real git, fake `claude` (tests/fake_claude.py), fake `gh`."""
 
+import datetime as dt
 import json
 import os
 import subprocess
@@ -58,6 +59,7 @@ class RunCase(RepoCase):
         self.setting(f"factory_home = {json.dumps(str(self.root / 'no-factory'))}")
         self.setting('internet_probe = ""')
         self.setting("chain_poll_s = 0.2")
+        self.setting('worker_env_extra = ["FAKE_CLAUDE_SCRIPT"]')
         self.rules()
 
     def rules(self, *extra):
@@ -208,7 +210,8 @@ class Faults(RunCase):
         self.assertEqual(self.ship_run(), 0, self.last_out)
         a2 = self.state().slices["a2"]
         self.assertEqual(a2.status, Status.PARKED)
-        self.assertTrue(a2.reason.startswith("manual: restarted 3 times"), a2.reason)
+        self.assertTrue(a2.reason.startswith("manual: its builder died 3 times"), a2.reason)
+        self.assertEqual((a2.deaths, a2.restarts), (3, 2))
         self.assertEqual(a2.attempts, 1)
         self.assertEqual(len(self.claude_calls("a2")), 3)
         self.assertEqual(self.state().slices["a1"].status, Status.LANDED)
@@ -280,6 +283,121 @@ class Unpark(RunCase):
             state.park("a1", st.ParkCause.ROUNDS, "2 rounds used")
             with self.assertRaisesRegex(st.StateError, "parked for rounds"):
                 state.unpark("a1", "no")
+
+
+class UnparkPins(RunCase):
+    """Pins for the surviving mutants M27 and M28, and D-L13."""
+
+    def park_after_a_push(self):
+        from ship.dispatch import dispatch
+        from ship.settings import load_settings
+
+        got = dispatch(self.program, "a1", load_settings(self.program.dir))
+        write(Path(got.worktree) / "pkg" / "a1.py", "A1 = 1\n")
+        pushed = self.commit("a1: half", Path(got.worktree))
+        sh(Path(got.worktree), "git", "push", "-q", "-u", "origin", "slice/a1")
+        with st.locked(self.program) as state:
+            state.slices["a1"].restarts, state.slices["a1"].deaths = 2, 2
+            state.park("a1", st.ParkCause.MANUAL, "BLOCKED needs his call")
+        return got, pushed
+
+    def test_unparked_slice_with_pushed_work_restarts_from_its_branch(self):  # M27
+        from ship.dispatch import dispatch
+        from ship.settings import load_settings
+
+        first, pushed = self.park_after_a_push()
+        done = self.run_cmd("unpark", "a1", "--why", "he answered")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        again = dispatch(self.program, "a1", load_settings(self.program.dir))
+        self.assertEqual((again.kind, again.attempt, again.parent), ("restart", 1, first.parent))
+        self.assertEqual(sh(Path(again.worktree), "git", "rev-parse", "HEAD"), pushed)
+
+    def test_unpark_resets_restarts_and_deaths(self):  # M28
+        self.park_after_a_push()
+        self.assertEqual(self.run_cmd("unpark", "a1", "--why", "he answered").returncode, 0)
+        a1 = self.state().slices["a1"]
+        self.assertEqual((a1.status, a1.restarts, a1.deaths, a1.reason), (Status.PENDING, 0, 0, ""))
+
+    def test_unpark_is_refused_once_the_review_started(self):  # D-L13
+        self.park_after_a_push()
+        write(self.program.stop_review("A") / "START.json", "{}\n")
+        done = self.run_cmd("unpark", "a1", "--why", "late")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("the review of stop A has started", done.stdout)
+        self.assertEqual(self.state().slices["a1"].status, Status.PARKED)
+
+
+class DeathsNotLimits(RunCase):
+    def test_limit_restarts_never_park_and_the_third_death_does(self):
+        from ship.dispatch import Dispatched, Parked, dispatch
+        from ship.settings import load_settings
+
+        settings = load_settings(self.program.dir)
+        with st.locked(self.program) as state:
+            sl = state.slices["a1"]
+            sl.status, sl.attempts, sl.restarts, sl.deaths, sl.parent = Status.DEAD, 1, 7, 2, self.tip()
+        self.assertIsInstance(dispatch(self.program, "a1", settings), Dispatched)
+        with st.locked(self.program) as state:
+            state.slices["a1"].status, state.slices["a1"].deaths = Status.DEAD, 3
+        got = dispatch(self.program, "a1", settings)
+        self.assertIsInstance(got, Parked)
+        self.assertEqual(got.reason, "its builder died 3 times")
+
+
+class LockSafety(RunCase):
+    """D-L14: a dead holder's children are killed only on an exact pid and creation-time match."""
+
+    def bystander(self):
+        proc = subprocess.Popen([PY, "-c", "import time; time.sleep(120)"])
+        self.addCleanup(proc.kill)
+        return proc
+
+    def dead_holder(self):
+        gone = subprocess.Popen([PY, "-c", "pass"])
+        gone.wait()
+        return gone.pid
+
+    def lock_with(self, **body):
+        self.program.chain_lock.write_text(json.dumps(body), "utf-8")
+
+    def test_a_bystander_with_a_reused_pid_survives_and_the_real_child_dies(self):
+        from ship.proc import created, pid_alive
+        from ship.run import ChainLock
+
+        bystander, child = self.bystander(), self.bystander()
+        started = dt.datetime.now(dt.timezone.utc).isoformat()
+        self.lock_with(pid=self.dead_holder(), created=1.0, started=started,
+                       children=[{"pid": bystander.pid, "created": created(bystander.pid) - 5},
+                                 {"pid": child.pid, "created": created(child.pid)}])
+        lock = ChainLock(self.program, "build")
+        self.assertTrue(lock.acquire())
+        lock.release()
+        child.wait(timeout=30)
+        self.assertTrue(pid_alive(bystander.pid), "a process whose creation time differs is never killed")
+
+    def test_a_lock_from_before_the_last_boot_is_taken_over_without_a_kill(self):
+        from ship.proc import created, pid_alive
+        from ship.run import ChainLock
+
+        bystander = self.bystander()
+        self.lock_with(pid=bystander.pid, created=created(bystander.pid), started="2020-01-01T00:00:00+00:00",
+                       children=[{"pid": bystander.pid, "created": created(bystander.pid)}])
+        lock = ChainLock(self.program, "build")
+        self.assertTrue(lock.acquire(), "a pre-boot lock never holds a run out (no exit 11 forever)")
+        lock.release()
+        self.assertTrue(pid_alive(bystander.pid))
+
+    def test_a_live_pid_that_is_not_the_holder_does_not_hold_the_lock(self):
+        from ship.proc import pid_alive
+        from ship.run import ChainLock
+
+        bystander = self.bystander()
+        started = dt.datetime.now(dt.timezone.utc).isoformat()
+        self.lock_with(pid=bystander.pid, created=12345.0, started=started, children=[])
+        lock = ChainLock(self.program, "build")
+        self.assertTrue(lock.acquire())
+        lock.release()
+        self.assertTrue(pid_alive(bystander.pid))
 
 
 if __name__ == "__main__":

@@ -6,8 +6,32 @@
       "Grep",
       "Write",
       "Edit",
-      "Bash(git *)",
-      "Bash(python *)"
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git rev-parse*)",
+      "Bash(git ls-files*)",
+      "Bash(git grep*)",
+      "Bash(git -C * status*)",
+      "Bash(git -C * diff*)",
+      "Bash(git -C * log*)",
+      "Bash(git -C * show*)",
+      "Bash(git -C * rev-parse*)",
+      "Bash(git -C * ls-files*)",
+      "Bash(git -C * grep*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git apply *)",
+      "Bash(git -C * add *)",
+      "Bash(git -C * commit *)",
+      "Bash(git -C * push *)",
+      "Bash(git -C * apply *)",
+      "Bash(uv run --no-sync *)",
+      "Bash(python *ship timed *)",
+      "Bash(python *ship\" timed *)",
+      "Bash(python -m ship timed *)"
     ]
   },
   "env": {
@@ -20,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${SHIP_KIT}\" hook --program \"${SHIP_PROGRAM}\""
+            "command": "python \"${SHIP_KIT}\" hook --program \"${SHIP_PROGRAM}\" || exit 2"
           }
         ]
       }

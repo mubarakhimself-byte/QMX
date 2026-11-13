@@ -47,8 +47,8 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `phase --program P` / `--all --plans P` / `--set PHASE --status S --by WHO` / `--words` (no `--program` needed for `--all` and `--words`) | `PROGRAM.yaml`, `phase.json`, `state.json`, the stop notes, verdicts and merge notes, `chain.lock`, `WAITING.md`, `notes/WAITS-ON-YOU.md` | `phase.json` (`--set` only) | 0 |
 | `gate <name> --by WHO --source SRC [--advance]` | `PROGRAM.yaml` | the `gates:` block of `PROGRAM.yaml` | 0, 1 when the program's kind has no such gate |
 | `run [--once]` | `state.json`, `SLICES.md` (lanes), `run.json`, `BUILDER.md` in `prompt_dir`, the remote | workers, `chain.lock`, `run.json`, `notes/run.log`, `notes/WAITS-ON-YOU.md`, `notes/CHAIN-ISSUES.md`, `notes/stop-<X>.json` | 0 built or nothing left, 10 waits, 11 lock held, 1 breaker or main changed |
-| `unpark <id> --why TEXT` | `state.json` | `state.json`; removes `notes/stop-<X>.json` | 0, 1 refused (checkpoint merged, not open, or a quality park) |
-| `spike [--parent\|--child]` | the real `claude` CLI (haiku, three tiny runs) | `workers/spike/SPIKE.md`, `roles/RESULT-SHAPE.md` | 0 all seven probes pass, 1 otherwise |
+| `unpark <id> --why TEXT` | `state.json`, `stop-review/<X>/` | `state.json`; removes `notes/stop-<X>.json` | 0, 1 refused (checkpoint merged, not open, its review started, or a quality park) |
+| `spike [--parent\|--child\|--recheck]` | the real `claude` CLI (haiku, three tiny runs; `--recheck`: probes 2, 3 and 7 under the isolation flags plus one opus and one fable model probe) | `workers/spike/SPIKE.md`, `roles/RESULT-SHAPE.md`; `--recheck` appends to `roles/SPIKE.md` | 0 all probes pass, 1 otherwise |
 
 `bisect-step` is internal: `nightly` hands it to `git bisect run`.
 
@@ -160,10 +160,15 @@ Every lint, types and test command runs through `wrapper.run_timed`, and builder
 line is built: the role's model and effort, `--settings roles/<file>.json` (the write-guard hook, the depth
 variable and the allow-list), `--permission-mode dontAsk --permission-prompts none`, `--disallowedTools Agent`
 unless the role uses agents, `--add-dir` the program folder and the factory home, a fresh `--session-id`, a
-`--name "<role>: <program> <slice>"`, `--fallback-model` for Fable roles, and `--output-format json`. Never
-`--bare` (that would drop the plan login) and never `bypassPermissions`. The run's environment drops every
-`CLAUDE*` and `ANTHROPIC*` variable of the parent and sets `SHIP_PROGRAM`, `SHIP_ROLE`, `SHIP_KIT` and the depth
-variable. Each run's folder is `workers/<id>/` (`prompt.md`, `started.json`, `stdout.log`, `stderr.log`,
+`--name "<role>: <program> <slice>"`, `--fallback-model` for Fable roles, `--setting-sources project,local` (none of
+his user settings, hooks, plugins or CLAUDE.md) and `--strict-mcp-config` with no MCP servers, and
+`--output-format json`. Never `--bare` (that would drop the plan login) and never `bypassPermissions`. The run's
+environment is an allow-list (D-L11: PATH, SYSTEMROOT, TEMP and TMP, USERPROFILE, HOME, APPDATA, LOCALAPPDATA,
+COMSPEC, PATHEXT, a few Windows basics, `GIT_*`, `UV_*`, `SHIP_*`, and the `worker_env_extra` setting); it sets
+`SHIP_PROGRAM`, `SHIP_ROLE`, `SHIP_KIT` and the depth variable. The role allow-lists hold reads, file writes,
+the git calls a builder needs, `uv run --no-sync` and the kit's `timed` wrapper; no bare `python` or `git`. A
+result is a `limit` only when the text names a limit and the run ended in an error (`is_error` or a non-zero
+exit). Each run's folder is `workers/<id>/` (`prompt.md`, `started.json`, `stdout.log`, `stderr.log`,
 `result.json`). A result's `kind` is `ok` (the last non-blank line is `READY`, `BLOCKED`, `DONE` or `WAITS`),
 `nocontract`, `limit` (with `limit_reset`), `timeout` or `crash`; `roles/RESULT-SHAPE.md` records the JSON the
 parser reads. Roles live in `roles/roles.toml`. `clock.now()` reads the time from the file `SHIP_FAKE_NOW`
@@ -180,8 +185,11 @@ answer: route, start nothing), a pending usage reset (start no worker), route ev
 only that builder stopped and restarted; `BREAKER` stops), fill seats (dead slices, fix rounds, then pending
 slices lane by lane from SLICES.md's `lane` column, then pre-builds; one `land` at a time), and write
 `notes/stop-<X>.json` once the open checkpoint is built. A builder that dies (`nocontract`, `crash`,
-`timeout`, stale) is recovered and restarted; the `max_restarts`-th death parks it `manual` with a WAITS line
-holding its last 20 lines. `BLOCKED chain` and `BLOCKED files` go to `notes/CHAIN-ISSUES.md`; any other
+`timeout`, stale) is recovered and restarted; its `max_restarts`-th death (the slice's `deaths`; a usage limit is
+a restart, never a death) parks it `manual` with a WAITS line holding its last 20 lines. `chain.lock` holds the
+pid and creation time of the run and of each child: a dead holder's children are stopped only on an exact match,
+and a lock written before the machine last started is taken over with no kill (D-L14). Each `verify_ready`,
+`slice_checks` and `land` child is stopped past its time limit and started again on the next tick. `BLOCKED chain` and `BLOCKED files` go to `notes/CHAIN-ISSUES.md`; any other
 `BLOCKED` and a brief mismatch go to WAITS. A usage limit records the reset and restarts the slice after it.
 A missing build branch is one WAITS line and exit 10. Routing reads `state.json`, so a run killed anywhere
 carries on when started again; `run.json` holds the rest (READY replies waiting for `verify_ready`, fix rounds
@@ -270,7 +278,7 @@ Add to the settings of every Claude Code session in the run:
 }
 ```
 
-It allows writes inside each held slice's worktree and current evidence folder, `review/` and `notes/`, and refuses the rest, including the main checkout and the planner's files. Claude Code's hook input does not say which agent is calling, so the allowed set is the union over held slices; it does not stop one builder writing into another held builder's worktree.
+It allows writes inside each held slice's worktree and current evidence folder, `review/` and `notes/`, and refuses the rest, including the main checkout and the planner's files. For Bash it refuses (D-L9): a git command that writes (commit, push, reset, checkout, rebase, merge, a branch or tag change, clean, stash, add and the rest) anywhere but a held worktree, through `-C`, `cd`, `--git-dir` or `--work-tree`; a force push, a push with `--mirror`, `--all`, `--tags`, `--delete` or `--prune`, a remote branch deletion, or a push to any branch but the slice's own; a command naming the main checkout, `~/.claude`, `cmdkey`, `keyring`, `CredRead` or the credential store; inline code or a nested shell (`python -c`, `bash -c`, `cmd /c`, `powershell`). It fails closed: any error in the guard, a bad `ship.toml` or an unreadable `state.json` refuses with exit 2, and the role settings run it as `... hook ... || exit 2`. Claude Code's hook input does not say which agent is calling, so the allowed set is the union over held slices; it does not stop one builder writing into another held builder's worktree.
 
 ## Settings
 
@@ -323,6 +331,8 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `main_check_ignore` | `tracker`, `.claude` | main-check: folders that never stop a run |
 | `prompt_dir` | `""` (`<factory_home>/skills/factory/prompts`) | run: the folder holding `BUILDER.md` |
 | `chain_poll_s` | 20 | run: seconds between ticks |
+| `verify_timeout_s`, `slice_checks_timeout_s`, `land_run_timeout_s` | 1800, 14400, 14400 | run: a child past this is stopped and started again |
+| `worker_env_extra` | none | launch: variables passed to workers beyond the allow-list |
 
 ## Edge cases these scripts own
 

@@ -101,7 +101,7 @@ def main(argv: list[str]) -> int:
     if program:
         env = {k: v for k, v in os.environ.items() if k.upper().startswith(("CLAUDE", "ANTHROPIC", "SHIP_"))}
         with open(Path(program) / "fake-claude.log", "a", encoding="utf-8") as log:
-            log.write(json.dumps({"argv": argv, "cwd": os.getcwd(), "env": env, "rule": n,
+            log.write(json.dumps({"argv": argv, "cwd": os.getcwd(), "env": env, "keys": sorted(os.environ), "rule": n,
                                   "at": time.time()}) + "\n")
     time.sleep(float(rule.get("sleep_s", 0)))
     kind = rule.get("kind", "ok")

@@ -32,7 +32,8 @@ class LaunchCase(unittest.TestCase):
         self.program = Program(root / "prog")
         self.program.dir.mkdir()
         self.script = root / "script.json"
-        self.settings = dataclasses.replace(Settings(), claude=(PY, str(FAKE_CLAUDE)), factory_home=str(root / "none"))
+        self.settings = dataclasses.replace(Settings(), claude=(PY, str(FAKE_CLAUDE)), factory_home=str(root / "none"),
+                                            worker_env_extra=("FAKE_CLAUDE_SCRIPT",))
         self.cwd = root / "wt"
         self.cwd.mkdir()
         sh(self.cwd, "git", "init", "-q", "-b", "main")
@@ -72,6 +73,9 @@ class CommandLine(LaunchCase):
         self.assertEqual(pairs["--permission-prompts"], "none")
         self.assertEqual(pairs["--disallowedTools"], "Agent")
         self.assertEqual(pairs["--output-format"], "json")
+        self.assertEqual(pairs["--setting-sources"], "project,local")
+        self.assertIn("--strict-mcp-config", argv)
+        self.assertNotIn("--mcp-config", argv)
         self.assertEqual(pairs["--name"], "builder: prog s1")
         self.assertEqual(argv[argv.index("-p") + 1], "build it")
         self.assertNotIn("--bare", argv)
@@ -89,9 +93,15 @@ class CommandLine(LaunchCase):
     def test_env_drops_parent_claude_and_anthropic_variables(self):
         self.rules({"match": "builder:", "reply": "DONE x"})
         with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test", "CLAUDE_CODE_SESSION_ID": "parent",
-                                          "CLAUDECODE": "1", "ANTHROPIC_BASE_URL": "http://proxy"}):
+                                          "CLAUDECODE": "1", "ANTHROPIC_BASE_URL": "http://proxy",
+                                          "OPENAI_API_KEY": "sk-x", "GH_TOKEN": "ghp_x", "MY_SECRET": "x",
+                                          "GIT_AUTHOR_NAME": "kept", "UV_CACHE_DIR": "kept"}):
             self.run_worker()
-        env = self.log()[0]["env"]
+        env, keys = self.log()[0]["env"], set(self.log()[0]["keys"])
+        for dropped in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GH_TOKEN", "MY_SECRET", "CLAUDECODE"):
+            self.assertNotIn(dropped, keys)
+        for kept in ("PATH", "GIT_AUTHOR_NAME", "UV_CACHE_DIR", "FAKE_CLAUDE_SCRIPT", "SHIP_PROGRAM"):
+            self.assertIn(kept, keys)
         self.assertEqual(sorted(k for k in env if k.upper().startswith(("CLAUDE", "ANTHROPIC"))), [ln.DEPTH_VAR])
         self.assertEqual(env[ln.DEPTH_VAR], "0")
         self.assertEqual((env["SHIP_PROGRAM"], env["SHIP_ROLE"]), (str(self.program.dir), "builder"))
@@ -106,6 +116,9 @@ class CommandLine(LaunchCase):
             body = json.loads(role.settings_file.read_text("utf-8"))
             command = body["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
             self.assertIn("hook --program", command)
+            self.assertTrue(command.endswith("|| exit 2"), command)
+            allow = body["permissions"]["allow"]
+            self.assertFalse({"Bash(python *)", "Bash(git *)", "Bash"} & set(allow), role.name)
             self.assertEqual(body["env"][ln.DEPTH_VAR], "1" if role.agent_tool else "0")
             self.assertFalse([t for t in body["permissions"]["allow"] if t.startswith(("WebFetch", "WebSearch", "mcp"))])
 
@@ -209,6 +222,18 @@ class Clock(unittest.TestCase):
                 self.assertEqual(clock.now().isoformat(), "2030-01-02T04:00:00+00:00")
         with mock.patch.dict(os.environ, {"SHIP_FAKE_NOW": ""}):
             self.assertLess(abs((clock.now() - dt.datetime.now(dt.timezone.utc)).total_seconds()), 5)
+
+
+class LimitsNeedAnError(unittest.TestCase):
+    def test_a_normal_end_that_mentions_a_rate_limit_is_not_a_limit(self):
+        text = "I added retries for the rate limit and the usage limit of the broker API. All tests pass."
+        got = ln.parse_result(json.dumps({**REAL, "result": text}), 0)
+        self.assertEqual((got.kind, got.limit_reset), ("nocontract", None))
+        self.assertEqual(ln.parse_result("hit the usage limit", 0).kind, "crash")
+
+    def test_the_pattern_with_an_error_is_a_limit(self):
+        got = ln.parse_result(json.dumps({**REAL, "is_error": True, "result": "Claude usage limit reached|1794632400"}), 0)
+        self.assertEqual((got.kind, got.limit_reset), ("limit", "2026-11-14T05:00:00+00:00"))
 
 
 if __name__ == "__main__":

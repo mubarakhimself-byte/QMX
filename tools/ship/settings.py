@@ -63,6 +63,10 @@ class Settings:
     # U07: ship run, the build loop
     prompt_dir: str = ""  # worker prompts; "" means <factory_home>/skills/factory/prompts
     chain_poll_s: float = 20  # the run loop's (and later the conveyor's) tick period
+    verify_timeout_s: int = 1800  # run: a verify_ready child is stopped past this and tried again
+    slice_checks_timeout_s: int = 14400  # run: a slice_checks child is stopped past this and tried again
+    land_run_timeout_s: int = 14400  # run: a land child is stopped past this and tried again
+    worker_env_extra: tuple[str, ...] = ()  # launch: variables passed to workers beyond the allow-list
     # U08: arm checks
     disk_warn_gb: float = 20  # preflight warns (never refuses) below this much free space on the worktree drive
     main_check_ignore: tuple[str, ...] = ("tracker", ".claude")  # never stop a run, even under a code root

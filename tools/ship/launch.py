@@ -28,6 +28,7 @@ from pathlib import Path
 from ship import clock
 from ship.gitx import env_no_prompt
 from ship.layout import Program
+from ship.proc import created as proc_created
 from ship.proc import kill_tree, popen_group_kwargs
 from ship.settings import Settings
 
@@ -35,8 +36,14 @@ KIT = Path(__file__).resolve().parent
 ROLES_DIR = KIT / "roles"
 CONTRACT_WORDS = ("READY", "BLOCKED", "DONE", "WAITS")
 KINDS = ("ok", "nocontract", "limit", "timeout", "crash")
-STRIP_PREFIXES = ("CLAUDE", "ANTHROPIC")
 DEPTH_VAR = "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"
+# D-L11: the only variables a worker gets from the parent. Everything else (API keys, the parent
+# session's CLAUDE* and ANTHROPIC* variables, tokens) is dropped.
+ENV_KEEP = {"PATH", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA",
+            "COMSPEC", "PATHEXT", "SYSTEMDRIVE", "WINDIR", "HOMEDRIVE", "HOMEPATH", "USERNAME", "PROGRAMDATA",
+            "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+            "OS", "LANG", "LC_ALL", "SHELL", "USER", "LOGNAME", "XDG_RUNTIME_DIR"}
+ENV_KEEP_PREFIXES = ("GIT_", "UV_", "SHIP_")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -131,7 +138,7 @@ def limit_reset_of(text: str, settings: Settings) -> str:
     return later.isoformat(timespec="seconds")
 
 
-def _is_limit(text: str, settings: Settings) -> bool:
+def _says_limit(text: str, settings: Settings) -> bool:
     low = text.casefold()
     return any(p.casefold() in low for p in settings.limit_patterns)
 
@@ -155,7 +162,7 @@ def parse_result(stdout_text: str, rc: int | None, settings: Settings | None = N
     data = _json_object(stdout_text)
     if data is None:
         raw = stdout_text + "\n" + stderr_text
-        if _is_limit(raw, settings):
+        if rc not in (0, None) and _says_limit(raw, settings):  # D-L12: the pattern alone is not a limit
             return Result("limit", rc, raw.strip()[-2000:], limit_reset=limit_reset_of(raw, settings))
         return Result("crash", rc, stdout_text.strip()[-2000:], note=f"exit {rc}, no JSON result")
     text = str(data.get("result") or "")
@@ -170,8 +177,8 @@ def parse_result(stdout_text: str, rc: int | None, settings: Settings | None = N
     line = contract_line(text)
     if line and rc == 0:
         got.kind, (got.contract, got.value) = "ok", line
-    elif _is_limit(text + "\n" + str(data.get("api_error_status") or "") + "\n" + stderr_text, settings) \
-            and (data.get("is_error") or not line):
+    elif (data.get("is_error") or rc not in (0, None)) \
+            and _says_limit(text + "\n" + str(data.get("api_error_status") or "") + "\n" + stderr_text, settings):
         got.kind, got.limit_reset = "limit", limit_reset_of(text, settings)
     elif rc not in (0, None):
         got.kind, got.note = "crash", got.note or f"exit {rc}"
@@ -180,10 +187,13 @@ def parse_result(stdout_text: str, rc: int | None, settings: Settings | None = N
 
 def worker_env(role: Role, program: Program, settings: Settings, extra_env: dict[str, str] | None = None,
                base: dict[str, str] | None = None) -> dict[str, str]:
-    """The no-prompt git env, with every CLAUDE* and ANTHROPIC* variable of the parent removed (so the run
-    uses its own stored login, never the parent session's), plus the ship variables and the depth limit."""
+    """An allow-list of the parent's variables (D-L11) plus the no-prompt git env, the ship variables and
+    the depth limit. Nothing else passes: no API key, and none of the parent session's CLAUDE* or
+    ANTHROPIC* variables, so the run uses its own stored plan login. `worker_env_extra` names more
+    variables to pass (tests: FAKE_CLAUDE_SCRIPT)."""
+    keep = ENV_KEEP | {k.upper() for k in settings.worker_env_extra}
     env = {k: v for k, v in (os.environ if base is None else base).items()
-           if not k.upper().startswith(STRIP_PREFIXES)}
+           if k.upper() in keep or k.upper().startswith(ENV_KEEP_PREFIXES)}
     env = env_no_prompt(env)
     env.update({"SHIP_PROGRAM": str(program.dir), "SHIP_ROLE": role.name, "SHIP_KIT": str(KIT),
                 DEPTH_VAR: "1" if role.agent_tool else "0"})
@@ -194,7 +204,8 @@ def worker_env(role: Role, program: Program, settings: Settings, extra_env: dict
 def argv_for(role: Role, prompt: str, program: Program, session_id: str, name: str,
              settings: Settings) -> list[str]:
     argv = [*settings.claude, "-p", prompt, "--model", role.model, "--effort", role.effort,
-            "--settings", str(role.settings_file), "--permission-mode", "dontAsk", "--permission-prompts", "none"]
+            "--settings", str(role.settings_file), "--setting-sources", "project,local", "--strict-mcp-config",
+            "--permission-mode", "dontAsk", "--permission-prompts", "none"]
     if not role.agent_tool:
         argv += ["--disallowedTools", "Agent"]
     argv += ["--add-dir", str(program.dir)]
@@ -217,6 +228,7 @@ class Handle:
         self.session_id, self.name, self.settings = session_id, name, settings
         self._files = files
         self._started = time.monotonic()
+        self.created = proc_created(child.pid)  # with the pid, names this run exactly (chain.lock)
         self.result: Result | None = None
 
     @property

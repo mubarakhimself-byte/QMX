@@ -105,9 +105,9 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
         if sl.status not in kinds:
             raise Refused(f"{slice_id} is {sl.status}" + (f" by {sl.holder.dispatch_id}" if sl.holder else ""))
         kind = kinds[sl.status]
-        if kind == "restart" and sl.status == Status.DEAD and sl.restarts >= settings.max_restarts:
-            blocked = state.park(slice_id, ParkCause.MANUAL, f"restarted {sl.restarts} times")
-            return Parked(slice_id, f"restarted {sl.restarts} times", blocked)
+        if kind == "restart" and sl.status == Status.DEAD and sl.deaths >= settings.max_restarts:
+            blocked = state.park(slice_id, ParkCause.MANUAL, f"its builder died {sl.deaths} times")
+            return Parked(slice_id, f"its builder died {sl.deaths} times", blocked)
         if kind == "fix" and sl.attempts >= settings.max_attempts:
             blocked = state.park(slice_id, ParkCause.ROUNDS, f"{sl.attempts} rounds used")
             return Parked(slice_id, f"{sl.attempts} rounds used", blocked)

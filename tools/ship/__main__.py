@@ -220,9 +220,13 @@ def cmd_park(a, program, settings):
 
 
 def cmd_hook(a, program, settings):
-    from ship.hook import main as hook_main
+    try:
+        from ship.hook import main as hook_main
 
-    return hook_main(program, sys.stdin.read())
+        return hook_main(program, sys.stdin.read())
+    except BaseException as exc:  # noqa: BLE001 - the guard fails closed (D-L9)
+        print(f"ship hook: refusing, the guard itself failed: {exc!r}", file=sys.stderr)
+        return 2
 
 
 # U03: plans worktree and records
@@ -302,6 +306,8 @@ def cmd_spike(a, program, settings):
         return spike.parent(program)
     if a.child:
         return spike.child(program, settings)
+    if a.recheck:
+        return _lines(*spike.recheck(program, settings))
     return _lines(*spike.spike(program, settings))
 
 
@@ -321,6 +327,10 @@ def cmd_unpark(a, program, settings):
             if a.slice not in state.slices:
                 raise st.StateError(f"no slice {a.slice}")
             checkpoint = state.slices[a.slice].checkpoint
+            review = program.stop_review(stop_name(program, checkpoint))
+            if review.is_dir() and any(review.iterdir()):
+                raise st.StateError(f"{a.slice}: the review of stop {review.name} has started; "
+                                    "his answer goes to the review or the backlog now")
             freed = state.unpark(a.slice, a.why)
     except st.StateError as exc:
         print(f"REFUSED {exc}")
@@ -400,7 +410,8 @@ def parser() -> argparse.ArgumentParser:
     add("gate", cmd_gate, (["name"], {}), (["--by"], {"required": True}), (["--source"], {"required": True}),
         (["--advance"], {"action": "store_true"}))
     # U06: headless launcher and spike
-    add("spike", cmd_spike, (["--parent"], {"action": "store_true"}), (["--child"], {"action": "store_true"}))
+    add("spike", cmd_spike, (["--parent"], {"action": "store_true"}), (["--child"], {"action": "store_true"}),
+        (["--recheck"], {"action": "store_true"}))
     # U07: ship run, the build loop
     add("run", cmd_run, (["--once"], {"action": "store_true"}))
     add("unpark", cmd_unpark, (["slice"], {}), (["--why"], {"required": True}))
@@ -413,6 +424,13 @@ def main(argv: list[str] | None = None) -> int:
     a = parser().parse_args(argv)
     if getattr(a, "plain", False):
         return a.fn(a)
+    if a.fn is cmd_hook:  # a bad ship.toml or program path must refuse, never fall through to allow
+        try:
+            program = Program(a.program.resolve())
+            return cmd_hook(a, program, load_settings(program.dir))
+        except BaseException as exc:  # noqa: BLE001
+            print(f"ship hook: refusing, the guard itself failed: {exc!r}", file=sys.stderr)
+            return 2
     program = Program(a.program.resolve())
     return a.fn(a, program, load_settings(program.dir))
 
