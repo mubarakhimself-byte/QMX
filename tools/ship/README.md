@@ -17,8 +17,9 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | Command | Reads | Writes | Exit |
 |---|---|---|---|
 | `init --repo R --build-branch B --worktree-root W` | `SLICES.md` | `state.json` (refuses a changed `SLICES.md` once it exists) | 0 |
-| `preflight [--protection-push-test]` | `state.json`, the machine, the remote | `preflight/checks.txt`, `ARMED.md`, `main-status.txt`, `runs/`, `KEEP-AWAKE` | 0 armed, 1 refused |
-| `main-check` | `main-status.txt`, the main checkout | nothing | 0 unchanged, 1 changed (stop the run) |
+| `preflight [--protection-push-test]` | `PROGRAM.yaml` (`gates.go`), `state.json`, the machine, the remote, the active `gh` account, free disk (a WARN, never a refusal) | `preflight/checks.txt`, `ARMED.md`, `main-status.txt`, `runs/`, `KEEP-AWAKE` | 0 armed, 1 refused |
+| `main-check` | `main-status.txt`, the main checkout's HEAD (commit and branch) and the status under the code roots (`checks.toml` roots and `tools`, never `tracker/` or `.claude/`) | nothing | 0 unchanged, 1 changed (stop the run) |
+| `facts --tip SHA [--slices a,b]` | every brief (or those named), a frozen checkout of SHA | `checks/_facts/<tip8>/summary.txt` | 0 all pass, 1 and one `FAIL <slice> <fact>` line each |
 | `status` | `state.json`, `heartbeat/`, `HOLD`, remote slice branches, land runs (github) | `state.json` (last push seen, land run results) | 0, 1 on STALE or breaker |
 | `dispatch <id>` | `state.json`, `HOLD`, `slices/<id>/BRIEF.md`, the build tip | the worktree, `evidence/<id>/<attempt>/facts.log`, `leftover.patch`, `state.json` | 0 dispatched (JSON), 2 refused, 3 parked |
 | `timed --slice <id> --log L [--timeout S] -- <argv>` | nothing | the log, `heartbeat/<id>` | the command's exit code, 124 on timeout |
@@ -313,6 +314,8 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `limit_patterns` | `usage limit`, `rate limit` | launch: text that marks a usage-limit ending |
 | `limit_backoff_s` | 1800 | launch: the wait when a limit names no reset time |
 | `max_restarts` | 3 | run, dispatch: infra restarts before a slice is parked for him |
+| `disk_warn_gb` | 20 | preflight: WARN below this many GB free on the worktree drive |
+| `main_check_ignore` | `tracker`, `.claude` | main-check: folders that never stop a run |
 | `prompt_dir` | `""` (`<factory_home>/skills/factory/prompts`) | run: the folder holding `BUILDER.md` |
 | `chain_poll_s` | 20 | run: seconds between ticks |
 

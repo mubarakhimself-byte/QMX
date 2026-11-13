@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -61,6 +62,16 @@ def remote_sha(repo: Path, remote: str, branch: str, timeout: float) -> str | No
         if ref.strip() == f"refs/heads/{branch}":
             return sha.strip()
     return None
+
+
+GITHUB_URL = re.compile(r"github\.com[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
+
+
+def gh_slug(repo: Path, remote: str, timeout: float) -> str:
+    """`owner/name` of a GitHub remote (`https://github.com/o/n.git` or `git@github.com:o/n.git`), else ""."""
+    url = git(repo, "remote", "get-url", remote, timeout=timeout).strip()
+    found = GITHUB_URL.search(url)
+    return f"{found.group(1)}/{found.group(2)}" if found else ""
 
 
 def changed_files(repo: Path, base: str, head: str, timeout: float) -> list[str]:

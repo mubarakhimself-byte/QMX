@@ -332,6 +332,14 @@ def cmd_unpark(a, program, settings):
     return 0
 
 
+# U08: arm checks
+def cmd_facts(a, program, settings):
+    from ship.facts import facts_at
+
+    only = [s.strip() for s in a.slices.split(",") if s.strip()] if a.slices else None
+    return _lines(*facts_at(program, a.tip, settings, only))
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -396,6 +404,8 @@ def parser() -> argparse.ArgumentParser:
     # U07: ship run, the build loop
     add("run", cmd_run, (["--once"], {"action": "store_true"}))
     add("unpark", cmd_unpark, (["slice"], {}), (["--why"], {"required": True}))
+    # U08: arm checks
+    add("facts", cmd_facts, (["--tip"], {"required": True}), (["--slices"], {}))
     return p
 
 

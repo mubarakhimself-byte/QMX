@@ -63,6 +63,9 @@ class Settings:
     # U07: ship run, the build loop
     prompt_dir: str = ""  # worker prompts; "" means <factory_home>/skills/factory/prompts
     chain_poll_s: float = 20  # the run loop's (and later the conveyor's) tick period
+    # U08: arm checks
+    disk_warn_gb: float = 20  # preflight warns (never refuses) below this much free space on the worktree drive
+    main_check_ignore: tuple[str, ...] = ("tracker", ".claude")  # never stop a run, even under a code root
 
 
 def repo_args(settings: Settings) -> list[str]:

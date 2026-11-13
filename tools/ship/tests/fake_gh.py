@@ -4,7 +4,8 @@ PRs live in fake-gh.json in the git dir; each PR's head sha is read from the rea
 `git ls-remote`. Actions runs live in fake-gh-runs.json: {"runs": [{databaseId, headSha, headBranch,
 event, status, conclusion, displayTitle, url, createdAt, jobs: [...], artifacts: {name: {path: text}}}]}.
 Every call is appended to fake-gh-calls.jsonl. A file fake-gh-down makes every call fail the way gh
-does without a network."""
+does without a network. A file fake-gh-account makes `auth status` report that account as active.
+A `-R <slug>` anywhere in the arguments is accepted and ignored."""
 
 import json
 import subprocess
@@ -30,6 +31,10 @@ def main(argv: list[str]) -> int:
     if "-R" in argv:
         i = argv.index("-R")
         argv = argv[:i] + argv[i + 2:]
+    if argv[:2] == ["auth", "status"] and (home / "fake-gh-account").exists():
+        name = (home / "fake-gh-account").read_text("utf-8").strip()
+        print(f"github.com\n  Logged in to github.com account {name} (keyring)\n  - Active account: true")
+        return 0
     if argv[:1] == ["pr"]:
         return pr(home, argv)
     if argv[:1] in (["run"], ["workflow"]):
