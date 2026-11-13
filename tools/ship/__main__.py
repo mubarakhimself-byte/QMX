@@ -367,6 +367,16 @@ def cmd_review(a, program, settings):
     return review(program, a.stop, settings, a.round)
 
 
+# U10: merge as a script
+def cmd_merge(a, program, settings):
+    from ship.merge import merge
+
+    rc, lines = merge(program, a.stop, settings)
+    for line in lines:
+        print(line)
+    return rc
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -437,6 +447,8 @@ def parser() -> argparse.ArgumentParser:
     # U09: trace and the checkpoint review
     add("trace", cmd_trace, (["--stop"], {"required": True}))
     add("review", cmd_review, (["stop"], {}), (["--round"], {"type": int, "choices": [1, 2]}))
+    # U10: merge as a script
+    add("merge", cmd_merge, (["stop"], {}))
     return p
 
 

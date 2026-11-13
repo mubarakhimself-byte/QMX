@@ -5,7 +5,13 @@ PRs live in fake-gh.json in the git dir; each PR's head sha is read from the rea
 event, status, conclusion, displayTitle, url, createdAt, jobs: [...], artifacts: {name: {path: text}}}]}.
 Every call is appended to fake-gh-calls.jsonl. A file fake-gh-down makes every call fail the way gh
 does without a network. A file fake-gh-account makes `auth status` report that account as active.
-A `-R <slug>` anywhere in the arguments is accepted and ignored."""
+A `-R <slug>` anywhere in the arguments is accepted and ignored.
+
+For `ship merge` (U10): an open PR gets a pull-request `gate` run on its current head the first time
+runs are listed for it (green, or red while a file fake-gh-gate-red exists); `pr merge <url> --merge`
+merges the PR's head into its base on the remote with `git` (refused while fake-gh-gate-red exists).
+With a file fake-gh-auto, `workflow run` makes a finished run at once (green, or red while
+fake-gh-deep-red exists) carrying the `deep-verdict` and `summary` artifacts for its head."""
 
 import json
 import subprocess
@@ -64,6 +70,19 @@ def pr(home: Path, argv: list[str]) -> int:
         found = next(p for p in prs if p["url"] == argv[2])
         print(json.dumps({**found, "headRefOid": head_sha(found["head"])}))
         return 0
+    if argv[:2] == ["pr", "merge"]:
+        found = next((p for p in prs if p["url"] == argv[2] or str(p["number"]) == argv[2]), None)
+        if found is None or found["state"] != "OPEN":
+            print(f"no open pull request {argv[2]}", file=sys.stderr)
+            return 1
+        if (home / "fake-gh-gate-red").exists():
+            print("Pull request is not mergeable: the base branch policy prohibits the merge "
+                  "(required status check gate is failing)", file=sys.stderr)
+            return 1
+        merge_on_remote(home, found)
+        found["state"] = "MERGED"
+        store.write_text(json.dumps(prs), "utf-8")
+        return 0
     if argv[:2] == ["pr", "close"]:
         for p in prs:
             if p["url"] == argv[2]:
@@ -82,14 +101,26 @@ def actions(home: Path, argv: list[str]) -> int:
         branch = opt(argv, "--ref")
         level = opt(argv, "-f", "level=deep").split("=", 1)[1]
         new_id = max([r["databaseId"] for r in runs] + [1000]) + 1
-        runs.insert(0, {"databaseId": new_id, "headSha": head_sha(branch), "headBranch": branch,
-                        "event": "workflow_dispatch", "status": "queued", "conclusion": "",
-                        "displayTitle": f"{level} {branch}", "url": f"https://github.test/runs/{new_id}",
-                        "createdAt": "2026-11-13T00:00:00Z", "jobs": [], "artifacts": {}})
+        sha = head_sha(branch)
+        run = {"databaseId": new_id, "headSha": sha, "headBranch": branch,
+               "event": "workflow_dispatch", "status": "queued", "conclusion": "",
+               "displayTitle": f"{level} {branch}", "url": f"https://github.test/runs/{new_id}",
+               "createdAt": "2026-11-13T00:00:00Z", "jobs": [], "artifacts": {}}
+        if (home / "fake-gh-auto").exists():
+            green = not (home / "fake-gh-deep-red").exists()
+            summary = {"sha": sha, "ref": branch, "run_id": new_id, "url": run["url"], "level": level, "green": green,
+                       "jobs": [], "reds": [], "quality": [], "mutants": {"killed": 0, "survived": 0, "new_survivors": 0},
+                       "skipped": []}
+            run.update({"status": "completed", "conclusion": "success" if green else "failure", "artifacts": {
+                "deep-verdict": {"verdict.json": json.dumps({"sha": sha, "level": level})},
+                "summary": {"summary.json": json.dumps(summary), "summary.md": "fake"}}})
+        runs.insert(0, run)
         store.write_text(json.dumps(data), "utf-8")
         return 0
     if argv[:2] == ["run", "list"]:
         branch, event, commit = opt(argv, "--branch"), opt(argv, "--event"), opt(argv, "--commit")
+        if event == "pull_request" and gate_runs(home, runs, branch):
+            store.write_text(json.dumps(data), "utf-8")
         rows = [r for r in runs if r["headBranch"] == branch and (event is None or r["event"] == event)
                 and (commit is None or r["headSha"] == commit)]
         print(json.dumps([{k: v for k, v in r.items() if k not in ("jobs", "artifacts")} for r in rows]))
@@ -117,10 +148,53 @@ def actions(home: Path, argv: list[str]) -> int:
         for job in found["jobs"]:
             if str(job["databaseId"]) == opt(argv, "--job"):
                 job.update({"status": "queued", "conclusion": "", "databaseId": job["databaseId"] + 1})
+                if (home / "fake-gh-gate-red").exists():
+                    job.update({"status": "completed", "conclusion": "failure"})
         store.write_text(json.dumps(data), "utf-8")
         return 0
     print(f"fake gh: unsupported {argv}", file=sys.stderr)
     return 2
+
+
+def gate_runs(home: Path, runs: list[dict], branch: str) -> bool:
+    """A pull-request gate run for each open PR from `branch` at its current head, made once."""
+    store = home / "fake-gh.json"
+    prs = json.loads(store.read_text("utf-8")) if store.exists() else []
+    made = False
+    for p in prs:
+        if p["head"] != branch or p["state"] != "OPEN":
+            continue
+        sha = head_sha(branch)
+        if any(r["event"] == "pull_request" and r["headSha"] == sha and r["headBranch"] == branch for r in runs):
+            continue
+        new_id = max([r["databaseId"] for r in runs] + [1000]) + 1
+        red = (home / "fake-gh-gate-red").exists()
+        job = {"name": "gate", "databaseId": new_id * 10, "status": "completed",
+               "conclusion": "failure" if red else "success", "url": f"https://github.test/runs/{new_id}/gate"}
+        runs.insert(0, {"databaseId": new_id, "headSha": sha, "headBranch": branch, "event": "pull_request",
+                        "status": "completed", "conclusion": job["conclusion"], "displayTitle": f"gate {branch}",
+                        "url": f"https://github.test/runs/{new_id}", "createdAt": "2026-11-13T00:00:00Z",
+                        "jobs": [job], "artifacts": {}})
+        made = True
+    return made
+
+
+def merge_on_remote(home: Path, pr: dict) -> None:
+    """`gh pr merge --merge`: a merge commit of the head into the base, pushed to the remote."""
+    import tempfile
+
+    git("fetch", "-q", "origin")
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "merge"
+        git("worktree", "add", "-q", "--detach", str(work), f"origin/{pr['baseRefName']}")
+        try:
+            subprocess.run(["git", "-c", "user.name=fake gh", "-c", "user.email=gh@test.invalid", "merge", "-q",
+                            "--no-ff", "-m", f"Merge pull request #{pr['number']} from {pr['head']}",
+                            f"origin/{pr['head']}"], cwd=work, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "push", "-q", "origin", f"HEAD:refs/heads/{pr['baseRefName']}"], cwd=work,
+                           check=True, capture_output=True, text=True)
+        finally:
+            git("worktree", "remove", "--force", str(work))
 
 
 def head_sha(branch: str) -> str:
