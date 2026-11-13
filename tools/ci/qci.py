@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import datetime
 import enum
 import io
 import json
@@ -100,6 +101,8 @@ class Level(enum.StrEnum):
 
 
 Scope = Literal["touched", "all"]
+# The files a quality scan reported in full: "all", a set of paths, or None when it cannot say.
+Covered = Literal["all"] | frozenset[str] | None
 TEST_SCOPE: dict[Level, Scope] = {
     Level.SLICE: "touched",
     Level.LAND: "touched",
@@ -321,11 +324,18 @@ def outcomes(junit: Path) -> dict[str, str]:
 
 
 def pytest(
-    cwd: Path, files: list[str], junit: Path, *, serial: bool | None, workers: str = "auto"
+    cwd: Path,
+    files: list[str],
+    junit: Path,
+    *,
+    serial: bool | None,
+    workers: str = "auto",
+    cache: Path | None = None,
+    last_failed: bool = False,
 ) -> int:
     """Run pytest on `files` (relative to `cwd`) through an argument file, so a long shard never
-    hits
-    the Windows command-line limit. serial=None runs every test with no worker split."""
+    hits the Windows command-line limit. serial=None runs every test with no worker split. With a
+    `cache` folder pytest records there what failed, and `last_failed` reruns only that."""
     junit.parent.mkdir(parents=True, exist_ok=True)
     args = OUT / "tmp" / f"{junit.stem}.args"
     args.parent.mkdir(parents=True, exist_ok=True)
@@ -349,8 +359,8 @@ def pytest(
         f"@{args}",
         "-q",
         "-rfE",
-        "-p",
-        "no:cacheprovider",
+        *(["-p", "no:cacheprovider"] if cache is None else ["-o", f"cache_dir={cache}"]),
+        *(["--last-failed", "--last-failed-no-failures", "none"] if last_failed else []),
         *split,
         "--basetemp",
         str(basetemp),
@@ -377,10 +387,13 @@ def job_tests(system: str) -> int:
     units = ci_units.discover(REPO)
     if TEST_SCOPE.get(lvl) == "all":
         base, changed, chosen = None, [], units
+        # The whole suite runs, but a flaky red still blocks in a module this change touched.
+        touched = changed_files(base_for(lvl, at), at)
     else:
         base = base_for(lvl, at)
         changed = changed_files(base, at)
         chosen = ci_units.select(units, changed)
+        touched = changed
     describe(lvl, base, at, changed)
     durations = ci_units.load_durations(REPO / "tools" / "ci" / "durations.json")
     files = [f for u in chosen for f in ci_units.test_files(REPO, u, durations)]
@@ -409,35 +422,96 @@ def job_tests(system: str) -> int:
         sync(workspace)
     crashed: list[str] = []
     reds: list[str] = []
+    flaky: list[str] = []
     for unit, paths in sorted(grouped.items(), key=lambda item: item[0].root):
         stem = f"{system}-{index}-{unit.root.replace('/', '_')}"
         for serial in (False, True):
-            junit = OUT / "junit" / f"{stem}{'-serial' if serial else ''}.xml"
-            rc = pytest(REPO / unit.cwd, sorted(paths), junit, serial=serial)
+            name = f"{stem}{'-serial' if serial else ''}"
+            junit = OUT / "junit" / f"{name}.xml"
+            cache = Path(tempfile.mkdtemp(prefix="qmx-cache-"))
+            rc = pytest(REPO / unit.cwd, sorted(paths), junit, serial=serial, cache=cache)
             if rc not in (0, 1, 5) or (rc == 1 and not junit.exists()):
                 crashed.append(f"{unit.root}{' (serial)' if serial else ''}: pytest rc={rc}")
-            reds += [
-                red_key(system, unit, test_id)
-                for test_id, outcome in outcomes(junit).items()
-                if outcome in ("assertion", "failed", "error")
-            ]
-    return tests_verdict(f"{system}-{index}", reds, crashed)
+            first = outcomes(junit)
+            again: dict[str, str] = {}
+            if any(o in RED_OUTCOMES for o in first.values()):
+                # Once, in this job, only the tests that were red (pytest's own last-failed list).
+                rerun = OUT / "rerun" / f"{name}.xml"
+                pytest(
+                    REPO / unit.cwd,
+                    sorted(paths),
+                    rerun,
+                    serial=serial,
+                    cache=cache,
+                    last_failed=True,
+                )
+                again = outcomes(rerun)
+            red, flake = split_flaky(system, unit, first, again, touched)
+            reds += red
+            flaky += flake
+    return tests_verdict(f"{system}-{index}", reds, crashed, flaky)
+
+
+RED_OUTCOMES = frozenset({"assertion", "failed", "error"})
 
 
 def red_key(system: str, unit: ci_units.Unit, test_id: str) -> str:
     return f"{system}|{unit.root}|{test_id}"
 
 
-def tests_verdict(name: str, reds: list[str], crashed: list[str]) -> int:
+def in_touched_module(unit: ci_units.Unit, test_id: str, touched: Sequence[str]) -> bool:
+    """Whether a JUnit test id (`dotted.module[.Class]::name`) comes from a test module this change
+    touched. JUnit names the module from pytest's rootdir, so any tail of the module's dotted repo
+    path may start the id."""
+    classname = test_id.split("::", 1)[0]
+    for path in touched:
+        if not unit.owns(path) or not path.endswith(".py"):
+            continue
+        parts = path.removesuffix(".py").split("/")
+        for i in range(len(parts)):
+            dotted = ".".join(parts[i:])
+            if classname == dotted or classname.startswith(dotted + "."):
+                return True
+    return False
+
+
+def split_flaky(
+    system: str,
+    unit: ci_units.Unit,
+    first: Mapping[str, str],
+    again: Mapping[str, str],
+    touched: Sequence[str],
+) -> tuple[list[str], list[str]]:
+    """(reds, flaky) for one pytest run and its rerun. A red that passed on the rerun is flaky and
+    does not block, unless its module is one this change touched: then it stays red."""
+    reds: list[str] = []
+    flaky: list[str] = []
+    for test_id, outcome in sorted(first.items()):
+        if outcome not in RED_OUTCOMES:
+            continue
+        key = red_key(system, unit, test_id)
+        if again.get(test_id) == "passed" and not in_touched_module(unit, test_id, touched):
+            flaky.append(key)
+        else:
+            reds.append(key)
+    return reds, flaky
+
+
+def tests_verdict(name: str, reds: list[str], crashed: list[str], flaky: Sequence[str] = ()) -> int:
     """Reds listed in ci/baselines/known-reds.txt (red on engine/base when it was taken) are
-    reported and do not block; any other red, or a pytest that crashed, does."""
+    reported and do not block; any other red, or a pytest that crashed, does. Flaky tests (red,
+    then green on the rerun) are printed, kept in flaky-<name>.txt, and do not block."""
     known = set(ratchet.read_baseline(BASELINES / "known-reds.txt"))
     new = sorted(r for r in set(reds) if r not in known)
-    lines = [f"{len(set(reds))} red tests, {len(new)} not in known-reds.txt"]
+    lines = [
+        f"{len(set(reds))} red tests, {len(new)} not in known-reds.txt, {len(set(flaky))} flaky"
+    ]
     lines += [f"FAIL {c}" for c in crashed]
     lines += [f"NEW RED {r}" for r in new]
     lines += [f"known red {r}" for r in sorted(set(reds) & known)]
+    lines += [f"FLAKY {r}" for r in sorted(set(flaky))]
     (OUT / f"reds-{name}.txt").write_text("".join(f"{r}\n" for r in sorted(set(reds))), "utf-8")
+    (OUT / f"flaky-{name}.txt").write_text("".join(f"{r}\n" for r in sorted(set(flaky))), "utf-8")
     print("\n".join(lines))
     return 1 if new or crashed else 0
 
@@ -513,7 +587,9 @@ def types_verdict(found: list[ratchet.Finding], scope: list[str] | None) -> int:
     """pyright errors against ci/baselines/pyright.txt. A folder run twice (a workspace and its
     package) reports the same error once."""
     unique = sorted(set(found), key=lambda f: (f.path, f.line, f.rule, f.message))
-    return ratchet_verdict("pyright", unique, scope)
+    # A slice's touched folders are checked whole, so its changed files are reported in full.
+    covered: Covered = "all" if scope is None else frozenset(scope)
+    return ratchet_verdict("pyright", unique, scope, covered=covered).rc
 
 
 def job_lint(write_baseline: bool = False) -> int:
@@ -668,26 +744,59 @@ def job_fail_at_parent() -> int:
     return 1 if problems else 0
 
 
+@dataclasses.dataclass(frozen=True)
+class Ratchet:
+    """A tool's verdict: rc 1 when a new finding blocks, and the baseline keys it did not see."""
+
+    rc: int
+    gone: list[str]
+
+
 def ratchet_verdict(
-    tool: str, found: list[ratchet.Finding], scope: list[str] | None, report_as: str = ""
-) -> int:
+    tool: str,
+    found: list[ratchet.Finding],
+    scope: list[str] | None,
+    report_as: str = "",
+    covered: Covered = None,
+) -> Ratchet:
     """New findings beyond `ci/baselines/<tool>.txt`. With a scope (a slice), only new findings in
-    the changed files block."""
-    fresh = ratchet.new_findings(found, ratchet.read_baseline(BASELINES / f"{tool}.txt"))
-    tool = report_as or tool
+    the changed files block. `covered` names the files this scan reported in full ("all" for a
+    whole-repo scan, None when it cannot say): baseline keys there that it did not see are `gone`,
+    printed as notes and written to ci-out/<tool>-ratchet.json for the summary and for prune."""
+    baseline = ratchet.read_baseline(BASELINES / f"{tool}.txt")
+    fresh = ratchet.new_findings(found, baseline)
+    gone = (
+        []
+        if covered is None
+        else ratchet.gone_keys(found, baseline, lambda p: covered == "all" or p in covered)
+    )
+    name = report_as or tool
     if scope is not None:
         wanted = set(scope)
         fresh = [dataclasses.replace(f, blocking=f.blocking and f.path in wanted) for f in fresh]
     blocking = [f for f in fresh if f.blocking]
     report = [
-        f"{tool}: {len(found)} findings, {len(fresh)} not in the baseline, {len(blocking)} blocking"
+        f"{name}: {len(found)} findings, {len(fresh)} not in the baseline, {len(blocking)} "
+        f"blocking, {len(gone)} baseline rows gone"
     ]
     report += [("BLOCK " if f.blocking else "note  ") + f.text() for f in fresh]
-    (OUT / f"{tool}-new.txt").write_text("\n".join(report) + "\n", "utf-8")
-    ratchet.write_junit(OUT / "junit" / f"{tool}.xml", tool, fresh)
+    report += [f"gone  {key}" for key in gone]
+    (OUT / f"{name}-new.txt").write_text("\n".join(report) + "\n", "utf-8")
+    record = {
+        "tool": tool,
+        "complete": covered == "all",
+        "new": [
+            {"key": f.key, "file": f.path, "line": f.line, "blocking": f.blocking} for f in fresh
+        ],
+        "gone": gone,
+    }
+    (OUT / f"{name}-ratchet.json").write_text(json.dumps(record, indent=1) + "\n", "utf-8")
+    ratchet.write_junit(OUT / "junit" / f"{name}.xml", name, fresh)
     print("\n".join(line for line in report if not line.startswith("note")))
-    print(f"(notes, which do not block, are in ci-out/{tool}-new.txt)")
-    return 1 if blocking else 0
+    print(f"(notes, which do not block, are in ci-out/{name}-new.txt)")
+    if gone:
+        print(f"note: {len(gone)} baseline rows gone; `qci.py ratchet --prune` drops them")
+    return Ratchet(1 if blocking else 0, gone)
 
 
 def vulture_findings() -> list[ratchet.Finding]:
@@ -748,7 +857,7 @@ def job_vulture(write_baseline: bool) -> int:
         print(f"wrote {len(found)} findings to ci/baselines/vulture.txt")
         return 0
     scope = changed_files(base_for(lvl, at), at) if lvl == Level.SLICE else None
-    return ratchet_verdict("vulture", found, scope)
+    return ratchet_verdict("vulture", found, scope, covered="all").rc
 
 
 def skylos_scope() -> dict[str, str]:
@@ -958,7 +1067,8 @@ def job_skylos(write_baseline: bool) -> int:
         print(f"wrote {len(found)} findings to ci/baselines/skylos.txt")
         return 0
     scope = changed_files(base, at) if base is not None else None
-    return ratchet_verdict("skylos", found, scope)
+    # A --diff-base scan may report only changed lines, so it cannot say what is gone.
+    return ratchet_verdict("skylos", found, scope, covered="all" if base is None else None).rc
 
 
 def mutable_packages() -> list[str]:
@@ -1054,6 +1164,7 @@ def job_mutmut() -> int:
     print(f"{len(targets)} functions in {len(by_package)} packages; this shard: {mine}")
     found: list[ratchet.Finding] = []
     broken: list[str] = []
+    counts: dict[str, int] = {}
     for package in mine:
         chosen = by_package[package]
         folder = REPO / package
@@ -1090,6 +1201,8 @@ def job_mutmut() -> int:
         for status in mine_results.values():
             statuses[status] = statuses.get(status, 0) + 1
         print(f"{package}: {statuses}")
+        for status, count in statuses.items():
+            counts[status] = counts.get(status, 0) + count
         for t in chosen:
             stem = f"{t.module}.{t.mangled}__mutmut_"
             for mutant, status in sorted(mine_results.items()):
@@ -1100,6 +1213,7 @@ def job_mutmut() -> int:
         shutil.rmtree(folder / "mutants", ignore_errors=True)
         git("checkout", "--", f"{package}/pyproject.toml", check=False)
     lines = sorted(f.key for f in found)
+    (OUT / f"mutmut-counts-{shard}.json").write_text(json.dumps(counts) + "\n", "utf-8")
     (OUT / f"mutmut-findings-{shard}.txt").write_text(
         "\n".join(lines) + ("\n" if lines else ""), "utf-8"
     )
@@ -1108,7 +1222,7 @@ def job_mutmut() -> int:
     if lvl in (Level.WALK, Level.BASELINE) or os.environ.get("QMX_MUTATE_MODULES"):
         print(f"{len(found)} surviving mutants recorded (walk: not a gate)")
         return 1 if broken else 0
-    verdict = ratchet_verdict("mutmut", found, None, f"mutmut-{shard}") if found else 0
+    verdict = ratchet_verdict("mutmut", found, None, f"mutmut-{shard}").rc if found else 0
     return 1 if broken or verdict else 0
 
 
@@ -1255,6 +1369,267 @@ def job_smoke() -> int:
     return 1 if failed else 0
 
 
+# ---- the run summary --------------------------------------------------------------------------
+
+LEVEL_IF = re.compile(
+    r"contains\(fromJSON\('\[([^\]]*)\]'\),\s*needs\.level\.outputs\.level\)"
+    r"|needs\.level\.outputs\.level\s*==\s*'([a-z]+)'"
+)
+
+
+def workflow_jobs(workflow: str) -> dict[str, str]:
+    """Each job id in qmx-ci.yml with its `if:` (empty when it has none)."""
+    jobs: dict[str, str] = {}
+    body = workflow.split("\njobs:\n", 1)[1]
+    current = ""
+    for line in body.splitlines():
+        if re.fullmatch(r"  [a-z][a-z0-9-]*:", line):
+            current = line.strip().rstrip(":")
+            jobs[current] = ""
+        elif current and line.startswith("    if: ") and not jobs[current]:
+            jobs[current] = line.removeprefix("    if: ")
+    return jobs
+
+
+def job_levels(condition: str) -> set[str]:
+    """The levels a job's `if:` admits, read from the two forms qmx-ci.yml uses."""
+    found: set[str] = set()
+    for listed, single in LEVEL_IF.findall(condition):
+        found |= {x.strip().strip('"') for x in listed.split(",") if x.strip()} | (
+            {single} if single else set()
+        )
+    return found
+
+
+def level_jobs(workflow: str, lvl: Level) -> list[str]:
+    """The jobs a run at this level holds, from the workflow's own conditions."""
+    return [job for job, cond in workflow_jobs(workflow).items() if lvl.value in job_levels(cond)]
+
+
+def read_lines(path: Path) -> list[str]:
+    return [line for line in path.read_text("utf-8").splitlines() if line]
+
+
+def build_summary(
+    *,
+    sha: str,
+    ref: str,
+    run_id: str,
+    url: str,
+    lvl: Level,
+    jobs_of_level: Sequence[str],
+    needs: Mapping[str, Mapping[str, object]],
+    api_jobs: Sequence[Mapping[str, object]] | None,
+    artifacts: Path,
+    known_reds: Sequence[str],
+) -> dict[str, object]:
+    """summary.json (factory design 11.11): every job of the level, every red (new, known or
+    flaky), every new and gone quality row, mutant counts, the level's skipped jobs."""
+    result = {job: str(needs.get(job, {}).get("result", "missing")) for job in jobs_of_level}
+    jobs: list[dict[str, object]]
+    if api_jobs is None:
+        jobs = [{"name": job, "result": result[job], "seconds": 0} for job in jobs_of_level]
+    else:
+        jobs = []
+        for item in api_jobs:
+            name = str(item.get("name", ""))
+            if name.split(" ", 1)[0] not in result:
+                continue
+            seconds = 0
+            started, completed = item.get("started_at"), item.get("completed_at")
+            if isinstance(started, str) and isinstance(completed, str):
+                span = datetime.datetime.fromisoformat(completed) - datetime.datetime.fromisoformat(
+                    started
+                )
+                seconds = max(0, int(span.total_seconds()))
+            outcome = item.get("conclusion") or item.get("status") or "unknown"
+            jobs.append({"name": name, "result": str(outcome), "seconds": seconds})
+    known = set(known_reds)
+    reds: list[dict[str, str]] = []
+    for path in sorted(artifacts.rglob("reds-*.txt")):
+        for key in read_lines(path):
+            system, _, rest = key.partition("|")
+            kind = "known" if key in known else "new"
+            reds.append({"id": rest, "system": system, "kind": kind})
+    for path in sorted(artifacts.rglob("flaky-*.txt")):
+        for key in read_lines(path):
+            system, _, rest = key.partition("|")
+            reds.append({"id": rest, "system": system, "kind": "flaky"})
+    quality: list[dict[str, str]] = []
+    for path in sorted(artifacts.rglob("*-ratchet.json")):
+        record = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
+        tool = str(record["tool"])
+        for item in cast("list[dict[str, object]]", record.get("new", [])):
+            row = {"tool": tool, "key": str(item["key"]), "file": str(item["file"]), "kind": "new"}
+            quality.append(row)
+        for key in cast("list[str]", record.get("gone", [])):
+            quality.append({"tool": tool, "key": key, "file": key.split("|", 1)[0], "kind": "gone"})
+    killed = survived = 0
+    for path in sorted(artifacts.rglob("mutmut-counts-*.json")):
+        counts = cast("dict[str, int]", json.loads(path.read_text("utf-8")))
+        killed += counts.get("killed", 0)
+        survived += sum(n for s, n in counts.items() if s in ci_mutate.SURVIVING)
+    new_survivors = sum(1 for q in quality if q["tool"] == "mutmut" and q["kind"] == "new")
+    return {
+        "sha": sha,
+        "ref": ref,
+        "run_id": int(run_id) if run_id.isdigit() else run_id,
+        "url": url,
+        "level": lvl.value,
+        "green": bool(jobs_of_level) and all(r == "success" for r in result.values()),
+        "jobs": jobs,
+        "reds": reds,
+        "quality": quality,
+        "mutants": {"killed": killed, "survived": survived, "new_survivors": new_survivors},
+        "skipped": sorted(job for job, r in result.items() if r == "skipped"),
+    }
+
+
+def summary_markdown(summary: Mapping[str, object]) -> str:
+    jobs = cast("list[dict[str, object]]", summary["jobs"])
+    reds = cast("list[dict[str, str]]", summary["reds"])
+    quality = cast("list[dict[str, str]]", summary["quality"])
+    mutants = cast("dict[str, int]", summary["mutants"])
+    skipped = cast("list[str]", summary["skipped"])
+    verdict = "GREEN" if summary["green"] else "RED"
+    lines = [
+        f"## CI {summary['level']} {str(summary['sha'])[:10]}: {verdict}",
+        "",
+        f"Run: {summary['url']}",
+        "",
+        "| Job | Result | Seconds |",
+        "|---|---|---|",
+        *[f"| {j['name']} | {j['result']} | {j['seconds']} |" for j in jobs],
+        "",
+    ]
+    by_kind = {k: [r for r in reds if r["kind"] == k] for k in ("new", "known", "flaky")}
+    lines.append(
+        f"Reds: {len(by_kind['new'])} new, {len(by_kind['known'])} known, "
+        f"{len(by_kind['flaky'])} flaky"
+    )
+    lines += [f"- {r['kind']} {r['system']} {r['id']}" for r in reds if r["kind"] != "known"]
+    new_quality = [q for q in quality if q["kind"] == "new"]
+    gone = len(quality) - len(new_quality)
+    lines += ["", f"Quality: {len(new_quality)} new rows, {gone} baseline rows gone"]
+    lines += [f"- {q['tool']} {q['key']}" for q in new_quality]
+    lines += [
+        "",
+        f"Mutants: {mutants['killed']} killed, {mutants['survived']} survived, "
+        f"{mutants['new_survivors']} new survivors",
+        "",
+        f"Skipped: {', '.join(skipped) or 'none'}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def job_summary(artifacts: Path) -> int:
+    """Always runs, after every job of the run. Writes ci-out/summary.json and summary.md from the
+    level's artifacts, `QMX_NEEDS` (the workflow's toJSON(needs)) and the run's job list. It
+    reports; it never fails the run (the deep-verdict job is the green stamp the gate reads)."""
+    run_facts = facts()
+    lvl = level()
+    workflow = (REPO / ".github" / "workflows" / WORKFLOW).read_text("utf-8")
+    needs = cast("dict[str, dict[str, object]]", json.loads(os.environ.get("QMX_NEEDS") or "{}"))
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    api_jobs: list[dict[str, object]] | None = None
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+    if repo and run_facts.run_id and token:
+        try:
+            listing = json.loads(
+                github_api(
+                    f"/repos/{repo}/actions/runs/{run_facts.run_id}/jobs?per_page=100", token
+                )
+            )
+            api_jobs = cast("list[dict[str, object]]", listing.get("jobs", []))
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            print(f"note: could not list the run's jobs ({error}); results come from needs")
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    summary = build_summary(
+        sha=head(),
+        ref=run_facts.ref,
+        run_id=run_facts.run_id,
+        url=f"{server}/{repo}/actions/runs/{run_facts.run_id}" if repo else "",
+        lvl=lvl,
+        jobs_of_level=level_jobs(workflow, lvl),
+        needs=needs,
+        api_jobs=api_jobs,
+        artifacts=artifacts,
+        known_reds=ratchet.read_baseline(BASELINES / "known-reds.txt"),
+    )
+    text = summary_markdown(summary)
+    (OUT / "summary.json").write_text(json.dumps(summary, indent=1) + "\n", "utf-8")
+    (OUT / "summary.md").write_text(text, "utf-8")
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        with Path(step_summary).open("a", encoding="utf-8") as fh:
+            fh.write(text)
+    print(text)
+    return 0
+
+
+# ---- the ratchet: guard and prune -------------------------------------------------------------
+
+
+def baseline_growth(base: str, at: str, root: Path = REPO) -> list[str]:
+    """Rows a change adds to a baseline file that `base` already has. A baseline file that is new
+    since `base` is a baseline being taken, not grown. Comment lines are not rows."""
+    diff = git("diff", "--diff-filter=M", "-U0", base, at, "--", "ci/baselines/", cwd=root)
+    grown: list[str] = []
+    current = ""
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            current = line.removeprefix("+++ b/")
+        elif line.startswith("+") and not line.startswith("+++"):
+            row = line[1:]
+            if row and not row.startswith("#"):
+                grown.append(f"{current}: {row}")
+    return grown
+
+
+PRUNE_TOOLS = ("vulture", "skylos", "mutmut", "pyright")
+
+
+def prune_gone(tool: str, out: Path) -> tuple[list[str], str]:
+    """The gone keys for one tool, and where they came from: every <tool>-ratchet.json under `out`
+    (a key keeps the largest count any one record saw), or else a fresh run of the tool when it can
+    run here. Skylos and mutmut are too slow to rerun; pyright's baseline is Linux's, so it reruns
+    only on Linux, and only over the folders the change since engine/base touched."""
+    gone: Counter[str] = Counter()
+    records = 0
+    for path in sorted(out.rglob("*-ratchet.json")):
+        record = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
+        if record.get("tool") == tool:
+            records += 1
+            gone |= Counter(cast("list[str]", record.get("gone", [])))
+    if records:
+        return sorted(gone.elements()), f"{records} result file(s) in {out.name}"
+    if tool == "vulture":
+        return ratchet_verdict("vulture", vulture_findings(), None, covered="all").gone, "a run"
+    if tool == "pyright" and sys.platform.startswith("linux"):
+        fetch_refs(build_branches=False)
+        at = head()
+        changed = changed_files(merge_base(at, f"refs/remotes/origin/{ENGINE}"), at)
+        errors: list[ratchet.Finding] = []
+        for folder in ci_units.lint_targets(changed, ci_units.poe_dirs(REPO)):
+            some, failed = pyright_run(folder)
+            if failed is not None:
+                raise CiError(failed)
+            errors += some
+        found = sorted(set(errors), key=lambda f: (f.path, f.line, f.rule, f.message))
+        result = ratchet_verdict("pyright", found, None, covered=frozenset(changed))
+        return result.gone, "a run over the changed files"
+    return [], f"no {tool} results in {out.name} and no run here"
+
+
+def ratchet_prune(tools: Sequence[str], out: Path) -> int:
+    """Drop gone rows from each baseline file. Prints `PRUNED <tool> <n>`; never adds a row."""
+    for tool in tools:
+        gone, source = prune_gone(tool, out)
+        removed = ratchet.prune(BASELINES / f"{tool}.txt", gone)
+        print(f"PRUNED {tool} {removed} (from {source})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1272,6 +1647,8 @@ def main(argv: list[str] | None = None) -> int:
             "smoke",
             "skylos-part",
             "skylos-merge",
+            "summary",
+            "ratchet",
         ],
     )
     parser.add_argument("--os", default="linux", choices=["linux", "windows"])
@@ -1279,6 +1656,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--part", choices=SKYLOS_FOLDERS, help="skylos-part: the folder to scan")
     parser.add_argument(
         "--parts", type=Path, default=OUT / "parts", help="skylos-merge: where the parts were put"
+    )
+    parser.add_argument(
+        "--artifacts",
+        type=Path,
+        default=OUT / "artifacts",
+        help="summary: where the level's artifacts were downloaded",
+    )
+    parser.add_argument("--prune", action="store_true", help="ratchet: drop gone baseline rows")
+    parser.add_argument(
+        "--tools", nargs="+", choices=PRUNE_TOOLS, default=list(PRUNE_TOOLS), help="ratchet"
     )
     args = parser.parse_args(argv)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -1306,6 +1693,12 @@ def main(argv: list[str] | None = None) -> int:
                 return job_skylos_part(args.part)
             case "skylos-merge":
                 return skylos_merge(args.parts, SKYLOS_FOLDERS, head())
+            case "summary":
+                return job_summary(args.artifacts)
+            case "ratchet":
+                if not args.prune:
+                    raise CiError("ratchet does one thing so far: --prune")
+                return ratchet_prune(args.tools, OUT)
             case _:
                 return job_smoke()
     except CiError as error:

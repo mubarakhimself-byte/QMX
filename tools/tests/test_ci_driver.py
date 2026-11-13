@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 from pathlib import Path
 
 import ci_host
@@ -461,3 +462,257 @@ def test_the_skylos_baseline_parts_cover_every_scanned_folder() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "qmx-ci.yml").read_text("utf-8")
     matrix = workflow.split("name: skylos-part", 1)[1].split("folder: [", 1)[1].split("]", 1)[0]
     assert tuple(f.strip() for f in matrix.split(",")) == qci.SKYLOS_FOLDERS
+
+
+# ---- flaky reruns, the run summary, the ratchet guard and prune ---------------------------------
+
+
+QMN = _unit("qmn")
+
+
+def _verdict_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    (tmp_path / "out").mkdir()
+
+
+def test_a_red_test_that_passes_on_its_rerun_is_flaky_and_the_job_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _verdict_case(tmp_path, monkeypatch)
+    first = {"qmn.tests.test_clock::test_fast": "assertion", "qmn.tests.test_a::test_b": "passed"}
+    again = {"qmn.tests.test_clock::test_fast": "passed"}
+    reds, flaky = qci.split_flaky("linux", QMN, first, again, ["qmn/src/qmn/clock.py"])
+    assert (reds, flaky) == ([], ["linux|qmn|qmn.tests.test_clock::test_fast"])
+    assert qci.tests_verdict("linux-1", reds, [], flaky) == 0
+    assert "FLAKY linux|qmn|qmn.tests.test_clock::test_fast" in capsys.readouterr().out
+    assert (tmp_path / "out" / "flaky-linux-1.txt").read_text("utf-8") == (
+        "linux|qmn|qmn.tests.test_clock::test_fast\n"
+    )
+    assert (tmp_path / "out" / "reds-linux-1.txt").read_text("utf-8") == ""
+
+
+def test_a_flaky_test_in_a_module_the_change_touched_stays_red(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _verdict_case(tmp_path, monkeypatch)
+    first = {"tests.test_clock.TestFast::test_fast": "failed"}
+    again = {"tests.test_clock.TestFast::test_fast": "passed"}
+    reds, flaky = qci.split_flaky("linux", QMN, first, again, ["qmn/tests/test_clock.py"])
+    assert (reds, flaky) == (["linux|qmn|tests.test_clock.TestFast::test_fast"], [])
+    assert qci.tests_verdict("linux-1", reds, [], flaky) == 1
+
+
+def test_a_red_test_that_stays_red_on_its_rerun_is_a_red() -> None:
+    first = {"qmn.tests.test_a::test_b": "error"}
+    reds, flaky = qci.split_flaky("linux", QMN, first, {"qmn.tests.test_a::test_b": "error"}, [])
+    assert (reds, flaky) == (["linux|qmn|qmn.tests.test_a::test_b"], [])
+
+
+WORKFLOW = (REPO_ROOT / ".github" / "workflows" / "qmx-ci.yml").read_text("utf-8")
+
+
+def test_the_summary_job_needs_every_job_and_every_job_names_its_levels() -> None:
+    jobs = qci.workflow_jobs(WORKFLOW)
+    needs = WORKFLOW.split("\n  summary:\n", 1)[1].split("needs: [", 1)[1].split("]", 1)[0]
+    assert sorted(n.strip() for n in needs.split(",")) == sorted(set(jobs) - {"summary"})
+    for job, condition in jobs.items():
+        assert job in ("level", "summary") or qci.job_levels(condition), job
+
+
+def test_the_deep_level_holds_the_suites_and_the_verdict() -> None:
+    deep = qci.level_jobs(WORKFLOW, qci.Level.DEEP)
+    assert {"lint", "suite-linux", "suite-windows", "mutmut", "deep-verdict"} <= set(deep)
+    assert "tests-linux" not in deep and "summary" not in deep
+
+
+def _artifacts(root: Path) -> Path:
+    shard = root / "ci-out-suite-linux-1"
+    shard.mkdir(parents=True)
+    (shard / "reds-linux-1.txt").write_text("linux|qmn|t::new\nlinux|qmn|t::old\n", "utf-8")
+    (shard / "flaky-linux-1.txt").write_text("linux|qmn|t::flaky\n", "utf-8")
+    tools = root / "ci-out-vulture"
+    tools.mkdir()
+    (tools / "vulture-ratchet.json").write_text(
+        json.dumps(
+            {
+                "tool": "vulture",
+                "complete": True,
+                "new": [{"key": "a.py|vulture|x", "file": "a.py", "line": 3, "blocking": True}],
+                "gone": ["b.py|vulture|y"],
+            }
+        ),
+        "utf-8",
+    )
+    mut = root / "ci-out-mutmut-1"
+    mut.mkdir()
+    (mut / "mutmut-counts-1.json").write_text(
+        '{"killed": 10, "survived": 1, "no tests": 1}', "utf-8"
+    )
+    (mut / "mutmut-1-ratchet.json").write_text(
+        json.dumps(
+            {
+                "tool": "mutmut",
+                "complete": False,
+                "new": [{"key": "qmn|mutmut|m.f survived", "file": "qmn", "line": 0}],
+                "gone": [],
+            }
+        ),
+        "utf-8",
+    )
+    return root
+
+
+def test_the_summary_of_a_run_with_one_red_job_is_red_and_lists_every_finding(
+    tmp_path: Path,
+) -> None:
+    jobs = ["lint", "suite-linux", "mutmut", "docker-node"]
+    needs = {
+        "lint": {"result": "success"},
+        "suite-linux": {"result": "failure"},
+        "mutmut": {"result": "success"},
+        "docker-node": {"result": "skipped"},
+    }
+    api = [
+        {
+            "name": "suite-linux 1",
+            "conclusion": "failure",
+            "started_at": "2026-11-13T10:00:00Z",
+            "completed_at": "2026-11-13T10:08:32Z",
+        },
+        {"name": "summary", "conclusion": None, "status": "in_progress"},
+        {"name": "tests-linux ${{ matrix.shard }}", "conclusion": "skipped"},
+    ]
+    summary = qci.build_summary(
+        sha=HEAD,
+        ref="build/x",
+        run_id="77",
+        url="https://github.com/o/r/actions/runs/77",
+        lvl=qci.Level.DEEP,
+        jobs_of_level=jobs,
+        needs=needs,
+        api_jobs=api,
+        artifacts=_artifacts(tmp_path / "artifacts"),
+        known_reds=["linux|qmn|t::old"],
+    )
+    assert summary == {
+        "sha": HEAD,
+        "ref": "build/x",
+        "run_id": 77,
+        "url": "https://github.com/o/r/actions/runs/77",
+        "level": "deep",
+        "green": False,
+        "jobs": [{"name": "suite-linux 1", "result": "failure", "seconds": 512}],
+        "reds": [
+            {"id": "qmn|t::new", "system": "linux", "kind": "new"},
+            {"id": "qmn|t::old", "system": "linux", "kind": "known"},
+            {"id": "qmn|t::flaky", "system": "linux", "kind": "flaky"},
+        ],
+        "quality": [
+            {"tool": "mutmut", "key": "qmn|mutmut|m.f survived", "file": "qmn", "kind": "new"},
+            {"tool": "vulture", "key": "a.py|vulture|x", "file": "a.py", "kind": "new"},
+            {"tool": "vulture", "key": "b.py|vulture|y", "file": "b.py", "kind": "gone"},
+        ],
+        "mutants": {"killed": 10, "survived": 2, "new_survivors": 1},
+        "skipped": ["docker-node"],
+    }
+    text = qci.summary_markdown(summary)
+    assert text.startswith(f"## CI deep {HEAD[:10]}: RED\n")
+    assert "| suite-linux 1 | failure | 512 |" in text
+
+
+def test_a_summary_with_no_job_list_takes_results_from_needs(tmp_path: Path) -> None:
+    summary = qci.build_summary(
+        sha=HEAD,
+        ref="r",
+        run_id="",
+        url="",
+        lvl=qci.Level.SLICE,
+        jobs_of_level=["lint"],
+        needs={"lint": {"result": "success"}},
+        api_jobs=None,
+        artifacts=tmp_path,
+        known_reds=[],
+    )
+    assert (summary["green"], summary["jobs"]) == (
+        True,
+        [{"name": "lint", "result": "success", "seconds": 0}],
+    )
+
+
+def _repo(tmp_path: Path) -> tuple[Path, str]:
+    root = tmp_path / "repo"
+    (root / "ci" / "baselines").mkdir(parents=True)
+    (root / "ci" / "baselines" / "v.txt").write_text("# header\na|r|1\nb|r|2\n", "utf-8")
+    for args in (
+        ["init", "-q", "-b", "main"],
+        ["add", "-A"],
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base"],
+    ):
+        qci.git(*args, cwd=root)
+    return root, qci.git("rev-parse", "HEAD", cwd=root).strip()
+
+
+def _commit(root: Path, name: str, text: str) -> str:
+    (root / "ci" / "baselines" / name).write_text(text, "utf-8")
+    qci.git("add", "-A", cwd=root)
+    qci.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x", cwd=root)
+    return qci.git("rev-parse", "HEAD", cwd=root).strip()
+
+
+def test_the_guard_fails_on_an_added_baseline_row(tmp_path: Path) -> None:
+    root, base = _repo(tmp_path)
+    at = _commit(root, "v.txt", "# header changed\na|r|1\nb|r|2\nc|r|3\n")
+    assert qci.baseline_growth(base, at, root) == ["ci/baselines/v.txt: c|r|3"]
+
+
+def test_the_guard_passes_on_a_removed_row_and_on_a_new_baseline_file(tmp_path: Path) -> None:
+    root, base = _repo(tmp_path)
+    _commit(root, "v.txt", "# header\nb|r|2\n")
+    at = _commit(root, "pyright.txt", "# new tool\nx|r|1\n")
+    assert qci.baseline_growth(base, at, root) == []
+
+
+def test_no_baseline_file_gains_a_row_outside_a_baseline_branch() -> None:
+    """The ratchet only tightens: outside a baseline/** branch, no change since engine/base adds a
+    row to a ci/baselines file (`qci.py ratchet --prune` only ever removes rows)."""
+    branch = os.environ.get("QMX_REF") or qci.git("branch", "--show-current").strip()
+    if branch.startswith("baseline/"):
+        pytest.skip(f"{branch} retakes baselines")
+    engine = f"refs/remotes/origin/{qci.ENGINE}"
+    if not qci.git_ok("rev-parse", "--verify", "--quiet", engine):
+        pytest.skip(f"{engine} is not fetched in this checkout")
+    base = qci.merge_base("HEAD", engine)
+    assert base is not None
+    assert qci.baseline_growth(base, "HEAD") == []
+
+
+def test_a_baseline_change_selects_the_tools_tests_that_hold_the_guard() -> None:
+    units = [_unit("tools"), _unit("qmn")]
+    assert [u.root for u in ci_units.select(units, ["ci/baselines/pyright.txt"])] == ["tools"]
+
+
+def test_gone_keys_are_counted_and_only_in_covered_files() -> None:
+    found = [ratchet.Finding("a.py", 1, "r", "x")]
+    baseline = ["a.py|r|x", "a.py|r|x", "b.py|r|y", "c.py|r|z"]
+    assert ratchet.gone_keys(found, baseline, lambda p: p != "c.py") == ["a.py|r|x", "b.py|r|y"]
+
+
+def test_prune_removes_a_gone_key_and_keeps_the_rest_in_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    (tmp_path / "baselines").mkdir()
+    (tmp_path / "baselines" / "vulture.txt").write_text(
+        "# header\nz.py|v|1\na.py|v|gone\nm.py|v|2\n", "utf-8"
+    )
+    out = tmp_path / "out" / "ci-out-vulture"
+    out.mkdir(parents=True)
+    (out / "vulture-ratchet.json").write_text(
+        json.dumps({"tool": "vulture", "new": [], "gone": ["a.py|v|gone"]}), "utf-8"
+    )
+    assert qci.ratchet_prune(["vulture"], tmp_path / "out") == 0
+    assert (tmp_path / "baselines" / "vulture.txt").read_text("utf-8") == (
+        "# header\nz.py|v|1\nm.py|v|2\n"
+    )
+    assert "PRUNED vulture 1" in capsys.readouterr().out

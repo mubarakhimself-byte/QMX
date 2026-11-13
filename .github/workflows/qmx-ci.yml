@@ -17,7 +17,8 @@
 #   baseline push to baseline/**: Vulture, pyright (the lint job) and Skylos (one part per
 #            top-level folder, joined by skylos-baseline) rewrite ci/baselines (artifact
 #            ci-out-*/baselines), and mutmut runs the modules in ci/baselines/mutmut-modules.txt.
-# Every job uploads its ci-out/ folder as the artifact ci-out-<job>[-<shard>].
+# Every job uploads its ci-out/ folder as the artifact ci-out-<job>[-<shard>]. The summary job runs
+# last at every level, whatever failed, and uploads `summary` (summary.json and summary.md).
 # Runner images are pinned (ubuntu-24.04, windows-2025), never -latest. This is the only workflow:
 # it took over the old battery, skylos, docker-nodes and qmn-ubuntu-24.04 workflows.
 
@@ -64,6 +65,8 @@ env:
   # On a pull request GITHUB_SHA is the merge commit; the commit under review is the head.
   QMX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   QMX_BEFORE_SHA: ${{ github.event.before }}
+  # The branch under test, for the ratchet guard (tests run without the GITHUB_* variables).
+  QMX_REF: ${{ github.head_ref || github.ref_name }}
   PYTHONUTF8: "1"
   PYTHONIOENCODING: utf-8
   UV_VERSION: "0.12.6"
@@ -467,3 +470,35 @@ jobs:
       - run: python tools/ci/qci.py gate
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # Always the last job: one summary of the run from every job's artifact (factory design 11.11).
+  # It reports and never fails the run; deep-verdict stays the green stamp the gate reads.
+  summary:
+    needs: [level, lint, vulture, skylos, skylos-part, skylos-baseline, fail-at-parent, tests-linux, tests-windows, suite-linux, suite-windows, mutmut, mutmut-walk, smoke-linux, smoke-windows, docker-node, qmn-lane, deep-verdict, gate]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - *checkout
+      - *setup
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        continue-on-error: true
+        with:
+          pattern: ci-out-*
+          path: ci-out/artifacts
+      - run: python tools/ci/qci.py summary --artifacts ci-out/artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QMX_NEEDS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        if: always()
+        with:
+          name: summary
+          path: |
+            ci-out/summary.json
+            ci-out/summary.md
+          retention-days: 90
+          if-no-files-found: error

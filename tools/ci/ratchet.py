@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from xml.sax.saxutils import escape, quoteattr
 
@@ -39,6 +39,35 @@ def new_findings(current: Iterable[Finding], baseline_keys: Iterable[str]) -> li
         else:
             fresh.append(finding)
     return sorted(fresh, key=lambda f: (f.path, f.line, f.rule))
+
+
+def gone_keys(
+    current: Iterable[Finding], baseline_keys: Iterable[str], covered: Callable[[str], bool]
+) -> list[str]:
+    """Baseline keys this scan did not see, counted, among the files it covered (`covered` is asked
+    with the key's path). These are fixed or deleted, and `qci ratchet --prune` drops them."""
+    seen = Counter(f.key for f in current)
+    left = Counter(k for k in baseline_keys if covered(k.split("|", 1)[0])) - seen
+    return sorted(left.elements())
+
+
+def prune(path: Path, gone: Iterable[str]) -> int:
+    """Remove `gone` keys from a baseline file, one line per count, keeping its header and the
+    order of every other line. Never adds a line. Returns how many lines it removed."""
+    if not path.exists():
+        return 0
+    drop = Counter(gone)
+    kept: list[str] = []
+    removed = 0
+    for line in path.read_text("utf-8").splitlines():
+        if line and not line.startswith("#") and drop[line] > 0:
+            drop[line] -= 1
+            removed += 1
+            continue
+        kept.append(line)
+    if removed:
+        path.write_text("".join(f"{line}\n" for line in kept), "utf-8", newline="\n")
+    return removed
 
 
 def read_baseline(path: Path) -> list[str]:

@@ -20,6 +20,7 @@ WORKSPACES = (ROOT_WS, AGENTS_WS)
 WORKSPACE_FILES = frozenset({"pyproject.toml", "uv.lock", "conftest.py"})
 EVERYTHING_FILES = frozenset({".python-version"})
 PYTHON_SUFFIXES = (".py", ".pyi")
+CI_BASELINES = "ci/baselines/"
 SECONDS_PER_TEST = (
     1.0  # wall seconds per test on a 2-vCPU runner with two workers, until durations exist
 )
@@ -105,7 +106,10 @@ def select(units: list[Unit], changed: Iterable[str]) -> list[Unit]:
             continue
         pure = PurePosixPath(path)
         folder = pure.parent.as_posix()
-        if pure.name in EVERYTHING_FILES:
+        if path.startswith(CI_BASELINES):
+            # The ratchet guard (a tools test) checks every change to a baseline file.
+            chosen.update(u for u in units if u.root == "tools")
+        elif pure.name in EVERYTHING_FILES:
             chosen.update(units)
         elif pure.name in WORKSPACE_FILES and folder in WORKSPACES:
             chosen.update(u for u in units if u.workspace == folder)
