@@ -60,6 +60,9 @@ class Settings:
     limit_patterns: tuple[str, ...] = ("usage limit", "rate limit")  # a worker's text holding one ended on a limit
     limit_backoff_s: int = 1800  # when a limit names no reset time, wait this long
     max_restarts: int = 3  # infra restarts of one slice before it is parked for him
+    # U07: ship run, the build loop
+    prompt_dir: str = ""  # worker prompts; "" means <factory_home>/skills/factory/prompts
+    chain_poll_s: float = 20  # the run loop's (and later the conveyor's) tick period
 
 
 def repo_args(settings: Settings) -> list[str]:

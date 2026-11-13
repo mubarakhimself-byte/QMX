@@ -45,6 +45,30 @@ class PowerSteps(RepoCase):
         self.assertEqual(self.go(True, 0), "MAINS")
         self.assertEqual(self.program.hold.read_text("utf-8"), "operator: stop\n")
 
+    def test_network_down_on_mains_holds_and_the_next_good_probe_clears(self):
+        self.net = ["github: offline"]
+        self.assertEqual(self.go(True, 0), "HOLD network: github: offline")
+        self.assertEqual(self.program.hold.read_text("utf-8"), "network: github: offline\n")
+        self.assertEqual(self.go(True, 1), "WAIT github: offline")
+        self.net = []
+        self.assertEqual(self.go(True, 2), "CLEAR hold removed; run recover before dispatching")
+        self.assertFalse(self.program.hold.exists())
+
+    def test_network_hold_that_meets_a_battery_waits_for_the_settle_time(self):
+        self.net = ["internet: down"]
+        self.go(True, 0)
+        self.assertEqual(self.go(False, 1), "BATTERY hold kept")
+        self.net = []
+        self.assertEqual(self.go(True, 2), "MAINS back, waiting 5s before network checks")
+
+    def test_fake_mains_variable_stands_in_for_the_power_line(self):
+        from unittest import mock
+
+        with mock.patch.dict("os.environ", {"SHIP_FAKE_MAINS": "0"}):
+            self.assertFalse(on_mains())
+        with mock.patch.dict("os.environ", {"SHIP_FAKE_MAINS": "1"}):
+            self.assertTrue(on_mains())
+
     def test_power_report_says_whether_a_watcher_runs_and_whether_to_wait(self):
         self.assertEqual(power_report(self.program, self.settings, now=1000.0),
                          (2, ["NO WATCHER: start `ship power_watch` in the background", "CLEAR"]))

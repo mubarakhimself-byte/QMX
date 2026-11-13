@@ -43,8 +43,8 @@ TRANSITIONS: dict[Status, frozenset[Status]] = {
     S.RED: frozenset({S.RED, S.CHECKED, S.HELD, S.DEAD, S.PARKED}),
     S.CHECKED: frozenset({S.CHECKED, S.READY, S.RED, S.LANDED, S.HELD, S.DEAD, S.PARKED}),
     S.LANDED: frozenset(),
-    S.PARKED: frozenset(),
-    S.BLOCKED_BY: frozenset(),
+    S.PARKED: frozenset({S.PENDING}),  # only through State.unpark, his answer while the checkpoint is open
+    S.BLOCKED_BY: frozenset({S.PENDING}),  # only when the slice it waited on is unparked
 }
 # Slices that own a branch and files that are not on the build branch yet.
 IN_FLIGHT = frozenset({S.HELD, S.DEAD, S.READY, S.RED, S.CHECKED})
@@ -144,6 +144,31 @@ class State:
         self.events[-1]["cause"] = str(cause)
         return self.block_dependents(slice_id, f"needs {slice_id}")
 
+    def unpark(self, slice_id: str, why: str) -> list[str]:
+        """His answer to a parked slice, while its checkpoint is still the open one: the slice is pending
+        again (its infra restarts start from zero), and every slice blocked by it is pending again.
+        Only a `manual` or `brief-mismatch` park; after the checkpoint merged it is a backlog row."""
+        sl = self.slices[slice_id]
+        if sl.status != S.PARKED:
+            raise StateError(f"{slice_id} is {sl.status}, not parked")
+        if sl.checkpoint in self.merged:
+            raise StateError(f"{slice_id}: checkpoint {sl.checkpoint or '(one)'} merged; this is a backlog row now")
+        if sl.checkpoint != self.open_checkpoint():
+            raise StateError(f"{slice_id}: checkpoint {sl.checkpoint} is not the open one ({self.open_checkpoint()})")
+        cause = sl.reason.split(":", 1)[0]
+        if cause not in (ParkCause.MANUAL, ParkCause.BRIEF_MISMATCH):
+            raise StateError(f"{slice_id} was parked for {cause}; only manual and brief-mismatch parks are unparked")
+        self.move(slice_id, S.PENDING, f"unparked: {why}")
+        sl.reason, sl.holder, sl.restarts = "", None, 0
+        freed = []
+        for dep_id in self.dependents(slice_id):
+            dep = self.slices[dep_id]
+            if dep.status == S.BLOCKED_BY and dep.blocked_by == slice_id:
+                self.move(dep_id, S.PENDING, f"unparked with {slice_id}")
+                dep.reason, dep.blocked_by = "", None
+                freed.append(dep_id)
+        return freed
+
     def block_dependents(self, slice_id: str, reason: str) -> list[str]:
         """Mark every pending slice that needs `slice_id`, directly or not, blocked-by it."""
         blocked = []
@@ -231,6 +256,11 @@ class State:
 
 
 def load(program: Program) -> State:
+    for _ in range(50):  # Windows refuses the open for the instant another process replaces the file
+        try:
+            return State.from_json(program.state.read_text("utf-8"))
+        except PermissionError:
+            time.sleep(0.1)
     return State.from_json(program.state.read_text("utf-8"))
 
 

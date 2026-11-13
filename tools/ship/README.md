@@ -40,6 +40,8 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `run_report` | `state.json`, `checks/` | `RUN-REPORT.md` | 0, 1 if the counts do not add up |
 | `teardown` | `ARMED.md` | the machine, `ARMED.md` (keeps only what is still there) | 0 all gone, 1 otherwise |
 | `hook` | hook JSON on stdin, `state.json` | nothing | 0 allow, 2 refuse |
+| `run [--once]` | `state.json`, `SLICES.md` (lanes), `run.json`, `BUILDER.md` in `prompt_dir`, the remote | workers, `chain.lock`, `run.json`, `notes/run.log`, `notes/WAITS-ON-YOU.md`, `notes/CHAIN-ISSUES.md`, `notes/stop-<X>.json` | 0 built or nothing left, 10 waits, 11 lock held, 1 breaker or main changed |
+| `unpark <id> --why TEXT` | `state.json` | `state.json`; removes `notes/stop-<X>.json` | 0, 1 refused (checkpoint merged, not open, or a quality park) |
 | `spike [--parent\|--child]` | the real `claude` CLI (haiku, three tiny runs) | `workers/spike/SPIKE.md`, `roles/RESULT-SHAPE.md` | 0 all seven probes pass, 1 otherwise |
 
 `bisect-step` is internal: `nightly` hands it to `git bisect run`.
@@ -162,6 +164,24 @@ parser reads. Roles live in `roles/roles.toml`. `clock.now()` reads the time fro
 names, when set. Tests replace `claude` with `tests/fake_claude.py` (rules in the file `FAKE_CLAUDE_SCRIPT`
 names), as `gh` is replaced by `fake_gh.py`. `roles/SPIKE.md` is the spike log from the real machine.
 
+## The build loop: `ship run`
+
+`run` does what the coordinator's rules card did, as a script: it holds `chain.lock` (a live holder means
+exit 11; a dead holder's children are stopped and its seats recovered), then ticks every `chain_poll_s`. Each
+tick: `main-check` (when armed), power and network (`HOLD` on battery or when the internet or GitHub does not
+answer: route, start nothing), a pending usage reset (start no worker), route every finished builder,
+`verify_ready`, `slice_checks` and `land` by the card's table, `status` (a `STALE` slice whose builder runs has
+only that builder stopped and restarted; `BREAKER` stops), fill seats (dead slices, fix rounds, then pending
+slices lane by lane from SLICES.md's `lane` column, then pre-builds; one `land` at a time), and write
+`notes/stop-<X>.json` once the open checkpoint is built. A builder that dies (`nocontract`, `crash`,
+`timeout`, stale) is recovered and restarted; the `max_restarts`-th death parks it `manual` with a WAITS line
+holding its last 20 lines. `BLOCKED chain` and `BLOCKED files` go to `notes/CHAIN-ISSUES.md`; any other
+`BLOCKED` and a brief mismatch go to WAITS. A usage limit records the reset and restarts the slice after it.
+A missing build branch is one WAITS line and exit 10. Routing reads `state.json`, so a run killed anywhere
+carries on when started again; `run.json` holds the rest (READY replies waiting for `verify_ready`, fix rounds
+for checked slices, a red batch being landed one slice at a time). `--once` starts work in one tick, then only
+routes until nothing runs. `verify_ready` exits 3 and changes nothing when the remote or `gh` does not answer.
+
 ## CI on GitHub
 
 `ci = "github"` (the default) uses qmx-ci (`.github/workflows/qmx-ci.yml` on `origin`; every `gh` call names the repo with `-R github_repo`, because the checkout has other GitHub remotes). Its levels follow the branch names these scripts push: every slice branch is `slice/<id>` (qmx-ci level `slice`, Linux) and the build branch must be `build/<name>` (level `land`, touched tests on Linux and Windows); `init` refuses any other build branch name with `ci = "github"`. Each push is one ref (GitHub sends no event for a push of more than 3 refs).
@@ -266,7 +286,7 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `power_poll_s` | 60 | power_watch loop |
 | `power_settle_s` | 600 | power_watch: wait after mains returns |
 | `net_timeout_s` | 20 | internet and GitHub probes, status's remote reads |
-| `internet_probe` | `1.1.1.1:443` | power_watch |
+| `internet_probe` | `1.1.1.1:443` | power_watch; `""` skips it |
 | `keep_awake_poll_s` | 30 | the keep-awake helper |
 | `teardown_wait_s` | 120 | teardown waiting for the helper to exit |
 | `updates_paused_min_h` | 12 | preflight |
@@ -293,6 +313,8 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `limit_patterns` | `usage limit`, `rate limit` | launch: text that marks a usage-limit ending |
 | `limit_backoff_s` | 1800 | launch: the wait when a limit names no reset time |
 | `max_restarts` | 3 | run, dispatch: infra restarts before a slice is parked for him |
+| `prompt_dir` | `""` (`<factory_home>/skills/factory/prompts`) | run: the folder holding `BUILDER.md` |
+| `chain_poll_s` | 20 | run: seconds between ticks |
 
 ## Edge cases these scripts own
 

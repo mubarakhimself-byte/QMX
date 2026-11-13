@@ -8,7 +8,8 @@
    ask when SLICES.md names one, and neither it nor any commit message carries a credit line;
 6. the changed files match the brief's files, and none overlaps another in-flight slice.
 
-Any failure moves the slice to `red` (BLOCKED). On success the script opens the PR (or adopts the open
+Any failure moves the slice to `red` (BLOCKED). A remote or `gh` that does not answer raises `Unreachable`
+(exit 3) and leaves the slice as it is. On success the script opens the PR (or adopts the open
 one), confirms its base is the build branch and its head is the sha, and moves the slice to `ready`.
 """
 
@@ -87,8 +88,15 @@ def pr_problems(path: Path, sl: st.Slice) -> list[str]:
     return found
 
 
+class Unreachable(Exception):
+    """The remote or GitHub did not answer. The slice is left as it is; try again later (exit 3)."""
+
+
 def _gh(settings: Settings, repo: Path, *args: str) -> str:
-    return run([*settings.gh, *args, *repo_args(settings)], repo, settings.git_timeout_s).stdout
+    try:
+        return run([*settings.gh, *args, *repo_args(settings)], repo, settings.git_timeout_s).stdout
+    except GitError as exc:
+        raise Unreachable(f"gh: {exc}") from exc
 
 
 def open_pr(program: Program, state: st.State, slice_id: str, sha: str, settings: Settings) -> str:
@@ -121,7 +129,10 @@ def verify_ready(program: Program, slice_id: str, sha: str, settings: Settings) 
         sl = state.slices[slice_id]
         if sl.status != Status.HELD or not sl.holder:
             return False, [f"{slice_id} is {sl.status}, not held"]
-        found = problems(program, state, slice_id, sha, settings)
+        try:
+            found = problems(program, state, slice_id, sha, settings)
+        except GitError as exc:  # the remote reads; nothing about the slice is known yet
+            raise Unreachable(str(exc)) from exc
         if not found:
             try:
                 sl.pr = open_pr(program, state, slice_id, sha, settings)

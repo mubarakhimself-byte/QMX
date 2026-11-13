@@ -9,7 +9,7 @@ The first rule whose `match` words all appear among the words of the `--name` va
 is not used up (a missing `times` never runs out), applies; the counts live in `<script>.count.json`.
 Steps run in the working folder, in order:
 
-    {"write": {"<relative path>": "<text>"}}   {"git": ["add", "-A"]}   {"commit": "<message>"}
+    {"write": {"<relative path, may hold {slice}>": "<text>"}}   {"git": ["add", "-A"]}   {"commit": "<message>"}
     {"push": true}   {"file": {"<path with {program}, {evidence}>": "<text>"}}   {"sleep": 0.5}
 
 `{head}` is `git rev-parse HEAD` when the text is filled; `{program}`, `{evidence}`, `{slice}`,
@@ -78,7 +78,7 @@ def run_steps(steps: list[dict]) -> None:
     for step in steps:
         if "write" in step:
             for rel, text in step["write"].items():
-                write(Path(rel), fill(text))
+                write(Path(fill(rel)), fill(text))
         if "git" in step:
             git(*step["git"])
         if "commit" in step:

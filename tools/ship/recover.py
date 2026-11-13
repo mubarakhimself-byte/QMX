@@ -17,7 +17,10 @@ from ship.gitx import GitError, registered
 from ship.worktree import fetch_branch, save_and_reset
 
 
-def recover(program: Program, settings: Settings, usage_reset: str | None = None) -> list[str]:
+def recover(program: Program, settings: Settings, usage_reset: str | None = None,
+            only: str | None = None) -> list[str]:
+    """With `only`, just that slice is marked dead and reset (a worker that died alone); the rest
+    and the recorded GitHub run are left as they are."""
     lines: list[str] = []
     with st.locked(program) as state:
         if usage_reset:
@@ -26,6 +29,8 @@ def recover(program: Program, settings: Settings, usage_reset: str | None = None
             lines.append(f"USAGE reset at {usage_reset}")
         repo = Path(state.repo)
         for sl in state.slices.values():
+            if only is not None and sl.id != only:
+                continue
             if sl.status == Status.HELD:
                 state.move(sl.id, Status.DEAD, f"holder {sl.holder.dispatch_id if sl.holder else '?'} dead")
                 lines.append(f"DEAD {sl.id}")
@@ -43,7 +48,7 @@ def recover(program: Program, settings: Settings, usage_reset: str | None = None
             saved = save_and_reset(wt, target, program.evidence(sl.id, sl.attempts) / "leftover.patch", settings)
             lines.append(f"RESET {sl.id} to {target[:8]}" + (f", leftovers in {saved}" if saved else ""))
         deep = state.ci.get("deep") or {}
-        if settings.ci == "github" and deep.get("run_id") and deep.get("result") is None:
+        if only is None and settings.ci == "github" and deep.get("run_id") and deep.get("result") is None:
             lines.append(reattach(state, settings, deep))
     return lines
 

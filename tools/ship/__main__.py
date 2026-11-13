@@ -44,9 +44,13 @@ def cmd_dispatch(a, program, settings):
 
 
 def cmd_verify_ready(a, program, settings):
-    from ship.verify_ready import verify_ready
+    from ship.verify_ready import Unreachable, verify_ready
 
-    return _lines(*verify_ready(program, a.slice, a.sha, settings))
+    try:
+        return _lines(*verify_ready(program, a.slice, a.sha, settings))
+    except Unreachable as exc:
+        print(f"UNREACHABLE {a.slice}: {exc}; nothing changed, try again later")
+        return 3
 
 
 def cmd_slice_checks(a, program, settings):
@@ -301,6 +305,33 @@ def cmd_spike(a, program, settings):
     return _lines(*spike.spike(program, settings))
 
 
+# U07: ship run, the build loop
+def cmd_run(a, program, settings):
+    from ship.run import run
+
+    return run(program, settings, once=a.once)
+
+
+def cmd_unpark(a, program, settings):
+    from ship import state as st
+    from ship.run import stop_name
+
+    try:
+        with st.locked(program) as state:
+            if a.slice not in state.slices:
+                raise st.StateError(f"no slice {a.slice}")
+            checkpoint = state.slices[a.slice].checkpoint
+            freed = state.unpark(a.slice, a.why)
+    except st.StateError as exc:
+        print(f"REFUSED {exc}")
+        return 1
+    note = program.stop_note(stop_name(program, checkpoint))
+    removed = note.exists()
+    note.unlink(missing_ok=True)  # the stop is no longer built
+    print(json.dumps({"unparked": a.slice, "freed": freed, "stop_note_removed": removed}))
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -362,6 +393,9 @@ def parser() -> argparse.ArgumentParser:
         (["--advance"], {"action": "store_true"}))
     # U06: headless launcher and spike
     add("spike", cmd_spike, (["--parent"], {"action": "store_true"}), (["--child"], {"action": "store_true"}))
+    # U07: ship run, the build loop
+    add("run", cmd_run, (["--once"], {"action": "store_true"}))
+    add("unpark", cmd_unpark, (["slice"], {}), (["--why"], {"required": True}))
     return p
 
 

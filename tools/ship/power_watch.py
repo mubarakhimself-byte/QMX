@@ -1,12 +1,14 @@
 """power_watch: read the power line every power_poll_s. On battery, write the HOLD file, which makes
 dispatch refuse new seats. When mains returns, wait power_settle_s for the router, then require the
-internet probe and GitHub (`git ls-remote`) to answer before removing HOLD. A HOLD this watcher did
-not write is never removed by it."""
+internet probe and GitHub (`git ls-remote`) to answer before removing HOLD. On mains, a failed internet
+or GitHub probe also writes HOLD, and the next passing probe removes it (no settle wait). A HOLD this
+watcher did not write is never removed by it. `SHIP_FAKE_MAINS` (1 or 0) stands in for the power line."""
 
 from __future__ import annotations
 
 import ctypes
 import json
+import os
 import socket
 import sys
 import time
@@ -42,17 +44,21 @@ def on_mains_linux(root: Path = Path("/sys/class/power_supply")) -> bool:
 
 
 def on_mains() -> bool:
+    fake = os.environ.get("SHIP_FAKE_MAINS")
+    if fake in ("0", "1"):
+        return fake == "1"
     return on_mains_windows() if sys.platform == "win32" else on_mains_linux()
 
 
 def probe_network(program: Program, settings: Settings) -> list[str]:
     """Empty when both the internet probe and GitHub answer; otherwise what failed."""
     failed = []
-    host, _, port = settings.internet_probe.rpartition(":")
-    try:
-        socket.create_connection((host, int(port)), timeout=settings.net_timeout_s).close()
-    except OSError as exc:
-        failed.append(f"internet {settings.internet_probe}: {exc}")
+    if settings.internet_probe:  # "" skips the internet probe (tests with no network)
+        host, _, port = settings.internet_probe.rpartition(":")
+        try:
+            socket.create_connection((host, int(port)), timeout=settings.net_timeout_s).close()
+        except OSError as exc:
+            failed.append(f"internet {settings.internet_probe}: {exc}")
     try:
         state = st.load(program)
         git(Path(state.repo), "ls-remote", state.remote, "HEAD", timeout=settings.net_timeout_s)
@@ -69,13 +75,30 @@ def step(program: Program, settings: Settings, mains: bool, now: float, probe: C
         if not ours:
             stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now))
             program.hold.write_text(f"power: on battery since {stamp}\n", "utf-8")
-            memo.update(hold=True, battery_since=now)
+            memo.update(hold=True, cause="battery", battery_since=now)
             _event(program, "hold", reason="battery")
             line = "HOLD on battery"
         else:
+            memo["cause"] = "battery"  # a network hold that meets a battery waits for the settle time too
             line = "BATTERY hold kept"
     elif not ours:
-        line = "MAINS"
+        failed = [] if program.hold.exists() else probe()  # a HOLD someone else wrote is left alone
+        if failed:
+            program.hold.write_text("network: " + "; ".join(failed) + "\n", "utf-8")
+            memo.update(hold=True, cause="network")
+            _event(program, "hold", reason="network")
+            line = "HOLD network: " + "; ".join(failed)
+        else:
+            line = "MAINS"
+    elif memo.get("cause") == "network":
+        failed = probe()
+        if failed:
+            line = "WAIT " + "; ".join(failed)
+        else:
+            program.hold.unlink(missing_ok=True)
+            memo = {"hold": False}
+            _event(program, "clear", reason="internet and GitHub back")
+            line = "CLEAR hold removed; run recover before dispatching"
     elif memo.get("mains_since") is None:
         memo["mains_since"] = now
         line = f"MAINS back, waiting {settings.power_settle_s}s before network checks"

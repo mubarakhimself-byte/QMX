@@ -11,6 +11,7 @@ import datetime as dt
 import json
 from pathlib import Path
 
+from ship import clock
 from ship import state as st
 from ship.gitx import GitError, git, run
 from ship.layout import Program
@@ -75,7 +76,7 @@ def _usage_wait(state: st.State) -> str | None:
     if not state.usage_reset_at:
         return None
     reset = dt.datetime.fromisoformat(state.usage_reset_at)
-    return state.usage_reset_at if reset > dt.datetime.now(dt.timezone.utc) else None
+    return state.usage_reset_at if reset > clock.now() else None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,11 +99,15 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
         waiting = _usage_wait(state)
         if waiting:
             raise Refused(f"usage limit resets at {waiting}")
-        kinds = {Status.PENDING: "first", Status.DEAD: "restart",
+        # A pending slice that was dispatched before (unparked by him) carries on from its pushed work.
+        kinds = {Status.PENDING: "restart" if sl.parent else "first", Status.DEAD: "restart",
                  Status.READY: "fix", Status.RED: "fix", Status.CHECKED: "fix"}
         if sl.status not in kinds:
             raise Refused(f"{slice_id} is {sl.status}" + (f" by {sl.holder.dispatch_id}" if sl.holder else ""))
         kind = kinds[sl.status]
+        if kind == "restart" and sl.status == Status.DEAD and sl.restarts >= settings.max_restarts:
+            blocked = state.park(slice_id, ParkCause.MANUAL, f"restarted {sl.restarts} times")
+            return Parked(slice_id, f"restarted {sl.restarts} times", blocked)
         if kind == "fix" and sl.attempts >= settings.max_attempts:
             blocked = state.park(slice_id, ParkCause.ROUNDS, f"{sl.attempts} rounds used")
             return Parked(slice_id, f"{sl.attempts} rounds used", blocked)
