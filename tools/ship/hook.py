@@ -33,10 +33,19 @@ refuses every write.
 | verdict | `stop-review/<SHIP_STOP>/`, `merge/`, the sibling `<program>-fix-<SHIP_STOP>/` |
 | grounding | `plan-review/grounding.md`, `grounding/REPORT.md` |
 | plan-review | `plan-review/` |
-| planner-fix, later-handoff, sweep-handoff | the plan files of the program folder |
-| challenger, audit-judge, answer-linker | `CHALLENGE.md`, `AUDIT.md`, `CAN-CHANGE.md`, `decisions/proposed/` |
-| audit-intent, audit-reader, audit-screen | `INTENT.md`, `readers/`, `AUDIT-SCREEN.md` (one each) |
+| planner-fix, later-handoff | the plan files of the program folder |
+| sweep-handoff | `SLICES.md`, `slices/`, `PROGRAM.yaml`, `EDGE-CASES.md`, `arch/`, `AUDIT.md`, `notes/` |
+| challenger, answer-linker | `CHALLENGE.md`, `CAN-CHANGE.md`, `decisions/proposed/`, `challenge/`, `subtract/` |
+| audit-judge | `FINDINGS.tsv`, `AUDIT.md`, `CHALLENGE.md`, `CAN-CHANGE.md`, `REMOVED.md`, `decisions/proposed/`, `challenge/`, `subtract/` |
+| audit-intent | `INTENT.md` |
+| audit-reader | its part only (`SHIP_PART`): `readers/<part>.md`, `readers/<part>.tsv`, `readers/<part>-runs/`, `runs/`, `heartbeat/audit-<part>` |
+| audit-screen | `AUDIT-SCREEN.md` (D-L18) |
 | docs | its docs worktree `SHIP_WORKTREE` |
+
+Python (D-L18). A non-builder role runs python only as `python -m pytest`, the kit's `timed` wrapper
+(`python -m ship timed`, `python <kit> timed`), and, for the planning and audit roles, a factory script
+`python <factory_home>/skills/<skill>/scripts/<name>.py` (factory_home from the program's settings). Any
+other python, inline code included, is refused. Builders keep D-L9's rules.
 
 The main checkout comes from `state.json`, else `SHIP_REPO`. A non-builder role with neither gets every
 Bash command refused: the guard cannot tell what names the main checkout.
@@ -111,20 +120,64 @@ def role_paths(program: Program, role: str, env) -> tuple[list[str], dict[str, s
         return [str(d / "plan-review" / "grounding.md"), str(d / "grounding" / "REPORT.md")], {}
     if role == "plan-review":
         return [str(d / "plan-review")], {}
-    if role in ("planner-fix", "later-handoff", "sweep-handoff"):
+    if role in ("planner-fix", "later-handoff"):
         return [str(d / name) for name in PLAN_FILES], {}
-    if role in ("challenger", "audit-judge", "answer-linker"):
-        return [str(d / name) for name in ("CHALLENGE.md", "AUDIT.md", "CAN-CHANGE.md", "decisions/proposed")], {}
+    if role == "sweep-handoff":
+        return [str(d / name) for name in ("SLICES.md", "slices", "PROGRAM.yaml", "EDGE-CASES.md", "arch", "AUDIT.md",
+                                           "notes")], {}
+    if role in ("challenger", "answer-linker"):
+        return [str(d / name) for name in ("CHALLENGE.md", "CAN-CHANGE.md", "decisions/proposed", "challenge",
+                                           "subtract")], {}
+    if role == "audit-judge":
+        return [str(d / name) for name in ("FINDINGS.tsv", "AUDIT.md", "CHALLENGE.md", "CAN-CHANGE.md", "REMOVED.md",
+                                           "decisions/proposed", "challenge", "subtract")], {}
     if role == "audit-intent":
         return [str(d / "INTENT.md")], {}
     if role == "audit-reader":
-        return [str(d / "readers")], {}
+        part = need("SHIP_PART")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", part) or part in (".", ".."):
+            raise ValueError(f"SHIP_PART {part!r} is not a plain part name")
+        return [str(d / "readers" / f"{part}.md"), str(d / "readers" / f"{part}.tsv"),
+                str(d / "readers" / f"{part}-runs"), str(d / "runs"), str(d / "heartbeat" / f"audit-{part}")], {}
     if role == "audit-screen":
         return [str(d / "AUDIT-SCREEN.md")], {}
     if role == "docs":
         tree = need("SHIP_WORKTREE")
         return [tree], {tree: need("SHIP_BRANCH")}
     raise KeyError(f"role {role!r} is not in the hook's table")
+
+
+SCRIPT_ROLES = ("planner-fix", "later-handoff", "sweep-handoff", "challenger", "answer-linker", "audit-judge",
+                "audit-intent", "audit-reader", "audit-screen", "grounding", "plan-review")
+
+
+def kit_dir() -> str:
+    return str(Path(__file__).resolve().parent)
+
+
+def python_problem(run: "Run", tokens: list[str], n: int, here: str) -> str | None:
+    """D-L18: the python a non-builder role may run (tokens[n] is the interpreter)."""
+    rest = tokens[n + 1:]
+    if not rest:
+        return "a bare python"
+    first = rest[0]
+    if first == "-m":
+        module = rest[1] if len(rest) > 1 else ""
+        if module == "pytest" or (module == "ship" and rest[2:3] == ["timed"]):
+            return None
+        return f"python -m {module}"
+    if first.startswith("-"):
+        return f"python {first}"
+    script = os.path.join(here, first)
+    if _norm(script) == _norm(kit_dir()) and rest[1:2] == ["timed"]:
+        return None
+    if run.role in SCRIPT_ROLES and run.factory:
+        skills = os.path.join(run.factory, "skills")
+        rel = os.path.relpath(_norm(script), _norm(skills)) if inside(script, skills) else ""
+        parts = rel.replace("\\", "/").split("/")
+        if len(parts) == 3 and parts[1] == "scripts" and parts[2].endswith(".py") and ".." not in parts:
+            return None
+    return f"python {first}"
 
 
 class Run:
@@ -144,6 +197,10 @@ class Run:
             return
         self.roots, self.branches = role_paths(program, self.role, env)
         self.worktrees = list(self.branches)
+        from ship.launch import factory_home
+        from ship.settings import load_settings
+
+        self.factory = str(factory_home(load_settings(program.dir)))
         self.repo = st.load(program).repo if program.state.exists() else ""
         self.repo = self.repo or (env.get("SHIP_REPO") or "").strip()
 
@@ -278,6 +335,11 @@ def bash_problem(run: Run, command: str, cwd: str) -> str | None:
             nxt = [t.lower() for t in tokens[n + 1:n + 3]]
             if name in PYTHONS and nxt and (nxt[0] == "-" or nxt[0].startswith("-c")):
                 return "ship hook: Bash refused: inline python code; put it in a test or a file in your worktree"
+            if name in PYTHONS and run.role not in SLICE_ROLES:
+                bad = python_problem(run, tokens, n, here)
+                if bad:
+                    return (f"ship hook: Bash refused: {bad}; role {run.role} runs only pytest, ship timed"
+                            + (" and the factory's skill scripts" if run.role in SCRIPT_ROLES else ""))
             if name in SHELLS and (name.startswith(("powershell", "pwsh"))
                                    or any(x in ("-c", "/c", "/k", "-command") for x in nxt)):
                 return f"ship hook: Bash refused: a nested shell ({tokens[n]}) the guard cannot read"

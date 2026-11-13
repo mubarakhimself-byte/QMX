@@ -281,6 +281,51 @@ class HookRoles(RepoCase):
         self.assertEqual(self.hook("docs", "Bash", cwd=self.repo, env=env, command='git commit -m "x"')[0], 2)
         self.assertEqual(self.hook("docs", "Write", env=env, file_path=str(self.repo / "README.md"))[0], 2)
 
+    def test_an_audit_reader_writes_only_its_own_part(self):
+        d = self.program.dir
+        env = {"SHIP_PART": "qmb-core"}
+        for ok in (d / "readers" / "qmb-core.md", d / "readers" / "qmb-core.tsv",
+                   d / "readers" / "qmb-core-runs" / "r1.log", d / "heartbeat" / "audit-qmb-core"):
+            self.assertEqual(self.hook("audit-reader", "Write", env=env, file_path=str(ok))[0], 0, ok)
+        for bad in (d / "readers" / "qmb-other.md", d / "readers" / "ids.tsv", d / "FINDINGS.tsv",
+                    d / "probe" / "x.txt", d / "INTENT.md"):
+            self.assertEqual(self.hook("audit-reader", "Write", env=env, file_path=str(bad))[0], 2, bad)
+        self.assertEqual(self.hook("audit-reader", "Write", file_path=str(d / "readers" / "x.md"))[0], 2,
+                         "no SHIP_PART: refused")
+        self.assertEqual(self.hook("audit-reader", "Write", env={"SHIP_PART": ".."},
+                                   file_path=str(d / "x.md"))[0], 2)
+
+    def test_the_audit_judge_screen_and_sweep_handoff_paths(self):
+        d = self.program.dir
+        for ok in ("FINDINGS.tsv", "AUDIT.md", "REMOVED.md", "decisions/proposed/P1.md", "challenge/a.md",
+                   "subtract/b.md", "CAN-CHANGE.md"):
+            self.assertEqual(self.hook("audit-judge", "Write", file_path=str(d / ok))[0], 0, ok)
+        for bad in ("INTENT.md", "SCOPE.md", "decisions/D1.md", "PROGRAM.yaml", "readers/x.md"):
+            self.assertEqual(self.hook("audit-judge", "Write", file_path=str(d / bad))[0], 2, bad)
+        self.assertEqual(self.hook("audit-screen", "Write", file_path=str(d / "AUDIT-SCREEN.md"))[0], 0)
+        self.assertEqual(self.hook("audit-screen", "Write", file_path=str(d / "AUDIT.md"))[0], 2)
+        for ok in ("SLICES.md", "slices/s1/BRIEF.md", "PROGRAM.yaml", "EDGE-CASES.md", "arch/ARCH.md", "notes/x.md"):
+            self.assertEqual(self.hook("sweep-handoff", "Write", file_path=str(d / ok))[0], 0, ok)
+        self.assertEqual(self.hook("sweep-handoff", "Write", file_path=str(d / "SCOPE.md"))[0], 2)
+
+    def test_audit_and_planning_roles_run_only_factory_scripts_and_the_kit(self):
+        factory = self.root / "factory"
+        self.setting(f"factory_home = {json.dumps(str(factory))}")
+        script = factory / "skills" / "audit-area" / "scripts" / "census.py"
+        env = {"SHIP_PART": "p1"}
+        for command in (f'python "{script}" qmb --tip HEAD', f"python {KIT} timed --slice x --log l -- uv run x",
+                        "python -m ship timed --slice x --log l -- x", "uv run --no-sync python -m pytest -q"):
+            self.assertEqual(self.hook("audit-reader", "Bash", env=env, command=command), (0, ""), command)
+        for command in (f'python "{self.root / "evil.py"}"', f'python "{factory / "skills" / "x.py"}"',
+                        f'python "{factory / "skills" / "a" / "scripts" / ".." / ".." / "evil.py"}"',
+                        "python -m pip install x", 'python -c "print(1)"', "python"):
+            rc, why = self.hook("audit-reader", "Bash", env=env, command=command)
+            self.assertEqual(rc, 2, command)
+        rc, why = self.hook("reader", "Bash", env={"SHIP_NOTES": str(self.root / "n.md")}, command=f'python "{script}"')
+        self.assertEqual(rc, 2, "a reader runs no factory script")
+        self.assertIn("runs only pytest, ship timed", why)
+        self.assertEqual(self.hook("planner-fix", "Bash", command=f'python "{script}"')[0], 0)
+
     def test_a_role_with_no_state_and_no_repo_gets_no_bash(self):
         self.program.state.unlink()
         rc, why = self.hook("plan-review", "Bash", command="git log -1")
