@@ -7,11 +7,16 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import shutil
+import subprocess
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar, cast
 
 import ci_host
 import ci_mutate
 import ci_units
+import guard
 import pull_reds
 import pytest
 import qci
@@ -467,6 +472,10 @@ def test_a_red_test_that_passes_on_its_rerun_is_flaky_and_the_job_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _verdict_case(tmp_path, monkeypatch)
+    (tmp_path / "baselines").mkdir()
+    (tmp_path / "baselines" / "flaky.txt").write_text(
+        "# known flaky\nlinux|qmn|qmn.tests.test_clock::test_fast\n", "utf-8"
+    )
     first = {"qmn.tests.test_clock::test_fast": "assertion", "qmn.tests.test_a::test_b": "passed"}
     again = {"qmn.tests.test_clock::test_fast": "passed"}
     reds, flaky = qci.split_flaky("linux", QMN, first, again, ["qmn/src/qmn/clock.py"])
@@ -589,11 +598,11 @@ def test_the_summary_of_a_run_with_one_red_job_is_red_and_lists_every_finding(
         "url": "https://github.com/o/r/actions/runs/77",
         "level": "deep",
         "green": False,
-        "jobs": [{"name": "suite-linux 1", "result": "failure", "seconds": 512}],
+        "jobs": [{"name": "suite-linux-1", "result": "failure", "seconds": 512}],
         "reds": [
-            {"id": "qmn|t::new", "system": "linux", "kind": "new"},
-            {"id": "qmn|t::old", "system": "linux", "kind": "known"},
-            {"id": "qmn|t::flaky", "system": "linux", "kind": "flaky"},
+            {"id": "qmn|t::new", "system": "linux", "kind": "new", "blocks": True},
+            {"id": "qmn|t::old", "system": "linux", "kind": "known", "blocks": False},
+            {"id": "qmn|t::flaky", "system": "linux", "kind": "flaky", "blocks": True},
         ],
         "quality": [
             {"tool": "mutmut", "key": "qmn|mutmut|m.f survived", "file": "qmn", "kind": "new"},
@@ -605,7 +614,7 @@ def test_the_summary_of_a_run_with_one_red_job_is_red_and_lists_every_finding(
     }
     text = qci.summary_markdown(summary)
     assert text.startswith(f"## CI deep {HEAD[:10]}: RED\n")
-    assert "| suite-linux 1 | failure | 512 |" in text
+    assert "| suite-linux-1 | failure | 512 |" in text
 
 
 def test_a_summary_with_no_job_list_takes_results_from_needs(tmp_path: Path) -> None:
@@ -647,28 +656,14 @@ def _commit(root: Path, name: str, text: str) -> str:
     return qci.git("rev-parse", "HEAD", cwd=root).strip()
 
 
-def test_the_guard_fails_on_an_added_baseline_row(tmp_path: Path) -> None:
-    root, base = _repo(tmp_path)
-    at = _commit(root, "v.txt", "# header changed\na|r|1\nb|r|2\nc|r|3\n")
-    assert qci.baseline_growth(base, at, root) == ["ci/baselines/v.txt: c|r|3"]
-
-
-def test_the_guard_passes_on_a_removed_row_and_on_a_new_baseline_file(tmp_path: Path) -> None:
-    root, base = _repo(tmp_path)
-    _commit(root, "v.txt", "# header\nb|r|2\n")
-    at = _commit(root, "pyright.txt", "# new tool\nx|r|1\n")
-    assert qci.baseline_growth(base, at, root) == []
-
-
-def test_no_baseline_file_gains_a_row_outside_a_baseline_branch() -> None:
-    """The ratchet only tightens: outside a baseline/** branch, no change since engine/base adds a
-    row to a ci/baselines file (`qci.py ratchet --prune` only ever removes rows)."""
+def test_this_change_loosens_nothing_the_ratchet_holds() -> None:
+    """The ratchet only tightens: the change since engine/base grows no baseline and adds no
+    suppression, unless it is a baseline retake (`qci.py ratchet --prune` only ever removes)."""
     branch = os.environ.get("QMX_REF") or qci.git("branch", "--show-current").strip()
     engine = f"refs/remotes/origin/{qci.ENGINE}"
     base = qci.merge_base("HEAD", engine)
     assert base is not None, f"{engine} must be fetched for the guard to measure the change"
-    grown = qci.baseline_growth(base, "HEAD")
-    assert grown == [] or branch.startswith("baseline/"), grown
+    assert guard.problems(REPO_ROOT, base, "HEAD", branch) == []
 
 
 def test_a_baseline_change_selects_the_tools_tests_that_hold_the_guard() -> None:
@@ -686,20 +681,30 @@ def test_prune_removes_a_gone_key_and_keeps_the_rest_in_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "head", lambda: "s1")
+    monkeypatch.setattr(qci, "tree_of", "t1".format)
     (tmp_path / "baselines").mkdir()
     (tmp_path / "baselines" / "vulture.txt").write_text(
-        "# header\nz.py|v|1\na.py|v|gone\nm.py|v|2\n", "utf-8"
+        "# header\nz.py|v|1\na.py|v|gone\nm.py|v|2\nm.py|v|stale\n", "utf-8"
     )
     out = tmp_path / "out" / "ci-out-vulture"
     out.mkdir(parents=True)
     (out / "vulture-ratchet.json").write_text(
-        json.dumps({"tool": "vulture", "new": [], "gone": ["a.py|v|gone"]}), "utf-8"
+        json.dumps({"tool": "vulture", "sha": "s1", "new": [], "gone": ["a.py|v|gone"]}), "utf-8"
     )
-    assert qci.ratchet_prune(["vulture"], tmp_path / "out") == 0
+    old = tmp_path / "out" / "ci-out-old"
+    old.mkdir()
+    (old / "vulture-ratchet.json").write_text(
+        json.dumps({"tool": "vulture", "sha": "s0", "tree": "t0", "gone": ["m.py|v|stale"]}),
+        "utf-8",
+    )
+    assert qci.ratchet_prune(["vulture", "skylos"], tmp_path / "out") == 0
     assert (tmp_path / "baselines" / "vulture.txt").read_text("utf-8") == (
-        "# header\nz.py|v|1\nm.py|v|2\n"
+        "# header\nz.py|v|1\nm.py|v|2\nm.py|v|stale\n"
     )
-    assert "PRUNED vulture 1" in capsys.readouterr().out
+    out_text = capsys.readouterr().out
+    assert "PRUNED vulture 1 (from 1 result file(s) in out, 1 stale one(s) skipped)" in out_text
+    assert "PRUNED skylos 0 (from skylos shrinks only at the baseline level" in out_text
 
 
 # ---- the gate reruns nothing; a release allows no red --------------------------------------------
@@ -765,3 +770,468 @@ def test_a_release_must_sit_on_engine_base_and_have_a_green_deep_run(
         f"{at[:10]} is not on engine/base or a release/v* branch (checked: refs/heads/side)",
         f"no green deep run vouches for {at[:10]}",
     ]
+
+
+# ---- the fix round (factory build log D-L17): guard, trust, flaky, summary, probes --------------
+
+NOQA = "#" + " noqa"
+GIT = shutil.which("git") or "git"
+T = TypeVar("T")
+
+
+def _returns(value: T) -> Callable[..., T]:
+    """A stand-in for a function, whatever it is called with."""
+
+    def answer(*args: object, **kwargs: object) -> T:
+        return value
+
+    return answer
+
+
+# ---- a throwaway git repository ------------------------------------------------------------------
+
+
+def _git(root: Path, *args: str, stdin: bytes | None = None) -> str:
+    done = subprocess.run(
+        [GIT, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+        cwd=root,
+        input=stdin,
+        capture_output=True,
+        check=True,
+        timeout=120,
+    )
+    return done.stdout.decode("utf-8").strip()
+
+
+def _write(root: Path, rel: str, data: str | bytes) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(data, bytes):
+        path.write_bytes(data)
+    else:
+        path.write_bytes(data.encode("utf-8"))
+
+
+def _gcommit(root: Path, files: dict[str, str | bytes], delete: tuple[str, ...] = ()) -> str:
+    for rel, data in files.items():
+        _write(root, rel, data)
+    for rel in delete:
+        (root / rel).unlink()
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "x")
+    return _git(root, "rev-parse", "HEAD")
+
+
+PYPROJECT = """[tool.pyright]
+typeCheckingMode = "strict"
+reportUnknownMemberType = "error"
+
+[tool.ruff.lint]
+ignore = ["E501"]
+
+[tool.skylos]
+exclude = ["docs"]
+"""
+
+
+def _grepo(tmp_path: Path, baselines: bool = True) -> tuple[Path, str]:
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "-q", "-b", "main")
+    files: dict[str, str | bytes] = {
+        "pyproject.toml": PYPROJECT,
+        "pkg/a.py": f"import os  {NOQA}: F401\n",
+        "pkg/b.py": "x = 1\n",
+    }
+    if baselines:
+        files["ci/baselines/v.txt"] = "# header\na|r|1\nb|r|2\n"
+    return root, _gcommit(root, files)
+
+
+def test_an_added_baseline_row_is_growth_and_a_removed_one_is_not(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    grown = _gcommit(root, {"ci/baselines/v.txt": "# header changed\na|r|1\nb|r|2\nc|r|3\n"})
+    assert guard.baseline_growth(root, base, grown) == ["ci/baselines/v.txt: + c|r|3"]
+    shrunk = _gcommit(root, {"ci/baselines/v.txt": "# header\nb|r|2\n"})
+    assert guard.baseline_growth(root, base, shrunk) == []
+
+
+def test_a_nul_byte_cannot_hide_a_new_row(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(root, {"ci/baselines/v.txt": b"# header\na|r|1\nb|r|2\nc|r|3\x00\n"})
+    assert guard.baseline_growth(root, base, at) == ["ci/baselines/v.txt: holds a NUL byte"]
+
+
+def test_a_minus_diff_attribute_cannot_hide_a_new_row(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(
+        root,
+        {
+            ".gitattributes": "ci/baselines/* -diff\n",
+            "ci/baselines/v.txt": "# header\na|r|1\nb|r|2\nc|r|3\n",
+        },
+    )
+    assert guard.baseline_growth(root, base, at) == [
+        "ci/baselines/v.txt: marked binary or -diff in .gitattributes"
+    ]
+
+
+def test_a_symlink_cannot_stand_in_for_a_baseline(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    _gcommit(root, {"elsewhere.txt": "a|r|1\nb|r|2\nc|r|3\n"})
+    target = _git(root, "hash-object", "-w", "--stdin", stdin=b"../../elsewhere.txt")
+    _git(root, "update-index", "--cacheinfo", f"120000,{target},ci/baselines/v.txt")
+    _git(root, "commit", "-q", "-m", "link")
+    at = _git(root, "rev-parse", "HEAD")
+    assert guard.baseline_growth(root, base, at) == [
+        "ci/baselines/v.txt: not a regular file (mode 120000)"
+    ]
+
+
+def test_deleting_a_baseline_or_adding_one_is_growth_once_baselines_exist(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(root, {"ci/baselines/w.txt": "x|r|1\n"}, delete=("ci/baselines/v.txt",))
+    assert guard.baseline_growth(root, base, at) == [
+        "ci/baselines/v.txt: deleted",
+        "ci/baselines/w.txt: new baseline file",
+    ]
+
+
+def test_the_change_that_brings_the_ratchet_in_may_add_baselines(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path, baselines=False)
+    at = _gcommit(root, {"ci/baselines/v.txt": "a|r|1\n", "pkg/c.py": f"x = 1  {NOQA}\n"})
+    assert guard.problems(root, base, at, "ci/github") == []
+
+
+@pytest.mark.parametrize(
+    ("branch", "also", "loosened"),
+    [
+        ("baseline/known-reds", {}, False),
+        ("baseline/known-reds", {"pkg/b.py": "x = 2\n"}, True),
+        ("ci/github", {}, True),
+    ],
+    ids=["retake", "retake-with-code", "not-a-retake"],
+)
+def test_only_a_retake_confined_to_ci_baselines_may_grow_one(
+    tmp_path: Path, branch: str, also: dict[str, str | bytes], loosened: bool
+) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(root, {"ci/baselines/v.txt": "# h\na|r|1\nb|r|2\nc|r|3\n", **also})
+    assert bool(guard.problems(root, base, at, branch)) == loosened
+
+
+def test_a_new_suppression_marker_is_loosening_and_a_moved_one_is_not(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    moved = _gcommit(root, {"pkg/a.py": "import os\n", "pkg/b.py": f"x = 1  {NOQA}: F841\n"})
+    assert guard.problems(root, base, moved, "x") == []
+    more = _gcommit(root, {"pkg/b.py": f"x = 1  {NOQA}: F841\ny = 2  {NOQA}\n"})
+    assert guard.problems(root, base, more, "x") == ["1 more noqa marker(s), in pkg/b.py"]
+
+
+@pytest.mark.parametrize(
+    ("edit", "expected"),
+    [
+        (
+            ('reportUnknownMemberType = "error"', 'reportUnknownMemberType = "none"'),
+            "pyproject.toml: pyright reportUnknownMemberType set to 'none'",
+        ),
+        (
+            ('typeCheckingMode = "strict"', 'typeCheckingMode = "basic"'),
+            "pyproject.toml: pyright typeCheckingMode set to 'basic'",
+        ),
+        (('ignore = ["E501"]', 'ignore = ["E501", "F401"]'), "[tool.ruff.lint].ignore + F401"),
+        (('exclude = ["docs"]', 'exclude = ["docs", "qmn"]'), "[tool.skylos].exclude + qmn"),
+    ],
+    ids=["pyright-rule", "pyright-mode", "ruff-ignore", "skylos-exclude"],
+)
+def test_a_config_that_turns_a_check_down_is_loosening(
+    tmp_path: Path, edit: tuple[str, str], expected: str
+) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(root, {"pyproject.toml": PYPROJECT.replace(*edit)})
+    found = guard.problems(root, base, at, "x")
+    assert len(found) == 1 and expected in found[0], found
+
+
+def test_a_config_that_tightens_is_not_loosening(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(root, {"pyproject.toml": PYPROJECT.replace('ignore = ["E501"]', "ignore = []")})
+    assert guard.problems(root, base, at, "x") == []
+
+
+# ---- the gate trusts only what it should ---------------------------------------------------------
+
+
+def _verdict(sha: str, ref: str = "ci/github", tree: str = "t1") -> dict[str, object]:
+    return {"sha": sha, "tree": tree, "level": "deep", "ref": ref}
+
+
+def test_a_baseline_runs_verdict_vouches_only_for_a_baseline_pull_request() -> None:
+    runs = [qci.DeepRun("u/1", _verdict(HEAD, ref="baseline/x"))]
+    assert qci.gate_decision(HEAD, runs, "how", head_ref="ci/github")[0] is False
+    assert qci.gate_decision(HEAD, runs, "how", head_ref="baseline/x")[0] is True
+
+
+def test_a_release_may_match_a_deep_verdict_by_tree() -> None:
+    runs = [qci.DeepRun("u/1", _verdict(OTHER, tree="t9"))]
+    assert qci.gate_decision(HEAD, runs, "how")[0] is False
+    ok, message = qci.gate_decision(HEAD, runs, "how", tree="t9")
+    assert ok and message.startswith(f"PASS deep run u/1 is green on {OTHER[:10]}")
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["qmn/tests/fixtures/note.md", "packages/x/src/README.md", "examples/apps/README.md"],
+)
+def test_markdown_inside_code_folders_is_not_docs_only(path: str) -> None:
+    assert qci.gate_checks([path]) == ("deep-verdict",)
+
+
+def _gate_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, loosened: list[str]) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "a.md").write_text("[gone](missing.md)\n", "utf-8")
+    facts = ci_host.RunFacts(ci_host.Host.GITHUB, HEAD, None, 1, 1, 0, "docs/x", "1")
+    monkeypatch.setenv("QMX_LEVEL", "gate")
+    monkeypatch.setattr(qci, "REPO", tmp_path)
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    monkeypatch.setattr(qci, "facts", _returns(facts))
+    monkeypatch.setattr(qci, "head", lambda: HEAD)
+    monkeypatch.setattr(qci, "base_for", _returns(OTHER))
+    monkeypatch.setattr(qci, "changed_files", _returns(["docs/a.md"]))
+    monkeypatch.setattr(guard, "problems", _returns(loosened))
+
+
+def test_the_gate_runs_docs_lint_on_a_docs_only_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _gate_case(tmp_path, monkeypatch, [])
+    assert qci.job_gate() == 1
+
+
+def test_the_gate_fails_a_change_that_loosens_the_ratchet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _gate_case(tmp_path, monkeypatch, ["ci/baselines/v.txt: + c|r|3"])
+    (tmp_path / "docs" / "a.md").write_text("fine\n", "utf-8")
+    assert qci.job_gate() == 1
+    assert "FAIL loosens the ratchet: ci/baselines/v.txt: + c|r|3" in capsys.readouterr().out
+
+
+def test_a_release_on_any_one_allowed_branch_is_enough(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, base = _grepo(tmp_path)
+    at = _gcommit(root, {"pkg/b.py": "x = 3\n"})
+    _git(root, "branch", "release/v1", base)
+    monkeypatch.setattr(qci, "REPO", root)
+    assert qci.release_problems(at, ["refs/heads/release/v1", "refs/heads/main"], True) == []
+
+
+# ---- flaky tests against flaky.txt ---------------------------------------------------------------
+
+
+def _flaky_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flaky: str = "") -> None:
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    (tmp_path / "out").mkdir()
+    (tmp_path / "baselines").mkdir()
+    (tmp_path / "baselines" / "flaky.txt").write_text(f"# flaky\n{flaky}", "utf-8")
+
+
+def test_a_newly_flaky_test_blocks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _flaky_case(tmp_path, monkeypatch)
+    assert qci.tests_verdict("linux-1", [], [], ["linux|qmn|t::x"]) == 1
+    assert "NEW FLAKY linux|qmn|t::x" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("level", "rc"), [("deep", 0), ("release", 1)])
+def test_a_listed_flaky_test_blocks_only_a_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: str, rc: int
+) -> None:
+    _flaky_case(tmp_path, monkeypatch, "linux|qmn|t::x\n")
+    monkeypatch.setenv("QMX_LEVEL", level)
+    assert qci.tests_verdict("linux-1", [], [], ["linux|qmn|t::x"]) == rc
+
+
+def test_a_rerun_that_was_skipped_is_still_red() -> None:
+    first = {"qmn.tests.test_a::test_b": "failed"}
+    reds, flaky = qci.split_flaky("linux", QMN, first, {"qmn.tests.test_a::test_b": "skipped"}, [])
+    assert (reds, flaky) == (["linux|qmn|qmn.tests.test_a::test_b"], [])
+
+
+def test_a_touched_module_must_belong_to_the_tests_own_unit() -> None:
+    first = {"tests.test_clock::test_fast": "failed"}
+    again = {"tests.test_clock::test_fast": "passed"}
+    reds, flaky = qci.split_flaky("linux", QMN, first, again, ["qmb/tests/test_clock.py"])
+    assert (reds, flaky) == ([], ["linux|qmn|tests.test_clock::test_fast"])
+
+
+def test_a_whole_suite_level_still_knows_what_the_change_touched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qci, "base_for", _returns(OTHER))
+    monkeypatch.setattr(qci, "changed_files", _returns(["qmn/tests/test_x.py"]))
+    assert qci.flaky_scope(qci.Level.DEEP, HEAD, []) == ["qmn/tests/test_x.py"]
+    assert qci.flaky_scope(qci.Level.SLICE, HEAD, ["a.py"]) == ["a.py"]
+
+
+def test_pull_reds_records_the_runs_flaky_tests(tmp_path: Path) -> None:
+    (tmp_path / "flaky-linux-1.txt").write_text("linux|qmn|t::b\nlinux|qmn|t::a\n", "utf-8")
+    flaky = pull_reds.shard_flaky(tmp_path)
+    text = pull_reds.flaky_text("77", flaky)
+    rows = [line for line in text.splitlines() if line and not line.startswith("#")]
+    assert rows == ["linux|qmn|t::a", "linux|qmn|t::b"]
+
+
+# ---- the summary --------------------------------------------------------------------------------
+
+
+def _summary(
+    artifacts: Path,
+    needs: dict[str, dict[str, object]],
+    api: list[dict[str, object]],
+    lvl: qci.Level = qci.Level.DEEP,
+) -> dict[str, object]:
+    return qci.build_summary(
+        sha=HEAD,
+        ref="r",
+        run_id="1",
+        url="u",
+        lvl=lvl,
+        jobs_of_level=list(needs),
+        needs=needs,
+        api_jobs=api,
+        artifacts=artifacts,
+        known_reds=["linux|qmn|t::old"],
+        known_flaky=["linux|qmn|t::calm"],
+    )
+
+
+def test_a_cancelled_job_makes_the_run_red() -> None:
+    needs: dict[str, dict[str, object]] = {
+        "lint": {"result": "success"},
+        "suite-linux": {"result": "cancelled"},
+    }
+    assert _summary(Path("missing"), needs, [])["green"] is False
+
+
+def test_a_shard_that_never_finished_is_a_blocking_red(tmp_path: Path) -> None:
+    shard = tmp_path / "ci-out-suite-linux-2"
+    shard.mkdir()
+    (shard / "plan-linux-2.json").write_text(json.dumps({"files": ["qmn::t.py"]}), "utf-8")
+    done = tmp_path / "ci-out-suite-linux-1"
+    done.mkdir()
+    (done / "plan-linux-1.json").write_text(json.dumps({"files": ["qmn::u.py"]}), "utf-8")
+    (done / "reds-linux-1.txt").write_text("linux|qmn|t::old\n", "utf-8")
+    (done / "flaky-linux-1.txt").write_text("linux|qmn|t::calm\n", "utf-8")
+    api: list[dict[str, object]] = [
+        {"name": "suite-windows 3", "conclusion": "cancelled"},
+        {"name": "suite-linux 1", "conclusion": "failure"},
+    ]
+    needs: dict[str, dict[str, object]] = {
+        "suite-linux": {"result": "failure"},
+        "suite-windows": {"result": "cancelled"},
+    }
+    summary = _summary(tmp_path, needs, api)
+    assert summary["reds"] == [
+        {"id": "qmn|t::old", "system": "linux", "kind": "known", "blocks": False},
+        {"id": "qmn|t::calm", "system": "linux", "kind": "flaky", "blocks": False},
+        {"id": "shard linux-2", "system": "linux", "kind": "unfinished", "blocks": True},
+        {"id": "shard windows-3", "system": "windows", "kind": "unfinished", "blocks": True},
+    ]
+    jobs = cast("list[dict[str, object]]", summary["jobs"])
+    assert [j["name"] for j in jobs] == ["suite-windows-3", "suite-linux-1"]
+    released = _summary(tmp_path, needs, api, qci.Level.RELEASE)
+    reds = cast("list[dict[str, object]]", released["reds"])
+    assert [r["blocks"] for r in reds][:2] == [True, True]
+
+
+# ---- wiring the probes reach --------------------------------------------------------------------
+
+
+def _lint_case(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    level: str,
+    errors: list[ratchet.Finding],
+    failed: str | None = None,
+) -> None:
+    monkeypatch.setenv("QMX_LEVEL", level)
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    (tmp_path / "out").mkdir()
+    (tmp_path / "baselines").mkdir()
+    (tmp_path / "baselines" / "pyright.txt").write_text("qmn/src/old.py|r|known\n", "utf-8")
+    monkeypatch.setattr(qci, "head", lambda: HEAD)
+    monkeypatch.setattr(qci, "tree_of", _returns("t1"))
+    monkeypatch.setattr(qci, "base_for", _returns(OTHER))
+    monkeypatch.setattr(qci, "changed_files", _returns(["qmn/src/touched.py"]))
+    monkeypatch.setattr(ci_units, "poe_dirs", _returns(["."]))
+    monkeypatch.setattr(qci, "sync", _returns(None))
+    monkeypatch.setattr(qci, "run", _returns(0))
+    monkeypatch.setattr(qci, "pyright_run", _returns((errors, failed)))
+
+
+def _error(path: str) -> ratchet.Finding:
+    return ratchet.Finding(path, 1, "r", "fresh")
+
+
+@pytest.mark.parametrize(
+    ("level", "path", "rc"),
+    [
+        ("slice", "qmn/src/touched.py", 1),
+        ("slice", "qmn/src/untouched.py", 0),
+        ("deep", "qmn/src/untouched.py", 1),
+    ],
+    ids=["slice-touched", "slice-untouched", "deep-untouched"],
+)
+def test_types_block_a_slice_in_its_files_and_a_deep_run_anywhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: str, path: str, rc: int
+) -> None:
+    _lint_case(tmp_path, monkeypatch, level, [_error(path)])
+    assert qci.job_lint() == rc
+
+
+def test_a_folder_pyright_could_not_check_leaves_nothing_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _lint_case(tmp_path, monkeypatch, "deep", [], failed="pyright exited 2")
+    assert qci.job_lint() == 1
+    record = json.loads((tmp_path / "out" / "pyright-ratchet.json").read_text("utf-8"))
+    assert (record["gone"], record["complete"], record["sha"]) == ([], False, HEAD)
+
+
+def test_skylos_at_deep_scans_the_diff_and_so_calls_nothing_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("QMX_LEVEL", "deep")
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    (tmp_path / "out").mkdir()
+    (tmp_path / "baselines").mkdir()
+    (tmp_path / "baselines" / "skylos.txt").write_text("z.py|danger:x|n\n", "utf-8")
+    monkeypatch.setattr(qci, "head", lambda: HEAD)
+    monkeypatch.setattr(qci, "tree_of", _returns("t1"))
+    monkeypatch.setattr(qci, "uv", lambda: "uv")
+    monkeypatch.setattr(qci, "base_for", _returns(OTHER))
+    monkeypatch.setattr(qci, "changed_files", _returns(["a.py"]))
+    monkeypatch.setattr(qci, "skylos_scope", dict)
+
+    def fake_run(argv: list[str], cwd: Path, **kwargs: object) -> int:
+        assert "--diff-base" in argv
+        (tmp_path / "out" / "skylos.json").write_text('{"danger": []}', "utf-8")
+        return 0
+
+    monkeypatch.setattr(qci, "run", fake_run)
+    assert qci.job_skylos(False) == 0
+    record = json.loads((tmp_path / "out" / "skylos-ratchet.json").read_text("utf-8"))
+    assert record["gone"] == []
+
+
+def test_prune_never_removes_a_comment_line(tmp_path: Path) -> None:
+    path = tmp_path / "v.txt"
+    path.write_text("# header\na|r|1\n", "utf-8")
+    assert ratchet.prune(path, ["# header", "a|r|1"]) == 1
+    assert path.read_text("utf-8") == "# header\n"

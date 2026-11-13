@@ -1,4 +1,4 @@
-"""Rewrite ci/baselines/known-reds.txt from a GitHub Actions deep run's test shards.
+"""Rewrite ci/baselines/known-reds.txt and flaky.txt from a GitHub Actions deep run's test shards.
 
     python tools/ci/pull_reds.py <run id>
 
@@ -51,6 +51,26 @@ def shard_reds(folder: Path) -> list[str] | None:
     return None
 
 
+def shard_flaky(folder: Path) -> list[str]:
+    """The flaky tests (red, then green on the rerun) one shard's artifact folder lists."""
+    return [line for f in sorted(folder.glob("flaky-*.txt")) for line in read(f) if line]
+
+
+def read(path: Path) -> list[str]:
+    return path.read_text("utf-8").splitlines()
+
+
+def flaky_text(run_id: str, flaky: list[str]) -> str:
+    lines = [
+        f"Tests flaky on GitHub Actions run {run_id} (red, then green on the rerun).",
+        "Key: system|unit|test id. A flaky test listed here does not block (except at a release);",
+        "any other flaky test does. This list may only shrink.",
+    ]
+    return "".join(f"# {line}" + chr(10) for line in lines) + "".join(
+        f"{r}" + chr(10) for r in sorted(set(flaky))
+    )
+
+
 def known_reds_text(run_id: str, shards: dict[str, list[str] | None]) -> str:
     read = sorted(name for name, reds in shards.items() if reds is not None)
     missing = sorted(name for name, reds in shards.items() if reds is None)
@@ -83,10 +103,14 @@ def main(argv: list[str]) -> int:
         for j in cast("list[dict[str, object]]", jobs["jobs"])
         if str(j["name"]).startswith(tuple(t.removeprefix("ci-out-") for t in TEST_ARTIFACTS))
     }
+    flaky: list[str] = []
     with tempfile.TemporaryDirectory(prefix="qmx-reds-") as tmp:
         for name in names:
             gh("run", "download", run_id, "-R", GITHUB_REPO, "-n", name, "-D", f"{tmp}/{name}")
             shards[name.removeprefix("ci-out-")] = shard_reds(Path(tmp) / name)
+            flaky += shard_flaky(Path(tmp) / name)
+    flaky_file = REPO / "ci" / "baselines" / "flaky.txt"
+    flaky_file.write_text(flaky_text(run_id, flaky), "utf-8", newline=chr(10))
     target = REPO / "ci" / "baselines" / "known-reds.txt"
     target.write_text(known_reds_text(run_id, shards), "utf-8", newline="\n")
     total = len({r for found in shards.values() if found for r in found})

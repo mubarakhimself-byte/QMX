@@ -8,8 +8,9 @@
 #            suite on Linux and Windows, lint, Vulture, Skylos, and mutmut on functions changed
 #            since engine/base. Ends in deep-verdict, whose artifact the pull-request gate reads.
 #            The dispatch input `level` starts any other level by hand instead.
-#   gate     pull request into engine/base: passes only if a green deep run tested its exact head;
-#            it reruns nothing that run ran. A change to documentation only (docs/**,
+#   gate     pull request into engine/base, run with the base commit's own CI driver: fails when
+#            the change loosens the ratchet (tools/ci/guard.py), and passes only if a green deep run
+#            tested its exact head; it reruns nothing that run ran. A change to documentation only (docs/**,
 #            contracts/CHANGELOG.md, *.md) passes on docs-lint instead.
 #   release  tag v*: everything in deep, where known reds block too, plus a smoke start of the host
 #            on Linux and Windows and release-verdict: the tag must sit on engine/base or a
@@ -451,6 +452,19 @@ jobs:
       contents: read
     steps:
       - *checkout
+      # The gate runs trusted code: the CI driver, its guard and the setup action come from the
+      # pull request's base commit, never from the change under review.
+      - name: Use the base commit's CI driver
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if ! git cat-file -e "$BASE_SHA:tools/ci/qci.py"; then
+            echo "the base commit $BASE_SHA has no CI driver, so this gate cannot vouch for the change"
+            exit 1
+          fi
+          rm -rf tools/ci .github/actions
+          git checkout "$BASE_SHA" -- tools/ci .github/actions
       - *setup
       - run: python tools/ci/qci.py gate
         env:

@@ -57,7 +57,10 @@ def test_the_gate_runs_on_pull_requests_into_engine_base_and_reads_the_verdict()
     assert triggers["pull_request"]["branches"] == ["engine/base"]
     jobs = _jobs()
     gate_steps = cast("list[dict[str, str]]", jobs["gate"]["steps"])
-    assert [s["run"] for s in gate_steps if "run" in s] == ["python tools/ci/qci.py gate"]
+    runs = [s["run"] for s in gate_steps if "run" in s]
+    # The gate runs the base commit's own driver, never the pull request's copy.
+    assert 'git checkout "$BASE_SHA" -- tools/ci .github/actions' in runs[0]
+    assert runs[1:] == ["python tools/ci/qci.py gate"]
     verdict_steps = cast("list[dict[str, dict[str, str]]]", jobs["deep-verdict"]["steps"])
     uploads = [s["with"]["name"] for s in verdict_steps if "name" in s.get("with", {})]
     assert uploads == ["deep-verdict"]

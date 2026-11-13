@@ -39,6 +39,7 @@ from typing import Literal, cast
 import ci_host
 import ci_mutate
 import ci_units
+import guard
 import ratchet
 import tomllib
 
@@ -46,6 +47,8 @@ REPO = Path(__file__).resolve().parents[2]
 GIT = shutil.which("git") or "git"
 OUT = REPO / "ci-out"
 BASELINES = REPO / "ci" / "baselines"
+FLAKY_BASELINE = "flaky.txt"
+BASELINE_REF = "baseline/"
 ENGINE = "engine/base"
 GIT_TIMEOUT_S = 600
 STEP_TIMEOUT_S = 80 * 60
@@ -229,6 +232,11 @@ def git_ok(*args: str) -> bool:
     )
 
 
+def tree_of(rev: str) -> str:
+    """The tree a commit holds: two commits with the same tree test the same code."""
+    return git("rev-parse", f"{rev}^{{tree}}").strip()
+
+
 def merge_base(a: str, b: str) -> str | None:
     done = git("merge-base", a, b, check=False).strip()
     return done or None
@@ -332,10 +340,12 @@ def pytest(
     workers: str = "auto",
     cache: Path | None = None,
     last_failed: bool = False,
+    timeout_s: int | None = None,
 ) -> int:
     """Run pytest on `files` (relative to `cwd`) through an argument file, so a long shard never
     hits the Windows command-line limit. serial=None runs every test with no worker split. With a
-    `cache` folder pytest records there what failed, and `last_failed` reruns only that."""
+    `cache` folder pytest records there what failed, and `last_failed` reruns only that.
+    `timeout_s` stops any one test after that many seconds (pytest-timeout), so a hang is a red."""
     junit.parent.mkdir(parents=True, exist_ok=True)
     args = OUT / "tmp" / f"{junit.stem}.args"
     args.parent.mkdir(parents=True, exist_ok=True)
@@ -361,6 +371,7 @@ def pytest(
         "-rfE",
         *(["-p", "no:cacheprovider"] if cache is None else ["-o", f"cache_dir={cache}"]),
         *(["--last-failed", "--last-failed-no-failures", "none"] if last_failed else []),
+        *(["--timeout", str(timeout_s)] if timeout_s is not None else []),
         *split,
         "--basetemp",
         str(basetemp),
@@ -387,13 +398,11 @@ def job_tests(system: str) -> int:
     units = ci_units.discover(REPO)
     if TEST_SCOPE.get(lvl) == "all":
         base, changed, chosen = None, [], units
-        # The whole suite runs, but a flaky red still blocks in a module this change touched.
-        touched = changed_files(base_for(lvl, at), at)
     else:
         base = base_for(lvl, at)
         changed = changed_files(base, at)
         chosen = ci_units.select(units, changed)
-        touched = changed
+    touched = flaky_scope(lvl, at, changed)
     describe(lvl, base, at, changed)
     durations = ci_units.load_durations(REPO / "tools" / "ci" / "durations.json")
     files = [f for u in chosen for f in ci_units.test_files(REPO, u, durations)]
@@ -429,7 +438,14 @@ def job_tests(system: str) -> int:
             name = f"{stem}{'-serial' if serial else ''}"
             junit = OUT / "junit" / f"{name}.xml"
             cache = Path(tempfile.mkdtemp(prefix="qmx-cache-"))
-            rc = pytest(REPO / unit.cwd, sorted(paths), junit, serial=serial, cache=cache)
+            rc = pytest(
+                REPO / unit.cwd,
+                sorted(paths),
+                junit,
+                serial=serial,
+                cache=cache,
+                timeout_s=PER_TEST_TIMEOUT_S,
+            )
             if rc not in (0, 1, 5) or (rc == 1 and not junit.exists()):
                 crashed.append(f"{unit.root}{' (serial)' if serial else ''}: pytest rc={rc}")
             first = outcomes(junit)
@@ -444,6 +460,7 @@ def job_tests(system: str) -> int:
                     serial=serial,
                     cache=cache,
                     last_failed=True,
+                    timeout_s=PER_TEST_TIMEOUT_S,
                 )
                 again = outcomes(rerun)
             red, flake = split_flaky(system, unit, first, again, touched)
@@ -453,6 +470,17 @@ def job_tests(system: str) -> int:
 
 
 RED_OUTCOMES = frozenset({"assertion", "failed", "error"})
+PER_TEST_TIMEOUT_S = 300
+
+
+def flaky_scope(lvl: Level, at: str, changed: Sequence[str]) -> list[str]:
+    """The files a flaky test's module must not be among for its rerun to count: what the change
+    touched. A slice or landing run has them already; a whole-suite level measures them too."""
+    if TEST_SCOPE.get(lvl) != "all":
+        return list(changed)
+    # The whole suite runs, but a flaky red still blocks in a module this change touched.
+    touched = changed_files(base_for(lvl, at), at)
+    return touched
 
 
 def red_key(system: str, unit: ci_units.Unit, test_id: str) -> str:
@@ -499,26 +527,29 @@ def split_flaky(
 
 def tests_verdict(name: str, reds: list[str], crashed: list[str], flaky: Sequence[str] = ()) -> int:
     """Reds listed in ci/baselines/known-reds.txt (red on engine/base when it was taken) are
-    reported and do not block; any other red, or a pytest that crashed, does. Flaky tests (red,
-    then green on the rerun) are printed, kept in flaky-<name>.txt, and do not block. A release
-    allows no red at all: there the known reds block too."""
-    known: set[str] = (
-        set()
-        if level() == Level.RELEASE
-        else set(ratchet.read_baseline(BASELINES / "known-reds.txt"))
-    )
+    reported and do not block; any other red, or a pytest that crashed, does. A flaky test (red,
+    then green on its rerun) does not block only when ci/baselines/flaky.txt lists it; a newly
+    flaky test blocks. A release allows no red at all: there known reds and flaky tests block too.
+    The shard's reds and flaky tests are kept in reds-<name>.txt and flaky-<name>.txt."""
+    release = level() == Level.RELEASE
+    known: set[str] = set() if release else set(ratchet.read_baseline(BASELINES / "known-reds.txt"))
+    calm: set[str] = set() if release else set(ratchet.read_baseline(BASELINES / FLAKY_BASELINE))
     new = sorted(r for r in set(reds) if r not in known)
+    new_flaky = sorted(f for f in set(flaky) if f not in calm)
+    rule = "release: every red blocks" if release else "the rest are in known-reds.txt"
     lines = [
-        f"{len(set(reds))} red tests, {len(new)} not in known-reds.txt, {len(set(flaky))} flaky"
+        f"{len(set(reds))} red tests, {len(new)} blocking ({rule}); {len(set(flaky))} flaky, "
+        f"{len(new_flaky)} not in {FLAKY_BASELINE}"
     ]
     lines += [f"FAIL {c}" for c in crashed]
     lines += [f"NEW RED {r}" for r in new]
     lines += [f"known red {r}" for r in sorted(set(reds) & known)]
-    lines += [f"FLAKY {r}" for r in sorted(set(flaky))]
+    lines += [f"NEW FLAKY {r}" for r in new_flaky]
+    lines += [f"FLAKY {r}" for r in sorted(set(flaky) & calm)]
     (OUT / f"reds-{name}.txt").write_text("".join(f"{r}\n" for r in sorted(set(reds))), "utf-8")
     (OUT / f"flaky-{name}.txt").write_text("".join(f"{r}\n" for r in sorted(set(flaky))), "utf-8")
     print("\n".join(lines))
-    return 1 if new or crashed else 0
+    return 1 if new or crashed or new_flaky else 0
 
 
 PYRIGHT_NUMBER = re.compile(r"\d+")
@@ -588,12 +619,15 @@ def pyright_run(folder: str) -> tuple[list[ratchet.Finding], str | None]:
     return pyright_findings(report), None
 
 
-def types_verdict(found: list[ratchet.Finding], scope: list[str] | None) -> int:
+def types_verdict(
+    found: list[ratchet.Finding], scope: list[str] | None, complete: bool = True
+) -> int:
     """pyright errors against ci/baselines/pyright.txt. A folder run twice (a workspace and its
-    package) reports the same error once."""
+    package) reports the same error once. When a folder's pyright did not finish (`complete` is
+    false), nothing can be called gone."""
     unique = sorted(set(found), key=lambda f: (f.path, f.line, f.rule, f.message))
     # A slice's touched folders are checked whole, so its changed files are reported in full.
-    covered: Covered = "all" if scope is None else frozenset(scope)
+    covered: Covered = None if not complete else "all" if scope is None else frozenset(scope)
     return ratchet_verdict("pyright", unique, scope, covered=covered).rc
 
 
@@ -659,7 +693,8 @@ def job_lint(write_baseline: bool = False) -> int:
         keep_baseline("pyright.txt")
         print(f"wrote {len(set(errors))} errors to ci/baselines/pyright.txt")
         return 0
-    verdict = types_verdict(errors, changed if lvl == Level.SLICE else None)
+    complete = not any(f.rule == "types" for f in found)
+    verdict = types_verdict(errors, changed if lvl == Level.SLICE else None, complete)
     return 1 if found or verdict else 0
 
 
@@ -787,8 +822,11 @@ def ratchet_verdict(
     report += [("BLOCK " if f.blocking else "note  ") + f.text() for f in fresh]
     report += [f"gone  {key}" for key in gone]
     (OUT / f"{name}-new.txt").write_text("\n".join(report) + "\n", "utf-8")
+    at = head()
     record = {
         "tool": tool,
+        "sha": at,
+        "tree": tree_of(at),
         "complete": covered == "all",
         "new": [
             {"key": f.key, "file": f.path, "line": f.line, "blocking": f.blocking} for f in fresh
@@ -1236,6 +1274,7 @@ def job_verdict() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     verdict = {
         "sha": at,
+        "tree": tree_of(at),
         "ref": facts().ref,
         "pipeline": facts().run_id,
         "host": facts().host.value,
@@ -1259,13 +1298,32 @@ class DeepRun:
     verdict: dict[str, object] | None
 
 
-def gate_decision(at: str, runs: Sequence[DeepRun], how: str) -> tuple[bool, str]:
-    """Pass only on a green deep run whose verdict names exactly the head under review. `runs` are
-    the host's successful runs on that commit, newest first."""
+def gate_decision(
+    at: str,
+    runs: Sequence[DeepRun],
+    how: str,
+    head_ref: str = "",
+    tree: str | None = None,
+) -> tuple[bool, str]:
+    """Pass only on a green deep run whose verdict names exactly the head under review (or, given
+    `tree`, a commit holding the identical tree). A verdict from a baseline/** run vouches only for
+    a pull request whose own head ref is baseline/** too. `runs` are the host's successful runs,
+    newest first."""
     for candidate in runs:
         verdict = candidate.verdict
-        if verdict is not None and verdict.get("level") == "deep" and verdict.get("sha") == at:
+        if verdict is None or verdict.get("level") != "deep":
+            continue
+        if str(verdict.get("ref", "")).startswith(BASELINE_REF) and not head_ref.startswith(
+            BASELINE_REF
+        ):
+            continue
+        if verdict.get("sha") == at:
             return True, f"PASS deep run {candidate.url} is green on {at[:10]}"
+        if tree is not None and verdict.get("tree") == tree:
+            return True, (
+                f"PASS deep run {candidate.url} is green on {str(verdict.get('sha'))[:10]}, "
+                f"whose tree is the tree of {at[:10]}"
+            )
     if runs:
         return False, (
             f"FAIL {len(runs)} green run(s) on {at[:10]}, but none is a deep run with a verdict "
@@ -1287,16 +1345,17 @@ def github_api(path: str, token: str, raw: bool = False) -> bytes:
         return cast("bytes", answer.read())
 
 
-def github_deep_runs(repo: str, at: str, token: str) -> list[DeepRun]:
-    query = urllib.parse.urlencode(
-        {"head_sha": at, "event": "workflow_dispatch", "status": "success", "per_page": "20"}
-    )
+def github_deep_runs(repo: str, at: str | None, token: str) -> list[DeepRun]:
+    """Successful hand-started runs and their deep verdicts: on commit `at`, or, with `at` None,
+    the latest 30 on any commit (a release matches them by tree)."""
+    fields = {"event": "workflow_dispatch", "status": "success", "per_page": "20" if at else "30"}
+    query = urllib.parse.urlencode({"head_sha": at, **fields} if at else fields)
     listing = json.loads(
         github_api(f"/repos/{repo}/actions/workflows/{WORKFLOW}/runs?{query}", token)
     )
     found: list[DeepRun] = []
     for run_ in cast("list[dict[str, object]]", listing.get("workflow_runs", [])):
-        if run_.get("head_sha") != at or run_.get("conclusion") != "success":
+        if (at is not None and run_.get("head_sha") != at) or run_.get("conclusion") != "success":
             continue
         arts = json.loads(
             github_api(
@@ -1317,7 +1376,14 @@ def github_deep_runs(repo: str, at: str, token: str) -> list[DeepRun]:
 DOCS_ONLY_FILES = frozenset({"contracts/CHANGELOG.md"})
 
 
+NOT_DOCS_SEGMENTS = frozenset({"src", "tests", "fixtures", "examples"})
+
+
 def is_docs(path: str) -> bool:
+    """Documentation only: under docs/, the contracts changelog, or Markdown, and never inside a
+    src, tests, fixtures or examples folder (Markdown there can be code's input or output)."""
+    if NOT_DOCS_SEGMENTS & set(path.split("/")[:-1]):
+        return False
     return path.startswith("docs/") or path in DOCS_ONLY_FILES or path.endswith(".md")
 
 
@@ -1367,7 +1433,7 @@ def job_docs_lint() -> int:
     base = base_for(lvl, at)
     changed = changed_files(base, at)
     describe(lvl, base, at, changed)
-    found = docs_findings(changed)
+    found = docs_findings(changed, REPO)
     ratchet.write_junit(OUT / "junit" / "docs-lint.xml", "docs-lint", found)
     for f in found:
         print(f"FAIL {f.text()}")
@@ -1375,7 +1441,7 @@ def job_docs_lint() -> int:
     return 1 if found else 0
 
 
-def deep_verdict_runs(at: str) -> tuple[list[DeepRun], str]:
+def deep_verdict_runs(at: str, by_tree: bool = False) -> tuple[list[DeepRun], str]:
     run_facts = facts()
     if run_facts.host == ci_host.Host.LAPTOP:
         raise CiError("the gate reads the CI host's runs; it does not run on a laptop")
@@ -1384,19 +1450,37 @@ def deep_verdict_runs(at: str) -> tuple[list[DeepRun], str]:
         "rerun this job"
     )
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-    return github_deep_runs(os.environ["GITHUB_REPOSITORY"], at, token), how
+    repo = os.environ["GITHUB_REPOSITORY"]
+    runs = github_deep_runs(repo, at, token)
+    if by_tree:
+        runs += github_deep_runs(repo, None, token)
+    return runs, how
+
+
+def loosening(base: str, at: str, branch: str) -> list[str]:
+    """What the change from `base` loosens (guard.py), printed one FAIL line each."""
+    found = guard.problems(REPO, base, at, branch)
+    for line in found:
+        print(f"FAIL loosens the ratchet: {line}")
+    return found
 
 
 def job_gate() -> int:
-    """A pull request into engine/base needs a green deep run on its exact head commit, or, when
-    it changes documentation only, a clean docs-lint."""
+    """A pull request into engine/base must loosen nothing the ratchet holds (guard.py, run from the
+    base branch's own copy of this driver), and needs a green deep run on its exact head commit,
+    or, when it changes documentation only, a clean docs-lint."""
     at = head()
-    checks = gate_checks(changed_files(base_for(Level.GATE, at), at))
+    base = base_for(Level.GATE, at)
+    if base is None:
+        raise CiError(f"no merge-base with {ENGINE}")
+    if loosening(base, at, facts().ref):
+        return 1
+    checks = gate_checks(changed_files(base, at))
     print(f"gate checks: {', '.join(checks)}")
     if checks == ("docs-lint",):
         return job_docs_lint()
     runs, how = deep_verdict_runs(at)
-    ok, message = gate_decision(at, runs, how)
+    ok, message = gate_decision(at, runs, how, head_ref=facts().ref)
     print(message)
     return 0 if ok else 1
 
@@ -1429,10 +1513,10 @@ def job_release_verdict() -> int:
         "for-each-ref",
         "--format=%(refname)",
         f"refs/remotes/origin/{ENGINE}",
-        "refs/remotes/origin/release/",
+        "refs/remotes/origin/release/v*",
     ).split()
-    runs, how = deep_verdict_runs(at)
-    deep_ok, message = gate_decision(at, runs, how)
+    runs, how = deep_verdict_runs(at, by_tree=True)
+    deep_ok, message = gate_decision(at, runs, how, tree=tree_of(at))
     print(message)
     problems = release_problems(at, refs, deep_ok)
     for problem in problems:
@@ -1515,9 +1599,12 @@ def build_summary(
     api_jobs: Sequence[Mapping[str, object]] | None,
     artifacts: Path,
     known_reds: Sequence[str],
+    known_flaky: Sequence[str] = (),
 ) -> dict[str, object]:
-    """summary.json (factory design 11.11): every job of the level, every red (new, known or
-    flaky), every new and gone quality row, mutant counts, the level's skipped jobs."""
+    """summary.json (factory design 11.11): every job of the level (named as its artifact is,
+    `suite-linux-3`), every red (new, known, flaky, or a test shard that never finished, each with
+    `blocks`), every new and gone quality row, mutant counts, the level's skipped jobs. A red id is
+    `unit|module::name`; an unfinished shard's is `shard <system>-<n>`."""
     result = {job: str(needs.get(job, {}).get("result", "missing")) for job in jobs_of_level}
     jobs: list[dict[str, object]]
     if api_jobs is None:
@@ -1536,18 +1623,34 @@ def build_summary(
                 )
                 seconds = max(0, int(span.total_seconds()))
             outcome = item.get("conclusion") or item.get("status") or "unknown"
-            jobs.append({"name": name, "result": str(outcome), "seconds": seconds})
-    known = set(known_reds)
-    reds: list[dict[str, str]] = []
+            jobs.append(
+                {"name": name.replace(" ", "-"), "result": str(outcome), "seconds": seconds}
+            )
+    release = lvl == Level.RELEASE
+    known, calm = set(known_reds), set(known_flaky)
+    reds: list[dict[str, object]] = []
+    finished: set[str] = set()
     for path in sorted(artifacts.rglob("reds-*.txt")):
+        finished.add(path.stem.removeprefix("reds-"))
         for key in read_lines(path):
             system, _, rest = key.partition("|")
             kind = "known" if key in known else "new"
-            reds.append({"id": rest, "system": system, "kind": kind})
+            blocks = kind == "new" or release
+            reds.append({"id": rest, "system": system, "kind": kind, "blocks": blocks})
     for path in sorted(artifacts.rglob("flaky-*.txt")):
         for key in read_lines(path):
             system, _, rest = key.partition("|")
-            reds.append({"id": rest, "system": system, "kind": "flaky"})
+            blocks = release or key not in calm
+            reds.append({"id": rest, "system": system, "kind": "flaky", "blocks": blocks})
+    for shard in sorted(unfinished_shards(artifacts, jobs, finished)):
+        reds.append(
+            {
+                "id": f"shard {shard}",
+                "system": shard.split("-", 1)[0],
+                "kind": "unfinished",
+                "blocks": True,
+            }
+        )
     quality: list[dict[str, str]] = []
     for path in sorted(artifacts.rglob("*-ratchet.json")):
         record = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
@@ -1578,9 +1681,33 @@ def build_summary(
     }
 
 
+TEST_JOBS = ("suite-linux", "suite-windows", "tests-linux", "tests-windows")
+
+
+def unfinished_shards(
+    artifacts: Path, jobs: Sequence[Mapping[str, object]], finished: set[str]
+) -> set[str]:
+    """Test shards (`<system>-<n>`) that left no reds file: one that planned tests and stopped, and
+    one whose job did not succeed (cancelled, timed out) and wrote nothing."""
+    missing: set[str] = set()
+    for path in artifacts.rglob("plan-*.json"):
+        plan = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
+        shard = path.stem.removeprefix("plan-")
+        if plan.get("files") and shard not in finished:
+            missing.add(shard)
+    for job in jobs:
+        name = str(job.get("name", ""))
+        base, _, index = name.rpartition("-")
+        if base in TEST_JOBS and index.isdigit() and job.get("result") != "success":
+            shard = f"{base.split('-', 1)[1]}-{index}"
+            if shard not in finished:
+                missing.add(shard)
+    return missing
+
+
 def summary_markdown(summary: Mapping[str, object]) -> str:
     jobs = cast("list[dict[str, object]]", summary["jobs"])
-    reds = cast("list[dict[str, str]]", summary["reds"])
+    reds = cast("list[dict[str, object]]", summary["reds"])
     quality = cast("list[dict[str, str]]", summary["quality"])
     mutants = cast("dict[str, int]", summary["mutants"])
     skipped = cast("list[str]", summary["skipped"])
@@ -1595,12 +1722,19 @@ def summary_markdown(summary: Mapping[str, object]) -> str:
         *[f"| {j['name']} | {j['result']} | {j['seconds']} |" for j in jobs],
         "",
     ]
-    by_kind = {k: [r for r in reds if r["kind"] == k] for k in ("new", "known", "flaky")}
+    kinds = ("new", "known", "flaky", "unfinished")
+    by_kind = {k: [r for r in reds if r["kind"] == k] for k in kinds}
+    blocking = sum(1 for r in reds if r.get("blocks"))
     lines.append(
         f"Reds: {len(by_kind['new'])} new, {len(by_kind['known'])} known, "
-        f"{len(by_kind['flaky'])} flaky"
+        f"{len(by_kind['flaky'])} flaky, {len(by_kind['unfinished'])} unfinished shards; "
+        f"{blocking} block"
     )
-    lines += [f"- {r['kind']} {r['system']} {r['id']}" for r in reds if r["kind"] != "known"]
+    lines += [
+        f"- {r['kind']}{' (blocks)' if r.get('blocks') else ''} {r['system']} {r['id']}"
+        for r in reds
+        if r["kind"] != "known" or r.get("blocks")
+    ]
     new_quality = [q for q in quality if q["kind"] == "new"]
     gone = len(quality) - len(new_quality)
     lines += ["", f"Quality: {len(new_quality)} new rows, {gone} baseline rows gone"]
@@ -1651,6 +1785,7 @@ def job_summary(artifacts: Path) -> int:
         api_jobs=api_jobs,
         artifacts=artifacts,
         known_reds=ratchet.read_baseline(BASELINES / "known-reds.txt"),
+        known_flaky=ratchet.read_baseline(BASELINES / FLAKY_BASELINE),
     )
     text = summary_markdown(summary)
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1) + "\n", "utf-8")
@@ -1666,39 +1801,36 @@ def job_summary(artifacts: Path) -> int:
 # ---- the ratchet: guard and prune -------------------------------------------------------------
 
 
-def baseline_growth(base: str, at: str, root: Path = REPO) -> list[str]:
-    """Rows a change adds to a baseline file that `base` already has. A baseline file that is new
-    since `base` is a baseline being taken, not grown. Comment lines are not rows."""
-    diff = git("diff", "--diff-filter=M", "-U0", base, at, "--", "ci/baselines/", cwd=root)
-    grown: list[str] = []
-    current = ""
-    for line in diff.splitlines():
-        if line.startswith("+++ "):
-            current = line.removeprefix("+++ b/")
-        elif line.startswith("+") and not line.startswith("+++"):
-            row = line[1:]
-            if row and not row.startswith("#"):
-                grown.append(f"{current}: {row}")
-    return grown
-
-
 PRUNE_TOOLS = ("vulture", "skylos", "mutmut", "pyright")
+SHRINK_AT_BASELINE_ONLY = frozenset({"skylos", "mutmut"})
 
 
 def prune_gone(tool: str, out: Path) -> tuple[list[str], str]:
     """The gone keys for one tool, and where they came from: every <tool>-ratchet.json under `out`
-    (a key keeps the largest count any one record saw), or else a fresh run of the tool when it can
-    run here. Skylos and mutmut are too slow to rerun; pyright's baseline is Linux's, so it reruns
-    only on Linux, and only over the folders the change since engine/base touched."""
+    taken at this checkout's commit or tree (a key keeps the largest count any one record saw;
+    records from another commit are stale and skipped), or else a fresh run of the tool when it
+    can run here. Skylos and mutmut shrink only at the baseline level and the scheduled walk;
+    pyright's baseline is Linux's, so it reruns only on Linux, and only over the folders the
+    change since engine/base touched."""
+    if tool in SHRINK_AT_BASELINE_ONLY:
+        return [], f"{tool} shrinks only at the baseline level and the scheduled walk"
+    at = head()
+    current = {at, tree_of(at)}
     gone: Counter[str] = Counter()
-    records = 0
+    records = stale = 0
     for path in sorted(out.rglob("*-ratchet.json")):
         record = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
-        if record.get("tool") == tool:
-            records += 1
-            gone |= Counter(cast("list[str]", record.get("gone", [])))
-    if records:
-        return sorted(gone.elements()), f"{records} result file(s) in {out.name}"
+        if record.get("tool") != tool:
+            continue
+        if not current & {record.get("sha"), record.get("tree")}:
+            stale += 1
+            continue
+        records += 1
+        gone |= Counter(cast("list[str]", record.get("gone", [])))
+    if records or stale:
+        return sorted(gone.elements()), (
+            f"{records} result file(s) in {out.name}, {stale} stale one(s) skipped"
+        )
     if tool == "vulture":
         return ratchet_verdict("vulture", vulture_findings(), None, covered="all").gone, "a run"
     if tool == "pyright" and sys.platform.startswith("linux"):
