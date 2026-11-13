@@ -579,7 +579,7 @@ PERMANENT_BATTERY_ITEMS: Final[tuple[BatteryItem, ...]] = (
     BatteryItem("mock-data-scan", ("tools/mock_data_scan.py",)),
     BatteryItem(
         "skylos-iac",
-        (".github/workflows/skylos.yml", "qmn/deploy/ci_lane.py", "pyproject.toml"),
+        (".github/workflows/qmx-ci.yml", "qmn/deploy/ci_lane.py", "pyproject.toml"),
     ),
     BatteryItem(
         "vulture",
@@ -588,7 +588,7 @@ PERMANENT_BATTERY_ITEMS: Final[tuple[BatteryItem, ...]] = (
     BatteryItem("qa-requirements-first", ("qa/run_qa_verify.py", "qa/tests")),
     BatteryItem(
         "ubuntu-24.04",
-        (".github/workflows/qmn-ubuntu-24.04.yml", "qmn/deploy/ci_lane.py"),
+        (".github/workflows/qmx-ci.yml", "qmn/deploy/ci_lane.py"),
     ),
     BatteryItem(
         "systemd-check-mode",

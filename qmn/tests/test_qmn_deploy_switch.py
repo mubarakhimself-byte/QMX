@@ -318,7 +318,7 @@ def test_deploy_surface_never_imports_composition_or_trade(
 
 def test_workflow_pins_ubuntu_24_04_never_latest() -> None:
     workflow = (
-        _WORKSPACE / ".github" / "workflows" / "qmn-ubuntu-24.04.yml"
+        _WORKSPACE / ".github" / "workflows" / "qmx-ci.yml"
     ).read_text(encoding="utf-8")
     assert "ubuntu-24.04" in workflow
     assert "runs-on: ubuntu-24.04" in workflow
