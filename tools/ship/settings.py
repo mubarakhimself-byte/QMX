@@ -54,6 +54,12 @@ class Settings:
     ci_wait_timeout_s: int = 43200  # a --wait watcher gives up (exit 2) after this; the run goes on
     ci_find_s: int = 180  # after a dispatch, how long to look for the new run in the listing
     ci_slice_grace_s: int = 3600  # land waits this long after slice_checks for the Linux slice run
+    # U06: headless workers (launch.py)
+    claude: tuple[str, ...] = ("claude",)  # the Claude Code CLI; tests put (python, tests/fake_claude.py) here
+    factory_home: str = "D:/factory"  # the factory repo; FACTORY_HOME overrides it (see launch.factory_home)
+    limit_patterns: tuple[str, ...] = ("usage limit", "rate limit")  # a worker's text holding one ended on a limit
+    limit_backoff_s: int = 1800  # when a limit names no reset time, wait this long
+    max_restarts: int = 3  # infra restarts of one slice before it is parked for him
 
 
 def repo_args(settings: Settings) -> list[str]:

@@ -40,6 +40,7 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `run_report` | `state.json`, `checks/` | `RUN-REPORT.md` | 0, 1 if the counts do not add up |
 | `teardown` | `ARMED.md` | the machine, `ARMED.md` (keeps only what is still there) | 0 all gone, 1 otherwise |
 | `hook` | hook JSON on stdin, `state.json` | nothing | 0 allow, 2 refuse |
+| `spike [--parent\|--child]` | the real `claude` CLI (haiku, three tiny runs) | `workers/spike/SPIKE.md`, `roles/RESULT-SHAPE.md` | 0 all seven probes pass, 1 otherwise |
 
 `bisect-step` is internal: `nightly` hands it to `git bisect run`.
 
@@ -144,6 +145,22 @@ Ids are compared in one spelling, `system|root|class::name`, where the class los
 ### The timed wrapper
 
 Every lint, types and test command runs through `wrapper.run_timed`, and builders use `timed` for their fast checks. Each run gets its own folder under `runs/`, with `TMP`, `TEMP`, `TMPDIR` and each `data_env_vars` folder inside it, deleted afterwards. It sets `PYTHON_KEYRING_BACKEND=keyring.backends.fail.Keyring`, puts `guard/sitecustomize.py` on `PYTHONPATH` (it refuses `Cred*` calls through ctypes), sets the no-prompt git variables, removes `CLAUDE*` and `ANTHROPIC*` variables, closes stdin, and touches `heartbeat/<id>` every `heartbeat_interval_s`. On timeout it stops the whole process tree (`taskkill /T` on Windows, the process group on Linux).
+
+## Workers: headless Claude Code runs
+
+`launch.py` starts every agent as `claude -p` (FACTORY-DESIGN section 11.3) and is the only place that command
+line is built: the role's model and effort, `--settings roles/<file>.json` (the write-guard hook, the depth
+variable and the allow-list), `--permission-mode dontAsk --permission-prompts none`, `--disallowedTools Agent`
+unless the role uses agents, `--add-dir` the program folder and the factory home, a fresh `--session-id`, a
+`--name "<role>: <program> <slice>"`, `--fallback-model` for Fable roles, and `--output-format json`. Never
+`--bare` (that would drop the plan login) and never `bypassPermissions`. The run's environment drops every
+`CLAUDE*` and `ANTHROPIC*` variable of the parent and sets `SHIP_PROGRAM`, `SHIP_ROLE`, `SHIP_KIT` and the depth
+variable. Each run's folder is `workers/<id>/` (`prompt.md`, `started.json`, `stdout.log`, `stderr.log`,
+`result.json`). A result's `kind` is `ok` (the last non-blank line is `READY`, `BLOCKED`, `DONE` or `WAITS`),
+`nocontract`, `limit` (with `limit_reset`), `timeout` or `crash`; `roles/RESULT-SHAPE.md` records the JSON the
+parser reads. Roles live in `roles/roles.toml`. `clock.now()` reads the time from the file `SHIP_FAKE_NOW`
+names, when set. Tests replace `claude` with `tests/fake_claude.py` (rules in the file `FAKE_CLAUDE_SCRIPT`
+names), as `gh` is replaced by `fake_gh.py`. `roles/SPIKE.md` is the spike log from the real machine.
 
 ## CI on GitHub
 
@@ -271,6 +288,11 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `ci_wait_timeout_s` | 43200 | `--wait` gives up (exit 2); the run goes on |
 | `ci_find_s` | 180 | ci start: how long to look for a run it just dispatched |
 | `ci_slice_grace_s` | 3600 | land: how long a pending Linux slice run holds a slice |
+| `claude` | `claude` | launch: the CLI (tests: python and `tests/fake_claude.py`) |
+| `factory_home` | `D:/factory` | launch: `--add-dir`; `FACTORY_HOME` overrides it |
+| `limit_patterns` | `usage limit`, `rate limit` | launch: text that marks a usage-limit ending |
+| `limit_backoff_s` | 1800 | launch: the wait when a limit names no reset time |
+| `max_restarts` | 3 | run, dispatch: infra restarts before a slice is parked for him |
 
 ## Edge cases these scripts own
 

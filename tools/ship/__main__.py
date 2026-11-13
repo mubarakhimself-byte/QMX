@@ -288,6 +288,19 @@ def cmd_gate(a, program, settings):
     return 0
 
 
+# U06: headless launcher and spike
+def cmd_spike(a, program, settings):
+    from ship import spike
+
+    program.dir.mkdir(parents=True, exist_ok=True)
+    (program.workers / "spike").mkdir(parents=True, exist_ok=True)
+    if a.parent:
+        return spike.parent(program)
+    if a.child:
+        return spike.child(program, settings)
+    return _lines(*spike.spike(program, settings))
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -347,6 +360,8 @@ def parser() -> argparse.ArgumentParser:
               (["--by"], {}), (["--words"], {"action": "store_true"}))
     add("gate", cmd_gate, (["name"], {}), (["--by"], {"required": True}), (["--source"], {"required": True}),
         (["--advance"], {"action": "store_true"}))
+    # U06: headless launcher and spike
+    add("spike", cmd_spike, (["--parent"], {"action": "store_true"}), (["--child"], {"action": "store_true"}))
     return p
 
 
