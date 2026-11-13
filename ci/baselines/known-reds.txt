@@ -1,0 +1,57 @@
+# Tests red on pipeline 3061230259. Key: system|unit|test id.
+# A red listed here does not block; any other red does. This list may only shrink.
+# Shards read: suite-linux 2/8, suite-linux 3/8, suite-linux 4/8, suite-linux 5/8, suite-linux 6/8, suite-linux 7/8, suite-linux 8/8.
+# Shards that did not finish, so their reds are not listed: suite-linux 1/8 (failed, ci_quota_exceeded), suite-windows 1/8 (failed, ci_quota_exceeded), suite-windows 2/8 (failed, ci_quota_exceeded), suite-windows 3/8 (failed, ci_quota_exceeded), suite-windows 4/8 (failed, ci_quota_exceeded), suite-windows 5/8 (failed, ci_quota_exceeded), suite-windows 6/8 (failed, ci_quota_exceeded), suite-windows 7/8 (failed, ci_quota_exceeded), suite-windows 8/8 (failed, ci_quota_exceeded).
+# Left out: 126 qma-harness reds caused by GitLab's CI_DEPENDENCY_PROXY_* variables, which test runs no longer see.
+linux|qa/tests/epic_13|qa.tests.epic_13.test_l0_static_build::test_t13_006_tier1_static_gate_ruff_and_pyright
+linux|qmn|qmn.tests.test_app_binding::test_at_the_live_stage_the_node_opens_its_door_with_its_own_grant_store
+linux|qmn|qmn.tests.test_app_binding::test_under_the_shadow_stage_or_none_the_node_reads_no_grant_and_binds_nothing[None]
+linux|qmn|qmn.tests.test_app_binding::test_under_the_shadow_stage_or_none_the_node_reads_no_grant_and_binds_nothing[shadow]
+linux|qmn|qmn.tests.test_app_runtime::test_a_missing_or_changed_staged_file_refuses_deploy_by_name_and_32_mb_deploys
+linux|qmx-agents/apps/qmb|apps.qmb.tests.test_qmb_app::test_the_first_start_click_keeps_qmb_running_at_every_host_start
+linux|qmx-agents/apps/trading-node|apps.trading-node.tests.test_node.FreshNode::test_a_fresh_node_reads_ready_with_no_units_yet
+linux|qmx-agents/apps/trading-node|apps.trading-node.tests.trading_node_app_test::test_an_older_pause_is_superseded_while_an_older_kill_applies
+linux|qmx-agents/apps/trading-node|apps.trading-node.tests.trading_node_app_test::test_every_operation_answers_inside_two_seconds_with_no_errors
+linux|qmx-agents/apps/trading-node|apps.trading-node.tests.trading_node_app_test::test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_job
+linux|qmx-agents/apps/trading-node|apps.trading-node.tests.trading_node_road_test::test_the_app_passes_every_road_stage_and_starts_ready
+linux|qmx-agents/packages/qma-harness|tests.test_launch::test_the_cli_path_starts_with_the_host_interpreter
+linux|qmx-agents/packages/qmx-apps|tests.test_host_facts::test_the_facts_are_in_the_volume_before_the_app_process_exists
+linux|qmx-agents/packages/qmx-apps|tests.test_shipped_apps::test_a_changed_app_folder_has_a_new_version_row
+linux|qmx-agents/packages/qmx-apps|tests.test_shipped_apps::test_each_shipped_app_installs_starts_answers_and_runs_each_job_once[trading-node]
+linux|qmx-agents/packages/qmx-broker|tests.test_oauth::test_the_receiver_forwards_one_code_answers_the_browser_and_stops
+linux|qmx-agents/packages/qmx-control|tests.test_node_update::test_a_drain_that_never_finishes_restarts_nothing
+linux|qmx-agents/packages/qmx-control|tests.test_settings_merge::test_an_in_process_change_that_drops_a_key_removes_it_and_old_keys_survive
+linux|qmx-agents/packages/qmx-control|tests.test_settings_merge::test_the_read_names_every_default_and_a_write_after_it_stores_none
+linux|qmx-agents/packages/qmx-engine|tests.test_zones::test_a_crash_between_the_renames_rolls_forward_at_recover
+linux|qmx-agents/packages/qmx-home|tests.test_rclone_runner::test_a_failure_is_sorted_from_its_exit_code_and_json_log[1-{"level":"error","msg":"googleapi: storageQuotaExceeded"}-full]
+linux|qmx-agents/packages/qmx-home|tests.test_rclone_runner::test_a_failure_is_sorted_from_its_exit_code_and_json_log[1-{"level":"error","msg":"something rclone never said before"}-other]
+linux|qmx-agents/packages/qmx-home|tests.test_rclone_runner::test_a_failure_is_sorted_from_its_exit_code_and_json_log[3-{"level":"error","msg":"error listing: directory not found"}-missing]
+linux|qmx-agents/packages/qmx-home|tests.test_rclone_runner::test_a_failure_is_sorted_from_its_exit_code_and_json_log[5-{"level":"error","msg":"dial tcp 127.0.0.1:9: connectex: refused"}-offline]
+linux|qmx-agents/packages/qmx-home|tests.test_rclone_runner::test_a_failure_is_sorted_from_its_exit_code_and_json_log[7-{"level":"error","msg":"oauth2: \\"invalid_grant\\" token expired"}-signin]
+linux|qmx-agents/packages/qmx-home|tests.test_rclone_runner::test_an_rclone_older_than_the_minimum_is_refused_naming_it
+linux|qmx-agents/packages/qmx-host|tests.test_bring_in::test_a_bring_in_stopped_mid_copy_is_offered_again_into_the_same_folder
+linux|qmx-agents/packages/qmx-host|tests.test_bring_in::test_a_busy_first_start_lock_is_still_409_when_making_or_opening_a_folder
+linux|qmx-agents/packages/qmx-host|tests.test_bring_in::test_a_first_start_in_another_process_makes_the_card_answer_409_even_with_no_appdata
+linux|qmx-agents/packages/qmx-host|tests.test_bring_in::test_two_first_starts_at_once_refuse_the_second
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[clock]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[ctrader-app]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[enable]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[install]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[keys]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[passport]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[round-trip]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[row]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[self-test]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[sign-in]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[signature]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row[waiting]
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_a_wrong_signature_publishes_nothing_and_a_restart_needs_no_new_one
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_one_click_sets_the_node_up_and_ends_on_the_app_request_with_no_sign_in
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node::test_pasting_the_app_id_ticks_the_waiting_step_and_its_later_steps_run
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node_server::test_a_kill_after_each_node_step_and_a_rerun_converge_on_one_place_row
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node_server::test_a_server_is_set_up_with_the_node_and_the_mis_homed_under_its_own_name
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node_server::test_a_wrong_signature_publishes_nothing_and_he_is_asked_again
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node_server::test_chrony_openobserve_and_the_round_trip_run_on_the_server
+linux|qmx-agents/packages/qmx-host|tests.test_connect_node_server::test_his_keys_are_typed_on_the_server_and_never_reach_this_pc
+linux|qmx-agents/packages/qmx-host|tests.test_handover::test_a_stale_lock_left_by_a_killed_card_is_removed_when_the_card_starts
+linux|qmx-agents/packages/qmx-host|tests.test_maintenance::test_the_upkeep_switched_off_never_runs_while_rounds_and_the_drill_still_do

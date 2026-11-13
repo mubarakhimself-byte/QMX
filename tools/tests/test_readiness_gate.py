@@ -1,84 +1,66 @@
-"""The established CI check cannot pass with a missing or unsuccessful native suite."""
+"""The CI checkpoint cannot be green with a missing or unsuccessful deep job.
+
+qmx-ci's deep-verdict job writes the verdict the pull-request gate reads. GitHub runs a job whose
+`if` names no status function only when every job it needs succeeded, so a failed, cancelled or
+skipped deep job leaves no verdict and the gate refuses the pull request.
+"""
 
 from __future__ import annotations
 
-import json
-import os
-import shlex
-import subprocess
-import sys
 from pathlib import Path
+from typing import cast
 
-import pytest
 import yaml
 
-WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/battery.yml"
-MANDATORY = ("backend",)
+WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/qmx-ci.yml"
+DEEP_JOBS = {
+    "lint",
+    "vulture",
+    "skylos",
+    "suite-linux",
+    "suite-windows",
+    "mutmut",
+    "docker-node",
+    "qmn-lane",
+}
+STATUS_FUNCTIONS = ("always()", "success()", "failure()", "cancelled()")
 
 
-def run_gate(raw: str, required: tuple[str, ...] = MANDATORY) -> int:
-    job = "agents" if required == ("agent-suites",) else "check"
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    definition = document["jobs"][job]
-    event = "==" if job == "agents" else "!="
-    assert definition["if"] == f"${{{{ always() && github.event_name {event} 'schedule' }}}}"
-    assert definition["needs"] == list(required)
-    assert len(definition["steps"]) == 1
-    step = definition["steps"][0]
-    assert step["if"] == "${{ always() }}"
-    assert step["env"]["NEEDS_JSON"] == "${{ toJSON(needs) }}"
-    assert step["env"]["REQUIRED_JOBS"].split() == list(required)
-    # Execute the actual workflow Python body using this host's interpreter.
-    prefix, body = step["run"].split("python3 - <<'PY'\n", 1)
-    assert prefix == ""
-    code, suffix = body.rsplit("\nPY", 1)
-    assert not suffix.strip()
-    return subprocess.run(
-        [sys.executable, "-B", "-c", code],
-        env=dict(os.environ, NEEDS_JSON=raw, REQUIRED_JOBS=" ".join(required)),
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=20,
-    ).returncode
+def _document() -> dict[object, object]:
+    return cast("dict[object, object]", yaml.safe_load(WORKFLOW.read_text(encoding="utf-8")))
 
 
-def test_native_pr_matrix_and_nightly_agent_matrix_must_complete() -> None:
-    payload = {name: {"result": "success"} for name in MANDATORY}
-    assert run_gate(json.dumps(payload)) == 0
-    assert run_gate(json.dumps({"agent-suites": {"result": "success"}}), ("agent-suites",)) == 0
+def _jobs() -> dict[str, dict[str, object]]:
+    return cast("dict[str, dict[str, object]]", _document()["jobs"])
 
 
-def test_nested_test_environment_uses_frozen_workspace_without_retired_extra() -> None:
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    steps = document["jobs"]["agent-suites"]["steps"]
-    sync = next(step for step in steps if step.get("id") == "sync")
-    command = shlex.split(sync["run"])
-    assert command[:2] == ["uv", "sync"]
-    assert "--frozen" in command and "--all-packages" in command
-    assert "--extra" not in command
-    for step in steps:
-        run = shlex.split(step.get("run", ""))
-        if run[:2] == ["uv", "run"]:
-            assert "--no-sync" in run, step["name"]
+def test_the_verdict_needs_every_deep_job_and_each_of_them_runs_at_deep() -> None:
+    jobs = _jobs()
+    assert set(cast("list[str]", jobs["deep-verdict"]["needs"])) == {"level", *DEEP_JOBS}
+    running_at_deep = {
+        name
+        for name, job in jobs.items()
+        if name != "deep-verdict" and '"deep"' in str(job.get("if", ""))
+    }
+    assert running_at_deep == DEEP_JOBS
 
 
-@pytest.mark.parametrize("job", MANDATORY)
-@pytest.mark.parametrize("result", ["failure", "cancelled", "skipped", "unknown"])
-def test_unsuccessful_prerequisite_is_never_green(job: str, result: str) -> None:
-    payload = {name: {"result": "success"} for name in MANDATORY}
-    payload[job]["result"] = result
-    assert run_gate(json.dumps(payload)) == 1
+def test_the_verdict_is_written_only_when_every_needed_job_succeeded() -> None:
+    condition = str(_jobs()["deep-verdict"]["if"])
+    assert condition == "needs.level.outputs.level == 'deep'"
+    assert not any(function in condition for function in STATUS_FUNCTIONS)
 
 
-@pytest.mark.parametrize("job", MANDATORY)
-def test_missing_native_suite_or_scan_is_never_green(job: str) -> None:
-    payload = {name: {"result": "success"} for name in MANDATORY if name != job}
-    assert run_gate(json.dumps(payload)) == 1
-
-
-@pytest.mark.parametrize(
-    "raw", ["", "not-json", "[]", "null", '{"backend": true}', '{"extra": {"result": "success"}}']
-)
-def test_unreadable_or_malformed_results_are_never_green(raw: str) -> None:
-    assert run_gate(raw) == 1
+def test_the_gate_runs_on_pull_requests_into_engine_base_and_reads_the_verdict() -> None:
+    # YAML 1.1 reads the bare key `on` as True.
+    triggers = cast("dict[str, dict[str, list[str]]]", _document()[True])
+    assert triggers["pull_request"]["branches"] == ["engine/base"]
+    jobs = _jobs()
+    gate_steps = cast("list[dict[str, str]]", jobs["gate"]["steps"])
+    runs = [s["run"] for s in gate_steps if "run" in s]
+    # The gate runs the base commit's own driver, never the pull request's copy.
+    assert 'git checkout "$BASE_SHA" -- tools/ci .github/actions' in runs[0]
+    assert runs[1:] == ["python tools/ci/qci.py gate"]
+    verdict_steps = cast("list[dict[str, dict[str, str]]]", jobs["deep-verdict"]["steps"])
+    uploads = [s["with"]["name"] for s in verdict_steps if "name" in s.get("with", {})]
+    assert uploads == ["deep-verdict"]

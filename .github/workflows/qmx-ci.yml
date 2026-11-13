@@ -1,0 +1,520 @@
+# QMX CI on GitHub Actions, the only pipeline.
+# Which jobs a run holds follows its level; what each job does at that level lives in
+# tools/ci/qci.py. Levels, and what starts each:
+#   slice    push to slice/**: Linux only. Format, lint and types of touched folders, touched tests,
+#            fail-at-parent, Vulture and Skylos (only new findings in changed files block).
+#   land     push to build/**: touched tests on Linux and Windows.
+#   deep     a checkpoint, started by hand: `gh workflow run qmx-ci.yml --ref <branch>`. The full
+#            suite on Linux and Windows, lint, Vulture, Skylos, and mutmut on functions changed
+#            since engine/base. Ends in deep-verdict, whose artifact the pull-request gate reads.
+#            The dispatch input `level` starts any other level by hand instead.
+#   gate     pull request into engine/base, run with the base commit's own CI driver: fails when
+#            the change loosens the ratchet (tools/ci/guard.py), and passes only if a green deep run
+#            tested its exact head; it reruns nothing that run ran. A change to documentation only (docs/**,
+#            contracts/CHANGELOG.md, *.md) passes on docs-lint instead.
+#   release  tag v*: everything in deep, where known reds block too, plus a smoke start of the host
+#            on Linux and Windows and release-verdict: the tag must sit on engine/base or a
+#            release/v* branch, and a green deep run must vouch for the commit.
+#   walk     the nightly schedule: one part of the whole-repo mutmut walk, chosen by run number.
+#            GitHub runs schedules from the default branch's copy of this file only.
+#   baseline push to baseline/**: Vulture, pyright (the lint job) and Skylos (one part per
+#            top-level folder, joined by skylos-baseline) rewrite ci/baselines (artifact
+#            ci-out-*/baselines), and mutmut runs the modules in ci/baselines/mutmut-modules.txt.
+# Every job uploads its ci-out/ folder as the artifact ci-out-<job>[-<shard>]. The summary job runs
+# last at every level, whatever failed, and uploads `summary` (summary.json and summary.md).
+# Runner images are pinned (ubuntu-24.04, windows-2025), never -latest. This is the only workflow:
+# it took over the old battery, skylos, docker-nodes and qmn-ubuntu-24.04 workflows.
+
+name: qmx-ci
+run-name: >-
+  ${{ inputs.level || (github.event_name == 'pull_request' && 'gate') || (github.event_name == 'schedule' && 'walk')
+  || (startsWith(github.ref, 'refs/tags/v') && 'release') || (startsWith(github.ref, 'refs/heads/slice/') && 'slice')
+  || (startsWith(github.ref, 'refs/heads/build/') && 'land') || (startsWith(github.ref, 'refs/heads/baseline/') && 'baseline')
+  || 'deep' }} ${{ github.head_ref || github.ref_name }}
+
+on:
+  push:
+    branches: ['slice/**', 'build/**', 'baseline/**']
+    tags: ['v*']
+  pull_request:
+    branches: [engine/base]
+  workflow_dispatch:
+    inputs:
+      level:
+        description: Level to run (deep is the checkpoint the pull-request gate reads)
+        type: choice
+        options: [deep, release, walk, baseline, land, slice]
+        default: deep
+  schedule:
+    - cron: "23 3 * * *"
+
+# Pushes and pull requests cancel the superseded run on the same ref. A hand-started run, a tag and
+# a scheduled walk each get their own group, so nothing ever cancels a deep run.
+concurrency:
+  group: >-
+    qmx-ci-${{ github.event_name }}-${{ github.ref }}${{ (github.event_name == 'workflow_dispatch'
+    || github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')) && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) || github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  QMX_LEVEL: >-
+    ${{ inputs.level || (github.event_name == 'pull_request' && 'gate') || (github.event_name == 'schedule' && 'walk')
+    || (startsWith(github.ref, 'refs/tags/v') && 'release') || (startsWith(github.ref, 'refs/heads/slice/') && 'slice')
+    || (startsWith(github.ref, 'refs/heads/build/') && 'land') || (startsWith(github.ref, 'refs/heads/baseline/') && 'baseline')
+    || 'deep' }}
+  # On a pull request GITHUB_SHA is the merge commit; the commit under review is the head.
+  QMX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  QMX_BEFORE_SHA: ${{ github.event.before }}
+  # The branch under test, for the ratchet guard (tests run without the GITHUB_* variables).
+  QMX_REF: ${{ github.head_ref || github.ref_name }}
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  UV_VERSION: "0.12.6"
+  UV_LINK_MODE: copy
+  UV_PYTHON_DOWNLOADS: automatic
+
+jobs:
+  level:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      level: ${{ steps.pick.outputs.level }}
+    steps:
+      - id: pick
+        run: |
+          echo "level=$QMX_LEVEL head=$QMX_HEAD_SHA before=$QMX_BEFORE_SHA"
+          echo "level=$QMX_LEVEL" >> "$GITHUB_OUTPUT"
+
+  # Format, lint and the scanners are strict; types are a ratchet against ci/baselines/pyright.txt.
+  # At level baseline only types run, and they rewrite pyright.txt (artifact ci-out-lint/baselines).
+  lint:
+    needs: level
+    if: contains(fromJSON('["slice","deep","release","baseline"]'), needs.level.outputs.level)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - &checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - &setup
+        uses: ./.github/actions/qmx-setup
+      - run: python tools/ci/qci.py lint
+      - &upload
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        if: always()
+        with:
+          name: ci-out-${{ github.job }}${{ matrix.shard && format('-{0}', matrix.shard) || '' }}
+          path: ci-out/
+          retention-days: 30
+          if-no-files-found: warn
+
+  vulture:
+    needs: level
+    if: contains(fromJSON('["slice","deep","release","baseline"]'), needs.level.outputs.level)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py vulture
+      - *upload
+
+  # Slice and deep scan only the change (--diff-base). The baseline scans one top-level folder per
+  # job (skylos-part) and skylos-baseline joins the parts into ci/baselines/skylos.txt.
+  skylos:
+    needs: level
+    if: contains(fromJSON('["slice","deep","release"]'), needs.level.outputs.level)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py skylos
+      - *upload
+
+  skylos-part:
+    needs: level
+    if: needs.level.outputs.level == 'baseline'
+    name: skylos-part ${{ matrix.folder }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        folder: [qmb, qmn, qml, packages, qmx-agents, tools, apps, scripts, extensions, examples, release]
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py skylos-part --part ${{ matrix.folder }}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        if: always()
+        with:
+          name: ci-out-skylos-part-${{ matrix.folder }}
+          path: ci-out/
+          retention-days: 30
+          if-no-files-found: warn
+
+  skylos-baseline:
+    needs: [level, skylos-part]
+    if: needs.level.outputs.level == 'baseline'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - *checkout
+      - *setup
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        with:
+          pattern: ci-out-skylos-part-*
+          path: ci-out/parts
+      - run: python tools/ci/qci.py skylos-merge --parts ci-out/parts
+      - *upload
+
+  fail-at-parent:
+    needs: level
+    if: needs.level.outputs.level == 'slice'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py fail-at-parent
+      - *upload
+
+  tests-linux:
+    needs: level
+    if: contains(fromJSON('["slice","land"]'), needs.level.outputs.level)
+    name: tests-linux ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      QMX_SHARD: ${{ matrix.shard }}
+      QMX_SHARDS: 3
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py tests --os linux
+      - *upload
+
+  tests-windows:
+    needs: level
+    if: needs.level.outputs.level == 'land'
+    name: tests-windows ${{ matrix.shard }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      QMX_SHARD: ${{ matrix.shard }}
+      QMX_SHARDS: 3
+    steps:
+      - &longpaths
+        name: Allow long paths
+        run: git config --system core.longpaths true
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py tests --os windows
+      - *upload
+
+  suite-linux:
+    needs: level
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
+    name: suite-linux ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      QMX_SHARD: ${{ matrix.shard }}
+      QMX_SHARDS: 8
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py tests --os linux
+      - *upload
+
+  suite-windows:
+    needs: level
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
+    name: suite-windows ${{ matrix.shard }}
+    runs-on: windows-2025
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      QMX_SHARD: ${{ matrix.shard }}
+      QMX_SHARDS: 8
+    steps:
+      - *longpaths
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py tests --os windows
+      - *upload
+
+  mutmut:
+    needs: level
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
+    name: mutmut ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      QMX_SHARD: ${{ matrix.shard }}
+      QMX_SHARDS: 2
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py mutmut
+      - *upload
+
+  mutmut-walk:
+    needs: level
+    if: contains(fromJSON('["walk","baseline"]'), needs.level.outputs.level)
+    name: mutmut-walk ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      QMX_SHARD: ${{ matrix.shard }}
+      QMX_SHARDS: 3
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py mutmut
+      - *upload
+
+  smoke-linux:
+    needs: level
+    if: needs.level.outputs.level == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py smoke
+      - *upload
+
+  smoke-windows:
+    needs: level
+    if: needs.level.outputs.level == 'release'
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - *longpaths
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py smoke
+      - *upload
+
+  # A fresh Ubuntu VM provisioned twice by the node bootstrap, then the Docker app tests. Deep and
+  # release only: the gate reads the deep run's verdict and does not run it again.
+  docker-node:
+    needs: level
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - *checkout
+      - name: Provision the fresh Ubuntu VM twice
+        shell: bash
+        run: |
+          revision=$(git rev-parse HEAD)
+          sudo install -d -m 700 /opt/qmx-deploy
+          git archive --format=tar "$revision" | sudo tee /opt/qmx-deploy/source.tar > /dev/null
+          sed "s/@REVISION@/$revision/g" qmx-agents/packages/qmx-control/src/qmx_control/node-bootstrap.sh > "$RUNNER_TEMP/bootstrap.sh"
+          sudo bash "$RUNNER_TEMP/bootstrap.sh"
+          sudo bash "$RUNNER_TEMP/bootstrap.sh"
+          sudo systemctl is-active docker tailscaled qmx-ship.timer
+          sudo systemctl is-enabled qmx-node
+          test -s /etc/systemd/system/qmx-node.service
+          rclone version
+          /usr/local/bin/uv --version
+      - name: Verify checklist without live enrollment or subscriptions
+        shell: bash
+        run: |
+          sudo /opt/qmx/qmx-agents/.venv/bin/qmx node verify > "$RUNNER_TEMP/checklist.txt" && exit 1 || status=$?
+          test "$status" = 1
+          cat "$RUNNER_TEMP/checklist.txt"
+          grep '^PASS docker' "$RUNNER_TEMP/checklist.txt"
+          grep '^PASS shipping' "$RUNNER_TEMP/checklist.txt"
+          grep '^FAIL cliproxy' "$RUNNER_TEMP/checklist.txt"
+      - name: Build, run, isolate, restart and restore the example
+        env:
+          QMX_TEST_DOCKER: '1'
+        run: /usr/local/bin/uv run --project qmx-agents --package qmx-apps --frozen pytest qmx-agents/packages/qmx-apps/tests/test_docker.py -n 0 -q
+
+  # The trading node's Linux lane (TN-16 / NFR-18/21 / DEC-0201): Linux typing of qmn, the
+  # unit-file and IaC scan, check-mode boot, the scratch-credstore LoadCredentialEncrypted contract,
+  # an isolated clean install, and the switch / node-rollback fixture proof.
+  qmn-lane:
+    needs: level
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - *checkout
+      - *setup
+      - name: Sync the workspace (default groups)
+        run: uv sync --frozen
+      - name: Linux typing (pythonPlatform=Linux) for qmn
+        run: uv run pyright --pythonplatform Linux --project pyproject.toml qmn/src qmn/deploy
+      - name: Unit-file / IaC scan + check-mode + scratch-credstore + upgrade contract
+        if: ${{ !cancelled() }}
+        run: uv run python qmn/deploy/ci_lane.py --out "$RUNNER_TEMP/qmn-ci-lane.json"
+      - name: Isolated clean install (qmn)
+        if: ${{ !cancelled() }}
+        run: uv run python qmn/deploy/ci_lane.py --isolated-install --out "$RUNNER_TEMP/qmn-ci-lane-isolated.json"
+      - name: Switch / rollback fixture proof (atomic current flip, paired record)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          ROOT="$RUNNER_TEMP/opt-qmx"
+          mkdir -p "$ROOT"
+          uv run python qmn/deploy/switch.py node-switch --commit aaaaaaaa --config-version cfg-a --fixture-root "$ROOT" --out "$RUNNER_TEMP/switch-a.json"
+          uv run python qmn/deploy/switch.py node-switch --commit bbbbbbbb --config-version cfg-b --fixture-root "$ROOT" --out "$RUNNER_TEMP/switch-b.json"
+          uv run python qmn/deploy/switch.py node-rollback --fixture-root "$ROOT" --out "$RUNNER_TEMP/rollback.json"
+          python - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "opt-qmx"
+          current = root / "current"
+          assert current.exists() or current.is_symlink(), current
+          if current.is_symlink():
+              commit = pathlib.Path(os.readlink(current)).name
+          else:
+              commit = current.read_text(encoding="utf-8").strip()
+          assert commit == "aaaaaaaa", commit
+          record = json.loads((root / "deployments" / "aaaaaaaa.json").read_text(encoding="utf-8"))
+          assert record["commit"] == "aaaaaaaa"
+          assert record["config_version"] == "cfg-a"
+          assert (root / "trees" / "aaaaaaaa").is_dir()
+          assert (root / "trees" / "bbbbbbbb").is_dir(), "previous tree must stay recoverable"
+          print("switch/rollback fixture proof ok")
+          PY
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        if: always()
+        with:
+          name: ci-out-qmn-lane
+          path: |
+            ${{ runner.temp }}/qmn-ci-lane.json
+            ${{ runner.temp }}/qmn-ci-lane-isolated.json
+            ${{ runner.temp }}/switch-a.json
+            ${{ runner.temp }}/switch-b.json
+            ${{ runner.temp }}/rollback.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  # Runs only when every deep job above succeeded (no status function in `if` means success()).
+  deep-verdict:
+    needs: [level, lint, vulture, skylos, suite-linux, suite-windows, mutmut, docker-node, qmn-lane]
+    if: needs.level.outputs.level == 'deep'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
+      - *setup
+      - run: python tools/ci/qci.py verdict
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        with:
+          name: deep-verdict
+          path: ci-out/verdict.json
+          retention-days: 90
+          if-no-files-found: error
+
+  gate:
+    needs: level
+    if: needs.level.outputs.level == 'gate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - *checkout
+      # The gate runs trusted code: the CI driver, its guard and the setup action come from the
+      # pull request's base commit, never from the change under review.
+      - name: Use the base commit's CI driver
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if ! git cat-file -e "$BASE_SHA:tools/ci/qci.py"; then
+            echo "the base commit $BASE_SHA has no CI driver, so this gate cannot vouch for the change"
+            exit 1
+          fi
+          rm -rf tools/ci .github/actions
+          git checkout "$BASE_SHA" -- tools/ci .github/actions
+      - *setup
+      - run: python tools/ci/qci.py gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # A tag may be released only from engine/base or a release/v* branch, and only when a green deep
+  # run vouches for the tagged commit.
+  release-verdict:
+    needs: level
+    if: needs.level.outputs.level == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py release-verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Always the last job: one summary of the run from every job's artifact (factory design 11.11).
+  # It reports and never fails the run; deep-verdict stays the green stamp the gate reads.
+  summary:
+    needs: [level, lint, vulture, skylos, skylos-part, skylos-baseline, fail-at-parent, tests-linux, tests-windows, suite-linux, suite-windows, mutmut, mutmut-walk, smoke-linux, smoke-windows, docker-node, qmn-lane, deep-verdict, gate, release-verdict]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - *checkout
+      - *setup
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        continue-on-error: true
+        with:
+          pattern: ci-out-*
+          path: ci-out/artifacts
+      - run: python tools/ci/qci.py summary --artifacts ci-out/artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QMX_NEEDS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        if: always()
+        with:
+          name: summary
+          path: |
+            ci-out/summary.json
+            ci-out/summary.md
+          retention-days: 90
+          if-no-files-found: error

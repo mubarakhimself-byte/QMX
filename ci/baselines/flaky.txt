@@ -1,0 +1,3 @@
+# Tests flaky on GitHub Actions (red, then green on the rerun). Key: system|unit|test id.
+# A flaky test listed here does not block (except at a release); any other flaky test does.
+# Empty until the first baseline retake (pull_reds.py) records today's flaky tests. This list may only shrink.

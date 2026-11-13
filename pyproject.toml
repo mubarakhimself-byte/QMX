@@ -117,6 +117,8 @@ dev = [
     "pytest-cov>=7,<8",
     "poethepoet==0.48.0",
     "pytest-xdist>=3.8,<4",
+    # CI passes --timeout 300, so a hanging test becomes a named red.
+    "pytest-timeout>=2.3,<3",
 ]
 
 # The QMF store engines, provisioned by default (see `default-groups` above).
@@ -212,6 +214,8 @@ pythonpath = [
     # Workspace tools (the tier-1 static scanners) import as top-level modules so
     # `poe test-tools` can measure their coverage (Story 1.7).
     "tools",
+    # The CI driver's modules (tools/ci), imported by tools/tests/test_ci_driver.py.
+    "tools/ci",
 ]
 
 [tool.ruff]
@@ -324,6 +328,7 @@ extraPaths = [
     "qmn/src",
     # Workspace tools import as top-level modules (see pytest pythonpath above).
     "tools",
+    "tools/ci",
 ]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
