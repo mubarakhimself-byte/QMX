@@ -86,7 +86,7 @@ def write_baseline(path: Path, findings: Iterable[Finding], header: str) -> None
 
 
 def write_junit(path: Path, suite: str, findings: list[Finding]) -> None:
-    """One failed test case per blocking new finding, so GitLab's test report lists them."""
+    """One failed test case per blocking new finding, so a test report lists them."""
     path.parent.mkdir(parents=True, exist_ok=True)
     blocking = [f for f in findings if f.blocking]
     cases = (

@@ -1,4 +1,4 @@
-# QMX CI on GitHub Actions (primary; .gitlab-ci.yml is the fallback and calls the same code).
+# QMX CI on GitHub Actions, the only pipeline.
 # Which jobs a run holds follows its level; what each job does at that level lives in
 # tools/ci/qci.py. Levels, and what starts each:
 #   slice    push to slice/**: Linux only. Format, lint and types of touched folders, touched tests,
@@ -8,10 +8,12 @@
 #            suite on Linux and Windows, lint, Vulture, Skylos, and mutmut on functions changed
 #            since engine/base. Ends in deep-verdict, whose artifact the pull-request gate reads.
 #            The dispatch input `level` starts any other level by hand instead.
-#   gate     pull request into engine/base: passes only if a green deep run tested its head. Also
-#            the Docker node check (only when the change touches the node or the apps) and the qmn
-#            lane, which deep runs too.
-#   release  tag v*: everything in deep plus a smoke start of the host on Linux and Windows.
+#   gate     pull request into engine/base: passes only if a green deep run tested its exact head;
+#            it reruns nothing that run ran. A change to documentation only (docs/**,
+#            contracts/CHANGELOG.md, *.md) passes on docs-lint instead.
+#   release  tag v*: everything in deep, where known reds block too, plus a smoke start of the host
+#            on Linux and Windows and release-verdict: the tag must sit on engine/base or a
+#            release/v* branch, and a green deep run must vouch for the commit.
 #   walk     the nightly schedule: one part of the whole-repo mutmut walk, chosen by run number.
 #            GitHub runs schedules from the default branch's copy of this file only.
 #   baseline push to baseline/**: Vulture, pyright (the lint job) and Skylos (one part per
@@ -323,29 +325,16 @@ jobs:
       - run: python tools/ci/qci.py smoke
       - *upload
 
-  # A fresh Ubuntu VM provisioned twice by the node bootstrap, then the Docker app tests. At the gate
-  # it runs only when the change touches the node, the apps or this file.
+  # A fresh Ubuntu VM provisioned twice by the node bootstrap, then the Docker app tests. Deep and
+  # release only: the gate reads the deep run's verdict and does not run it again.
   docker-node:
     needs: level
-    if: contains(fromJSON('["gate","deep"]'), needs.level.outputs.level)
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - *checkout
-      - name: Does this change touch the node or the apps?
-        id: touch
-        shell: bash
-        run: |
-          if [ "$QMX_LEVEL" != gate ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          git diff --name-only origin/engine/base...HEAD > "$RUNNER_TEMP/changed.txt"
-          if grep -qE '^(qmx-agents/packages/qmx-(apps|control)/|qmx-agents/uv\.lock$|qmx-agents/pyproject\.toml$|examples/apps/|\.github/workflows/qmx-ci\.yml$)' "$RUNNER_TEMP/changed.txt"; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "no node or app file changed; nothing to check"
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Provision the fresh Ubuntu VM twice
-        if: steps.touch.outputs.run == 'true'
         shell: bash
         run: |
           revision=$(git rev-parse HEAD)
@@ -360,7 +349,6 @@ jobs:
           rclone version
           /usr/local/bin/uv --version
       - name: Verify checklist without live enrollment or subscriptions
-        if: steps.touch.outputs.run == 'true'
         shell: bash
         run: |
           sudo /opt/qmx/qmx-agents/.venv/bin/qmx node verify > "$RUNNER_TEMP/checklist.txt" && exit 1 || status=$?
@@ -370,7 +358,6 @@ jobs:
           grep '^PASS shipping' "$RUNNER_TEMP/checklist.txt"
           grep '^FAIL cliproxy' "$RUNNER_TEMP/checklist.txt"
       - name: Build, run, isolate, restart and restore the example
-        if: steps.touch.outputs.run == 'true'
         env:
           QMX_TEST_DOCKER: '1'
         run: /usr/local/bin/uv run --project qmx-agents --package qmx-apps --frozen pytest qmx-agents/packages/qmx-apps/tests/test_docker.py -n 0 -q
@@ -380,7 +367,7 @@ jobs:
   # an isolated clean install, and the switch / node-rollback fixture proof.
   qmn-lane:
     needs: level
-    if: contains(fromJSON('["gate","deep"]'), needs.level.outputs.level)
+    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -463,18 +450,33 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
-        with:
-          persist-credentials: false
+      - *checkout
       - *setup
       - run: python tools/ci/qci.py gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # A tag may be released only from engine/base or a release/v* branch, and only when a green deep
+  # run vouches for the tagged commit.
+  release-verdict:
+    needs: level
+    if: needs.level.outputs.level == 'release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py release-verdict
         env:
           GH_TOKEN: ${{ github.token }}
 
   # Always the last job: one summary of the run from every job's artifact (factory design 11.11).
   # It reports and never fails the run; deep-verdict stays the green stamp the gate reads.
   summary:
-    needs: [level, lint, vulture, skylos, skylos-part, skylos-baseline, fail-at-parent, tests-linux, tests-windows, suite-linux, suite-windows, mutmut, mutmut-walk, smoke-linux, smoke-windows, docker-node, qmn-lane, deep-verdict, gate]
+    needs: [level, lint, vulture, skylos, skylos-part, skylos-baseline, fail-at-parent, tests-linux, tests-windows, suite-linux, suite-windows, mutmut, mutmut-walk, smoke-linux, smoke-windows, docker-node, qmn-lane, deep-verdict, gate, release-verdict]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 15

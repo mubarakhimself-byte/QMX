@@ -1,6 +1,6 @@
 """The CI driver's planning: which tests a change selects, how shards split, which findings are new
 against a baseline, which functions mutmut mutates, how JUnit outcomes are read, which run facts it
-takes from GitHub Actions, GitLab or a laptop, and when the pull-request gate passes."""
+takes from GitHub Actions or a laptop, and when the pull-request gate and a release pass."""
 
 from __future__ import annotations
 
@@ -222,22 +222,9 @@ def test_a_github_push_reads_its_sha_and_before_and_a_new_branch_has_no_before()
     assert ci_host.read({**env, "QMX_BEFORE_SHA": "0" * 40}).before is None
 
 
-def test_gitlab_facts_still_come_from_its_own_variables() -> None:
-    facts = ci_host.read(
-        {
-            "GITLAB_CI": "true",
-            "CI_COMMIT_SHA": HEAD,
-            "CI_COMMIT_BEFORE_SHA": "0" * 40,
-            "CI_NODE_INDEX": "2",
-            "CI_NODE_TOTAL": "3",
-            "CI_PIPELINE_IID": "7",
-            "CI_COMMIT_REF_NAME": "slice/x",
-            "CI_PIPELINE_ID": "3061230259",
-        }
-    )
-    assert facts == ci_host.RunFacts(
-        ci_host.Host.GITLAB, HEAD, None, 2, 3, 7, "slice/x", "3061230259"
-    )
+def test_gitlab_variables_alone_are_a_laptop_now() -> None:
+    facts = ci_host.read({"GITLAB_CI": "true", "CI_COMMIT_SHA": HEAD, "CI_NODE_INDEX": "2"})
+    assert facts.host == ci_host.Host.LAPTOP
 
 
 def test_a_laptop_has_one_shard_and_reads_head_from_git() -> None:
@@ -716,3 +703,68 @@ def test_prune_removes_a_gone_key_and_keeps_the_rest_in_order(
         "# header\nz.py|v|1\nm.py|v|2\n"
     )
     assert "PRUNED vulture 1" in capsys.readouterr().out
+
+
+# ---- the gate reruns nothing; a release allows no red --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("changed", "checks"),
+    [
+        (["docs/a.md", "contracts/CHANGELOG.md", "qmn/README.md", "docs/img.png"], ("docs-lint",)),
+        (["docs/a.md", "qmn/src/qmn/a.py"], ("deep-verdict",)),
+        (["contracts/api.json"], ("deep-verdict",)),
+        ([], ("deep-verdict",)),
+    ],
+    ids=["docs-only", "docs-and-code", "contract", "nothing"],
+)
+def test_a_docs_only_change_needs_only_docs_lint_at_the_gate(
+    changed: list[str], checks: tuple[str, ...]
+) -> None:
+    assert qci.gate_checks(changed) == checks
+
+
+def test_the_gate_level_runs_the_gate_alone() -> None:
+    assert qci.level_jobs(WORKFLOW, qci.Level.GATE) == ["gate"]
+    for lvl in (qci.Level.DEEP, qci.Level.RELEASE):
+        assert {"docker-node", "qmn-lane"} <= set(qci.level_jobs(WORKFLOW, lvl))
+
+
+def test_docs_lint_finds_a_broken_link_and_a_conflict_marker(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "there.md").write_text("# there\n", "utf-8")
+    (tmp_path / "docs" / "a.md").write_text(
+        "[ok](there.md#top) [web](https://x.org/y) [anchor](#here) [root](/docs/there.md)\n"
+        "[gone](missing.md)\n<<<<<<< HEAD\n",
+        "utf-8",
+    )
+    found = qci.docs_findings(["docs/a.md", "docs/there.md", "docs/img.png"], tmp_path)
+    assert [f.text() for f in found] == [
+        "docs/a.md:3: [docs-lint] merge-conflict marker",
+        "docs/a.md:2: [docs-lint] broken link missing.md",
+    ]
+
+
+@pytest.mark.parametrize(("level", "rc"), [("release", 1), ("deep", 0)])
+def test_a_known_red_blocks_a_release_but_not_a_deep_run(
+    level: str, rc: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _verdict_case(tmp_path, monkeypatch)
+    monkeypatch.setenv("QMX_LEVEL", level)
+    (tmp_path / "baselines").mkdir()
+    (tmp_path / "baselines" / "known-reds.txt").write_text("linux|qmn|t::old\n", "utf-8")
+    assert qci.tests_verdict("linux-1", ["linux|qmn|t::old"], []) == rc
+
+
+def test_a_release_must_sit_on_engine_base_and_have_a_green_deep_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, base = _repo(tmp_path)
+    at = _commit(root, "v.txt", "# header\n")
+    qci.git("branch", "side", base, cwd=root)
+    monkeypatch.setattr(qci, "REPO", root)
+    assert qci.release_problems(at, ["refs/heads/main"], deep_ok=True) == []
+    assert qci.release_problems(at, ["refs/heads/side"], deep_ok=False) == [
+        f"{at[:10]} is not on engine/base or a release/v* branch (checked: refs/heads/side)",
+        f"no green deep run vouches for {at[:10]}",
+    ]

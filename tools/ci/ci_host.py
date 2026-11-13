@@ -1,6 +1,6 @@
 """Where a CI job runs, and the facts about its run that qci needs.
 
-GitHub Actions is the primary host, GitLab the fallback, and a laptop the default. Every other
+GitHub Actions is the host, and a laptop the default. Every other
 module reads these facts from `read()` and never from a host's own variables, so a new host is one
 more branch here.
 
@@ -18,7 +18,6 @@ from collections.abc import Mapping
 
 class Host(enum.StrEnum):
     GITHUB = "github"
-    GITLAB = "gitlab"
     LAPTOP = "laptop"
 
 
@@ -59,17 +58,6 @@ def read(env: Mapping[str, str]) -> RunFacts:
             number=_int(env.get("GITHUB_RUN_NUMBER"), 0),
             ref=env.get("GITHUB_HEAD_REF") or env.get("GITHUB_REF_NAME", ""),
             run_id=env.get("GITHUB_RUN_ID", ""),
-        )
-    if env.get("GITLAB_CI") == "true":
-        return RunFacts(
-            host=Host.GITLAB,
-            head=env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_SHA") or env.get("CI_COMMIT_SHA") or None,
-            before=_sha(env.get("CI_COMMIT_BEFORE_SHA")),
-            shard=_int(env.get("CI_NODE_INDEX"), 1),
-            shards=_int(env.get("CI_NODE_TOTAL"), 1),
-            number=_int(env.get("CI_PIPELINE_IID"), 0),
-            ref=env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME") or env.get("CI_COMMIT_REF_NAME", ""),
-            run_id=env.get("CI_PIPELINE_ID", ""),
         )
     return RunFacts(
         host=Host.LAPTOP,

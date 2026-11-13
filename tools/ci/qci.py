@@ -1,6 +1,6 @@
 """The one entry point every CI job calls: `python tools/ci/qci.py <job>`.
 
-`.github/workflows/qmx-ci.yml` (and the fallback `.gitlab-ci.yml`) decides which jobs a run holds,
+`.github/workflows/qmx-ci.yml` decides which jobs a run holds,
 from `QMX_LEVEL`. This file decides what each job does at that level: which commit it compares
 against, which tests a shard runs, and which findings are new. Every job writes what it found under
 `ci-out/`, JUnit XML under `ci-out/junit/`. The host's own facts (head, shard, run number) come
@@ -94,7 +94,7 @@ class Level(enum.StrEnum):
     SLICE = "slice"  # push to slice/**
     LAND = "land"  # push to build/**
     DEEP = "deep"  # a checkpoint (stop point), started by hand: `gh workflow run qmx-ci.yml`
-    GATE = "gate"  # pull request (GitLab: merge request) into engine/base
+    GATE = "gate"  # pull request into engine/base
     RELEASE = "release"  # tag v*
     WALK = "walk"  # one part of the scheduled whole-repo mutation walk
     BASELINE = "baseline"  # rewrite ci/baselines from this commit; the files are job artifacts
@@ -500,8 +500,13 @@ def split_flaky(
 def tests_verdict(name: str, reds: list[str], crashed: list[str], flaky: Sequence[str] = ()) -> int:
     """Reds listed in ci/baselines/known-reds.txt (red on engine/base when it was taken) are
     reported and do not block; any other red, or a pytest that crashed, does. Flaky tests (red,
-    then green on the rerun) are printed, kept in flaky-<name>.txt, and do not block."""
-    known = set(ratchet.read_baseline(BASELINES / "known-reds.txt"))
+    then green on the rerun) are printed, kept in flaky-<name>.txt, and do not block. A release
+    allows no red at all: there the known reds block too."""
+    known: set[str] = (
+        set()
+        if level() == Level.RELEASE
+        else set(ratchet.read_baseline(BASELINES / "known-reds.txt"))
+    )
     new = sorted(r for r in set(reds) if r not in known)
     lines = [
         f"{len(set(reds))} red tests, {len(new)} not in known-reds.txt, {len(set(flaky))} flaky"
@@ -1309,44 +1314,132 @@ def github_deep_runs(repo: str, at: str, token: str) -> list[DeepRun]:
     return found
 
 
-def gitlab_deep_runs(branch: str) -> list[DeepRun]:
-    """GitLab keeps the latest successful pipeline's deep-verdict artifact per branch."""
-    url = (
-        f"{os.environ['CI_API_V4_URL']}/projects/{os.environ['CI_PROJECT_ID']}/jobs/artifacts/"
-        f"{urllib.parse.quote(branch, safe='')}/raw/ci-out/verdict.json?job=deep-verdict"
+DOCS_ONLY_FILES = frozenset({"contracts/CHANGELOG.md"})
+
+
+def is_docs(path: str) -> bool:
+    return path.startswith("docs/") or path in DOCS_ONLY_FILES or path.endswith(".md")
+
+
+def gate_checks(changed: Sequence[str]) -> tuple[str, ...]:
+    """What the gate needs for a pull request's change: docs-lint alone when it touches only
+    documentation, otherwise a green deep run of its exact head (which already ran the suites,
+    docker-node and the qmn lane, so the gate reruns none of them)."""
+    if changed and all(is_docs(p) for p in changed):
+        return ("docs-lint",)
+    return ("deep-verdict",)
+
+
+MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+CONFLICT = re.compile(r"^(<{7}|>{7})( |$)", re.M)
+
+
+def docs_findings(files: Sequence[str], root: Path = REPO) -> list[ratchet.Finding]:
+    """For each Markdown file: it reads as UTF-8, holds no merge-conflict marker, and every relative
+    link points at a file or folder that exists."""
+    found: list[ratchet.Finding] = []
+    for rel in files:
+        path = root / rel
+        if not rel.endswith(".md") or not path.is_file():
+            continue
+        try:
+            text = path.read_text("utf-8")
+        except UnicodeDecodeError:
+            found.append(ratchet.Finding(rel, 0, "docs-lint", "not UTF-8"))
+            continue
+        for match in CONFLICT.finditer(text):
+            line = text.count("\n", 0, match.start()) + 1
+            found.append(ratchet.Finding(rel, line, "docs-lint", "merge-conflict marker"))
+        for match in MD_LINK.finditer(text):
+            target = match.group(1).split("#", 1)[0].split("?", 1)[0]
+            if not target or re.match(r"^[a-z][a-z0-9+.-]*:", target, re.I):
+                continue
+            where = root / target.lstrip("/") if target.startswith("/") else path.parent / target
+            if not where.exists():
+                line = text.count("\n", 0, match.start()) + 1
+                found.append(ratchet.Finding(rel, line, "docs-lint", f"broken link {target}"))
+    return found
+
+
+def job_docs_lint() -> int:
+    lvl = level()
+    at = head()
+    base = base_for(lvl, at)
+    changed = changed_files(base, at)
+    describe(lvl, base, at, changed)
+    found = docs_findings(changed)
+    ratchet.write_junit(OUT / "junit" / "docs-lint.xml", "docs-lint", found)
+    for f in found:
+        print(f"FAIL {f.text()}")
+    print(f"docs-lint: {len([p for p in changed if p.endswith('.md')])} Markdown files checked")
+    return 1 if found else 0
+
+
+def deep_verdict_runs(at: str) -> tuple[list[DeepRun], str]:
+    run_facts = facts()
+    if run_facts.host == ci_host.Host.LAPTOP:
+        raise CiError("the gate reads the CI host's runs; it does not run on a laptop")
+    how = (
+        f"start one with: gh workflow run {WORKFLOW} --ref {run_facts.ref}; when it is green, "
+        "rerun this job"
     )
-    token = {"JOB-TOKEN": os.environ["CI_JOB_TOKEN"]}
-    request = urllib.request.Request(url, headers=token)  # noqa: S310 - GitLab's own API
-    try:
-        with urllib.request.urlopen(request, timeout=60) as answer:  # noqa: S310 - GitLab's own API
-            verdict = json.loads(answer.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        print(f"no deep-verdict artifact on {branch} (HTTP {error.code})")
-        return []
-    return [DeepRun(f"pipeline {verdict.get('pipeline')}", verdict)]
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+    return github_deep_runs(os.environ["GITHUB_REPOSITORY"], at, token), how
 
 
 def job_gate() -> int:
-    """A pull request into engine/base needs a green deep run on its exact head commit."""
-    run_facts = facts()
+    """A pull request into engine/base needs a green deep run on its exact head commit, or, when
+    it changes documentation only, a clean docs-lint."""
     at = head()
-    branch = run_facts.ref
-    match run_facts.host:
-        case ci_host.Host.GITHUB:
-            how = (
-                f"start one with: gh workflow run {WORKFLOW} --ref {branch}; when it is green, "
-                "rerun this job"
-            )
-            token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-            runs = github_deep_runs(os.environ["GITHUB_REPOSITORY"], at, token)
-        case ci_host.Host.GITLAB:
-            how = f"start one with: glab ci run -b {branch}, then rerun this job"
-            runs = gitlab_deep_runs(branch)
-        case ci_host.Host.LAPTOP:
-            raise CiError("the gate reads the CI host's runs; it does not run on a laptop")
+    checks = gate_checks(changed_files(base_for(Level.GATE, at), at))
+    print(f"gate checks: {', '.join(checks)}")
+    if checks == ("docs-lint",):
+        return job_docs_lint()
+    runs, how = deep_verdict_runs(at)
     ok, message = gate_decision(at, runs, how)
     print(message)
     return 0 if ok else 1
+
+
+def release_problems(at: str, released_from: Sequence[str], deep_ok: bool) -> list[str]:
+    """Why a tagged commit may not be released: it is on none of the branches a release may come
+    from (engine/base, release/v*), or no green deep run vouches for it."""
+    problems: list[str] = []
+    if not any(git_ok("merge-base", "--is-ancestor", at, ref) for ref in released_from):
+        problems.append(
+            f"{at[:10]} is not on {ENGINE} or a release/v* branch "
+            f"(checked: {', '.join(released_from) or 'none fetched'})"
+        )
+    if not deep_ok:
+        problems.append(f"no green deep run vouches for {at[:10]}")
+    return problems
+
+
+def job_release_verdict() -> int:
+    at = head()
+    if os.environ.get("CI"):
+        git(
+            "fetch",
+            "--quiet",
+            "origin",
+            f"+refs/heads/{ENGINE}:refs/remotes/origin/{ENGINE}",
+            "+refs/heads/release/*:refs/remotes/origin/release/*",
+        )
+    refs = git(
+        "for-each-ref",
+        "--format=%(refname)",
+        f"refs/remotes/origin/{ENGINE}",
+        "refs/remotes/origin/release/",
+    ).split()
+    runs, how = deep_verdict_runs(at)
+    deep_ok, message = gate_decision(at, runs, how)
+    print(message)
+    problems = release_problems(at, refs, deep_ok)
+    for problem in problems:
+        print(f"FAIL {problem}")
+    if not problems:
+        print(f"PASS {at[:10]} may be released")
+    return 1 if problems else 0
 
 
 def job_smoke() -> int:
@@ -1643,7 +1736,8 @@ def main(argv: list[str] | None = None) -> int:
             "mutmut",
             "verdict",
             "gate",
-            "mr-gate",
+            "release-verdict",
+            "docs-lint",
             "smoke",
             "skylos-part",
             "skylos-merge",
@@ -1685,8 +1779,12 @@ def main(argv: list[str] | None = None) -> int:
                 return job_mutmut()
             case "verdict":
                 return job_verdict()
-            case "gate" | "mr-gate":
+            case "gate":
                 return job_gate()
+            case "release-verdict":
+                return job_release_verdict()
+            case "docs-lint":
+                return job_docs_lint()
             case "skylos-part":
                 if args.part is None:
                     raise CiError("skylos-part needs --part <folder>")
