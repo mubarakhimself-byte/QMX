@@ -14,7 +14,8 @@
 #   release  tag v*: everything in deep plus a smoke start of the host on Linux and Windows.
 #   walk     the nightly schedule: one part of the whole-repo mutmut walk, chosen by run number.
 #            GitHub runs schedules from the default branch's copy of this file only.
-#   baseline push to baseline/**: Vulture and Skylos rewrite ci/baselines (artifact
+#   baseline push to baseline/**: Vulture, pyright (the lint job) and Skylos (one part per
+#            top-level folder, joined by skylos-baseline) rewrite ci/baselines (artifact
 #            ci-out-*/baselines), and mutmut runs the modules in ci/baselines/mutmut-modules.txt.
 # Every job uploads its ci-out/ folder as the artifact ci-out-<job>[-<shard>].
 # Runner images are pinned (ubuntu-24.04, windows-2025), never -latest. This is the only workflow:
@@ -81,9 +82,11 @@ jobs:
           echo "level=$QMX_LEVEL head=$QMX_HEAD_SHA before=$QMX_BEFORE_SHA"
           echo "level=$QMX_LEVEL" >> "$GITHUB_OUTPUT"
 
+  # Format, lint and the scanners are strict; types are a ratchet against ci/baselines/pyright.txt.
+  # At level baseline only types run, and they rewrite pyright.txt (artifact ci-out-lint/baselines).
   lint:
     needs: level
-    if: contains(fromJSON('["slice","deep","release"]'), needs.level.outputs.level)
+    if: contains(fromJSON('["slice","deep","release","baseline"]'), needs.level.outputs.level)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -115,15 +118,54 @@ jobs:
       - run: python tools/ci/qci.py vulture
       - *upload
 
+  # Slice and deep scan only the change (--diff-base). The baseline scans one top-level folder per
+  # job (skylos-part) and skylos-baseline joins the parts into ci/baselines/skylos.txt.
   skylos:
     needs: level
-    if: contains(fromJSON('["slice","deep","release","baseline"]'), needs.level.outputs.level)
+    if: contains(fromJSON('["slice","deep","release"]'), needs.level.outputs.level)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - *checkout
       - *setup
       - run: python tools/ci/qci.py skylos
+      - *upload
+
+  skylos-part:
+    needs: level
+    if: needs.level.outputs.level == 'baseline'
+    name: skylos-part ${{ matrix.folder }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        folder: [qmb, qmn, qml, packages, qmx-agents, tools, apps, scripts, extensions, examples, release]
+    steps:
+      - *checkout
+      - *setup
+      - run: python tools/ci/qci.py skylos-part --part ${{ matrix.folder }}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
+        if: always()
+        with:
+          name: ci-out-skylos-part-${{ matrix.folder }}
+          path: ci-out/
+          retention-days: 30
+          if-no-files-found: warn
+
+  skylos-baseline:
+    needs: [level, skylos-part]
+    if: needs.level.outputs.level == 'baseline'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - *checkout
+      - *setup
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        with:
+          pattern: ci-out-skylos-part-*
+          path: ci-out/parts
+      - run: python tools/ci/qci.py skylos-merge --parts ci-out/parts
       - *upload
 
   fail-at-parent:

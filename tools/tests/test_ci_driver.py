@@ -4,6 +4,7 @@ takes from GitHub Actions, GitLab or a laptop, and when the pull-request gate pa
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pull_reds
 import pytest
 import qci
 import ratchet
+import tomllib
 
 
 def _unit(root: str, workspace: str = ".", cwd: str = ".") -> ci_units.Unit:
@@ -309,3 +311,153 @@ def test_pull_reds_reads_each_shard_and_names_the_ones_that_did_not_finish(tmp_p
         "suite-windows-1.\n"
         "linux|qmn|t::a\nlinux|qmn|t::b\n"
     )
+
+
+# ---- types join the ratchet; Skylos scans the change at deep and folders at baseline -----------
+
+
+def _pyright(root: Path, *diagnostics: tuple[str, str, str, int]) -> str:
+    """pyright --outputjson as the PyPI wrapper prints it: a set-up line, then the report."""
+    report = {
+        "version": "1.1.400",
+        "generalDiagnostics": [
+            {
+                "file": str(root / path),
+                "severity": severity,
+                "message": message,
+                "range": {"start": {"line": line, "character": 4}},
+                "rule": "reportAttributeAccessIssue",
+            }
+            for path, severity, message, line in diagnostics
+        ],
+        "summary": {"errorCount": len(diagnostics)},
+    }
+    return "installing node...\n" + json.dumps(report, indent=4) + "\n"
+
+
+def test_a_pyright_error_becomes_a_key_without_line_or_numbers(tmp_path: Path) -> None:
+    text = _pyright(
+        tmp_path,
+        ("pkg/a.py", "error", '"WinDLL" is not a known\n  attribute of 2 modules', 41),
+        ("pkg/a.py", "warning", "only a warning", 3),
+    )
+    found = qci.pyright_findings(qci.pyright_report(text), tmp_path)
+    assert [(f.key, f.line) for f in found] == [
+        ('pkg/a.py|reportAttributeAccessIssue|"WinDLL" is not a known attribute of # modules', 42)
+    ]
+
+
+def test_pyright_with_no_report_is_an_error() -> None:
+    with pytest.raises(qci.CiError):
+        qci.pyright_report("node: command not found\n")
+
+
+def _types_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[ratchet.Finding]:
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    (tmp_path / "out").mkdir()
+    old = ratchet.Finding("pkg/old.py", 5, "reportX", "known error")
+    ratchet.write_baseline(tmp_path / "baselines" / "pyright.txt", [old], "header")
+    return [dataclasses.replace(old, line=9)]
+
+
+def test_a_pyright_error_in_the_baseline_does_not_fail_a_slice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = _types_case(tmp_path, monkeypatch)
+    assert qci.types_verdict(found, ["pkg/old.py"]) == 0
+
+
+def test_a_new_pyright_error_in_a_touched_file_fails_a_slice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = _types_case(tmp_path, monkeypatch)
+    found.append(ratchet.Finding("pkg/new.py", 1, "reportX", "fresh error"))
+    assert qci.types_verdict(found, ["pkg/new.py"]) == 1
+    assert "BLOCK pkg/new.py:1: [reportX] fresh error" in (
+        tmp_path / "out" / "pyright-new.txt"
+    ).read_text("utf-8")
+
+
+def test_a_new_pyright_error_in_an_untouched_file_is_a_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = _types_case(tmp_path, monkeypatch)
+    found.append(ratchet.Finding("pkg/other.py", 1, "reportX", "fresh error"))
+    assert qci.types_verdict(found, ["pkg/old.py"]) == 0
+    assert "note  pkg/other.py:1: [reportX] fresh error" in (
+        tmp_path / "out" / "pyright-new.txt"
+    ).read_text("utf-8")
+
+
+def test_the_same_pyright_error_from_two_folders_counts_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = _types_case(tmp_path, monkeypatch)
+    assert qci.types_verdict(found + found, None) == 0
+
+
+@pytest.mark.parametrize(("level", "diff"), [("slice", True), ("deep", True), ("release", False)])
+def test_skylos_scans_only_the_change_at_slice_and_deep(
+    level: str, diff: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qci, "uv", lambda: "uv")
+
+    def base_for(lvl: qci.Level, at: str) -> str:
+        return OTHER
+
+    monkeypatch.setattr(qci, "base_for", base_for)
+    base = qci.skylos_base(qci.Level(level), HEAD)
+    argv = qci.skylos_argv(".", Path("r.json"), base)
+    assert ("--diff-base" in argv, argv[-1] == OTHER) == (diff, diff)
+
+
+def test_a_folder_scan_path_is_made_repo_relative(tmp_path: Path) -> None:
+    (tmp_path / "qmn" / "src").mkdir(parents=True)
+    (tmp_path / "qmn" / "src" / "a.py").write_text("", "utf-8")
+    assert qci.repo_path("qmn", "src/a.py", tmp_path) == "qmn/src/a.py"
+    assert qci.repo_path("qmn", "qmn/src/a.py", tmp_path) == "qmn/src/a.py"
+
+
+def test_the_skylos_parts_join_keeping_each_keys_largest_count_and_a_missing_part_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qci, "BASELINES", tmp_path / "baselines")
+    monkeypatch.setattr(qci, "OUT", tmp_path / "out")
+    parts = tmp_path / "parts"
+    (parts / "ci-out-skylos-part-qmn").mkdir(parents=True)
+    (parts / "ci-out-skylos-part-qmn" / "skylos-part-qmn.txt").write_text(
+        "qmn/b|r|n\nuv.lock|d|x\n", "utf-8"
+    )
+    (parts / "ci-out-skylos-part-qmb").mkdir(parents=True)
+    (parts / "ci-out-skylos-part-qmb" / "skylos-part-qmb.txt").write_text(
+        "qmb/a|r|n\nqmb/a|r|n\nuv.lock|d|x\n", "utf-8"
+    )
+    with pytest.raises(qci.CiError, match="tools"):
+        qci.skylos_merge(parts, ("qmn", "qmb", "tools"), HEAD)
+    assert qci.skylos_merge(parts, ("qmn", "qmb"), HEAD) == 0
+    assert ratchet.read_baseline(tmp_path / "baselines" / "skylos.txt") == [
+        "qmb/a|r|n",
+        "qmb/a|r|n",
+        "qmn/b|r|n",
+        "uv.lock|d|x",
+    ]
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".svelte", ".rs")
+
+
+def test_the_skylos_baseline_parts_cover_every_scanned_folder() -> None:
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text("utf-8"))
+    excluded = set(config["tool"]["skylos"]["exclude"])
+    tracked = qci.git("ls-files", cwd=REPO_ROOT).splitlines()
+    folders = {
+        p.split("/", 1)[0]
+        for p in tracked
+        if "/" in p and p.endswith(CODE_SUFFIXES) and not p.startswith(".")
+    }
+    assert folders - excluded <= set(qci.SKYLOS_FOLDERS)
+    workflow = (REPO_ROOT / ".github" / "workflows" / "qmx-ci.yml").read_text("utf-8")
+    matrix = workflow.split("name: skylos-part", 1)[1].split("folder: [", 1)[1].split("]", 1)[0]
+    assert tuple(f.strip() for f in matrix.split(",")) == qci.SKYLOS_FOLDERS

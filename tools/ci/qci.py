@@ -18,6 +18,7 @@ import enum
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -29,6 +30,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal, cast
@@ -440,7 +442,84 @@ def tests_verdict(name: str, reds: list[str], crashed: list[str]) -> int:
     return 1 if new or crashed else 0
 
 
-def job_lint() -> int:
+PYRIGHT_NUMBER = re.compile(r"\d+")
+
+
+def pyright_report(text: str) -> dict[str, object]:
+    """The JSON object `pyright --outputjson` printed. Anything printed before it (the PyPI
+    wrapper's node set-up, a node deprecation warning) is skipped."""
+    starts = [0] if text.startswith("{") else []
+    starts += [m.end() - 1 for m in re.finditer(r"\n\{", text)]
+    for offset in starts:
+        try:
+            found, _ = json.JSONDecoder().raw_decode(text, offset)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(found, dict) and "generalDiagnostics" in found:
+            return cast("dict[str, object]", found)
+    raise CiError("pyright printed no JSON report")
+
+
+def pyright_findings(report: Mapping[str, object], root: Path = REPO) -> list[ratchet.Finding]:
+    """Each pyright error as a ratchet finding keyed `path|rule|message`: the path repo-relative,
+    the message on one line with every number stripped, so a moved line or a renumbered overload
+    does not make an old error new. Warnings and information do not fail pyright and are left
+    out."""
+    found: list[ratchet.Finding] = []
+    for raw in cast("list[object]", report.get("generalDiagnostics") or []):
+        if not isinstance(raw, dict):
+            continue
+        item = cast("dict[str, object]", raw)
+        if item.get("severity") != "error":
+            continue
+        file = Path(str(item.get("file") or ""))
+        try:
+            path = file.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            path = file.as_posix()
+        message = " ".join(str(item.get("message") or "").split())
+        start = cast("dict[str, dict[str, int]]", item.get("range") or {}).get("start", {})
+        found.append(
+            ratchet.Finding(
+                path,
+                int(start.get("line", -1)) + 1,
+                str(item.get("rule") or "pyright"),
+                PYRIGHT_NUMBER.sub("#", message),
+            )
+        )
+    return found
+
+
+def pyright_run(folder: str) -> tuple[list[ratchet.Finding], str | None]:
+    """Run the folder's own pyright (the same config `poe types` reads) with JSON output. Returns
+    its errors, and a failure line when pyright itself did not finish."""
+    name = folder.replace("/", "_").replace(".", "root")
+    raw = OUT / "pyright" / f"{name}.json"
+    rc = run(
+        [uv(), "run", "--frozen", "--no-sync", "python", "-m", "pyright", "--outputjson"],
+        REPO / folder,
+        stdout_to=raw,
+    )
+    if rc not in (0, 1):
+        return [], f"pyright exited {rc} (see ci-out/pyright/{name}.json)"
+    try:
+        report = pyright_report(raw.read_text("utf-8", errors="replace"))
+    except CiError as error:
+        return [], f"{error} (rc={rc}, see ci-out/pyright/{name}.json)"
+    return pyright_findings(report), None
+
+
+def types_verdict(found: list[ratchet.Finding], scope: list[str] | None) -> int:
+    """pyright errors against ci/baselines/pyright.txt. A folder run twice (a workspace and its
+    package) reports the same error once."""
+    unique = sorted(set(found), key=lambda f: (f.path, f.line, f.rule, f.message))
+    return ratchet_verdict("pyright", unique, scope)
+
+
+def job_lint(write_baseline: bool = False) -> int:
+    """Format, lint and the repo scanners stay strict. Types join the ratchet: only a pyright error
+    not in ci/baselines/pyright.txt blocks, and in a slice only one in a file the slice touched.
+    At level baseline (or with --write-baseline) only types run, and they rewrite pyright.txt."""
     lvl = level()
     at = head()
     dirs = ci_units.poe_dirs(REPO)
@@ -461,8 +540,9 @@ def job_lint() -> int:
         }
     ):
         sync(workspace)
-    steps = [(d, task) for d in targets for task in ("fmt-check", "lint", "types")]
-    if ci_units.ROOT_WS in targets:
+    tasks = () if write_baseline else ("fmt-check", "lint")
+    steps = [(d, task) for d in targets for task in tasks]
+    if ci_units.ROOT_WS in targets and not write_baseline:
         # The scanners the old GitHub battery ran beside lint, all of them over the root workspace.
         steps += [
             (ci_units.ROOT_WS, task)
@@ -476,10 +556,30 @@ def job_lint() -> int:
         )
         if rc != 0:
             found.append(ratchet.Finding(folder, 0, task, f"poe {task} failed (rc={rc})"))
+    errors: list[ratchet.Finding] = []
+    for folder in targets:
+        some, failed = pyright_run(folder)
+        errors += some
+        if failed is not None:
+            found.append(ratchet.Finding(folder, 0, "types", failed))
     ratchet.write_junit(OUT / "junit" / "lint.xml", "lint", found)
     for f in found:
         print(f"FAIL {f.text()}")
-    return 1 if found else 0
+    if write_baseline:
+        if found:
+            return 1
+        ratchet.write_baseline(
+            BASELINES / "pyright.txt",
+            sorted(set(errors), key=lambda f: (f.path, f.line, f.rule, f.message)),
+            f"pyright errors from each folder's own config, run on {sys.platform}, over "
+            f"{' '.join(targets)}.\nTaken at {at[:10]}. Key: path|rule|message, numbers in the "
+            "message replaced by #; line numbers are left out.",
+        )
+        keep_baseline("pyright.txt")
+        print(f"wrote {len(set(errors))} errors to ci/baselines/pyright.txt")
+        return 0
+    verdict = types_verdict(errors, changed if lvl == Level.SLICE else None)
+    return 1 if found or verdict else 0
 
 
 def job_fail_at_parent() -> int:
@@ -722,12 +822,26 @@ def skylos_findings(report: Path) -> list[ratchet.Finding]:
     return found
 
 
-def job_skylos(write_baseline: bool) -> int:
-    lvl = level()
-    at = head()
-    base = base_for(lvl, at) if lvl == Level.SLICE else None
-    env = skylos_scope()
-    report = OUT / "skylos.json"
+SKYLOS_PART_PREFIX = "skylos-part-"
+# The baseline scan's parts, one top-level folder each: every tracked top-level folder holding code
+# that [tool.skylos].exclude does not drop (a driver test keeps this list and the workflow's matrix
+# complete), plus qmx-agents. qmx-ci.yml's skylos-part matrix lists the same names.
+SKYLOS_FOLDERS = (
+    "qmb",
+    "qmn",
+    "qml",
+    "packages",
+    "qmx-agents",
+    "tools",
+    "apps",
+    "scripts",
+    "extensions",
+    "examples",
+    "release",
+)
+
+
+def skylos_argv(target: str, report: Path, base: str | None) -> list[str]:
     argv = [
         uv(),
         "tool",
@@ -737,7 +851,7 @@ def job_skylos(write_baseline: bool) -> int:
         "--from",
         SKYLOS,
         "skylos",
-        ".",
+        target,
         "-a",
         "--no-upload",
         "--format",
@@ -745,9 +859,83 @@ def job_skylos(write_baseline: bool) -> int:
         "-o",
         str(report),
     ]
-    if base is not None:
-        argv += ["--diff-base", base]
-    rc = run(argv, REPO, env=env, timeout=40 * 60)
+    return [*argv, "--diff-base", base] if base is not None else argv
+
+
+def skylos_base(lvl: Level, at: str) -> str | None:
+    """A slice and a checkpoint scan only what changed: a slice since its fork point, a deep run
+    since the merge-base with engine/base (the same commit mutate_targets measures from). Every
+    other level scans the whole tree."""
+    return base_for(lvl, at) if lvl in (Level.SLICE, Level.DEEP) else None
+
+
+def repo_path(folder: str, path: str, root: Path = REPO) -> str:
+    """A path Skylos reported while scanning `folder`, made repo-relative: kept when it already
+    is, prefixed with the folder when Skylos reported it relative to the scan target."""
+    if path.startswith(folder + "/") or not (root / folder / path).exists():
+        return path
+    return f"{folder}/{path}"
+
+
+def job_skylos_part(folder: str) -> int:
+    """One top-level folder of the baseline scan, so each part finishes under the step cap. Writes
+    ci-out/skylos-part-<folder>.txt; `skylos-merge` joins the parts into ci/baselines/skylos.txt."""
+    env = skylos_scope()
+    report = OUT / f"skylos-{folder}.json"
+    if not (REPO / folder).is_dir():
+        print(f"{folder}: no such folder in this commit; empty part")
+        found: list[ratchet.Finding] = []
+    else:
+        rc = run(skylos_argv(folder, report, None), REPO, env=env, timeout=40 * 60)
+        if rc not in (0, 1) or not report.exists():
+            raise CiError(f"skylos did not finish on {folder}: exit {rc}")
+        found = [
+            dataclasses.replace(f, path=repo_path(folder, f.path)) for f in skylos_findings(report)
+        ]
+    keys = sorted(f.key for f in found)
+    part = OUT / f"{SKYLOS_PART_PREFIX}{folder}.txt"
+    part.write_text("".join(f"{k}\n" for k in keys), "utf-8", newline="\n")
+    print(f"{folder}: {len(keys)} findings")
+    return 0
+
+
+def skylos_merge(parts: Path, folders: Sequence[str], at: str) -> int:
+    """Join every folder's part (found anywhere under `parts`) into ci/baselines/skylos.txt. A
+    missing part is a failure: a baseline that silently skips a folder would let its findings in."""
+    found = {
+        p.stem.removeprefix(SKYLOS_PART_PREFIX): p
+        for p in parts.rglob(f"{SKYLOS_PART_PREFIX}*.txt")
+    }
+    missing = sorted(set(folders) - set(found))
+    if missing:
+        raise CiError(f"no Skylos part for {', '.join(missing)}; the baseline is not written")
+    # Skylos also reports repo-level files (the workflow, lockfiles) from every part, so a key
+    # keeps the largest count any one part saw, not the sum over parts.
+    counts: Counter[str] = Counter()
+    for name in folders:
+        counts |= Counter(ratchet.read_baseline(found[name]))
+    keys = sorted(counts.elements())
+    header = (
+        f"Skylos {SKYLOS} `skylos <folder> -a --no-upload`, one part per top-level folder "
+        f"({' '.join(folders)}), scope from [tool.skylos].\n"
+        f"Taken at {at[:10]}. Key: path|category:rule|name; line numbers are left out."
+    )
+    target = BASELINES / "skylos.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    body = "".join(f"# {line}\n" for line in header.splitlines()) + "".join(f"{k}\n" for k in keys)
+    target.write_text(body, "utf-8", newline="\n")
+    keep_baseline("skylos.txt")
+    print(f"wrote {len(keys)} findings from {len(folders)} parts to ci/baselines/skylos.txt")
+    return 0
+
+
+def job_skylos(write_baseline: bool) -> int:
+    lvl = level()
+    at = head()
+    base = skylos_base(lvl, at)
+    env = skylos_scope()
+    report = OUT / "skylos.json"
+    rc = run(skylos_argv(".", report, base), REPO, env=env, timeout=40 * 60)
     if rc not in (0, 1) or not report.exists():
         reason = (
             "timed out"
@@ -1082,10 +1270,16 @@ def main(argv: list[str] | None = None) -> int:
             "gate",
             "mr-gate",
             "smoke",
+            "skylos-part",
+            "skylos-merge",
         ],
     )
     parser.add_argument("--os", default="linux", choices=["linux", "windows"])
     parser.add_argument("--write-baseline", action="store_true")
+    parser.add_argument("--part", choices=SKYLOS_FOLDERS, help="skylos-part: the folder to scan")
+    parser.add_argument(
+        "--parts", type=Path, default=OUT / "parts", help="skylos-merge: where the parts were put"
+    )
     args = parser.parse_args(argv)
     OUT.mkdir(parents=True, exist_ok=True)
     try:
@@ -1093,7 +1287,7 @@ def main(argv: list[str] | None = None) -> int:
             case "tests":
                 return job_tests(args.os)
             case "lint":
-                return job_lint()
+                return job_lint(args.write_baseline or level() == Level.BASELINE)
             case "fail-at-parent":
                 return job_fail_at_parent()
             case "vulture":
@@ -1106,6 +1300,12 @@ def main(argv: list[str] | None = None) -> int:
                 return job_verdict()
             case "gate" | "mr-gate":
                 return job_gate()
+            case "skylos-part":
+                if args.part is None:
+                    raise CiError("skylos-part needs --part <folder>")
+                return job_skylos_part(args.part)
+            case "skylos-merge":
+                return skylos_merge(args.parts, SKYLOS_FOLDERS, head())
             case _:
                 return job_smoke()
     except CiError as error:
