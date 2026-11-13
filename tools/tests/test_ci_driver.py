@@ -664,14 +664,11 @@ def test_no_baseline_file_gains_a_row_outside_a_baseline_branch() -> None:
     """The ratchet only tightens: outside a baseline/** branch, no change since engine/base adds a
     row to a ci/baselines file (`qci.py ratchet --prune` only ever removes rows)."""
     branch = os.environ.get("QMX_REF") or qci.git("branch", "--show-current").strip()
-    if branch.startswith("baseline/"):
-        pytest.skip(f"{branch} retakes baselines")
     engine = f"refs/remotes/origin/{qci.ENGINE}"
-    if not qci.git_ok("rev-parse", "--verify", "--quiet", engine):
-        pytest.skip(f"{engine} is not fetched in this checkout")
     base = qci.merge_base("HEAD", engine)
-    assert base is not None
-    assert qci.baseline_growth(base, "HEAD") == []
+    assert base is not None, f"{engine} must be fetched for the guard to measure the change"
+    grown = qci.baseline_growth(base, "HEAD")
+    assert grown == [] or branch.startswith("baseline/"), grown
 
 
 def test_a_baseline_change_selects_the_tools_tests_that_hold_the_guard() -> None:

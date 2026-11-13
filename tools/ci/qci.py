@@ -1615,6 +1615,20 @@ def summary_markdown(summary: Mapping[str, object]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def run_jobs(repo: str, run_id: str) -> list[dict[str, object]] | None:
+    """This run's job list from GitHub (names, conclusions, times), or None when it cannot be read;
+    the summary then takes results from `needs`."""
+    credential = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+    if not (repo and run_id and credential):
+        return None
+    try:
+        raw = github_api(f"/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100", credential)
+    except (urllib.error.URLError, OSError):
+        return None
+    listing = cast("dict[str, object]", json.loads(raw))
+    return cast("list[dict[str, object]]", listing.get("jobs", []))
+
+
 def job_summary(artifacts: Path) -> int:
     """Always runs, after every job of the run. Writes ci-out/summary.json and summary.md from the
     level's artifacts, `QMX_NEEDS` (the workflow's toJSON(needs)) and the run's job list. It
@@ -1624,18 +1638,7 @@ def job_summary(artifacts: Path) -> int:
     workflow = (REPO / ".github" / "workflows" / WORKFLOW).read_text("utf-8")
     needs = cast("dict[str, dict[str, object]]", json.loads(os.environ.get("QMX_NEEDS") or "{}"))
     repo = os.environ.get("GITHUB_REPOSITORY", "")
-    api_jobs: list[dict[str, object]] | None = None
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-    if repo and run_facts.run_id and token:
-        try:
-            listing = json.loads(
-                github_api(
-                    f"/repos/{repo}/actions/runs/{run_facts.run_id}/jobs?per_page=100", token
-                )
-            )
-            api_jobs = cast("list[dict[str, object]]", listing.get("jobs", []))
-        except (urllib.error.URLError, OSError, ValueError) as error:
-            print(f"note: could not list the run's jobs ({error}); results come from needs")
+    api_jobs = run_jobs(repo, run_facts.run_id)
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     summary = build_summary(
         sha=head(),
