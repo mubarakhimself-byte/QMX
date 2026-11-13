@@ -6,12 +6,11 @@ name: QMN ubuntu-24.04 lane
 # Steps: Linux typing, isolated clean install, unit-file/IaC scan, check-mode
 # boot + switch/rollback planner, scratch-credstore LoadCredentialEncrypted
 # contract (systemd-analyze when available).
+# qmx-ci does not run these deploy checks. They run on pull requests into engine/base, or by hand.
 on:
-  push:
-    branches: [main, integration, 'rebuild/**']
-    tags: ['factory-candidate/**']
   pull_request:
-    branches: [main, integration, 'rebuild/**']
+    branches: [engine/base]
+  workflow_dispatch:
 
 permissions:
   contents: read

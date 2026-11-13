@@ -1,68 +1,97 @@
-"""Rewrite ci/baselines/known-reds.txt from a GitLab deep pipeline's test shards.
+"""Rewrite ci/baselines/known-reds.txt from a GitHub Actions deep run's test shards.
 
-    python tools/ci/pull_reds.py <pipeline id>
+    python tools/ci/pull_reds.py <run id>
 
-Runs on a laptop with `glab` signed in. It reads every suite job's `ci-out/reds-*.txt` artifact,
-so the list is exactly the reds that pipeline saw, on Linux and Windows.
+Runs on a laptop with `gh` signed in. It downloads every test shard's `ci-out-*` artifact and reads
+its `reds-*.txt`, so the list is exactly the reds that run saw, on Linux and Windows. A shard that
+did not finish leaves no reds file; it is named in the header and its reds are not listed.
+`QMX_GITHUB_REPO` names another repository (default: the QMX home on GitHub). The local checkout
+also has other GitHub remotes, so the repository is always passed to `gh` by name.
 """
 
 from __future__ import annotations
 
-import io
 import json
+import os
 import shutil
 import subprocess
 import sys
-import zipfile
+import tempfile
 from pathlib import Path
 from typing import cast
 
 REPO = Path(__file__).resolve().parents[2]
-PROJECT = "qmx-group1%2FQMX-project"
-TIMEOUT_S = 300
+GITHUB_REPO = os.environ.get("QMX_GITHUB_REPO", "mubarakhimself-byte/QMX")
+TEST_ARTIFACTS = ("ci-out-suite-", "ci-out-tests-")
+TIMEOUT_S = 600
 
 
-def glab(path: str) -> bytes:
-    exe = shutil.which("glab") or "glab"
-    done = subprocess.run([exe, "api", path], capture_output=True, timeout=TIMEOUT_S, check=True)
+def gh(*args: str) -> str:
+    exe = shutil.which("gh") or "gh"
+    done = subprocess.run(
+        [exe, *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=TIMEOUT_S,
+        check=True,
+    )
     return done.stdout
 
 
-def main(argv: list[str]) -> int:
-    pipeline = argv[1]
-    raw = glab(f"projects/{PROJECT}/pipelines/{pipeline}/jobs?per_page=100")
-    jobs = cast("list[dict[str, object]]", json.loads(raw))
-    reds: set[str] = set()
-    read: list[str] = []
-    missing: list[str] = []
-    for job in jobs:
-        name = str(job["name"])
-        if not name.startswith(("suite-", "tests-")):
-            continue
-        finished = job["status"] == "success" or job.get("failure_reason") == "script_failure"
-        if not finished:
-            missing.append(f"{name} ({job['status']}, {job.get('failure_reason')})")
-            continue
-        read.append(name)
-        archive = zipfile.ZipFile(
-            io.BytesIO(glab(f"projects/{PROJECT}/jobs/{job['id']}/artifacts"))
-        )
-        for entry in archive.namelist():
-            if entry.startswith("ci-out/reds-") and entry.endswith(".txt"):
-                text = archive.read(entry).decode("utf-8")
-                reds.update(line for line in text.splitlines() if line)
+def shard_reds(folder: Path) -> list[str] | None:
+    """The reds one shard's artifact folder lists, or None when that shard did not finish. A shard
+    with nothing to run writes only its plan, which lists no files."""
+    reds = sorted(folder.glob("reds-*.txt"))
+    if reds:
+        return [line for f in reds for line in f.read_text("utf-8").splitlines() if line]
+    plans = sorted(folder.glob("plan-*.json"))
+    if plans and all(not json.loads(p.read_text("utf-8"))["files"] for p in plans):
+        return []
+    return None
+
+
+def known_reds_text(run_id: str, shards: dict[str, list[str] | None]) -> str:
+    read = sorted(name for name, reds in shards.items() if reds is not None)
+    missing = sorted(name for name, reds in shards.items() if reds is None)
+    reds = sorted({r for found in shards.values() if found for r in found})
     lines = [
-        f"Tests red on pipeline {pipeline}. Key: system|unit|test id.",
+        f"Tests red on GitHub Actions run {run_id}. Key: system|unit|test id.",
         "A red listed here does not block; any other red does. This list may only shrink.",
-        f"Shards read: {', '.join(sorted(read)) or 'none'}.",
+        f"Shards read: {', '.join(read) or 'none'}.",
         "Shards that did not finish, so their reds are not listed: "
-        + (", ".join(sorted(missing)) or "none")
-        + ".",
+        f"{', '.join(missing) or 'none'}.",
     ]
-    header = "".join(f"# {line}\n" for line in lines)
+    return "".join(f"# {line}\n" for line in lines) + "".join(f"{r}\n" for r in reds)
+
+
+def main(argv: list[str]) -> int:
+    run_id = argv[1]
+    listing = json.loads(
+        gh("api", f"repos/{GITHUB_REPO}/actions/runs/{run_id}/artifacts?per_page=100")
+    )
+    names = sorted(
+        str(a["name"])
+        for a in cast("list[dict[str, object]]", listing["artifacts"])
+        if str(a["name"]).startswith(TEST_ARTIFACTS)
+    )
+    jobs = json.loads(gh("api", f"repos/{GITHUB_REPO}/actions/runs/{run_id}/jobs?per_page=100"))
+    # A test job is named "suite-linux 3"; its artifact is "ci-out-suite-linux-3". A job that never
+    # uploaded one did not finish.
+    shards: dict[str, list[str] | None] = {
+        str(j["name"]).replace(" ", "-"): None
+        for j in cast("list[dict[str, object]]", jobs["jobs"])
+        if str(j["name"]).startswith(tuple(t.removeprefix("ci-out-") for t in TEST_ARTIFACTS))
+    }
+    with tempfile.TemporaryDirectory(prefix="qmx-reds-") as tmp:
+        for name in names:
+            gh("run", "download", run_id, "-R", GITHUB_REPO, "-n", name, "-D", f"{tmp}/{name}")
+            shards[name.removeprefix("ci-out-")] = shard_reds(Path(tmp) / name)
     target = REPO / "ci" / "baselines" / "known-reds.txt"
-    target.write_text(header + "".join(f"{r}\n" for r in sorted(reds)), "utf-8", newline="\n")
-    print(f"{len(reds)} known reds from {len(read)} shards ({len(missing)} unfinished)")
+    target.write_text(known_reds_text(run_id, shards), "utf-8", newline="\n")
+    total = len({r for found in shards.values() if found for r in found})
+    unfinished = sum(1 for reds in shards.values() if reds is None)
+    print(f"{total} known reds from {len(shards) - unfinished} shards ({unfinished} unfinished)")
     return 0
 
 

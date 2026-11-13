@@ -212,7 +212,7 @@ pythonpath = [
     # Workspace tools (the tier-1 static scanners) import as top-level modules so
     # `poe test-tools` can measure their coverage (Story 1.7).
     "tools",
-    # The GitLab CI driver's modules, imported by tools/tests/test_ci_gitlab.py.
+    # The CI driver's modules (tools/ci), imported by tools/tests/test_ci_driver.py.
     "tools/ci",
 ]
 

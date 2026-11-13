@@ -1,10 +1,12 @@
-"""The one entry point every GitLab CI job calls: `python tools/ci/qci.py <job>`.
+"""The one entry point every CI job calls: `python tools/ci/qci.py <job>`.
 
-`.gitlab-ci.yml` decides which jobs a pipeline holds, from `QMX_LEVEL`. This file decides what each
-job does at that level: which commit it compares against, which tests a shard runs, and which
-findings are new. Every job writes what it found under `ci-out/`, JUnit XML under `ci-out/junit/`.
+`.github/workflows/qmx-ci.yml` (and the fallback `.gitlab-ci.yml`) decides which jobs a run holds,
+from `QMX_LEVEL`. This file decides what each job does at that level: which commit it compares
+against, which tests a shard runs, and which findings are new. Every job writes what it found under
+`ci-out/`, JUnit XML under `ci-out/junit/`. The host's own facts (head, shard, run number) come
+from ci_host.
 
-It also runs on a laptop: with no GitLab variables the level is `deep` and the head is `HEAD`, so
+It also runs on a laptop: with no host variables the level is `deep` and the head is `HEAD`, so
 `python tools/ci/qci.py vulture --write-baseline` rewrites a baseline from the same code CI runs.
 """
 
@@ -13,6 +15,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import enum
+import io
 import json
 import os
 import shutil
@@ -25,10 +28,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal, cast
 
+import ci_host
 import ci_mutate
 import ci_units
 import ratchet
@@ -38,7 +43,6 @@ REPO = Path(__file__).resolve().parents[2]
 GIT = shutil.which("git") or "git"
 OUT = REPO / "ci-out"
 BASELINES = REPO / "ci" / "baselines"
-ZERO_SHA = "0" * 40
 ENGINE = "engine/base"
 GIT_TIMEOUT_S = 600
 STEP_TIMEOUT_S = 80 * 60
@@ -86,8 +90,8 @@ SMOKE_PORT = 18766
 class Level(enum.StrEnum):
     SLICE = "slice"  # push to slice/**
     LAND = "land"  # push to build/**
-    DEEP = "deep"  # a checkpoint (stop point), started by hand: `glab ci run -b <branch>`
-    GATE = "gate"  # merge request into engine/base
+    DEEP = "deep"  # a checkpoint (stop point), started by hand: `gh workflow run qmx-ci.yml`
+    GATE = "gate"  # pull request (GitLab: merge request) into engine/base
     RELEASE = "release"  # tag v*
     WALK = "walk"  # one part of the scheduled whole-repo mutation walk
     BASELINE = "baseline"  # rewrite ci/baselines from this commit; the files are job artifacts
@@ -195,8 +199,12 @@ def level() -> Level:
     return Level(os.environ.get("QMX_LEVEL", "deep"))
 
 
+def facts() -> ci_host.RunFacts:
+    return ci_host.read(os.environ)
+
+
 def head() -> str:
-    return os.environ.get("CI_COMMIT_SHA") or git("rev-parse", "HEAD").strip()
+    return facts().head or git("rev-parse", "HEAD").strip()
 
 
 def fetch_refs(build_branches: bool) -> None:
@@ -260,8 +268,8 @@ def base_for(lvl: Level, at: str) -> str | None:
         case Level.SLICE:
             return fork_point(at)
         case Level.LAND:
-            before = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
-            if before and before != ZERO_SHA and git_ok("cat-file", "-e", before):
+            before = facts().before
+            if before and git_ok("cat-file", "-e", before):
                 return before
             return merge_base(at, f"refs/remotes/origin/{ENGINE}")
         case Level.DEEP | Level.WALK | Level.GATE | Level.BASELINE:
@@ -351,10 +359,8 @@ def pytest(
 
 
 def test_env() -> dict[str, str]:
-    """The job's environment without GitLab's own CI_* and GITLAB_* variables. They hold job
-    tokens and proxy settings that the code under test rightly refuses to run beside (the agent
-    harness refuses any name holding PROXY), and no test needs them. `CI` itself stays."""
-    return {k: v for k, v in os.environ.items() if not k.startswith(("CI_", "GITLAB_"))}
+    """The job's environment without the host's own variables (see ci_host.HOST_PREFIXES)."""
+    return ci_host.test_env(os.environ)
 
 
 # ---- jobs -------------------------------------------------------------------------------------
@@ -365,8 +371,7 @@ def job_tests(system: str) -> int:
     inputs and takes its own part, so shards need no plan job."""
     lvl = level()
     at = head()
-    index = int(os.environ.get("CI_NODE_INDEX", "1"))
-    total = int(os.environ.get("CI_NODE_TOTAL", "1"))
+    index, total = facts().shard, facts().shards
     units = ci_units.discover(REPO)
     if TEST_SCOPE.get(lvl) == "all":
         base, changed, chosen = None, [], units
@@ -458,7 +463,11 @@ def job_lint() -> int:
         sync(workspace)
     steps = [(d, task) for d in targets for task in ("fmt-check", "lint", "types")]
     if ci_units.ROOT_WS in targets:
-        steps += [(ci_units.ROOT_WS, "money-path-scan"), (ci_units.ROOT_WS, "secret-scan")]
+        # The scanners the old GitHub battery ran beside lint, all of them over the root workspace.
+        steps += [
+            (ci_units.ROOT_WS, task)
+            for task in ("money-path-scan", "ambient-scan", "mock-data-scan", "secret-scan")
+        ]
     found: list[ratchet.Finding] = []
     for folder, task in steps:
         rc = run(
@@ -788,11 +797,7 @@ def mutate_targets(lvl: Level, at: str) -> list[ci_mutate.Target]:
         return [t for t in everything if t.module in named]
     if lvl == Level.WALK:
         parts = int(os.environ.get("QMX_WALK_PARTS", str(ci_mutate.WALK_PARTS)))
-        part = int(
-            os.environ.get(
-                "QMX_WALK_PART", str(int(os.environ.get("CI_PIPELINE_IID", "0")) % parts)
-            )
-        )
+        part = int(os.environ.get("QMX_WALK_PART", str(facts().number % parts)))
         print(f"walk part {part} of {parts} (0-based)")
         return ci_mutate.walk_part(everything, part, parts)
     base = base_for(lvl, at)
@@ -851,8 +856,7 @@ def stage_mutmut(package: Path, files: list[str]) -> None:
 def job_mutmut() -> int:
     lvl = level()
     at = head()
-    shard = int(os.environ.get("CI_NODE_INDEX", "1"))
-    total = int(os.environ.get("CI_NODE_TOTAL", "1"))
+    shard, total = facts().shard, facts().shards
     targets = mutate_targets(lvl, at)
     by_package: dict[str, list[ci_mutate.Target]] = {}
     for t in targets:
@@ -925,8 +929,9 @@ def job_verdict() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     verdict = {
         "sha": at,
-        "ref": os.environ.get("CI_COMMIT_REF_NAME", ""),
-        "pipeline": os.environ.get("CI_PIPELINE_ID", ""),
+        "ref": facts().ref,
+        "pipeline": facts().run_id,
+        "host": facts().host.value,
         "level": level().value,
     }
     (OUT / "verdict.json").write_text(json.dumps(verdict, indent=1) + "\n", "utf-8")
@@ -934,34 +939,112 @@ def job_verdict() -> int:
     return 0
 
 
-def job_mr_gate() -> int:
-    """A merge request into engine/base needs a green deep run on its exact head commit."""
-    branch = os.environ["CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"]
-    at = os.environ.get("CI_MERGE_REQUEST_SOURCE_BRANCH_SHA") or head()
+WORKFLOW = "qmx-ci.yml"
+VERDICT_ARTIFACT = "deep-verdict"
+
+
+@dataclasses.dataclass(frozen=True)
+class DeepRun:
+    """One finished run that may vouch for a commit: where it is, and the verdict.json it left
+    (None when it left none, as a run at any level other than deep does)."""
+
+    url: str
+    verdict: dict[str, object] | None
+
+
+def gate_decision(at: str, runs: Sequence[DeepRun], how: str) -> tuple[bool, str]:
+    """Pass only on a green deep run whose verdict names exactly the head under review. `runs` are
+    the host's successful runs on that commit, newest first."""
+    for candidate in runs:
+        verdict = candidate.verdict
+        if verdict is not None and verdict.get("level") == "deep" and verdict.get("sha") == at:
+            return True, f"PASS deep run {candidate.url} is green on {at[:10]}"
+    if runs:
+        return False, (
+            f"FAIL {len(runs)} green run(s) on {at[:10]}, but none is a deep run with a verdict "
+            f"for that commit; {how}"
+        )
+    return False, f"FAIL no green deep run tested the head {at[:10]}; {how}"
+
+
+def github_api(path: str, token: str, raw: bool = False) -> bytes:
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    url = path if path.startswith("https://") else f"{api}{path}"
+    request = urllib.request.Request(url)  # noqa: S310 - GitHub's own API
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("X-GitHub-Api-Version", "2022-11-28")
+    # Not forwarded on a redirect: an artifact download redirects to blob storage, which refuses
+    # a second credential beside its own signed URL.
+    request.add_unredirected_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request, timeout=120) as answer:  # noqa: S310 - GitHub's own API
+        return cast("bytes", answer.read())
+
+
+def github_deep_runs(repo: str, at: str, token: str) -> list[DeepRun]:
+    query = urllib.parse.urlencode(
+        {"head_sha": at, "event": "workflow_dispatch", "status": "success", "per_page": "20"}
+    )
+    listing = json.loads(
+        github_api(f"/repos/{repo}/actions/workflows/{WORKFLOW}/runs?{query}", token)
+    )
+    found: list[DeepRun] = []
+    for run_ in cast("list[dict[str, object]]", listing.get("workflow_runs", [])):
+        if run_.get("head_sha") != at or run_.get("conclusion") != "success":
+            continue
+        arts = json.loads(
+            github_api(
+                f"/repos/{repo}/actions/runs/{run_['id']}/artifacts?name={VERDICT_ARTIFACT}", token
+            )
+        )
+        verdict: dict[str, object] | None = None
+        for art in cast("list[dict[str, object]]", arts.get("artifacts", [])):
+            if art.get("name") != VERDICT_ARTIFACT or art.get("expired"):
+                continue
+            blob = github_api(str(art["archive_download_url"]), token)
+            with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                verdict = json.loads(archive.read("verdict.json").decode("utf-8"))
+        found.append(DeepRun(str(run_.get("html_url", run_["id"])), verdict))
+    return found
+
+
+def gitlab_deep_runs(branch: str) -> list[DeepRun]:
+    """GitLab keeps the latest successful pipeline's deep-verdict artifact per branch."""
     url = (
         f"{os.environ['CI_API_V4_URL']}/projects/{os.environ['CI_PROJECT_ID']}/jobs/artifacts/"
         f"{urllib.parse.quote(branch, safe='')}/raw/ci-out/verdict.json?job=deep-verdict"
     )
     token = {"JOB-TOKEN": os.environ["CI_JOB_TOKEN"]}
     request = urllib.request.Request(url, headers=token)  # noqa: S310 - GitLab's own API
-    how = f"start one with: glab ci run -b {branch}, then rerun this job"
     try:
         with urllib.request.urlopen(request, timeout=60) as answer:  # noqa: S310 - GitLab's own API
             verdict = json.loads(answer.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
-        print(
-            f"FAIL no green deep run is the latest successful pipeline on {branch} "
-            f"(HTTP {error.code}); {how}"
-        )
-        return 1
-    if verdict.get("sha") != at:
-        print(
-            f"FAIL the last green deep run on {branch} tested {str(verdict.get('sha'))[:10]}, "
-            f"not the head {at[:10]}; {how}"
-        )
-        return 1
-    print(f"PASS deep run pipeline {verdict.get('pipeline')} is green on {at[:10]}")
-    return 0
+        print(f"no deep-verdict artifact on {branch} (HTTP {error.code})")
+        return []
+    return [DeepRun(f"pipeline {verdict.get('pipeline')}", verdict)]
+
+
+def job_gate() -> int:
+    """A pull request into engine/base needs a green deep run on its exact head commit."""
+    run_facts = facts()
+    at = head()
+    branch = run_facts.ref
+    match run_facts.host:
+        case ci_host.Host.GITHUB:
+            how = (
+                f"start one with: gh workflow run {WORKFLOW} --ref {branch}; when it is green, "
+                "rerun this job"
+            )
+            token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+            runs = github_deep_runs(os.environ["GITHUB_REPOSITORY"], at, token)
+        case ci_host.Host.GITLAB:
+            how = f"start one with: glab ci run -b {branch}, then rerun this job"
+            runs = gitlab_deep_runs(branch)
+        case ci_host.Host.LAPTOP:
+            raise CiError("the gate reads the CI host's runs; it does not run on a laptop")
+    ok, message = gate_decision(at, runs, how)
+    print(message)
+    return 0 if ok else 1
 
 
 def job_smoke() -> int:
@@ -996,6 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
             "skylos",
             "mutmut",
             "verdict",
+            "gate",
             "mr-gate",
             "smoke",
         ],
@@ -1020,8 +1104,8 @@ def main(argv: list[str] | None = None) -> int:
                 return job_mutmut()
             case "verdict":
                 return job_verdict()
-            case "mr-gate":
-                return job_mr_gate()
+            case "gate" | "mr-gate":
+                return job_gate()
             case _:
                 return job_smoke()
     except CiError as error:

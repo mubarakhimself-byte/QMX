@@ -1,12 +1,16 @@
-"""The GitLab CI driver's planning: which tests a change selects, how shards split, which findings
-are new against a baseline, which functions mutmut mutates, and how JUnit outcomes are read."""
+"""The CI driver's planning: which tests a change selects, how shards split, which findings are new
+against a baseline, which functions mutmut mutates, how JUnit outcomes are read, which run facts it
+takes from GitHub Actions, GitLab or a laptop, and when the pull-request gate passes."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import ci_host
 import ci_mutate
 import ci_units
+import pull_reds
 import pytest
 import qci
 import ratchet
@@ -149,8 +153,10 @@ def test_each_test_level_has_its_scope(level: str, scope: str) -> None:
 def test_skylos_blocks_security_and_high_findings_but_only_notes_dead_code(tmp_path: Path) -> None:
     report = tmp_path / "skylos.json"
     report.write_text(
-        '{"danger": [{"file": "qmn/src/a.py", "line": 3, "rule_id": "SKY-D211", "message": "eval"}],'
-        ' "unused_functions": [{"file": "qmn/src/b.py", "line": 9, "name": "f", "severity": "HIGH"}],'
+        '{"danger": [{"file": "qmn/src/a.py", "line": 3, "rule_id": "SKY-D211",'
+        ' "message": "eval"}],'
+        ' "unused_functions": [{"file": "qmn/src/b.py", "line": 9, "name": "f",'
+        ' "severity": "HIGH"}],'
         ' "quality": [{"file": "qmn/src/c.py", "line": 1, "rule_id": "SKY-Q301", "message": "deep",'
         ' "severity": "MEDIUM"}], "summary": {"total": 3}}',
         "utf-8",
@@ -171,3 +177,135 @@ def test_skylos_lists_that_are_not_findings_are_ignored(tmp_path: Path) -> None:
         "utf-8",
     )
     assert qci.skylos_findings(report) == []
+
+
+HEAD = "a" * 40
+OTHER = "b" * 40
+
+
+def test_github_facts_take_the_pull_request_head_not_the_merge_commit() -> None:
+    facts = ci_host.read(
+        {
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_SHA": OTHER,
+            "QMX_HEAD_SHA": HEAD,
+            "QMX_BEFORE_SHA": "",
+            "QMX_SHARD": "3",
+            "QMX_SHARDS": "8",
+            "GITHUB_RUN_NUMBER": "41",
+            "GITHUB_REF_NAME": "17/merge",
+            "GITHUB_HEAD_REF": "ci/github",
+            "GITHUB_RUN_ID": "9001",
+        }
+    )
+    assert facts == ci_host.RunFacts(ci_host.Host.GITHUB, HEAD, None, 3, 8, 41, "ci/github", "9001")
+
+
+def test_a_github_push_reads_its_sha_and_before_and_a_new_branch_has_no_before() -> None:
+    env = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_SHA": HEAD,
+        "QMX_BEFORE_SHA": OTHER,
+        "GITHUB_REF_NAME": "build/x",
+    }
+    facts = ci_host.read(env)
+    assert (facts.head, facts.before, facts.shard, facts.shards, facts.ref) == (
+        HEAD,
+        OTHER,
+        1,
+        1,
+        "build/x",
+    )
+    assert ci_host.read({**env, "QMX_BEFORE_SHA": "0" * 40}).before is None
+
+
+def test_gitlab_facts_still_come_from_its_own_variables() -> None:
+    facts = ci_host.read(
+        {
+            "GITLAB_CI": "true",
+            "CI_COMMIT_SHA": HEAD,
+            "CI_COMMIT_BEFORE_SHA": "0" * 40,
+            "CI_NODE_INDEX": "2",
+            "CI_NODE_TOTAL": "3",
+            "CI_PIPELINE_IID": "7",
+            "CI_COMMIT_REF_NAME": "slice/x",
+            "CI_PIPELINE_ID": "3061230259",
+        }
+    )
+    assert facts == ci_host.RunFacts(
+        ci_host.Host.GITLAB, HEAD, None, 2, 3, 7, "slice/x", "3061230259"
+    )
+
+
+def test_a_laptop_has_one_shard_and_reads_head_from_git() -> None:
+    facts = ci_host.read({"CI_COMMIT_SHA": HEAD})
+    assert facts == ci_host.RunFacts(ci_host.Host.LAPTOP, None, None, 1, 1, 0, "", "")
+
+
+def test_tests_run_without_the_hosts_variables_but_keep_ci_and_qmx() -> None:
+    env = {
+        "CI": "true",
+        "CI_JOB_TOKEN": "t",
+        "GITLAB_CI": "true",
+        "GITHUB_TOKEN": "t",
+        "ACTIONS_RUNTIME_TOKEN": "t",
+        "RUNNER_TEMP": "runner-temp",
+        "QMX_LEVEL": "deep",
+        "PATH": "/bin",
+    }
+    assert ci_host.test_env(env) == {"CI": "true", "QMX_LEVEL": "deep", "PATH": "/bin"}
+
+
+def _deep(sha: str, level: str = "deep") -> dict[str, object]:
+    return {"sha": sha, "level": level, "ref": "ci/github", "pipeline": "1"}
+
+
+def test_the_gate_passes_on_a_green_deep_run_of_the_exact_head() -> None:
+    runs = [qci.DeepRun("u/2", None), qci.DeepRun("u/1", _deep(HEAD))]
+    assert qci.gate_decision(HEAD, runs, "how") == (
+        True,
+        f"PASS deep run u/1 is green on {HEAD[:10]}",
+    )
+
+
+def test_the_gate_fails_with_no_green_run_on_the_head() -> None:
+    assert qci.gate_decision(HEAD, [], "start one") == (
+        False,
+        f"FAIL no green deep run tested the head {HEAD[:10]}; start one",
+    )
+
+
+@pytest.mark.parametrize(
+    "verdict", [None, _deep(OTHER), _deep(HEAD, level="release")], ids=["none", "sha", "level"]
+)
+def test_the_gate_fails_when_no_green_run_is_a_deep_run_of_the_head(
+    verdict: dict[str, object] | None,
+) -> None:
+    ok, message = qci.gate_decision(HEAD, [qci.DeepRun("u/1", verdict)], "how")
+    assert (ok, message.split(",")[0]) == (False, f"FAIL 1 green run(s) on {HEAD[:10]}")
+
+
+def test_pull_reds_reads_each_shard_and_names_the_ones_that_did_not_finish(tmp_path: Path) -> None:
+    done = tmp_path / "done"
+    done.mkdir()
+    (done / "reds-linux-1.txt").write_text("linux|qmn|t::b\nlinux|qmn|t::a\n", "utf-8")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    (empty / "plan-linux-2.json").write_text(json.dumps({"files": []}), "utf-8")
+    cut = tmp_path / "cut"
+    cut.mkdir()
+    (cut / "plan-linux-3.json").write_text(json.dumps({"files": ["qmn::t.py"]}), "utf-8")
+    shards = {
+        "suite-linux-1": pull_reds.shard_reds(done),
+        "suite-linux-2": pull_reds.shard_reds(empty),
+        "suite-linux-3": pull_reds.shard_reds(cut),
+        "suite-windows-1": None,
+    }
+    assert pull_reds.known_reds_text("77", shards) == (
+        "# Tests red on GitHub Actions run 77. Key: system|unit|test id.\n"
+        "# A red listed here does not block; any other red does. This list may only shrink.\n"
+        "# Shards read: suite-linux-1, suite-linux-2.\n"
+        "# Shards that did not finish, so their reds are not listed: suite-linux-3, "
+        "suite-windows-1.\n"
+        "linux|qmn|t::a\nlinux|qmn|t::b\n"
+    )
