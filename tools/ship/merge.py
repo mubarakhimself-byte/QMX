@@ -204,6 +204,18 @@ class Merge:
         return out
 
     def reviewed_tip(self) -> str | None:
+        run = self.program.stop_review(self.stop) / "review-run.json"
+        if run.exists():
+            import json
+
+            try:
+                result = json.loads(run.read_text("utf-8")).get("result")
+            except ValueError:
+                result = None
+            if result not in (0,):
+                self.wait(f"stop {self.stop}: ship review has not passed this verdict (its result is {result}); "
+                          "nothing merged", str(run))
+                return None
         found = self.verdicts()
         if not found:
             self.wait(f"stop {self.stop} has no verdict to merge on", str(self.program.stop_review(self.stop)))

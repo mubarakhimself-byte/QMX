@@ -405,6 +405,51 @@ def cmd_claims(a, program, settings):
     return _lines(True, lines)
 
 
+# U11: chain, the conveyor
+def cmd_chain(a):
+    from ship import chain, scheduled_task
+
+    if a.install_task or a.remove_task:
+        if a.install_task:
+            if not a.plans:
+                raise SystemExit("ship chain --install-task needs --plans")
+            rc, lines = scheduled_task.install(a.plans.resolve(), _settings_for(a), apply=a.install)
+        else:
+            rc, lines = scheduled_task.remove(_settings_for(a), apply=a.install)
+        _lines(True, lines)
+        return rc
+    if a.resume_all:
+        if not a.plans:
+            raise SystemExit("ship chain --resume-all needs --plans")
+        return _lines(True, chain.resume_all(a.plans.resolve()) or ["NOTHING to resume"])
+    where = a.follow if isinstance(a.follow, Path) else a.program
+    if not where:
+        raise SystemExit("ship chain needs --program (or --follow P, --resume-all --plans P)")
+    program = Program(where.resolve())
+    settings = load_settings(program.dir)
+    if a.follow is not None:
+        return chain.follow(program, settings, settings.chain_poll_s)
+    if a.stop_after:
+        (program.dir / "STOP-AFTER").write_text(a.stop_after + "\n", "utf-8", newline="\n")
+        print(f"STOP-AFTER {a.stop_after}: the conveyor stops once that stop is merged")
+        return 0
+    if a.detach:
+        return chain.detach(["chain", "--program", str(program.dir)], program.dir)
+    return chain.conveyor(program, settings)
+
+
+def _settings_for(a):
+    from ship.settings import Settings
+
+    return load_settings(a.program.resolve()) if a.program else Settings()
+
+
+def cmd_abandon(a, program, settings):
+    from ship.chain import abandon
+
+    return _lines(True, abandon(program, settings, a.why))
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ship")
     sub = p.add_subparsers(dest="command", required=True)
@@ -479,6 +524,12 @@ def parser() -> argparse.ArgumentParser:
     add("merge", cmd_merge, (["stop"], {}))
     # U38: claims, the merge queue and the worker pool
     add("claims", cmd_claims, (["action"], {"choices": ["claim", "notice", "release", "sweep", "list"]}))
+    # U11: chain, the conveyor
+    add_plain("chain", cmd_chain, (["--program"], {"type": Path}), (["--detach"], {"action": "store_true"}),
+              (["--follow"], {"nargs": "?", "const": True, "type": Path}), (["--resume-all"], {"action": "store_true"}),
+              (["--plans"], {"type": Path}), (["--stop-after"], {}), (["--install-task"], {"action": "store_true"}),
+              (["--remove-task"], {"action": "store_true"}), (["--install"], {"action": "store_true"}))
+    add("abandon", cmd_abandon, (["--why"], {"required": True}))
     return p
 
 

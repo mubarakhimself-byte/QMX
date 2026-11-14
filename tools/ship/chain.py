@@ -1,0 +1,947 @@
+"""ship chain: the conveyor (unit U11, FACTORY-DESIGN section 4 and 11.8).
+
+`python tools/ship chain --program P` holds `chain.lock` and polls every `chain_poll_s` seconds. Each loop
+it reads `ship phase` (`phase.read`) and ticks the activity for its `next`; an activity starts at most one
+thing per tick and never waits on a long command (scripts are children of the kit's own CLI, agents are
+`launch()` handles). Every finished step leaves a file, so a conveyor killed anywhere and started again
+carries on at the first step with no file.
+
+| next | Activity |
+|---|---|
+| review | `check_chain --stage handoff` and `check_plan` as children; a FAIL writes `plan-review/FIXES.md` and a `RESULT: FIXES` review (so planner-fix runs); else one `plan-review` worker. `RESULT: QUESTIONS` copies `QUESTIONS.md` into `WAITING.md` and exits 10 |
+| planner-fix | one `planner-fix` worker, both checks again, then the review once more (`REVIEW.md` set aside). A second FIXES writes WAITS |
+| go | when rule 8 holds, `gates.go` by him with the advance gate's source; otherwise exits 10 |
+| arm | `init_state` (build branch made at `parent_tip` when the remote has none), `preflight`, facts at `parent_tip` and at the target tip; failing facts start one `grounding` worker |
+| build | the `ship run` loop (`run.Build`) on the program, or on the fix folder (`build_folder`, armed first) |
+| checkpoint-review | `review.Checkpoint`; while it runs, the program's Build keeps pre-building |
+| merge | `ship merge X` as a child; 3 and 11 retry next tick. A fix program `merge` wrote is built and reviewed (round 2) before the next try |
+| docs | `ship.docs` when it exists (U36); otherwise `docs/<X>.json` records the skip. Never blocks |
+| later-handoff | one `later-handoff` worker when its prompt exists; else WAITS |
+| audit | the stage in `phase.json`: `census` as a script, the others as workers when their prompts exist; else SKIP and WAITS |
+| done | `run_report`, `teardown`, the claims released, the final note in `RUN-REPORT.md` |
+
+Every loop it also refreshes `chain.lock` with its children, reads power, internet and GitHub
+(`power_watch.step`; `HOLD` starts nothing new), and starts no worker before `usage_reset_at`. WAITS lines go
+to `notes/WAITS-ON-YOU.md`. Exit: 0 finished (or stopped after `STOP-AFTER`'s stop merged), 10 waits on him,
+11 another process holds `chain.lock`, 1 an error it could not route (written to WAITS).
+
+`SHIP_CHAIN_STOP_AFTER=<activity>:<n>` (tests) exits hard right after the n-th finished activity of that
+name (`any` counts every activity).
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from collections import Counter
+from pathlib import Path
+
+from ship import clock
+from ship import launch as ln
+from ship import phase
+from ship import program as prog
+from ship import state as st
+from ship.gitx import GitError, git, remote_sha
+from ship.layout import Program
+from ship.proc import kill_tree, pid_alive, popen_group_kwargs
+from ship.proc import created as proc_created
+from ship.review import Checkpoint, add_wait
+from ship.run import Build, ChainLock, PromptError, Script, prompt_dir, render
+from ship.settings import Settings, load_settings
+
+CHECK_FAIL = re.compile(r"^FAIL\b", re.M)
+AUDIT_WORKERS = {"intent": ("audit-intent", "AUDIT-INTENT.md", "intent-check"),
+                 "quality": ("audit-reader", "AUDIT-READER.md", "judgement"),
+                 "judgement": ("audit-judge", "AUDIT-JUDGE.md", "verdicts"),
+                 "audit-handoff": ("sweep-handoff", "AUDIT-HANDOFF.md", "")}
+
+
+class Stop(Exception):
+    def __init__(self, code: int):
+        super().__init__(code)
+        self.code = code
+
+
+def project_values(profile: dict) -> dict[str, str]:
+    return {f"PROJECT.{k}": str(v) for k, v in (profile.get("project") or {}).items()}
+
+
+class Conveyor:
+    def __init__(self, program: Program, settings: Settings, lock: ChainLock | None = None):
+        from ship import profile
+
+        self.program, self.settings, self.lock = program, settings, lock
+        self.profile = profile.of_program(program.dir, settings)
+        self.roles = ln.load_roles(settings, self.profile)
+        self.memo_path = program.dir / "chain.json"
+        self.memo = self._load()
+        self.builds: dict[str, Build] = {}
+        self.checkpoint: Checkpoint | None = None
+        self.cp_key: tuple | None = None
+        self.worker: tuple[str, ln.Handle] | None = None
+        self.scripts: list[Script] = []
+        self.done_count: Counter = Counter()
+        self.exit: int | None = None
+        self.last_next = ""
+        self.buf: list[str] = []  # this tick's lines, kept when an activity stops the loop
+        self.current = None  # (handler, phase) of the activity being ticked
+        self.owner = None  # (handler, phase) of the activity whose worker runs; it collects the result
+
+    # -- memo and notes --
+
+    def _load(self) -> dict:
+        try:
+            return json.loads(self.memo_path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def save(self) -> None:
+        tmp = self.memo_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(self.memo, indent=2) + "\n", "utf-8", newline="\n")
+        st.replace(tmp, self.memo_path)
+
+    def log(self, lines: list[str]) -> None:
+        if not lines:
+            return
+        path = self.program.notes_dir / "chain.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stamp = clock.now().isoformat(timespec="seconds")
+        with open(path, "a", encoding="utf-8", newline="\n") as out:
+            out.writelines(f"{stamp} {line}\n" for line in lines)
+
+    def wait(self, text: str, see: str = "") -> None:
+        add_wait(self.program, text, see)
+
+    def finished(self, activity: str) -> None:
+        """One activity finished: count it, and honour SHIP_CHAIN_STOP_AFTER (tests kill the conveyor here)."""
+        self.done_count[activity] += 1
+        self.done_count["any"] += 1
+        self.save()
+        want = os.environ.get("SHIP_CHAIN_STOP_AFTER", "")
+        name, _, n = want.partition(":")
+        if name and n.isdigit() and self.done_count[name] == int(n):
+            self.log([f"STOP-AFTER test hook {want} after {activity}"])
+            if self.lock:
+                self.lock.refresh(self.children())
+            os._exit(137)
+
+    # -- children --
+
+    def children(self) -> list[dict]:
+        rows = []
+        for build in self.builds.values():
+            rows += build.children()
+        if self.checkpoint:
+            rows += self.checkpoint.children()
+        if self.worker:
+            name, h = self.worker
+            rows.append({"pid": h.pid, "created": h.created, "role": h.role.name, "id": name,
+                         "session": h.session_id, "started": h.folder.name})
+        rows += [{"pid": s.proc.pid, "created": s.created, "role": s.name, "id": s.slice, "started": s.started}
+                 for s in self.scripts]
+        return rows
+
+    def stop_children(self) -> None:
+        for build in self.builds.values():
+            build.stop_children()
+        if self.checkpoint:
+            self.checkpoint.stop_children()
+        if self.worker:
+            self.worker[1].kill()
+            self.worker = None
+        for s in self.scripts:
+            if s.done() is None:
+                kill_tree(s.proc.pid)
+        self.scripts.clear()
+
+    def child(self, name: str, argv: list[str]) -> Script:
+        logs = self.program.checks_root / "_chain"
+        logs.mkdir(parents=True, exist_ok=True)
+        stamp = clock.now().strftime("%Y%m%dT%H%M%S") + f"-{time.monotonic_ns() % 10**6:06d}"
+        log = logs / f"{stamp}-{name}.log"
+        with open(log, "w", encoding="utf-8", newline="\n") as out:
+            proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                                    **popen_group_kwargs())
+        script = Script(name, "", proc, log, clock.now().isoformat(timespec="seconds"), (), proc_created(proc.pid))
+        self.scripts.append(script)
+        return script
+
+    def kit(self, command: str, program: Program, *args: str) -> list[str]:
+        return [sys.executable, str(ln.KIT), *command.split(), "--program", str(program.dir), *args]
+
+    def ended(self, name: str) -> tuple[int, list[str]] | None:
+        """The exit and output of a finished child called `name`; None while it runs or was never started."""
+        script = next((s for s in self.scripts if s.name == name), None)
+        if script is None:
+            return None
+        rc = script.done()
+        if rc is None:
+            return None
+        self.scripts.remove(script)
+        return rc, script.output()
+
+    def running(self, name: str) -> bool:
+        return any(s.name == name for s in self.scripts)
+
+    # -- workers --
+
+    def no_workers_now(self) -> bool:
+        if self.program.hold.exists():
+            return True
+        if self.program.state.exists():
+            usage = st.load(self.program).usage_reset_at
+            if usage and dt.datetime.fromisoformat(usage) > clock.now():
+                return True
+        until = self.memo.get("limit_until")
+        return bool(until and dt.datetime.fromisoformat(until) > clock.now())
+
+    def start_worker(self, name: str, role: str, prompt_file: str, values: dict, cwd: Path,
+                     env: dict | None = None) -> bool:
+        """Start one conveyor worker (plan review, planner fix, grounding, later handoff, audit stages)."""
+        if self.worker or self.no_workers_now():
+            return False
+        path = prompt_dir(self.settings) / prompt_file
+        try:
+            prompt = render(path, {**project_values(self.profile), **values})
+        except (PromptError, OSError) as exc:
+            self.wait(f"the {role} prompt cannot be filled: {exc}", str(path))
+            raise Stop(10) from exc
+        n = self.memo.setdefault("workers", {}).get(name, 0) + 1
+        self.memo["workers"][name] = n
+        repo = str((self.profile.get("project") or {}).get("repo") or "")
+        full_env = {"SHIP_REPO": repo, **(env or {})}
+        handle = ln.launch(self.roles[role], prompt, cwd, self.program, f"chain-{name}-{n}", self.settings,
+                           extra_env=full_env, label=name)
+        if handle is None:
+            return False
+        self.worker = (name, handle)
+        self.owner = self.current
+        self.buf.append(f"START {role} {name} pid {handle.pid}")
+        return True
+
+    def worker_result(self, name: str) -> ln.Result | None:
+        if not self.worker or self.worker[0] != name:
+            return None
+        got = self.worker[1].poll()
+        if got is None:
+            return None
+        handle = self.worker[1]
+        self.worker = None
+        self.log([f"WORKER {name} ended: {got.kind} {got.line or got.note}".rstrip()])
+        if got.kind == "limit":
+            self.memo["limit_until"] = got.limit_reset
+            return None
+        if got.kind == "ok" and got.contract == "WAITS":
+            self.wait(f"the {name} worker needs you", got.value)
+            raise Stop(10)
+        if not (got.kind == "ok" and got.contract in ("DONE", "READY")):
+            if self.memo["workers"].get(name, 0) >= self.settings.max_restarts:
+                self.wait(f"the {name} worker failed {self.memo['workers'][name]} times ({got.kind})", str(handle.stdout))
+                raise Stop(10)
+            return None
+        return got
+
+    # -- the loop --
+
+    def tick(self) -> list[str]:
+        self.buf = []
+        try:
+            self.buf += self._tick()
+        except Stop as stop:
+            self.exit = stop.code
+        lines = self.buf
+        self.save()
+        if self.lock:
+            self.lock.refresh(self.children())
+        self.log(lines)
+        return lines
+
+    def _tick(self) -> list[str]:
+        lines: list[str] = []
+        if self.program.state.exists():
+            from ship import power_watch
+
+            line = power_watch.step(self.program, self.settings, power_watch.on_mains(), time.time(),
+                                    lambda: power_watch.probe_network(self.program, self.settings))
+            if line != "MAINS":
+                lines.append(f"POWER {line}")
+        p = phase.read(self.program, self.settings)
+        nxt, why = p["next"], p.get("why", "")
+        override = self.merge_fix(p)
+        if override:
+            nxt, p = override
+        if nxt != self.last_next:
+            self.buf.append(f"NEXT {nxt}: {why}")
+            if p.get("status") != "abandoned":
+                phase.set_phase(self.program, nxt, "running", "conveyor")
+            built = self.last_next == "build"
+            self.last_next = nxt
+            if built:
+                self.finished("build")  # the build's done-file, the stop note, is written
+        if self.worker and self.owner:  # a worker's result goes to the activity that started it, whatever phase says now
+            handler, started_p = self.owner
+            return lines + handler(started_p)
+        merging = next((sc for sc in self.scripts if sc.name.startswith("merge-")), None)
+        if merging is not None:  # MERGED in the note moves phase on; the merge's own exit is still read here
+            return lines + self.merge({**p, "next": "merge", "stop": merging.name[len("merge-"):]})
+        if self.checkpoint is not None:  # a verdict file alone moves phase on; the review must judge it first
+            return lines + self.review_checkpoint({"stop": self.cp_key[0], "round": str(self.cp_key[1])})
+        unjudged = self.unjudged(p)
+        if unjudged:
+            return lines + self.review_checkpoint(unjudged)
+        if self.stop_after_reached():
+            lines.append(f"STOP-AFTER {self.stop_after_reached()} merged; the conveyor stops here")
+            phase.set_phase(self.program, nxt, "waits", "conveyor")
+            (self.program.dir / "STOP-AFTER").unlink(missing_ok=True)
+            raise Stop(0)
+        handler = {"review": self.review, "planner-fix": self.planner_fix, "go": self.go, "arm": self.arm_self,
+                   "build": self.build, "checkpoint-review": self.review_checkpoint, "merge": self.merge,
+                   "docs": self.docs, "later-handoff": self.later_handoff, "audit": self.audit,
+                   "sweep-handoff": self.sweep_handoff, "done": self.finish}.get(nxt)
+        if handler is None:  # intake, plan, waits: nothing moves without him
+            self.wait_or_note(p)
+            raise Stop(10)
+        if self.program.state.exists() and not self.memo.get("armed", {}).get(str(self.program.dir)) \
+                and nxt not in ("done",) and p.get("kind") != "fix":
+            self.current = (self.arm_self, p)
+            return lines + self.arm(self.program)  # state.json exists, but the arm steps did not all finish
+        self.current = (handler, p)
+        return lines + handler(p)
+
+    def wait_or_note(self, p: dict) -> None:
+        if p.get("status") == "waits-on-him" or p.get("waits"):
+            return
+        self.wait(f"{self.program.dir.name} is at `{p['next']}` ({p.get('why', '')}); the conveyor cannot go on "
+                  "without you", str(self.program.dir))
+
+    def stop_after_reached(self) -> str:
+        path = self.program.dir / "STOP-AFTER"
+        if not path.exists() or not self.program.state.exists():
+            return ""
+        stop = path.read_text("utf-8").strip()
+        return stop if stop and stop in st.load(self.program).merged else ""
+
+    # -- review and planner-fix --
+
+    def checks(self) -> list[tuple[str, list[str]]]:
+        home = ln.factory_home(self.settings) / "skills" / "factory-core" / "scripts"
+        try:
+            kind = prog.load(self.program).kind
+        except prog.ProgramError:
+            kind = "feature"
+        kind = kind if kind in ("feature", "wire", "audit") else "feature"
+        project = (self.profile.get("project") or {}).get("name") or "qmx"
+        return [("check_chain", [sys.executable, str(home / "check_chain.py"), str(self.program.dir), "--stage",
+                                 "handoff", "--kind", kind, "--project", project, "--ship", str(ln.KIT)]),
+                ("check_plan", [sys.executable, str(home / "check_plan.py"), str(self.program.dir), str(ln.KIT)])]
+
+    def run_checks(self, tag: str) -> list[str] | None:
+        """Both plan checks as children: None while they run, else their FAIL lines."""
+        book = self.memo.setdefault("checks", {})
+        if book.get(tag) is not None:
+            return book[tag]
+        for name, argv in self.checks():
+            key = f"{tag}-{name}"
+            if not self.running(key) and key not in book.get("done", {}):
+                if not Path(argv[1]).exists():
+                    self.wait(f"the plan check {Path(argv[1]).name} is not in the factory home", argv[1])
+                    raise Stop(10)
+                self.child(key, argv)
+        for name, _ in self.checks():
+            key = f"{tag}-{name}"
+            got = self.ended(key)
+            if got:
+                rc, out = got
+                fails = [x for x in out if x.startswith("FAIL")] or ([f"FAIL {name} exit {rc}"] if rc else [])
+                book.setdefault("done", {})[key] = fails
+        done = book.get("done", {})
+        if all(f"{tag}-{name}" in done for name, _ in self.checks()):
+            book[tag] = [x for name, _ in self.checks() for x in done.pop(f"{tag}-{name}")]
+            return book[tag]
+        return None
+
+    def review(self, p: dict) -> list[str]:
+        folder = self.program.dir / "plan-review"
+        rounds = len(list(folder.glob("REVIEW.round-*.md")))
+        tag = f"review-{rounds + 1}"
+        fails = self.run_checks(tag)
+        if fails is None:
+            return []
+        if fails:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "FIXES.md").write_text("# Fixes from the plan checks\n\n" + "".join(f"- {x}\n" for x in fails),
+                                             "utf-8", newline="\n")
+            (folder / "REVIEW.md").write_text(f"The plan checks failed; see FIXES.md.\n\nRESULT: FIXES\n"
+                                              f"END plan-review {self.parent_tip()}\n", "utf-8", newline="\n")
+            self.finished("review")
+            return [f"CHECKS failed ({len(fails)}): planner-fix"]
+        got = self.worker_result("plan-review")
+        if got is None:
+            if not self.worker:
+                self.start_worker("plan-review", "plan-review", "PLAN-REVIEW.md", self.values(), self.program.dir)
+            return []
+        result = phase.review_result(folder / "REVIEW.md")
+        if result == "QUESTIONS":
+            asked = folder / "QUESTIONS.md"
+            text = asked.read_text("utf-8") if asked.exists() else ""
+            rows = [x.strip() for x in text.splitlines() if x.strip().startswith("- [ ]")] or \
+                   [f"- [ ] {x.strip(' -*')}" for x in text.splitlines() if x.strip(" -*#")]
+            old = self.program.waiting.read_text("utf-8") if self.program.waiting.exists() else ""
+            self.program.waiting.write_text(old + "".join(f"{r}\n" for r in rows if r not in old), "utf-8",
+                                            newline="\n")
+            self.finished("review")
+            raise Stop(10)
+        if not result:
+            return [f"REVIEW the plan-review worker wrote no RESULT line; again ({self.memo['workers']['plan-review']})"]
+        self.finished("review")
+        return [f"REVIEW result {result}"]
+
+    def planner_fix(self, p: dict) -> list[str]:
+        folder = self.program.dir / "plan-review"
+        if (folder / "FIXES.applied.md").exists() and self.memo.get("planner_fix_done"):
+            self.wait("the plan review asked for fixes a second time", str(folder / "REVIEW.md"))
+            raise Stop(10)
+        if not self.memo.get("planner_fix_worker_done"):
+            got = self.worker_result("planner-fix")
+            if got is None:
+                if not self.worker:
+                    self.start_worker("planner-fix", "planner-fix", "PLANNER-FIX.md", self.values(), self.program.dir)
+                return []
+            self.memo["planner_fix_worker_done"] = True
+        fails = self.run_checks(f"fix-{len(list(folder.glob('REVIEW.round-*.md'))) + 1}")
+        if fails is None:
+            return []
+        if fails:
+            self.wait("the plan checks still fail after the planner's fixes: " + "; ".join(fails[:3]),
+                      str(self.program.dir))
+            raise Stop(10)
+        n = len(list(folder.glob("REVIEW.round-*.md"))) + 1
+        if (folder / "REVIEW.md").exists():
+            (folder / "REVIEW.md").replace(folder / f"REVIEW.round-{n}.md")
+        self.memo["planner_fix_done"] = True
+        self.memo["planner_fix_worker_done"] = False
+        self.finished("planner-fix")
+        return [f"PLANNER-FIX applied; the plan review runs once more"]
+
+    def parent_tip(self) -> str:
+        try:
+            return prog.load(self.program).parent_tip or ""
+        except prog.ProgramError:
+            return ""
+
+    def values(self, **more: str) -> dict:
+        return {"PROGRAM": str(self.program.dir), "SHIP": str(ln.KIT), "PARENT_TIP": self.parent_tip(), **more}
+
+    # -- go --
+
+    def go(self, p: dict) -> list[str]:
+        if "conveyor writes go" not in p.get("why", ""):
+            raise Stop(10)
+        index = prog.load(self.program)
+        last = index.last_gate_before_go()
+        source = str((index.gate(last) or {}).get("source") or f"gates.{last}")
+        line = prog.set_gate(self.program, "go", by="him", source=source, advance=True)
+        self.finished("go")
+        return [f"GO {line}"]
+
+    # -- arm --
+
+    def arm_self(self, p: dict) -> list[str]:
+        return self.arm(self.program)
+
+    def project(self) -> dict:
+        return self.profile.get("project") or {}
+
+    def arm(self, folder: Program) -> list[str]:
+        """init, preflight, facts at parent_tip and at the target tip, grounding for failing facts."""
+        key = str(folder.dir)
+        book = self.memo.setdefault("arm", {}).setdefault(key, {})
+        index = prog.load(folder)
+        proj = self.project()
+        repo = Path(proj.get("repo") or "")
+        remote = str(proj.get("remote") or self.settings.remote)
+        lines: list[str] = []
+        if not folder.state.exists():
+            if not index.build_branch or not repo.is_dir():
+                self.wait(f"{folder.dir.name} cannot be armed: build_branch {index.build_branch!r}, repo {repo}")
+                raise Stop(10)
+            try:
+                if not remote_sha(repo, remote, index.build_branch, self.settings.git_timeout_s):
+                    git(repo, "push", "-q", remote, f"{index.parent_tip}:refs/heads/{index.build_branch}",
+                        timeout=self.settings.git_timeout_s)
+                    lines.append(f"BRANCH {index.build_branch} made at {str(index.parent_tip)[:10]}")
+            except GitError as exc:
+                return lines + [f"ARM {folder.dir.name}: remote unreachable ({exc}); again next tick"]
+            from ship.plan import init_state
+
+            lines.append(init_state(folder.dir, repo, index.build_branch,
+                                    Path(proj.get("worktree_root") or self.settings.quality_dir or repo.parent),
+                                    remote))
+        if self.settings.arm_preflight and not book.get("preflight"):
+            got = self.ended("preflight")
+            if got is None:
+                if not self.running("preflight"):
+                    self.child("preflight", self.kit("preflight", folder))
+                return lines
+            rc, out = got
+            if rc != 0:
+                for line in [x for x in out if x.startswith("FAIL")] or out[-5:]:
+                    self.wait(f"{folder.dir.name} preflight: {line}", str(folder.dir / "preflight"))
+                raise Stop(10)
+            book["preflight"] = True
+        tips = [t for t in dict.fromkeys([index.parent_tip or "", self.target_tip(repo, remote)]) if t]
+        for tip in tips:
+            if tip in book.get("facts", {}):
+                continue
+            got = self.ended(f"facts-{tip[:8]}")
+            if got is None:
+                if not self.running(f"facts-{tip[:8]}"):
+                    self.child(f"facts-{tip[:8]}", self.kit("facts", folder, "--tip", tip))
+                return lines
+            book.setdefault("facts", {})[tip] = [x for x in got[1] if x.startswith("FAIL")]
+        failing = sorted({x.split()[1] for fails in book.get("facts", {}).values() for x in fails if len(x.split()) > 1})
+        if failing and not book.get("grounded"):
+            got = self.worker_result(f"grounding-{folder.dir.name}")
+            if got is None:
+                if not self.worker:
+                    started = (prompt_dir(self.settings) / "GROUNDING.md").exists() and self.start_worker(
+                        f"grounding-{folder.dir.name}", "grounding", "GROUNDING.md",
+                        self.values(SLICES=", ".join(failing), TIP=tips[-1],
+                                    FACTS=str(folder.checks_root / "_facts")), folder.dir)
+                    if not started and not self.worker:
+                        book["grounded"] = True  # no grounding prompt: dispatch parks what still fails
+                return lines + [f"FACTS fail for {failing}"]
+            book["grounded"] = True
+        self.memo.setdefault("armed", {})[key] = True
+        self.finished("arm")
+        return lines + [f"ARMED {folder.dir.name}"]
+
+    def target_tip(self, repo: Path, remote: str) -> str:
+        target = str(self.project().get("target_branch") or self.settings.ci_gate_base)
+        try:
+            return remote_sha(repo, remote, target, self.settings.git_timeout_s) or ""
+        except GitError:
+            return ""
+
+    # -- build and the checkpoint --
+
+    def build(self, p: dict) -> list[str]:
+        folder = Program(Path(p["build_folder"])) if p.get("build_folder") else self.program
+        if folder.dir != self.program.dir and not self.memo.get("armed", {}).get(str(folder.dir)):
+            return self.arm(folder)
+        return self.tick_build(folder)
+
+    def tick_build(self, folder: Program, count: bool = True) -> list[str]:
+        key = str(folder.dir)
+        build = self.builds.get(key)
+        lines: list[str] = []
+        if build is None:
+            build = Build(folder, load_settings(folder.dir), None)
+            self.builds[key] = build
+            lines += build.start()
+            if build.exit is not None:
+                raise Stop(10)
+        lines += [f"[{folder.dir.name}] {x}" for x in build.tick(clock.now())]
+        if build.exit is not None:
+            code = build.exit
+            build.stop_children()
+            del self.builds[key]
+            raise Stop(10 if code in (1, 10) else code)
+        if build.done() and count and folder.dir != self.program.dir:
+            del self.builds[key]  # a fix program's build is over once its stop note is written
+        return lines
+
+    def prebuild(self) -> list[str]:
+        """While a checkpoint is in review or merging, the program's own Build keeps pre-building."""
+        if not self.program.state.exists():
+            return []
+        state = st.load(self.program)
+        early = [s for s in state.slices.values() if s.status not in (st.Status.LANDED, st.Status.PARKED,
+                                                                     st.Status.BLOCKED_BY) and state.ahead(s.id) == 1]
+        if not early and str(self.program.dir) not in self.builds:
+            return []
+        try:
+            return self.tick_build(self.program, count=False)
+        except Stop:
+            return ["PREBUILD stopped; the open checkpoint goes on"]
+
+    def review_checkpoint(self, p: dict) -> list[str]:
+        stop, rnd = p["stop"], int(p.get("round") or 1)
+        lines = self.prebuild()
+        if self.cp_key != (stop, rnd):
+            if self.checkpoint:
+                self.checkpoint.stop_children()
+            self.checkpoint = Checkpoint(self.program, stop, self.settings, rnd)
+            self.cp_key = (stop, rnd)
+        if self.program.hold.exists():
+            return lines + ["HOLD: the review starts nothing new"]
+        lines += self.checkpoint.tick()
+        code = self.checkpoint.result()
+        if code is None:
+            return lines
+        self.checkpoint, self.cp_key = None, None
+        self.finished("checkpoint")
+        if code == 10:
+            raise Stop(10)
+        return lines + [f"CHECKPOINT {stop} round {rnd}: {code}"]
+
+    def unjudged(self, p: dict) -> dict | None:
+        """A stop whose review was started but has no result (the conveyor died after the verdict file)."""
+        stop = p.get("stop")
+        if p.get("next") not in ("merge", "docs") or not stop:
+            return None
+        run = self.program.stop_review(stop) / "review-run.json"
+        try:
+            memo = json.loads(run.read_text("utf-8"))
+        except (OSError, ValueError):
+            return None
+        if "result" in memo or not memo.get("tip"):
+            return None
+        return {"stop": stop, "round": str(memo.get("round") or 1)}
+
+    # -- merge --
+
+    def merge_fix(self, p: dict) -> tuple[str, dict] | None:
+        """A fix program `ship merge` wrote (its go gate's source is merge/<X>.md): build it, then round 2."""
+        if p.get("next") != "merge" or not p.get("stop"):
+            return None
+        stop = p["stop"]
+        fix = Program(self.program.dir.parent / f"{self.program.dir.name}-fix-{stop}")
+        if not fix.project_file.exists():
+            return None
+        try:
+            go = prog.load(fix).gate("go") or {}
+        except prog.ProgramError:
+            return None
+        if str(go.get("source") or "") != f"merge/{stop}.md":
+            return None
+        if not phase.stop_tip(fix, stop):
+            return "build", {**p, "next": "build", "build_folder": fix.dir.as_posix()}
+        if not phase.verdict(self.program.stop_review(stop) / "REVIEW-2.md")[0]:
+            return "checkpoint-review", {**p, "next": "checkpoint-review", "round": "2"}
+        return None
+
+    def merge(self, p: dict) -> list[str]:
+        stop = p["stop"]
+        lines = self.prebuild()
+        if self.program.hold.exists():
+            return lines + ["HOLD: no merge now"]
+        got = self.ended(f"merge-{stop}")
+        if got is None:
+            if not self.running(f"merge-{stop}"):
+                self.child(f"merge-{stop}", self.kit("merge", self.program, stop))
+            return lines
+        rc, out = got
+        lines += [f"MERGE {x}" for x in out[-8:]]
+        if rc == 0:
+            self.finished("merge")
+            return lines
+        if rc in (3, 11):
+            return lines + [f"MERGE {stop} exit {rc}: again next tick"]
+        if rc == 2 and self.merge_fix({**p, "next": "merge"}):
+            return lines + [f"MERGE {stop}: a fix program does the merge"]
+        raise Stop(10)
+
+    # -- docs, later handoff, sweep handoff, audit --
+
+    def docs(self, p: dict) -> list[str]:
+        stop = p["stop"]
+        record = self.program.dir / "docs" / f"{stop}.json"
+        try:
+            from ship import docs as docs_step  # U36
+        except ImportError:
+            docs_step = None
+        if docs_step is not None and hasattr(docs_step, "docs"):
+            try:
+                docs_step.docs(self.program, stop, self.settings)
+            except Exception as exc:  # noqa: BLE001 - a docs failure never blocks code (row 40)
+                self.log([f"DOCS {stop} failed: {exc!r}"])
+        if not record.exists():
+            record.parent.mkdir(parents=True, exist_ok=True)
+            record.write_text(json.dumps({"stop": stop, "skipped": "the docs step (U36) is not built yet",
+                                          "at": clock.now().isoformat(timespec="seconds")}) + "\n", "utf-8",
+                              newline="\n")
+        self.finished("docs")
+        return [f"DOCS {stop}: {record.name}"]
+
+    def later_handoff(self, p: dict) -> list[str]:
+        stop = p["stop"]
+        if not (prompt_dir(self.settings) / "LATER-HANDOFF.md").exists():
+            self.wait(f"stop {stop} is deferred and the later-handoff prompt is not there yet")
+            raise Stop(10)
+        got = self.worker_result(f"later-handoff-{stop}")
+        if got is None:
+            if not self.worker:
+                self.start_worker(f"later-handoff-{stop}", "later-handoff", "LATER-HANDOFF.md",
+                                  self.values(STOP=stop), self.program.dir)
+            return []
+        self.finished("later-handoff")
+        return [f"LATER-HANDOFF {stop} done; SKIP the sweep review (U21)"]
+
+    def sweep_handoff(self, p: dict) -> list[str]:
+        if not (prompt_dir(self.settings) / "SWEEP-HANDOFF.md").exists():
+            self.wait("the sweep is not handed off and the sweep-handoff prompt is not there yet")
+            raise Stop(10)
+        got = self.worker_result("sweep-handoff")
+        if got is None:
+            if not self.worker:
+                self.start_worker("sweep-handoff", "sweep-handoff", "SWEEP-HANDOFF.md", self.values(), self.program.dir)
+            return []
+        self.finished("sweep-handoff")
+        return ["SWEEP-HANDOFF done"]
+
+    def audit(self, p: dict) -> list[str]:
+        stage = p.get("stage") or "census"
+        index = prog.load(self.program)
+        if stage == "census":
+            script = ln.factory_home(self.settings) / "skills" / "audit-area" / "scripts" / "census.py"
+            if not script.exists():
+                self.wait(f"SKIP audit census: {script} is not there")
+                raise Stop(10)
+            got = self.ended("census")
+            if got is None:
+                if not self.running("census"):
+                    proj = self.project()
+                    tip = self.target_tip(Path(proj.get("repo") or "."), str(proj.get("remote") or "origin"))
+                    self.child("census", [sys.executable, str(script), *map(str, index.area or ["."]), "--repo",
+                                          str(proj.get("repo") or ""), "--tip", tip or "HEAD", "--out",
+                                          str(self.program.dir / "CENSUS.md"), "--project",
+                                          str(proj.get("name") or "qmx")])
+                return []
+            if got[0] != 0:
+                self.wait("the audit census failed: " + "; ".join(got[1][-3:]))
+                raise Stop(10)
+            phase.set_phase(self.program, "intent", "running", "conveyor")
+            self.finished("audit")
+            return ["AUDIT census done"]
+        if stage in ("intent-check", "verdicts"):
+            gate = "intent" if stage == "intent-check" else "verdicts"
+            if index.gate(gate) is None:
+                raise Stop(10)
+            phase.set_phase(self.program, "quality" if gate == "intent" else "audit-handoff", "running", "conveyor")
+            return [f"AUDIT gate {gate} is set"]
+        role, prompt, after = AUDIT_WORKERS.get(stage, ("", "", ""))
+        if not role or not (prompt_dir(self.settings) / prompt).exists():
+            self.wait(f"SKIP audit stage {stage}: its worker prompt is not there yet (U26)")
+            raise Stop(10)
+        got = self.worker_result(f"audit-{stage}")
+        if got is None:
+            if not self.worker:
+                self.start_worker(f"audit-{stage}", role, prompt, self.values(STAGE=stage), self.program.dir)
+            return []
+        if stage == "intent":
+            intent = self.program.dir / "INTENT.md"
+            open_ = [x for x in (intent.read_text("utf-8").splitlines() if intent.exists() else [])
+                     if x.strip().startswith("- [ ]")]
+            if open_:
+                old = self.program.waiting.read_text("utf-8") if self.program.waiting.exists() else ""
+                self.program.waiting.write_text(old + "".join(f"{x.strip()}\n" for x in open_ if x.strip() not in old),
+                                                "utf-8", newline="\n")
+            after = "quality"  # reading does not wait for him; judgement waits for gates.intent
+        if after:
+            phase.set_phase(self.program, after, "running", "conveyor")
+        self.finished("audit")
+        return [f"AUDIT {stage} done"]
+
+    # -- the end --
+
+    def finish(self, p: dict) -> list[str]:
+        if p.get("status") == "abandoned":
+            raise Stop(0)
+        from ship.armed import teardown
+        from ship.run_report import write_report
+
+        lines = []
+        if self.program.state.exists():
+            ok, path = write_report(self.program, self.settings)
+            lines.append(f"REPORT {path} ({'ok' if ok else 'counts do not add up'})")
+            _, out = teardown(self.program, self.settings)
+            lines += out
+            try:
+                from ship import claims
+
+                released = claims.for_program(self.program, self.settings).release(self.program.dir.name)
+                lines.append(f"CLAIMS released {released}")
+            except ImportError:
+                pass
+            with open(self.program.report, "a", encoding="utf-8", newline="\n") as out_:
+                out_.write(f"\n## The conveyor's last word\n\nEvery stop is merged and its docs step ran "
+                           f"({clock.now().isoformat(timespec='seconds')}).\n")
+        phase.set_phase(self.program, "done", "done", "conveyor")
+        raise Stop(0)
+
+
+def conveyor(program: Program, settings: Settings, poll_s: float | None = None) -> int:
+    lock = ChainLock(program, "chain")
+    if not lock.acquire():
+        print(f"LOCKED chain.lock is held by pid {lock.read().get('pid')}")
+        return 11
+    belt = Conveyor(program, settings, lock)
+    period = settings.chain_poll_s if poll_s is None else poll_s
+    try:
+        from ship.recover import recover
+
+        if program.state.exists():
+            for line in recover(program, settings):
+                print(line, flush=True)
+        refused = 0
+        while True:
+            try:
+                ticked = belt.tick()
+                refused = 0
+            except PermissionError as exc:  # Windows: another process had a file open for an instant
+                refused += 1
+                if refused >= 10:
+                    raise
+                print(f"RETRY the tick: {exc!r}", flush=True)
+                time.sleep(period)
+                continue
+            for line in ticked:
+                print(line, flush=True)
+            if belt.exit is not None:
+                if belt.exit == 10:
+                    phase.set_phase(program, phase.phase_json(program).get("phase") or "waits", "waits", "conveyor")
+                return belt.exit
+            time.sleep(period)
+    except Exception as exc:  # noqa: BLE001 - an error the conveyor cannot route goes to him, never lost
+        add_wait(program, f"the conveyor stopped on an error: {exc!r}", str(program.dir / "notes" / "chain.log"))
+        print(f"ERROR {exc!r}", flush=True)
+        phase.set_phase(program, phase.phase_json(program).get("phase") or "waits", "waits", "conveyor")
+        return 1
+    finally:
+        belt.stop_children()
+        lock.release()
+
+
+# ---- follow, detach, resume-all, abandon ----------------------------------------------------------------
+
+
+def follow(program: Program, settings: Settings, poll_s: float | None = None) -> int:
+    """One line per change of next, status or the WAITS count; 0 done, 10 waits on him, 1 the conveyor died."""
+    period = 20 if poll_s is None else poll_s
+    last = None
+    dead = 0
+    while True:
+        p = phase.read(program, settings)
+        waits = sum(len(phase.UNANSWERED.findall(phase._read(path))) for path in (program.waiting, program.waits))
+        now = (p.get("next"), p.get("status"), waits)
+        if now != last:
+            print(f"{clock.now().isoformat(timespec='seconds')} next: {now[0]} status: {now[1]} waits: {waits} "
+                  f"({p.get('why', '')})", flush=True)
+            last = now
+        if p.get("status") in ("done", "abandoned") or p.get("next") == "done":
+            return 0
+        if p.get("status") == "waits-on-him":
+            return 10
+        running = phase.phase_json(program).get("status") == "running"
+        alive, _ = phase.conveyor(program)
+        dead = dead + 1 if running and not alive else 0
+        if dead >= 2:
+            print("DEAD the conveyor is not running and phase.json says running", flush=True)
+            return 1
+        time.sleep(period)
+
+
+def detach(argv: list[str], program_dir: Path) -> int:
+    """Start the same command again as its own process, outliving this one; print its pid."""
+    program_dir.mkdir(parents=True, exist_ok=True)
+    log = open(program_dir / "chain.log", "a", encoding="utf-8", newline="\n")
+    try:
+        if sys.platform == "win32":
+            flags = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
+            proc = subprocess.Popen([sys.executable, str(ln.KIT), *argv], stdin=subprocess.DEVNULL, stdout=log,
+                                    stderr=subprocess.STDOUT, creationflags=flags, close_fds=True)
+        else:
+            proc = subprocess.Popen([sys.executable, str(ln.KIT), *argv], stdin=subprocess.DEVNULL, stdout=log,
+                                    stderr=subprocess.STDOUT, start_new_session=True, close_fds=True)
+    finally:
+        log.close()
+    print(f"DETACHED pid {proc.pid} log {program_dir / 'chain.log'}")
+    return 0
+
+
+def resume_all(plans: Path, settings_of=load_settings) -> list[str]:
+    """A conveyor for every program whose phase.json says running and whose chain.lock is dead."""
+    from ship.recover import recover
+
+    lines = []
+    for folder in phase.all_programs(plans):
+        program = Program(folder.resolve())
+        if phase.phase_json(program).get("status") != "running":
+            continue
+        alive, words = phase.conveyor(program)
+        if alive:
+            lines.append(f"RUNNING {folder.name}: {words}")
+            continue
+        settings = settings_of(program.dir)
+        if program.state.exists():
+            try:
+                recover(program, settings)
+            except GitError as exc:
+                lines.append(f"RECOVER {folder.name} unreachable ({exc}); the conveyor retries")
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            detach(["chain", "--program", str(program.dir)], program.dir)
+        lines.append(f"STARTED {folder.name}: {buf.getvalue().strip()}")
+    return lines
+
+
+def abandon(program: Program, settings: Settings, why: str) -> list[str]:
+    """Stop the conveyor and its children, recover, tear down, release the claims, and mark it abandoned."""
+    from ship.armed import teardown
+    from ship.proc import same_process
+    from ship.recover import recover
+
+    lines = []
+    held = {}
+    try:
+        held = json.loads(program.chain_lock.read_text("utf-8"))
+    except (OSError, ValueError):
+        pass
+    for row in [held, *held.get("children", [])]:
+        pid = int(row.get("pid") or 0)
+        if pid and pid != os.getpid() and (same_process(pid, row.get("created")) if row.get("created") is not None
+                                           else pid_alive(pid)):
+            kill_tree(pid)
+            lines.append(f"KILLED {row.get('role') or 'conveyor'} {pid}")
+    program.chain_lock.unlink(missing_ok=True)
+    if program.state.exists():
+        try:
+            lines += recover(program, settings)
+        except GitError as exc:
+            lines.append(f"RECOVER unreachable ({exc}); leftovers stay in the worktrees")
+        lines += teardown(program, settings)[1]
+        try:
+            from ship import claims
+
+            lines.append(f"CLAIMS released {claims.for_program(program, settings).release(program.dir.name)}")
+        except ImportError:
+            pass
+    today = clock.now().date().isoformat()
+    if program.project_file.exists():
+        text = program.project_file.read_text("utf-8")
+        if re.search(r"^abandoned:", text, re.M):
+            text = re.sub(r"^abandoned:.*$", f"abandoned: {today}", text, count=1, flags=re.M)
+        else:
+            text = text.rstrip("\n") + f"\nabandoned: {today}\n"
+        program.project_file.write_text(text, "utf-8", newline="\n")
+    notes = program.notes_dir / "ABANDONED.md"
+    notes.parent.mkdir(parents=True, exist_ok=True)
+    notes.write_text(f"# Abandoned {today}\n\n{why}\n", "utf-8", newline="\n")
+    phase.set_phase(program, "done", "done", "abandon")
+    try:
+        from ship import backlog  # U33
+
+        if hasattr(backlog, "add_parked"):
+            lines += backlog.add_parked(program, settings)
+    except ImportError:
+        pass
+    return lines + [f"ABANDONED {program.dir.name}: {why}"]

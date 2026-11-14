@@ -310,4 +310,27 @@ def locked(program: Program) -> Iterator[State]:
         yield state
         save(program, state)
     finally:
-        program.lock.unlink(missing_ok=True)
+        release_lock(program.lock)
+
+
+def replace(tmp: Path, path: Path) -> None:
+    """os.replace that waits out the instant Windows refuses it while another process reads `path`."""
+    for _ in range(100):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            time.sleep(0.05)
+    os.replace(tmp, path)
+
+
+def release_lock(path: Path) -> None:
+    """Delete a lock file. Windows refuses for the instant another process has it open to read the
+    holder's pid, so try again for a few seconds before giving up."""
+    for _ in range(100):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            time.sleep(0.05)
+    path.unlink(missing_ok=True)

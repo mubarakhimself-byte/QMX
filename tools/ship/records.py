@@ -168,7 +168,9 @@ def locked(records: Records) -> Iterator[Records]:
     try:
         yield records
     finally:
-        records.lock.unlink(missing_ok=True)
+        from ship.state import release_lock
+
+        release_lock(records.lock)
 
 
 def commit(plans: Path, message: str, settings: Settings, push: bool = True, remote: str | None = None,

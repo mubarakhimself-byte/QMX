@@ -159,7 +159,7 @@ class Checkpoint:
         self.dir.mkdir(parents=True, exist_ok=True)
         tmp = self.memo_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(self.memo, indent=2) + "\n", "utf-8", newline="\n")
-        tmp.replace(self.memo_path)
+        st.replace(tmp, self.memo_path)
 
     def result(self) -> int | None:
         return self.code
@@ -292,6 +292,7 @@ class Checkpoint:
                                     **popen_group_kwargs())
         script = Script(name, self.stop, proc, log, clock.now().isoformat(timespec="seconds"), (),
                         proc_created(proc.pid))
+        script.began_wall = time.time()
         self.scripts.append(script)
         return script
 
@@ -314,14 +315,20 @@ class Checkpoint:
                 deep["started_at"] = clock.now().isoformat(timespec="seconds")
                 if rc != 0:
                     lines += [f"DEEP {x}" for x in script.output()[-3:]]
-            elif script.name == "ci status":
-                if rc in (0, 1):
-                    deep["ci"] = rc
-            elif script.name in ("nightly", "quality"):
-                if rc in (0, 1):
-                    deep[script.name] = rc
-                else:
-                    lines.append(f"DEEP {script.name} exit {rc}; started again")
+            elif script.name in ("ci status", "nightly", "quality"):
+                key = "ci" if script.name == "ci status" else script.name
+                summary = (self.program.quality(self.memo["tip"]) if key == "quality"
+                           else self.program.nightly(self.memo["tip"])) / "summary.txt"
+                if rc in (0, 1) and summary.exists() and summary.stat().st_mtime >= script.began_wall - 2:
+                    deep[key] = rc
+                elif rc != 2:  # 2 is "still running on GitHub"; anything else without a summary crashed
+                    deep["crashes"] = deep.get("crashes", 0) + 1
+                    lines.append(f"DEEP {script.name} exit {rc} with no summary; started again "
+                                 f"({deep['crashes']} of {self.settings.max_restarts})")
+                    if deep["crashes"] >= self.settings.max_restarts:
+                        self.wait(f"the deep run of stop {self.stop} keeps failing to report", str(script.log),
+                                  "\n".join(script.output()[-15:]))
+                        return self.end(10, lines, "deep run keeps crashing")
         if self.scripts:
             return lines
         if "backend" not in deep:
@@ -485,7 +492,7 @@ class Checkpoint:
         except (PromptError, OSError) as exc:
             self.wait(f"the reader prompt cannot be filled: {exc}")
             return self.end(10, [], f"reader prompt: {exc}")
-        env = {"SHIP_NOTES": str(notes), "SHIP_STOP": self.stop, "SHIP_REPO": state.repo}
+        env = {"SHIP_NOTES": str(notes), "SHIP_STOP": self.stop, "SHIP_REPO": state.repo, "SHIP_TIP": self.memo["tip"]}
         n = rec["attempts"] + 1
         handle = ln.launch(self.roles[reader.role], prompt, copy, self.program,
                            f"stop-{self.stop}-r{self.round}-{reader.name}-{n}", self.settings, extra_env=env,
@@ -566,7 +573,7 @@ class Checkpoint:
         except (PromptError, OSError) as exc:
             self.wait(f"the verdict prompt cannot be filled: {exc}")
             return self.end(10, [], f"verdict prompt: {exc}")
-        env = {"SHIP_STOP": self.stop, "SHIP_REPO": state.repo}
+        env = {"SHIP_STOP": self.stop, "SHIP_REPO": state.repo, "SHIP_TIP": tip}
         n = rec["attempts"] + 1
         handle = ln.launch(self.roles["verdict"], prompt, self.program.dir, self.program,
                            f"stop-{self.stop}-r{self.round}-verdict-{n}", self.settings, extra_env=env,

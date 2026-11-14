@@ -129,6 +129,14 @@ class Clean(MergeCase):
         self.assertEqual(st.load(self.program).merged, [])
         self.assertTrue(any("gate refused" in w for w in self.waits()), self.waits())
 
+    def test_a_verdict_ship_review_has_not_judged_does_not_merge(self):
+        write(self.program.stop_review("A") / "review-run.json", json.dumps({"round": 1, "tip": self.reviewed}))
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertTrue(any("ship review has not passed this verdict" in w for w in self.waits()), self.waits())
+        write(self.program.stop_review("A") / "review-run.json",
+              json.dumps({"round": 1, "tip": self.reviewed, "result": 0}))
+        self.assertEqual(self.ship_merge(), 0, self.out)
+
     def test_the_last_verdict_must_be_clean(self):
         write(self.program.stop_review("A") / "REVIEW-2.md", f"VERDICT: BLOCKED\n\nEND {self.reviewed} x\n")
         self.assertEqual(self.ship_merge(), 10, self.out)

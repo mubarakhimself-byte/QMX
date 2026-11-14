@@ -74,6 +74,8 @@ class Settings:
     worker_timeout_s: float = 0  # > 0 caps every worker role's time limit (tests and drills); 0 keeps roles.toml's
     # U38: claims, locks and the worker pool
     merge_queue_stale_s: int = 900  # a merge waiter that has not asked again for this long loses its place
+    # U11: ship chain, the conveyor
+    arm_preflight: bool = True  # the conveyor's arm step runs `preflight`; tests on a scratch repo turn it off
 
 
 def repo_args(settings: Settings) -> list[str]:

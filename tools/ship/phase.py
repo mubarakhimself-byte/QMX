@@ -9,7 +9,6 @@ notes/WAITS-ON-YOU.md. `set_phase` is the one writer of phase.json.
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
@@ -94,7 +93,7 @@ def set_phase(program: Program, phase: str, status: str, by: str) -> dict:
     tmp = program.phase_file.with_suffix(".json.tmp")
     program.dir.mkdir(parents=True, exist_ok=True)
     tmp.write_text(json.dumps(record) + "\n", "utf-8", newline="\n")
-    os.replace(tmp, program.phase_file)
+    st.replace(tmp, program.phase_file)
     return record
 
 
