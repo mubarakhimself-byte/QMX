@@ -1376,3 +1376,20 @@ def test_a_collection_error_is_read_with_its_text(tmp_path: Path) -> None:
             "collection failure\nE   ModuleNotFoundError: No module named 'backlog'"
         )
     }
+
+
+def test_the_parent_run_keeps_going_past_test_files_it_cannot_collect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(argv: list[str], cwd: Path, **kwargs: object) -> int:
+        seen.append(list(argv))
+        return 0
+
+    monkeypatch.setattr(qci, "OUT", tmp_path)
+    monkeypatch.setattr(qci, "run", fake_run)
+    monkeypatch.setattr(qci, "uv", _returns("uv"))
+    qci.pytest(tmp_path, ["t.py"], tmp_path / "a.xml", serial=None, keep_going=True)
+    qci.pytest(tmp_path, ["t.py"], tmp_path / "b.xml", serial=None)
+    assert ["--continue-on-collection-errors" in argv for argv in seen] == [True, False]

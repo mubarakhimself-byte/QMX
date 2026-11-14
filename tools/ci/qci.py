@@ -395,11 +395,14 @@ def pytest(
     cache: Path | None = None,
     last_failed: bool = False,
     timeout_s: int | None = None,
+    keep_going: bool = False,
 ) -> int:
     """Run pytest on `files` (relative to `cwd`) through an argument file, so a long shard never
     hits the Windows command-line limit. serial=None runs every test with no worker split. With a
     `cache` folder pytest records there what failed, and `last_failed` reruns only that.
-    `timeout_s` stops any one test after that many seconds (pytest-timeout), so a hang is a red."""
+    `timeout_s` stops any one test after that many seconds (pytest-timeout), so a hang is a red.
+    `keep_going` runs the files that collect even when others do not (the parent of a change
+    that adds a module cannot collect the new test files that import it)."""
     junit.parent.mkdir(parents=True, exist_ok=True)
     args = OUT / "tmp" / f"{junit.stem}.args"
     args.parent.mkdir(parents=True, exist_ok=True)
@@ -426,6 +429,7 @@ def pytest(
         *(["-p", "no:cacheprovider"] if cache is None else ["-o", f"cache_dir={cache}"]),
         *(["--last-failed", "--last-failed-no-failures", "none"] if last_failed else []),
         *(["--timeout", str(timeout_s)] if timeout_s is not None else []),
+        *(["--continue-on-collection-errors"] if keep_going else []),
         *split,
         "--basetemp",
         str(basetemp),
@@ -828,8 +832,9 @@ def job_fail_at_parent() -> int:
         stem = unit.root.replace("/", "_")
         before = {}
         if own:
-            pytest(parent_copy / unit.cwd, own, OUT / "fap" / f"{stem}-parent-own.xml", serial=None)
-            before = outcomes(OUT / "fap" / f"{stem}-parent-own.xml")
+            own_report = OUT / "fap" / f"{stem}-parent-own.xml"
+            pytest(parent_copy / unit.cwd, own, own_report, serial=None, keep_going=True)
+            before = outcomes(own_report)
         for path in [*support, *mods]:
             target = parent_copy / path
             if path in present:
@@ -845,7 +850,8 @@ def job_fail_at_parent() -> int:
                 )
             else:
                 target.unlink(missing_ok=True)
-        pytest(parent_copy / unit.cwd, rel, OUT / "fap" / f"{stem}-parent.xml", serial=None)
+        parent_report = OUT / "fap" / f"{stem}-parent.xml"
+        pytest(parent_copy / unit.cwd, rel, parent_report, serial=None, keep_going=True)
         pytest(REPO / unit.cwd, rel, OUT / "junit" / f"fap-{stem}-head.xml", serial=None)
         at_parent = outcomes(OUT / "fap" / f"{stem}-parent.xml")
         errors = collection_errors(OUT / "fap" / f"{stem}-parent.xml")

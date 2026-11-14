@@ -215,6 +215,8 @@ def test_the_walk_job_records_its_survivors_as_notes_the_backlog_reads(
         return 0
 
     monkeypatch.setenv("QMX_LEVEL", "walk")
+    monkeypatch.setenv("QMX_SHARD", "1")
+    monkeypatch.setenv("QMX_SHARDS", "1")
     monkeypatch.setattr(qci, "OUT", out)
     monkeypatch.setattr(qci, "REPO", tmp_path)
     monkeypatch.setattr(qci, "BASELINES", baselines)
