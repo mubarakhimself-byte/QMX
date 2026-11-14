@@ -163,6 +163,8 @@ def read(program: Program, settings: Settings) -> dict:
         return done("waits", gates, wait=True)
     stage = str(phase_json(program).get("phase") or "")
     if not program.slices_md.exists():
+        if index.kind == "audit" and stage == "done":  # D-L26 F3, F7: a scoped audit, or a hand-off with no slices
+            return done("done", "the audit is done and builds nothing (its findings or hand-off rows are written)")
         if index.kind == "audit":
             return done("audit", "no SLICES.md; the audit is not handed off", stage=stage)
         if index.kind == "sweep":

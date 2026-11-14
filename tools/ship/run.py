@@ -188,6 +188,7 @@ class Memo:
     fixing: dict[str, dict] = dataclasses.field(default_factory=dict)  # slice -> the running fix round's reason, paths
     setup_fails: dict[str, int] = dataclasses.field(default_factory=dict)  # slice -> setups failed in a row
     lands: int = 0  # land runs started, for SHIP_RUN_STOP_AFTER
+    land_crashes: int = 0  # land runs in a row that crashed (D-L26 F9: counted toward max_restarts, then WAITS)
 
     @classmethod
     def load(cls, path: Path) -> "Memo":
@@ -337,6 +338,8 @@ class Build:
             return self.finish(lines, 10)
         lines += self.route_workers()
         lines += self.route_scripts()
+        if self.exit is not None:  # a script's result stopped the build (a land that keeps crashing)
+            return self.finish(lines, self.exit)
         if not hold:
             lines += self.retry_recover()
         breaker = self.check_status(lines)
@@ -564,7 +567,18 @@ class Build:
         return [f"CHECKS {sid} again next tick (exit {rc}, still {sl.status})"]
 
     def after_land(self, script: Script, rc: int, out: list[str]) -> list[str]:
-        lines = [f"LAND {line}" for line in out if line.split(" ", 1)[0] in ("PASS", "FAIL", "HELD", "RECHECK", "SKIP")]
+        lines = [f"LAND {line}" for line in out if line.split(" ", 1)[0] in ("PASS", "FAIL", "HELD", "RECHECK", "SKIP",
+                                                                             "NOTE")]
+        if rc not in (0, 1) or any(x.startswith("Traceback (most recent call last)") for x in out):
+            self.memo.land_crashes += 1  # F9 (D-L26): a land that crashes is a restart, counted
+            n = self.memo.land_crashes
+            if n >= self.settings.max_restarts:
+                self.wait_line(f"land crashed {n} times in a row; the build stopped",
+                               f"{script.log}\n" + "\n".join(out[-15:]))
+                self.memo.land_crashes = 0
+                self.exit = 10
+            return lines + [f"LAND crashed ({n} of {self.settings.max_restarts}); see {script.log}"]
+        self.memo.land_crashes = 0
         for line in out:
             batch = LAND_TESTS.match(line)
             if batch:

@@ -76,6 +76,9 @@ class Settings:
     merge_queue_stale_s: int = 900  # a merge waiter that has not asked again for this long loses its place
     # U11: ship chain, the conveyor
     arm_preflight: bool = True  # the conveyor's arm step runs `preflight`; tests on a scratch repo turn it off
+    # D-L26: the chaos suite's findings
+    merge_moved_max: int = 5  # merge: tries GitHub refused because the target moved, then WAITS naming the movers
+    fable_wait_s: int = 1800  # launch: a Fable role waiting longer than this for the Fable seat runs on its fallback
 
 
 def repo_args(settings: Settings) -> list[str]:

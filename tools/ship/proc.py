@@ -170,6 +170,33 @@ def kill_tree(pid: int, timeout: float = 60) -> None:
         pass
 
 
+def git_processes_in(root: Path) -> list[int]:
+    """Git processes working in `root`: on Windows those whose command line names it (a git started with `-C`,
+    or by a script whose arguments name it), elsewhere those whose current folder is inside it."""
+    root_text = str(root.resolve()).casefold()
+    found: list[int] = []
+    if WINDOWS:
+        script = ("Get-CimInstance Win32_Process -Filter \"Name like 'git%'\" | "
+                  "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }")
+        done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              stdin=subprocess.DEVNULL)
+        for line in done.stdout.splitlines():
+            pid_text, _, cmd = line.partition("\t")
+            if pid_text.strip().isdigit() and root_text in cmd.replace("/", "\\").casefold():
+                found.append(int(pid_text))
+        return found
+    for entry in Path("/proc").glob("[0-9]*"):
+        try:
+            if not (entry / "comm").read_text().strip().startswith("git"):
+                continue
+            if os.readlink(entry / "cwd").casefold().startswith(root_text):
+                found.append(int(entry.name))
+        except OSError:
+            continue
+    return found
+
+
 def stop_processes_under(root: Path) -> list[int]:
     """Stop processes whose executable lives inside `root`, such as a worktree's venv python.
 

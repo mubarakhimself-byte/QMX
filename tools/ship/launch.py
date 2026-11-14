@@ -233,6 +233,7 @@ class Handle:
         self.created = proc_created(child.pid)  # with the pid, names this run exactly (chain.lock)
         self.result: Result | None = None
         self.held: list = []  # the pool slot and, for a Fable role, the Fable seat; released when it ends
+        self.forced_fallback = ""  # G1: set when the Fable seat was taken past fable_wait_s
 
     @property
     def pid(self) -> int:
@@ -285,6 +286,8 @@ class Handle:
     def _finish(self, got: Result) -> Result:
         self.result = got
         self._release()
+        if got.fell_back:  # F5 (D-L26): a Fable run that came back on its fallback is said, not only recorded
+            note_fallback(Program(self.folder.parent.parent), f"{got.note} ({self.name})")
         record = {**dataclasses.asdict(got), "role": self.role.name, "name": self.name, "pid": self.pid,
                   "asked_model": self.role.model, "ended": clock.now().isoformat(timespec="seconds")}
         tmp = self.folder / "result.json.tmp"
@@ -309,12 +312,23 @@ def launch(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str,
         if slot is None:
             return None
     held = [slot]
+    forced = ""
     if role.model.casefold().startswith("fable"):
         seat = locks.fable_lock(settings)
-        if not seat.try_take(program=program.dir.name, worker_id=worker_id):
-            slot.release()
-            return None
-        held.append(seat)
+        key = f"{role.name} {label or worker_id}"
+        if seat.try_take(program=program.dir.name, worker_id=worker_id):
+            held.append(seat)
+            fable_wait(program, key, clear=True)
+        else:
+            waited = fable_wait(program, key)
+            if not role.fallback or waited < settings.fable_wait_s:
+                slot.release()
+                return None
+            # G1 (D-L26): the seat was taken past fable_wait_s: the role runs on its fallback, and says so
+            forced = f"FALLBACK {role.name} {role.fallback} (the Fable seat was taken for {waited:.0f}s)"
+            role = dataclasses.replace(role, model=role.fallback, fallback=None)
+            fable_wait(program, key, clear=True)
+            note_fallback(program, forced)
     folder = program.workers / worker_id
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "prompt.md").write_text(prompt, "utf-8", newline="\n")
@@ -340,7 +354,36 @@ def launch(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str,
          "started": clock.now().isoformat(timespec="seconds")}, indent=2) + "\n", "utf-8", newline="\n")
     handle = Handle(role, folder, child, session_id, name, settings, (out, err))
     handle.held = held
+    handle.forced_fallback = forced
     return handle
+
+
+def fable_wait(program: Program, key: str, clear: bool = False) -> float:
+    """Seconds this role has waited for the Fable seat (the first refusal is kept in `fable-wait.json`)."""
+    path = program.dir / "fable-wait.json"
+    try:
+        book = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        book = {}
+    now = clock.now()
+    if clear:
+        if book.pop(key, None) is None:
+            return 0.0
+        waited = 0.0
+    else:
+        since = book.setdefault(key, now.isoformat(timespec="seconds"))
+        waited = (now - dt.datetime.fromisoformat(since)).total_seconds()
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(book), "utf-8")
+    os.replace(tmp, path)
+    return waited
+
+
+def note_fallback(program: Program, line: str) -> None:
+    """One line in `notes/FALLBACKS.md`, which the conveyor copies into chain.log and the run report lists (F5)."""
+    program.notes_dir.mkdir(parents=True, exist_ok=True)
+    with open(program.notes_dir / "FALLBACKS.md", "a", encoding="utf-8", newline="\n") as out:
+        out.write(f"- {clock.now().isoformat(timespec='seconds')} {line}\n")
 
 
 class LaunchError(Exception):

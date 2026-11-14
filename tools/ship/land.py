@@ -189,6 +189,9 @@ class Landing:
 
         git(repo, "fetch", "-q", state.remote, timeout=t)
         tip = remote_sha(repo, state.remote, state.build_branch, t)
+        cleared = clear_stale_index_lock(repo, program.tmp / "landing", t)
+        if cleared:
+            self.say(cleared)
         copy = checkout_copy(repo, program.tmp / "landing", tip, settings)
         cur, included, commits = tip, [], {}
         for sid in candidates:
@@ -265,6 +268,25 @@ class Landing:
     def finish(self, ok: bool) -> bool:
         (self.out / "summary.txt").write_text("\n".join(self.lines) + "\n", "utf-8", newline="\n")
         return ok
+
+
+def clear_stale_index_lock(repo: Path, copy: Path, timeout: float) -> str:
+    """F9 (D-L26): a land killed while git ran in the landing copy leaves git's `index.lock`, and every later land
+    would fail on it. One land runs at a time (the build starts one, under chain.lock), so the lock is removed when
+    no git process works in the copy; with one running it stays. Returns what was done, or ""."""
+    from ship.proc import git_processes_in
+    from ship.worktree import registered
+
+    if not copy.exists() or not registered(repo, copy, timeout):
+        return ""
+    lock = Path(git(copy, "rev-parse", "--path-format=absolute", "--git-path", "index.lock", timeout=timeout).strip())
+    if not lock.exists():
+        return ""
+    running = git_processes_in(copy)
+    if running:
+        return f"NOTE {lock} stays: git runs in the landing copy (pids {running})"
+    lock.unlink(missing_ok=True)
+    return f"NOTE removed a stale {lock}: no git process runs in the landing copy"
 
 
 def land(program: Program, ids: list[str] | None, settings: Settings) -> tuple[bool, list[str]]:

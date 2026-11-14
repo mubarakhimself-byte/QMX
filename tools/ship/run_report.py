@@ -131,6 +131,9 @@ def build(program: Program, settings: Settings, now: dt.datetime | None = None) 
     out += ["", f"## Idle time: {idle / 3600:.1f} hours (no seat held while work remained)", ""]
     out += [f"- {a.isoformat(timespec='minutes')} to {b.isoformat(timespec='minutes')} "
             f"({(b - a).total_seconds() / 60:.0f} min): {c}" for a, b, c in spans] or ["- none"]
+    fallbacks = program.notes_dir / "FALLBACKS.md"  # F5 (D-L26): every Fable run that ran on its fallback
+    rows = [x for x in fallbacks.read_text("utf-8").splitlines() if x.strip()] if fallbacks.exists() else []
+    out += ["", f"## Fable fallbacks ({len(rows)})", ""] + (rows or ["- none"])
     if state.nightly:
         out += ["", "## Last nightly", "", f"- {state.nightly}"]
     if state.breaker_tripped(settings.breaker_parks):

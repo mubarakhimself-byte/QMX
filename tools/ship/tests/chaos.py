@@ -347,7 +347,7 @@ class ChaosCase(ChainCase):
             except (OSError, ValueError, KeyError):
                 continue
             when = created(pid)
-            if when is not None and abs(when - started.stat().st_mtime) < 30:
+            if when is not None and abs(when - started.stat().st_mtime) < 3:  # the same process, not a reused pid
                 found.append(f"{started.parent.name} pid {pid}")
         for lock in self.plans.rglob("chain.lock"):
             try:
@@ -448,9 +448,12 @@ class ChaosCase(ChainCase):
 
 
 def audit_yaml(base: str, area=("pkg",), parent: str = "null", extra: str = "") -> str:
+    """An audit's index: its gates are intent, verdicts and go (all his, all open); stop A is where the hand-off's
+    sweep slices land (`sweep_briefs.py` writes it; here it is there from the start)."""
     return (f"project: qmx\nprogram: program\nkind: audit\nparent: {parent}\nbuild_branch: build/t\n"
             f"parent_tip: {base}\narea: [{', '.join(area)}]\ncore_sentence: \"the area is fit to build on\"\n"
             "budget:\n  core: 1\n  later: 0\n  checkpoints: 1\n"
-            "gates:\n  cut: {by: him, at: 2026-11-14, source: \"t:1\", advance: no}\n"
-            "  plan: {by: him, at: 2026-11-14, source: \"t:2\", advance: yes}\n  go: null\n"
-            f"stop_points: []\nchains: []\n{extra}abandoned: null\n")
+            "gates:\n  intent: null\n  verdicts: null\n  go: null\n"
+            "stop_points:\n  - id: A\n    tier: core\n    handoff: ready\n"
+            f"chains:\n  - ask: S1\n    verdict: core\n    plan: [S1.a]\n    arch: [A1]\n    slices: [p-1]\n"
+            f"{extra}abandoned: null\n")

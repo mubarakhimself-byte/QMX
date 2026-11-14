@@ -79,6 +79,7 @@ AUDIT_WORKERS = {"intent": ("audit-intent", "AUDIT-INTENT.md", "intent-check"),
 CENSUS_TIP = re.compile(r"^Tip:\s*([0-9a-f]{40})\s*$", re.M)
 CENSUS_PART = re.compile(r"^- \*\*([^*\s]+)\*\* `([^`]+)`", re.M)
 PLAIN_PART = re.compile(r"[A-Za-z0-9_-]+")
+MOVED = re.compile(r"\bmoved to ([0-9a-f]{7,40}) while\b")  # merge.py's "target moved under the PR" line
 HIS_SOURCE = re.compile(r"\b[0-9a-f]{8}:L\d+\b")  # his_words.py's source for a turn of his: <id8>:L<line>
 # A quote of his and its source: "<his words>" (<id8>:L<line>), straight or curly quotes.
 HIS_QUOTE = re.compile(r"[\"\u201c]([^\"\u201c\u201d]+)[\"\u201d]\s*\(([0-9a-f]{8}:L\d+)\)")
@@ -219,6 +220,12 @@ class Conveyor:
         """One activity finished: count it, and honour SHIP_CHAIN_STOP_AFTER (tests kill the conveyor here)."""
         self.done_count[activity] += 1
         self.done_count["any"] += 1
+        # a worker's restart count starts again once another activity finishes (its step moved on); a worker whose
+        # own activity finishes again without the phase moving on keeps counting (D-L26)
+        started_in = self.memo.setdefault("worker_activity", {})
+        for name in [n for n, act in started_in.items() if act != activity]:
+            started_in.pop(name, None)
+            self.memo.setdefault("workers", {}).pop(name, None)
         self.save()
         want = os.environ.get("SHIP_CHAIN_STOP_AFTER", "")
         name, _, n = want.partition(":")
@@ -318,13 +325,18 @@ class Conveyor:
             self.wait(f"the {role} prompt cannot be filled: {exc}", str(path))
             raise Stop(10) from exc
         n = self.memo.setdefault("workers", {}).get(name, 0) + 1
-        self.memo["workers"][name] = n
+        if not side and n > self.settings.max_restarts:  # D-L26: every worker restart loop is counted, then WAITS
+            self.wait(f"the {name} worker was started {n - 1} times and its step never moved on; the conveyor "
+                      "stops asking it", str(self.program.workers))
+            raise Stop(10)
         repo = str((self.profile.get("project") or {}).get("repo") or "")
         full_env = {"SHIP_REPO": repo, **(env or {})}
         handle = ln.launch(self.roles[role], prompt, cwd, self.program, f"chain-{name}-{n}", self.settings,
                            extra_env=full_env, label=name)
-        if handle is None:
+        if handle is None:  # no seat (the pool, or the Fable seat): nothing started, nothing counted
             return False
+        self.memo["workers"][name] = n
+        self.memo.setdefault("worker_activity", {})[name] = (self.current[1].get("next") if self.current else "") or ""
         if side:
             self.side[name] = handle
         else:
@@ -354,8 +366,9 @@ class Conveyor:
         handle = self.worker[1]
         self.worker = None
         self.log([f"WORKER {name} ended: {got.kind} {got.line or got.note}".rstrip()])
-        if got.kind == "limit":
+        if got.kind == "limit":  # a usage limit is a restart, never one of its runs (D-L12)
             self.memo["limit_until"] = got.limit_reset
+            self.memo["workers"][name] = max(0, self.memo["workers"].get(name, 1) - 1)
             return None
         if got.kind == "ok" and got.contract == "WAITS":
             self.wait(f"the {name} worker needs you", got.value)
@@ -377,12 +390,24 @@ class Conveyor:
             self.exit = stop.code
         except Held as held:
             self.buf.append(f"HOLD: {held} did not start")
-        lines = self.buf
+        lines = self.buf + self.fallbacks()
         self.save()
         if self.lock:
             self.lock.refresh(self.children())
         self.log(lines)
         return lines
+
+    def fallbacks(self) -> list[str]:
+        """F5 (D-L26): new lines of `notes/FALLBACKS.md` (a Fable worker that ran on its fallback, from any part of
+        the run) go into chain.log."""
+        path = self.program.notes_dir / "FALLBACKS.md"
+        try:
+            rows = [x for x in path.read_text("utf-8").splitlines() if x.strip()]
+        except OSError:
+            return []
+        seen = int(self.memo.get("fallbacks_seen", 0))
+        self.memo["fallbacks_seen"] = len(rows)
+        return [row.split(" ", 2)[-1] for row in rows[seen:]]
 
     def _tick(self) -> list[str]:
         lines: list[str] = []
@@ -408,6 +433,9 @@ class Conveyor:
         if self.worker and self.owner:  # a worker's result goes to the activity that started it, whatever phase says now
             handler, started_p = self.owner
             return lines + handler(started_p)
+        pending = self.memo.get("later_pending")
+        if pending:  # F1: the later hand-off's slices joined state.json; their facts at the tip finish first
+            return lines + self.later_handoff({**p, "stop": pending})
         merging = next((sc for sc in self.scripts if sc.name.startswith("merge-")), None)
         if merging is not None:  # MERGED in the note moves phase on; the merge's own exit is still read here
             return lines + self.merge({**p, "next": "merge", "stop": merging.name[len("merge-"):]})
@@ -697,6 +725,7 @@ class Conveyor:
             code = build.exit
             build.stop_children()
             del self.builds[key]
+            self.buf += lines  # the build's last lines (why it stopped) reach chain.log too
             raise Stop(10 if code in (1, 10) else code)
         if build.done() and count and folder.dir != self.program.dir:
             del self.builds[key]  # a fix program's build is over once its stop note is written
@@ -760,14 +789,43 @@ class Conveyor:
             return lines
         rc, out = got
         lines += [f"MERGE {x}" for x in out[-8:]]
+        moved_book = self.memo.setdefault("merge_moved", {})
         if rc == 0:
+            moved_book.pop(stop, None)
             self.finished("merge")
             return lines
+        moved = [m.group(1) for x in out for m in [MOVED.search(x)] if m]
+        if rc == 3 and moved:  # F8 (D-L26): the target moved under the PR; counted, then WAITS
+            shas = moved_book.setdefault(stop, [])
+            shas.append(moved[-1])
+            if len(shas) >= self.settings.merge_moved_max:
+                moved_book.pop(stop, None)
+                self.wait(f"stop {stop}: GitHub refused the merge {len(shas)} times because the target moved; "
+                          f"the merges that moved it: {'; '.join(self.subjects(shas))}", str(self.program.merge_note(stop)))
+                raise Stop(10)
+            return lines + [f"MERGE {stop}: the target moved ({len(shas)} of {self.settings.merge_moved_max}); "
+                            "again next tick"]
         if rc in (3, 11):
             return lines + [f"MERGE {stop} exit {rc}: again next tick"]
         if rc == 2 and phase.read(self.program, self.settings).get("next") in ("build", "checkpoint-review"):
             return lines + [f"MERGE {stop}: a fix program does the merge"]  # phase's rule for a merge-written fix
         raise Stop(10)
+
+    def subjects(self, shas: list[str]) -> list[str]:
+        """`<sha10> <subject>` of each commit that moved the target (as far as the clone can name it)."""
+        proj = self.project()
+        repo = Path(str(proj.get("repo") or ""))
+        try:
+            git(repo, "fetch", "-q", str(proj.get("remote") or "origin"), timeout=self.settings.git_timeout_s)
+        except GitError:
+            pass
+        out = []
+        for sha in dict.fromkeys(shas):
+            try:
+                out.append(git(repo, "log", "-1", "--format=%h %s", sha, timeout=self.settings.git_timeout_s).strip())
+            except GitError:
+                out.append(sha)
+        return out
 
     # -- docs, later handoff, sweep handoff, audit --
 
@@ -804,14 +862,53 @@ class Conveyor:
         if not (prompt_dir(self.settings) / "LATER-HANDOFF.md").exists():
             self.wait(f"stop {stop} is deferred and the later-handoff prompt is not there yet")
             raise Stop(10)
-        got = self.worker_result(f"later-handoff-{stop}")
-        if got is None:
-            if not self.worker:
-                self.start_worker(f"later-handoff-{stop}", "later-handoff", "LATER-HANDOFF.md",
-                                  self.values(STOP=stop), self.program.dir)
-            return []
+        book = self.memo.setdefault("later", {}).setdefault(stop, {})
+        if not book.get("written"):
+            got = self.worker_result(f"later-handoff-{stop}")
+            if got is None:
+                if not self.worker:
+                    self.start_worker(f"later-handoff-{stop}", "later-handoff", "LATER-HANDOFF.md",
+                                      self.values(STOP=stop), self.program.dir)
+                return []
+            book["written"] = True
+        return self.later_absorb(stop, book)
+
+    def later_absorb(self, stop: str, book: dict) -> list[str]:
+        """F1 (D-L26): the later-handoff's new rows join state.json (`init_state` appends rows of a deferred stop),
+        and their brief facts run at the target's tip, which holds the core's merge."""
+        from ship.plan import PlanError, init_state, parse_slices
+
+        lines: list[str] = []
+        if not book.get("absorbed"):
+            state = st.load(self.program)
+            try:
+                lines.append(init_state(self.program.dir, Path(state.repo), state.build_branch,
+                                        Path(state.worktree_root), state.remote))
+            except (PlanError, OSError) as exc:
+                self.memo["later"].pop(stop, None)
+                self.wait(f"stop {stop}: the later hand-off's slices cannot join the run: {exc}",
+                          str(self.program.slices_md))
+                raise Stop(10) from exc
+            book["absorbed"] = True
+            book["slices"] = [s.id for s in parse_slices(self.program.slices_md.read_text("utf-8"))
+                              if s.checkpoint == stop]
+            self.memo["later_pending"] = stop
+        proj = self.project()
+        tip = self.target_tip(Path(proj.get("repo") or ""), str(proj.get("remote") or "origin"))
+        if book["slices"] and tip:
+            got = self.ended(f"later-facts-{stop}")
+            if got is None:
+                if not self.running(f"later-facts-{stop}"):
+                    self.child(f"later-facts-{stop}", self.kit("facts", self.program, "--tip", tip, "--slices",
+                                                              ",".join(book["slices"])))
+                return lines
+            fails = [x for x in got[1] if x.startswith("FAIL")]
+            lines += [f"FACTS at {tip[:10]} for stop {stop}: {x}" for x in fails] or \
+                [f"FACTS at {tip[:10]} for stop {stop}: all pass"]  # a failing one parks at dispatch
+        self.memo.pop("later_pending", None)
+        self.memo["later"].pop(stop, None)
         self.finished("later-handoff")
-        return [f"LATER-HANDOFF {stop} done; SKIP the sweep review (U21)"]
+        return lines + [f"LATER-HANDOFF {stop} done; its slices {book['slices']} join the run"]
 
     def sweep_handoff(self, p: dict) -> list[str]:
         if not (prompt_dir(self.settings) / "SWEEP-HANDOFF.md").exists():
@@ -852,6 +949,12 @@ class Conveyor:
         if stage in ("intent-check", "verdicts"):
             gate = "intent" if stage == "intent-check" else "verdicts"
             if index.gate(gate) is None:
+                if gate == "intent":  # F2 (D-L26): no quality, judge or screen while his intent check is open
+                    asked = [x.strip()[6:] for x in phase._read(self.program.waiting).splitlines()
+                             if phase.UNANSWERED.match(x)]
+                    self.wait("the audit waits on his intent check (gates.intent) before quality starts"
+                              + (": " + "; ".join(asked[:4]) if asked else ": confirm the intent lines in INTENT.md"),
+                              str(self.program.dir / "INTENT.md"))
                 raise Stop(10)
             phase.set_phase(self.program, "quality" if gate == "intent" else "audit-handoff", "running", "conveyor")
             return [f"AUDIT gate {gate} is set"]
@@ -878,9 +981,9 @@ class Conveyor:
             old = self.program.waiting.read_text("utf-8") if self.program.waiting.exists() else ""
             self.program.waiting.write_text(old + "".join(f"{x.strip()}\n" for x in open_ if x.strip() not in old),
                                             "utf-8", newline="\n")
-        phase.set_phase(self.program, "quality", "running", "conveyor")  # reading does not wait for him
+        phase.set_phase(self.program, "intent-check", "running", "conveyor")  # F2: quality waits on gates.intent
         self.finished("audit")
-        return [f"AUDIT {stage} done"]
+        return [f"AUDIT {stage} done; the intent check is his"]
 
     # -- the audit's checkout, probes and readers --
 
@@ -1078,9 +1181,34 @@ class Conveyor:
             raise Stop(10)
         book.pop("judged", None)
         book.pop("screened", None)
+        index = prog.load(self.program)
+        if index.parent:  # F3 (D-L26): a scoped audit stops here and hands its findings to the plan that asked
+            return self.scoped_audit_done(index.parent)
         phase.set_phase(self.program, "verdicts", "running", "conveyor")
         self.finished("audit")
         return ["AUDIT judgement, screen and its moves done"]
+
+    def scoped_audit_done(self, parent: str) -> list[str]:
+        """A scoped audit has no verdicts gate and no hand-off of its own: its findings go into the parent's notes
+        (`notes/AUDIT-<audit>.md`), for the plan's ground, and the audit is done."""
+        home = self.program.dir.parent / parent
+        if not (home / "PROGRAM.yaml").exists():
+            self.wait(f"the scoped audit's parent {parent} has no PROGRAM.yaml; its findings stay in "
+                      f"{self.program.dir.name}", str(self.program.dir / "FINDINGS.tsv"))
+            raise Stop(10)
+        note = Program(home).notes_dir / f"AUDIT-{self.program.dir.name}.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        parts = [f"# Scoped audit {self.program.dir.name}\n\nFor the plan's ground: the audit {parent} asked for "
+                 f"stopped after its judgement (no verdicts gate, no hand-off). Its files: "
+                 f"`{self.program.dir.as_posix()}` (`INTENT.md`, `AUDIT.md`, `FINDINGS.tsv`).\n"]
+        for name in ("FINDINGS.tsv", "AUDIT.md"):
+            path = self.program.dir / name
+            if path.exists():
+                parts.append(f"\n## {name}\n\n```\n{path.read_text('utf-8').rstrip()}\n```\n")
+        note.write_text("".join(parts), "utf-8", newline="\n")
+        phase.set_phase(self.program, "done", "done", "conveyor")
+        self.finished("audit")
+        return [f"AUDIT scoped: findings written to {note}; the audit is done"]
 
     def audit_handoff(self) -> list[str]:
         tip, _ = self.census()
@@ -1098,6 +1226,16 @@ class Conveyor:
 
         drop_copy(Path(str(self.project().get("repo") or "")), copy, self.settings)
         self.audit_copy = None
+        if not self.program.slices_md.exists():  # F7 (D-L26): every approved row is design or later: nothing to build
+            rows = self.program.notes_dir / "BACKLOG-ROWS.tsv"
+            listed = [x for x in phase._read(rows).splitlines()[1:] if x.strip()]
+            self.program.notes_dir.mkdir(parents=True, exist_ok=True)
+            (self.program.notes_dir / "HANDOFF.md").write_text(
+                "# Hand-off with no slices\n\nEvery approved row went to planning or later; nothing is built here.\n\n"
+                + ("".join(f"- {x}\n" for x in listed) or "- no hand-off rows were written\n"), "utf-8", newline="\n")
+            phase.set_phase(self.program, "done", "done", "conveyor")
+            self.finished("audit")
+            return [f"AUDIT audit-handoff done with no slices; {len(listed)} hand-off rows in notes/HANDOFF.md"]
         self.finished("audit")
         return ["AUDIT audit-handoff done; the audit checkout is dropped"]
 

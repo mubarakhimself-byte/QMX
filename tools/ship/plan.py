@@ -208,8 +208,10 @@ def read_brief_facts(brief: Path) -> list[Fact]:
 
 
 def init_state(program_dir: Path, repo: Path, build_branch: str, worktree_root: Path, remote: str) -> str:
-    """Create state.json from SLICES.md. Run twice, it changes nothing; a changed SLICES.md is refused,
-    because slices are never added or changed mid-run."""
+    """Create state.json from SLICES.md. Run twice, it changes nothing. A changed SLICES.md is refused, because
+    slices never change mid-run, with one exception (D-L26 F1): rows added, after the core merged, for a stop
+    PROGRAM.yaml marks `handoff: deferred` (the later-handoff's slices) are appended; every existing row must be
+    unchanged."""
     from ship import state as st
     from ship.layout import Program
 
@@ -219,11 +221,32 @@ def init_state(program_dir: Path, repo: Path, build_branch: str, worktree_root: 
         current = st.load(program)
         planned = {s.id: (s.depends_on, s.files) for s in slices}
         held = {s.id: (s.depends_on, s.files) for s in current.slices.values()}
-        if planned != held:
-            raise PlanError("state.json exists and SLICES.md no longer matches it; slices never change mid-run")
-        return "state.json already matches SLICES.md"
+        if planned == held:
+            return "state.json already matches SLICES.md"
+        added = [s for s in slices if s.id not in held]
+        changed = sorted(sid for sid, row in held.items() if planned.get(sid) != row)
+        deferred = deferred_stops(program)
+        late = sorted({s.checkpoint for s in added if s.checkpoint not in deferred})
+        if changed or late or not added:
+            raise PlanError("state.json exists and SLICES.md no longer matches it; slices never change mid-run "
+                            f"(changed or removed: {changed}; added outside a deferred stop: {late})")
+        with st.locked(program) as state:
+            for s in added:
+                state.slices[s.id] = s
+            state.log("init", None, added=[s.id for s in added])
+        return f"state.json gained {len(added)} slices of deferred stops: {', '.join(s.id for s in added)}"
     fresh = st.State(repo=str(repo.resolve()), build_branch=build_branch, remote=remote,
                      worktree_root=str(worktree_root.resolve()), slices={s.id: s for s in slices})
     fresh.log("init", None, slices=len(slices))
     st.save(program, fresh)
     return f"state.json created with {len(slices)} slices"
+
+
+def deferred_stops(program) -> set[str]:
+    """The stops PROGRAM.yaml marks `handoff: deferred` (LATER stops whose briefs come after the core merged)."""
+    from ship import program as prog
+
+    try:
+        return {s.id for s in prog.load(program).stops if s.handoff == "deferred"}
+    except (prog.ProgramError, OSError):
+        return set()

@@ -5,7 +5,7 @@ Most are `chaos` scenarios: the conveyor (`ship chain`) on a scratch repo with s
 (`tests/chaos.py`), broken on purpose, then read for the end state it must reach. A row another unit's test
 already covers gets a test here that names it (`covered(...)` asserts the test exists), so the table stays whole
 and a renamed or deleted test fails here. A row the lead's later decisions changed says so in its docstring:
-the D-L wins. A scenario that shows a real kit bug is marked `expectedFailure` with the bug in one line.
+the D-L wins. A scenario that showed a kit bug (F1 to F9, G1) was fixed under D-L26 and now passes.
 
 Run: `cd tools && python -m unittest ship.tests.test_chain_chaos` (or pytest). No real Claude run, no real
 merge, no scheduled task; the factory home is a temp folder. The factory's own fixtures (rows marked
@@ -16,7 +16,7 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | Row | Failure | Covered by |
 |---|---|---|
 | 1 | power cut, battery lasts | chaos `Power.test_battery_holds_then_resumes`; HOLD inside review and merge: kit `test_k4a.HoldScope` (`Named.test_row_01_hold_inside_review_and_merge`); drill D1 |
-| 2 | laptop dies or restarts | chaos `DeadLaptop.test_dead_laptop_resume_all`; mid-land: `LandKilled.test_land_killed_mid_git_is_recovered` (expectedFailure: finding F9); drill D2 |
+| 2 | laptop dies or restarts | chaos `DeadLaptop.test_dead_laptop_resume_all`; mid-land (F9): `LandKilled.test_land_killed_mid_git_is_recovered`, `LandKilled.test_a_land_that_keeps_crashing_waits_after_its_restarts`, `LandLock.test_a_lock_with_git_running_in_the_copy_stays`; drill D2 |
 | 3 | internet or GitHub down | chaos `Network.test_remote_down_is_not_a_failure`; drill D5 |
 | 4 | usage limit | chaos `Limits.test_usage_limit_sleeps`; drill D4 |
 | 5 | the app is closed | chaos `Detach.test_detached_conveyor_outlives_parent`; drill D3 |
@@ -25,19 +25,19 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | 8 | a worker replies nonsense | chaos `Garbage.test_garbage_builder_parks_after_three` |
 | 9 | he is away at a gate | chaos `Gates.test_away_at_go` |
 | 10 | he answers days later | chaos `Gates.test_answer_then_go` (10a); kit `test_run.Unpark` and `UnparkPins` (10b): `Named.test_row_10b_unpark_while_open_else_backlog` |
-| 11 | he changes his mind mid-plan | not testable here: the factory has no `retired-id-cited` fixture yet (check_chain.py has the RETIRED rule); `FactoryFixtures.test_row_11_retired_id_cited` is skipped until it does |
+| 11 | he changes his mind mid-plan | fixture `h01-retired-id-cited` (factory 2fcbb35): `FactoryFixtures.test_row_11_retired_id_cited` |
 | 12 | he changes his mind mid-build | chaos `StopAfter.test_stop_after_checkpoint` |
 | 13 | he abandons a program | chaos `Abandon.test_abandon` (kit `test_chain.Abandon` too) |
 | 14 | budget overrun at handoff | fixture `d03`/`d04` (factory, U21): `FactoryFixtures.test_row_14_over_budget` |
-| 15 | he insists on a DROP | not testable here: the factory has no `he-overrules-a-drop` fixture yet (U20); `FactoryFixtures.test_row_15_he_overrules_a_drop` is skipped until it does |
+| 15 | he insists on a DROP | fixtures `h02-he-overrules-a-drop`, `h03-agent-overrules-a-drop` (factory 2fcbb35): `FactoryFixtures.test_row_15_he_overrules_a_drop` |
 | 16 | the challenger finds nothing | no script ("—"); fixture `e16-no-call-outs` named in `FactoryFixtures.test_row_16_nothing_to_call_out` |
 | 17 | LATER hidden in a CORE slice | fixture `d02` (factory, U21): `FactoryFixtures.test_row_17_later_in_core_slice` |
 | 18 | core sentence not true at the last CORE stop | chaos `CoreThenLater.test_core_not_proven_blocks_later` |
-| 19 | LATER briefs would be stale | chaos `CoreThenLater.test_later_briefs_written_after_core` (expectedFailure: finding F1) |
+| 19 | LATER briefs would be stale | chaos `CoreThenLater.test_later_briefs_written_after_core` (F1); its loop: `CoreThenLater.test_a_later_hand_off_that_writes_nothing_waits_after_its_restarts` |
 | 20 | an audit finds a design-level problem | chaos `Handoffs.test_x1_design_finding_goes_to_planning_as_a_row`; fixture `g05` |
-| 21 | a plan's area is not fit to build on | chaos `Handoffs.test_x2_scoped_audit_stops_after_judgement` (expectedFailure: finding F3); factory fixture: not testable here (no `audit-first` fixture in the factory yet) |
+| 21 | a plan's area is not fit to build on | chaos `Handoffs.test_x2_scoped_audit_stops_after_judgement` (F3); factory fixture: not testable here (no `audit-first` fixture in the factory yet) |
 | 22 | a hand-off row is lost or bounces | `Handoffs.test_handoff_row_bounce`: not testable here, U33 (`ship backlog`) is not built; it runs once `ship.backlog` exists |
-| 23 | an audit and a plan on one area | `Handoffs.test_notice_overlap_is_reported` (expectedFailure: finding F4) |
+| 23 | an audit and a plan on one area | chaos `Handoffs.test_notice_overlap_is_reported` (F4) |
 | 24 | a removal breaks a lookup by name | not testable here: U29 (`remove` kind) and U27 (`callers.py` fixture) are not in the kit; the factory's `g13`, `g21`, `g33`, `g36` fixtures check the callers fact |
 | 25 | a refactor changes behaviour | not testable here: U29 (`pin`/`refactor` kinds) is not in the kit |
 | 26 | a one-way door nobody approved | fixture `g04` (factory, U28): `FactoryFixtures.test_row_26_unapproved_one_way_door` |
@@ -57,7 +57,7 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | 40 | the docs step fails | not testable here: U36 (`ship.docs`) is not built; the conveyor's skip record is in `test_chain.EndToEnd` |
 | 41 | an undeclared route | not testable here: U25 (contract check in `slice_checks`) is not in the kit |
 | 42 | a stale contract file | not testable here: CI's drift job (U23) lives in qmx-ci, not the kit |
-| 43 | Fable cannot be started | kit `test_launch.Results.test_fable_role_that_fell_back_says_so`; chaos `Fable.test_fable_falls_back_and_its_result_says_so` and `Fable.test_fable_falls_back_and_says_so` (expectedFailure: finding F5) |
+| 43 | Fable cannot be started | kit `test_launch.Results.test_fable_role_that_fell_back_says_so`; chaos `Fable.test_fable_falls_back_and_its_result_says_so`, `Fable.test_fable_falls_back_and_says_so` and `FallbackReport.test_the_run_report_lists_every_fable_fallback` (F5) |
 | 44 | two programs' records collide | kit `test_records.Lock`, `test_dl22.RecordsRace`: `Named.test_row_44` |
 | 45 | the main checkout is edited | kit `test_arm.MainCheck.test_tracker_and_claude_edits_...`: `Named.test_row_45` |
 | 46 | two programs want one file | kit `test_claims.Build.test_only_the_slice_naming_a_claimed_file_...`: `Named.test_row_46` |
@@ -65,36 +65,35 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | 48 | two programs break each other quietly | not testable here: needs a fake deep run red only for a commit holding both programs (fake `gh` cannot script that yet); the merge's own deep run is in `test_merge.Moved` |
 | 49 | one program keeps merging first | kit `test_locks.MergeQueue.test_three_waiters_...`: `Named.test_row_49` |
 | 50 | a stale claim | kit `test_claims.Build.test_the_claims_of_a_deleted_program_are_swept`: `Named.test_row_50` |
-| 51 | he is away at the intent check | chaos `Audit.test_away_at_intent_check_reading_goes_on` (passes) and `Audit.test_away_at_intent_check` (also X3; expectedFailure: finding F2) |
+| 51 | he is away at the intent check | chaos `Audit.test_away_at_intent_check` (also X3; F2) and `Audit.test_intent_answered_then_quality_and_judgement` |
 | 52 | intent changed after quality | fixture `g07` (factory, U28): `FactoryFixtures.test_row_52_intent_changed_after_quality` |
 | 53 | the sources contradict | fixture `g08` (factory, U28): `FactoryFixtures.test_row_53_leave_it_as_it_works` |
 | 54 | a Fable removal he uses | fixture `g14` (factory, U26): `FactoryFixtures.test_row_54_fable_decides_visible_removal`; drill D8 |
 | 55 | a restructure with no measure | fixture `c07`/`g06` (factory, U20): `FactoryFixtures.test_row_55_core_restructure_no_measure` |
-| 56 | two Fable seats at once | kit `test_locks.FableSeat.test_two_fable_workers_never_overlap`; chaos `Fable.test_one_fable_at_a_time_waits_for_the_seat` (gap G1: no setting lets Opus stand in after a long wait) |
+| 56 | two Fable seats at once | kit `test_locks.FableSeat.test_two_fable_workers_never_overlap`; chaos `Fable.test_one_fable_at_a_time_waits_for_the_seat` and, past `fable_wait_s`, `Fable.test_fable_seat_taken_too_long_falls_back_to_opus` (G1) |
 | 57 | a loop reaches its round limit | `Loops` (one test per loop of 3.9, below) |
 | 58 | the index and the skills disagree | fixture `check_index` (factory, U40): `FactoryFixtures.test_row_58_index_drift` |
 
-Findings (each an `expectedFailure` with the bug in its docstring; the lead decides):
+Findings of the first run, all fixed under D-L26 (the test that proves each fix):
 
-- F1 (row 19) a deferred stop's slices written by the later-handoff worker never reach state.json; the stop is never
-  built and the conveyor ticks `build` forever.
-- F2 (row 51, X3) the intent stage goes straight to quality and on to judgement: the judge starts while his intent
-  question is open; the `intent-check` gate is never read.
-- F3 (row 21, X2) no scoped audit: an audit with a `parent` waits on a verdicts gate instead of stopping after the
-  judgement.
-- F4 (row 23) `ship claims notice` never reports an overlap with another program's notice.
-- F5 (row 43) a Fable fallback is only in the worker's `result.json`, not in the conveyor's log or the run report.
-- F6 (X9) the audit hand-off gets a checkout of the census tip; nothing marks its facts stale after a merge into the
-  area or reruns them at the new tip.
-- F7 (X1) a hand-off that writes no `SLICES.md` (every approved row design or later) is started again on every
-  tick, without a bound.
-- F8 (row 57) a merge refused because the target moved is retried every tick with no count; nobody is told who keeps
-  merging first.
-- F9 (row 2) a `land` killed mid-git leaves `index.lock` in the landing copy; every later `land` exits 1 and is
-  started again every tick, without a bound. It is also why `test_chain`'s kill test times out now and then.
+- F1 (row 19) a later hand-off's slices never reached state.json: `CoreThenLater.test_later_briefs_written_after_core`.
+- F2 (row 51, X3) the judge started while his intent question was open: `Audit.test_away_at_intent_check`.
+- F3 (row 21, X2) no scoped audit: `Handoffs.test_x2_scoped_audit_stops_after_judgement`.
+- F4 (row 23) no overlap report on a notice: `Handoffs.test_notice_overlap_is_reported`.
+- F5 (row 43) a Fable fallback was only in result.json: `Fable.test_fable_falls_back_and_says_so`,
+  `FallbackReport.test_the_run_report_lists_every_fable_fallback`.
+- F6 (X9) an audit's facts were never rerun after a merge into its area: `Handoffs.test_x9_stale_findings_rerun_at_the_new_tip`.
+- F7 (X1) a hand-off with no slices restarted forever: `Handoffs.test_x1_all_rows_design_hand_off_ends`.
+- F8 (row 57) a merge refused because the target moved was retried forever: `Loops.test_merge_when_the_target_moved`.
+- F9 (row 2) a stale `index.lock` made `land` fail forever: `LandKilled.test_land_killed_mid_git_is_recovered`,
+  `LandKilled.test_a_land_that_keeps_crashing_waits_after_its_restarts`, `LandLock.test_a_lock_with_git_running_in_the_copy_stays`.
+- G1 (row 56) no Opus stand-in for a long Fable wait: `Fable.test_fable_seat_taken_too_long_falls_back_to_opus`.
 
-Gap, not a test: G1 (row 56) the design's "Opus stands in where the project settings allow" has no setting; a Fable
-role waits for the seat for as long as it is held, silently.
+D-L26's general rule, every worker restart loop counts toward `max_restarts` and then WAITS, one test per loop that
+had no limit: plan review with no RESULT line (`Loops.test_plan_review_with_no_result_waits_after_its_restarts`),
+the later hand-off (`CoreThenLater.test_a_later_hand_off_that_writes_nothing_waits_after_its_restarts`), the sweep
+hand-off (`Handoffs.test_a_sweep_hand_off_that_writes_nothing_waits_after_its_restarts`), the audit hand-off (F7)
+and `land` (F9).
 
 Loops of 3.9 (row 57), each: exit, and what happens at the round count.
 
@@ -109,7 +108,7 @@ Loops of 3.9 (row 57), each: exit, and what happens at the round count.
 | Checkpoint fix batch (2 rounds) | chaos row 32: `Loops.test_checkpoint_fix_batch` |
 | A reader that does not finish (1 restart) | kit row 35: `Loops.test_reader_not_finishing` |
 | Waiting on CI (2 long waits) | chaos row 33: `Loops.test_waiting_on_ci` |
-| Merge when the target moved (2 tries) | chaos `Loops.test_merge_when_the_target_moved` (expectedFailure: finding F8); one retry is kit `test_merge.Clean.test_the_merge_names_the_reviewed_head_and_a_moved_target_is_a_retry`, turn order `test_locks.MergeQueue` |
+| Merge when the target moved (5 tries, D-L26) | chaos `Loops.test_merge_when_the_target_moved` (F8); one retry is kit `test_merge.Clean.test_the_merge_names_the_reviewed_head_and_a_moved_target_is_a_retry`, turn order `test_locks.MergeQueue` |
 | Budget growth (his yes each time) | fixture row 14: `Loops.test_budget_growth` |
 | CORE then LATER (the LATER budget) | chaos rows 18 and 19: `Loops.test_core_then_later` |
 | Audit and plan (1 crossing) | not testable here: U33 (row 22) |
@@ -119,15 +118,15 @@ Hand-offs between the branches (13.4).
 
 | Id | Covered by |
 |---|---|
-| X1 audit hands a redesign to planning | chaos `Handoffs.test_x1_design_finding_goes_to_planning_as_a_row` (backlog filing is U33: the row stays in `notes/BACKLOG-ROWS.tsv` for the desk); all rows design: `Handoffs.test_x1_all_rows_design_hand_off_ends` (expectedFailure: finding F7) |
-| X2 planning asks for an audit first | chaos `Handoffs.test_x2_scoped_audit_stops_after_judgement` (expectedFailure F3) |
-| X3 away at the intent check | chaos row 51 `Audit.test_away_at_intent_check` (expectedFailure F2) |
+| X1 audit hands a redesign to planning | chaos `Handoffs.test_x1_design_finding_goes_to_planning_as_a_row` (backlog filing is U33: the row stays in `notes/BACKLOG-ROWS.tsv` for the desk); all rows design: `Handoffs.test_x1_all_rows_design_hand_off_ends` (F7) |
+| X2 planning asks for an audit first | chaos `Handoffs.test_x2_scoped_audit_stops_after_judgement` (F3) |
+| X3 away at the intent check | chaos row 51 `Audit.test_away_at_intent_check` (F2) |
 | X4 an audit sweep and a feature side by side | kit `test_claims.Build.test_disjoint_programs_build_and_land_side_by_side` and `Merges`: `Named.test_x4` |
 | X5 a removal meets a new caller | not testable here: U29 (`remove` kind and its callers fact at dispatch) is not in the kit |
 | X6 work bouncing between branches | not testable here: U33 (row 22) |
 | X7 a LATER item comes back as an ask | not testable here: U33 and U34 |
 | X8 a builder says the plan is wrong | chaos row 27 (`MAP.md` lists it); the fix slice citing the chain id is the verdict prompt's job (skills lane) |
-| X9 an audit's findings go stale | chaos `Handoffs.test_x9_stale_findings_rerun_at_the_new_tip` (expectedFailure: finding F6) |
+| X9 an audit's findings go stale | chaos `Handoffs.test_x9_stale_findings_rerun_at_the_new_tip` (F6: the facts rerun at arm, as D-L26 decided) |
 | X10 a fix program crosses nothing | chaos `CoreThenLater.test_core_not_proven_blocks_later` (its claims part; D-L22 wins over "never registers its own": the fix's claims never block its parent and its merge releases them) |
 """
 
@@ -147,7 +146,7 @@ from ship.layout import Program
 from ship.proc import kill_tree, pid_alive
 from ship.settings import load_settings
 from ship.tests.chaos import ChaosCase, Stop, builder, verdict
-from ship.tests.fixture import BRIEF, PY, sh, write
+from ship.tests.fixture import BRIEF, PY, RepoCase, sh, write
 
 ONE_STOP = (Stop("A"),)
 
@@ -214,22 +213,30 @@ class LandKilled(ChaosCase):
     stops = ONE_STOP
     slices = (("a1", "A", "L1"),)
 
-    @unittest.expectedFailure
     def test_land_killed_mid_git_is_recovered(self):
         """Row 2, the laptop dying while `land` runs git in its landing copy: git's `index.lock` stays behind in
-        `<program>/tmp/landing`. FINDING F9: every later `land` exits 1 on it, and the build starts it again every
-        tick without a bound or a WAITS line. This is the hang that makes the kit's own kill test
-        (`test_chain.EndToEnd.test_killed_after_each_activity_and_restarted_it_ends_the_same`) time out now and then
-        (2 runs in 9 here), when a kill lands while a pre-built slice's `land` runs."""
+        `<program>/tmp/landing`. F9 (D-L26, fixed): the next `land` removes it, because no git process works in the
+        copy, and lands. Before the fix every later `land` exited 1 forever; that was also the occasional hang of
+        `test_chain.EndToEnd.test_killed_after_each_activity_and_restarted_it_ends_the_same`."""
         from ship.worktree import checkout_copy
 
         copy = checkout_copy(self.repo, self.program.tmp / "landing", self.base, load_settings(self.program.dir))
-        write(Path(sh(copy, "git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock")), "")
-        proc = self.start()
-        self.until(lambda: self.chain_log().count("SCRIPT land exit 1") >= 3 or proc.poll() is not None, timeout=300,
-                   what="three failed lands or the end")
-        self.assertEqual(proc.poll(), 0, "the stale lock is cleared (or the run stops and asks him)")
+        lock = Path(sh(copy, "git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock"))
+        write(lock, "")
+        self.assertEqual(self.chain(), 0, self.out)
+        self.assertIn("LAND NOTE removed a stale", self.chain_log())
+        self.assertNotIn("SCRIPT land exit 1", self.chain_log())
         self.assert_converged()
+
+    def test_a_land_that_keeps_crashing_waits_after_its_restarts(self):
+        """F9's restart loop (D-L26: every restart loop counts toward `max_restarts`, then WAITS): a landing copy
+        that cannot be made (here a file is in its place) crashes `land` every time; after three the build stops
+        with one WAITS line and the conveyor exits 10."""
+        write(self.program.tmp / "landing", "not a folder\n")
+        self.assertEqual(self.chain(), 10, self.out)
+        self.assertEqual(self.chain_log().count("LAND crashed"), 3, self.chain_log()[-2000:])
+        self.assertTrue(any("land crashed 3 times in a row" in w for w in self.waits()), self.waits())
+        self.assertEqual(self.state().merged, [])
 
 
 class Network(ChaosCase):
@@ -461,12 +468,12 @@ class CoreThenLater(ChaosCase):
         self.assertIn("pkg/a1f.py", self.target_files())
         self.assertTrue((self.program.stop_review("A") / "REVIEW-2.md").exists())
 
-    @unittest.expectedFailure
     def test_later_briefs_written_after_core(self):
-        """Row 19. FINDING F1: a deferred stop's slices, written by the later-handoff worker after the core merged,
-        never reach state.json (init_state refuses a changed SLICES.md; nothing adds them), so stop C is never
-        built, its facts never run at the new tip, and the conveyor ticks `build` forever. (Stop B is left out
-        here: the core is A alone.)"""
+        """Row 19. The later-handoff worker starts only after the core (A) merged and writes stop C's slice; F1
+        (D-L26, fixed): `init_state` appends a deferred stop's new rows to state.json, the conveyor runs their brief
+        facts at the target's tip (which holds A's merge), and C is built, reviewed and merged. Before the fix the
+        rows never reached state.json and the conveyor ticked `build` forever. (Stop B is left out: the core is A
+        alone.)"""
         self.make_program(stops=(Stop("A"), Stop("C", "later", "deferred")), slices=(("a1", "A", "L1"),))
         self.prompt("LATER-HANDOFF.md")
         self.rule({"match": "later-handoff:", "times": 1, "steps": [{"file": {
@@ -476,11 +483,27 @@ class CoreThenLater(ChaosCase):
             "{program}/slices/c1/BRIEF.md": BRIEF}}], "reply": "DONE {program}/SLICES.md"})
         proc = self.start()
         self.until(lambda: self.calls("later-handoff:") or proc.poll() is not None, timeout=400, what="the hand-off")
+        self.assertTrue(self.calls("later-handoff:"), f"exit {proc.poll()}: {self.waits()} {self.chain_log()[-3000:]}")
         first = self.calls("later-handoff:")[0]["at"]
         self.assertGreater(first, self.program.merge_note("A").stat().st_mtime, "LATER starts after the core merged")
         self.until(lambda: "c1" in self.state().slices, timeout=30, what="c1 in state.json")
         self.assertEqual(proc.wait(timeout=400), 0, self.chain_log()[-2000:])
         self.assertIn("pkg/c1.py", self.target_files())
+        merged_a = self.program.merge_note("A").read_text("utf-8").split("MERGED ")[1].split()[0]
+        facts = self.program.checks_root / "_facts" / merged_a[:8] / "summary.txt"
+        self.assertTrue(facts.exists(), "c1's facts ran at the tip that holds A's merge")
+        self.assertIn("c1", facts.read_text("utf-8"))
+        self.assertEqual(self.state().merged, ["A", "C"])
+        self.assert_converged(merged=["A", "C"], target_has=["a1"])
+
+    def test_a_later_hand_off_that_writes_nothing_waits_after_its_restarts(self):
+        """D-L26's general rule, the later-handoff loop: a worker that ends DONE but writes no slice for the
+        deferred stop was started again every tick; now its runs count toward `max_restarts`, then WAITS."""
+        self.make_program(stops=(Stop("A"), Stop("C", "later", "deferred")), slices=(("a1", "A", "L1"),))
+        self.prompt("LATER-HANDOFF.md")
+        self.assertEqual(self.chain(), 10, self.out)
+        self.assertEqual(len(self.calls("later-handoff:")), 3)
+        self.assertTrue(any("later-handoff-C worker was started 3 times" in w for w in self.waits()), self.waits())
 
 
 class Briefs(ChaosCase):
@@ -624,11 +647,13 @@ INTENT = ("# Intent\n\n- **N1** the order book keeps every order it was given. S
           "- [ ] U1 Does N2 mean the old daily limit or the new one? (recommended: the old one)\n")
 READER_PART = {"match": "audit-reader:", "steps": [{"file": {"{program}/readers/{part}.md": "Read it.\nDONE\n"}}],
                "reply": "DONE {program}/readers/{part}.md"}
+SWEEP_ROWS = "| id | name | stop | lane | depends on | files | size |\n|---|---|---|---|---|---|---|\n"
 
 
 class AuditCase(ChaosCase):
     """An audit program (kind audit, area `pkg`) with a census at the base, one part, and the audit prompts and
-    scripts in the temp factory home; `at(stage)` puts it at a stage, as `phase.json` would after a kill."""
+    scripts in the temp factory home; `at(stage)` puts it at a stage, as `phase.json` would after a kill, with the
+    gates of his that a program at that stage has (logged as `ship gate` would)."""
 
     stops = ONE_STOP
     slices = (("a1", "A", "L1"),)
@@ -636,20 +661,31 @@ class AuditCase(ChaosCase):
     def setUp(self):
         super().setUp()
         self.make_program(kind="audit")
-        for name in ("AUDIT-INTENT.md", "AUDIT-READER.md", "AUDIT-JUDGE.md", "AUDIT-SCREEN.md"):
+        for name in ("AUDIT-INTENT.md", "AUDIT-READER.md", "AUDIT-JUDGE.md", "AUDIT-SCREEN.md", "SWEEP-HANDOFF.md"):
             self.prompt(name)
         self.prompt("AUDIT-HANDOFF.md", "Hand {PROGRAM} on from {CHECKOUT} with {SHIP}\n")
         scripts = self.factory / "skills" / "audit-area" / "scripts"
         write(scripts / "collect_findings.py", "print('collected')\n")
         write(scripts / "apply_screen.py", "print('applied')\n")
         write(self.program.dir / "CENSUS.md", f"# Census\n\nTip: {self.base}\n\n## Parts\n\n- **core** `pkg`\n")
+        write(self.program.dir / "FINDINGS.tsv", "id\tpart\tverdict\twhat\nF1\tcore\timprove\tthe limit check\n")
         self.base_rules = [{"match": "audit-intent:", "steps": [{"file": {"{program}/INTENT.md": INTENT}}],
                             "reply": "DONE {program}/INTENT.md"}, READER_PART,
                            {"match": "audit-judge:", "reply": "DONE judged"},
                            {"match": "audit-screen:", "reply": "DONE screened"}, PLAN_CLEAN_AUDIT]
         self._write_rules()
 
+    def gate(self, name: str, advance: bool = False) -> None:
+        from ship import program as prog
+
+        prog.set_gate(self.program, name, by="him", source="t:9", advance=advance, at="2026-11-14")
+
     def at(self, stage: str) -> None:
+        order = ("census", "intent", "intent-check", "quality", "judgement", "verdicts", "audit-handoff")
+        if order.index(stage) >= order.index("quality"):
+            self.gate("intent")
+        if stage == "audit-handoff":
+            self.gate("verdicts", advance=True)
         phase.set_phase(self.program, stage, "running", "test")
 
 
@@ -659,23 +695,33 @@ PLAN_CLEAN_AUDIT = {"match": "plan-review:", "steps": [{"file": {
 
 
 class Audit(AuditCase):
-    def test_away_at_intent_check_reading_goes_on(self):
-        """Row 51 and X3, the part that holds: the intent worker leaves an ambiguity on N2; `WAITING.md` holds the
-        question; the readers still run (quality work does not wait for him); the conveyor ends on exit 10."""
+    def test_away_at_intent_check(self):
+        """Row 51 and X3. The intent worker leaves an ambiguity on N2 while he is away. F2 (D-L26, fixed; the
+        design's "quality starts on the lines with no ambiguity" is replaced by D-L26): the conveyor waits on
+        `gates.intent` before quality, with a WAITS line naming his question; no reader, judge or screen starts.
+        Before the fix it went on to quality and judgement while the question was open."""
         self.at("intent")
         self.assertEqual(self.chain(), 10, self.out)
         self.assertIn("- [ ] U1 Does N2 mean", self.program.waiting.read_text("utf-8"))
-        self.assertEqual(len(self.calls("audit-reader:")), 1)
-        self.assertTrue((self.program.dir / "readers" / "core.md").exists())
+        self.assertTrue(any("waits on his intent check" in w and "U1 Does N2 mean" in w for w in self.waits()),
+                        self.waits())
+        for role in ("audit-reader:", "audit-judge:", "audit-screen:"):
+            self.assertEqual(self.calls(role), [], role)
+        self.assertEqual(phase.phase_json(self.program)["phase"], "intent-check")
 
-    @unittest.expectedFailure
-    def test_away_at_intent_check(self):
-        """Row 51 and X3. FINDING F2: while his intent question is open, the conveyor goes on from quality to
-        judgement and starts the audit judge (and the screen) anyway: the intent stage moves straight to quality,
-        the `intent-check` gate is never read, and nothing holds the findings that depend on N2."""
+    def test_intent_answered_then_quality_and_judgement(self):
+        """Row 51, then his answer: once `ship gate intent` is set, quality (the readers), the judge and the
+        screen run, and the audit waits on his verdicts gate."""
         self.at("intent")
         self.assertEqual(self.chain(), 10, self.out)
-        self.assertEqual(self.calls("audit-judge:"), [], "no judge while the intent question is open")
+        write(self.program.waiting, self.program.waiting.read_text("utf-8").replace("- [ ]", "- [x]"))
+        write(self.program.waits, self.program.waits.read_text("utf-8").replace("- [ ]", "- [x]"))
+        self.assertEqual(self.ship("gate", "intent", "--program", str(self.program.dir), "--by", "him", "--source",
+                                   "test"), 0, self.out)
+        self.assertEqual(self.chain(), 10, self.out)
+        for role in ("audit-reader:", "audit-judge:", "audit-screen:"):
+            self.assertEqual(len(self.calls(role)), 1, role)
+        self.assertEqual(phase.phase_json(self.program)["phase"], "verdicts")
 
 
 class Handoffs(AuditCase):
@@ -689,9 +735,7 @@ class Handoffs(AuditCase):
         `FactoryFixtures.test_row_20_design_finding_needs_handoff`."""
         self.at("audit-handoff")
         self.rule({"match": "sweep-handoff:", "times": 1, "steps": [{"file": {
-            "{program}/SLICES.md": "| id | name | stop | lane | depends on | files | size |\n"
-                                   "|---|---|---|---|---|---|---|\n| p-1 | Drop the dead helper | A | L1 | - | "
-                                   "pkg/app.py | S |\n",
+            "{program}/SLICES.md": SWEEP_ROWS + "| p-1 | Drop the dead helper | A | L1 | - | pkg/app.py | S |\n",
             "{program}/slices/p-1/BRIEF.md": BRIEF,
             "{program}/AUDIT.md": "# Audit\n\n## Hand-offs\n\n- **F3** design: the order book needs a new shape\n",
             "{program}/notes/BACKLOG-ROWS.tsv": "source\tdoor\twhat\twhere\n"
@@ -714,54 +758,77 @@ class Handoffs(AuditCase):
         p = self.phase()
         self.assertEqual((p["next"], p["status"]), ("go", "waits-on-him"))
 
-    @unittest.expectedFailure
     def test_x1_all_rows_design_hand_off_ends(self):
-        """X1 when every approved row is a design (or later) row. FINDING F7: the hand-off then writes no
-        `SLICES.md`, `phase.json` still says `audit-handoff`, and the conveyor starts the hand-off worker again on
-        every tick, without a bound (no round count, no WAITS)."""
+        """X1 when every approved row is a design (or later) row. F7 (D-L26, fixed): the hand-off writes no
+        `SLICES.md`, so the program ends done with its hand-off rows recorded in `notes/HANDOFF.md`. Before the fix
+        the conveyor started the hand-off worker again on every tick."""
         self.at("audit-handoff")
         self.rule({"match": "sweep-handoff:", "steps": [{"file": {
             "{program}/notes/BACKLOG-ROWS.tsv": "source\tdoor\twhat\twhere\n"
                                                 "handoff\tdesign\tthe order book needs a new shape\t{program}\n"}}],
             "reply": "DONE {program}/notes/BACKLOG-ROWS.tsv"})
-        proc = self.start()
-        self.until(lambda: len(self.calls("sweep-handoff:")) > 1 or proc.poll() is not None, timeout=120,
-                   what="a second hand-off or the end")
+        self.assertEqual(self.chain(), 0, self.out)
         self.assertEqual(len(self.calls("sweep-handoff:")), 1, "the hand-off ran once")
+        self.assertIn("the order book needs a new shape", (self.program.notes_dir / "HANDOFF.md").read_text("utf-8"))
+        self.assertFalse(self.program.slices_md.exists())
+        p = self.phase()
+        self.assertEqual((p["next"], p["status"]), ("done", "done"))
+        self.assertEqual(self.waits(), [])
 
-    @unittest.expectedFailure
+    def test_a_sweep_hand_off_that_writes_nothing_waits_after_its_restarts(self):
+        """D-L26's general rule, the sweep-handoff loop: a sweep program whose hand-off worker ends DONE with no
+        `SLICES.md` was started again every tick; now its runs count toward `max_restarts`, then WAITS."""
+        write(self.program.project_file, "project: qmx\nprogram: program\nkind: sweep\nparent: null\n"
+                                         f"build_branch: build/t\nparent_tip: {self.base}\ngates:\n  go: null\n"
+                                         "stop_points:\n  - id: A\n    tier: core\n    handoff: ready\n"
+                                         "abandoned: null\n")
+        from ship.tests.fixture import sign_gates
+
+        sign_gates(self.program)
+        self.assertEqual(self.chain(), 10, self.out)
+        self.assertEqual(len(self.calls("sweep-handoff:")), 3)
+        self.assertTrue(any("sweep-handoff worker was started 3 times" in w for w in self.waits()), self.waits())
+
     def test_x2_scoped_audit_stops_after_judgement(self):
-        """Row 21 and X2. A scoped audit (its `parent` is the feature that asked for it) runs census to judgement
-        and stops: no verdict gate, no hand-off of its own. FINDING F3: the kit has no scoped audit; after the
-        judgement it waits on a verdicts gate (exit 10) like any audit. The feature's `--stage anneal` check citing
-        the audit's files is the factory's (U28), with no fixture there yet."""
-        self.make_program(kind="audit")
+        """Row 21 and X2. A scoped audit (its `parent` is the feature that asked for it) runs to judgement and
+        stops. F3 (D-L26, fixed): no verdicts gate and no hand-off of its own; its findings go into the parent's
+        `notes/AUDIT-<audit>.md` for the plan's ground, and the audit is done. The feature's `--stage anneal`
+        check citing the audit's files is the factory's (U28), with no fixture there yet."""
+        parent = Program(self.plans / "feature-x")
+        write(parent.project_file, "project: qmx\nprogram: feature-x\nkind: feature\ngates:\n  go: null\n"
+                                   "stop_points: []\n")
         write(self.program.project_file, self.program.project_file.read_text("utf-8").replace(
             "parent: null", "parent: feature-x"))
         from ship.tests.fixture import sign_gates
 
         sign_gates(self.program)
         self.at("judgement")
-        rc = self.chain()
+        self.assertEqual(self.chain(), 0, self.out)
         self.assertEqual(len(self.calls("audit-judge:")), 1)
         self.assertEqual(self.calls("sweep-handoff:"), [])
-        self.assertEqual(rc, 0, self.out)
+        note = (parent.notes_dir / "AUDIT-program.md").read_text("utf-8")
+        self.assertIn("F1\tcore\timprove\tthe limit check", note)
+        self.assertEqual(self.waits(), [])
+        p = self.phase()
+        self.assertEqual((p["next"], p["status"]), ("done", "done"))
 
-    @unittest.expectedFailure
     def test_x9_stale_findings_rerun_at_the_new_tip(self):
-        """X9. A feature merged into the audit's area after its judgement: at the hand-off the facts must run at the
-        new tip. FINDING F6: the hand-off is given a checkout of the census tip, and nothing marks the audit's facts
-        stale or reruns them (nor sends the findings back to a reader)."""
+        """X9. A feature merged into the audit's area after the census. F6 (D-L26, fixed as decided: the
+        hand-off's briefs go through `ship facts --tip` at arm, as a feature's do): arm runs the sweep brief's
+        facts at the target's new tip, the fact the merge made false fails there, and one grounding worker
+        starts for that slice. (The design's "findings go back to an audit-reader" is replaced by D-L26.)"""
         self.at("audit-handoff")
         new_tip = self.target_commit({"pkg/app.py": "def add(a, b):\n    return int(a) + int(b)\n"},
                                      "feature: merged into pkg")
+        brief = "# Brief\n\n```fact F1\n$ git grep -c \"return a + b\" -- pkg/app.py\npkg/app.py:1\n```\n"
         self.rule({"match": "sweep-handoff:", "times": 1, "steps": [{"file": {
-            "{program}/SLICES.md": "| id | name | stop | lane | depends on | files | size |\n"
-                                   "|---|---|---|---|---|---|---|\n| p-1 | One | A | L1 | - | pkg/app.py | S |\n",
-            "{program}/slices/p-1/BRIEF.md": BRIEF}}], "reply": "DONE {program}/SLICES.md"})
-        self.rule(QUESTIONS)
-        self.assertEqual(self.chain(), 10, self.out)
-        self.assertIn(f"at {new_tip[:10]}", self.chain_log().split("AUDIT checkout")[1].splitlines()[0])
+            "{program}/SLICES.md": SWEEP_ROWS + "| p-1 | One | A | L1 | - | pkg/app.py | S |\n",
+            "{program}/slices/p-1/BRIEF.md": brief}}], "reply": "DONE {program}/SLICES.md"})
+        self.kill_after("arm", 1)
+        self.assertEqual(self.chain(), 137, self.out)
+        summary = self.program.checks_root / "_facts" / new_tip[:8] / "summary.txt"
+        self.assertIn("FAIL p-1", summary.read_text("utf-8"))
+        self.assertEqual(len(self.calls("grounding:")), 1)
 
     @unittest.skipUnless(__import__("importlib.util").util.find_spec("ship.backlog"), "U33 (ship backlog) is not built")
     def test_handoff_row_bounce(self):
@@ -770,49 +837,51 @@ class Handoffs(AuditCase):
         self.assertEqual(self.ship("backlog", "add", "--plans", str(self.plans), "--source", "handoff", "--door",
                                    "design", "--what", "B-1"), 0, self.out)
 
-    @unittest.expectedFailure
     def test_notice_overlap_is_reported(self):
-        """Row 23. An audit and a plan on the same area: both go on (notices never block), and the second
-        `ship claims notice` prints `OVERLAP notice <the other program>` so the desk can tell him. FINDING F4:
-        `claims notice` writes the rows and prints only `NOTICE <program> <area>`; nothing reports the overlap."""
+        """Row 23. An audit and a plan on the same area: both go on (notices never block), and F4 (D-L26, fixed):
+        the second `ship claims notice` prints `OVERLAP notice <the other program>` so the desk can tell him."""
         feature = Program(self.plans / "feature-x")
         write(feature.project_file, "project: qmx\nprogram: feature-x\nkind: feature\narea: [pkg]\ngates:\n"
                                     "  go: null\nstop_points: []\n")
         self.assertEqual(self.ship("claims", "notice", "--program", str(self.program.dir)), 0, self.out)
+        self.assertNotIn("OVERLAP", self.out)
         self.assertEqual(self.ship("claims", "notice", "--program", str(feature.dir)), 0, self.out)
         self.assertIn("OVERLAP notice program", self.out)
+        self.assertIn("NOTICE feature-x pkg", self.out)
 
 
 class Fable(AuditCase):
     def test_fable_falls_back_and_its_result_says_so(self):
-        """Row 43, the part that holds (kit, U06): the audit judge is a Fable role; the run comes back on Opus, so
-        its `result.json` says `FALLBACK audit-judge claude-opus-5-5`."""
+        """Row 43, the kit part (U06): the audit judge is a Fable role; the run comes back on Opus, so its
+        `result.json` says `FALLBACK audit-judge claude-opus-5-5`."""
         self.at("judgement")
         self.rule({"match": "audit-judge:", "model": "claude-opus-5-5", "reply": "DONE judged"})
         self.assertEqual(self.chain(), 10, self.out)
         result = json.loads(next(self.program.workers.glob("chain-audit-judgement-*/result.json")).read_text("utf-8"))
         self.assertIn("FALLBACK audit-judge claude-opus-5-5", json.dumps(result))
 
-    @unittest.expectedFailure
     def test_fable_falls_back_and_says_so(self):
-        """Row 43. FINDING F5: "the log and the note to him say so": the fallback is only in the worker's
-        `result.json`; the conveyor's log line prints the reply instead of the note, and the run report never
-        names it."""
+        """Row 43. F5 (D-L26, fixed): the fallback is said, not only recorded: `notes/FALLBACKS.md` gets a line,
+        the conveyor copies it into chain.log, and the run report lists it (`FallbackReport` below)."""
         self.at("judgement")
         self.rule({"match": "audit-judge:", "model": "claude-opus-5-5", "reply": "DONE judged"})
         self.assertEqual(self.chain(), 10, self.out)
-        self.assertIn("FALLBACK audit-judge", self.chain_log())
+        self.assertIn("FALLBACK audit-judge claude-opus-5-5", self.chain_log())
+        self.assertIn("FALLBACK audit-judge", (self.program.notes_dir / "FALLBACKS.md").read_text("utf-8"))
 
-    def test_one_fable_at_a_time_waits_for_the_seat(self):
-        """Row 56. Another program's Fable worker holds the seat: the judge does not start (no Opus stands in, no
-        attempt is used); once the seat is free it starts. The design's "Opus stands in where the project settings
-        allow" has no setting yet (report: gap G1)."""
+    def hold_seat(self):
         from ship.proc import created
 
         holder = subprocess.Popen([PY, "-c", "import time; time.sleep(120)"])
         self.addCleanup(lambda: holder.poll() is None and holder.kill())
-        seat = self.factory / "run" / "fable.lock"
-        write(seat, json.dumps({"pid": holder.pid, "created": created(holder.pid), "program": "other"}))
+        write(self.factory / "run" / "fable.lock",
+              json.dumps({"pid": holder.pid, "created": created(holder.pid), "program": "other"}))
+        return holder
+
+    def test_one_fable_at_a_time_waits_for_the_seat(self):
+        """Row 56. Another program's Fable worker holds the seat: the judge does not start (no attempt is used);
+        once the seat is free it starts, on Fable. Within `fable_wait_s` nothing stands in."""
+        holder = self.hold_seat()
         self.at("judgement")
         proc = self.start()
         self.until(lambda: self.chain_log().count("\n") >= 1, what="the conveyor's first tick")
@@ -821,7 +890,57 @@ class Fable(AuditCase):
         holder.kill()
         holder.wait()
         self.assertEqual(proc.wait(timeout=300), 10, self.chain_log()[-2000:])
-        self.assertEqual(len(self.calls("audit-judge:")), 1)
+        judge = self.calls("audit-judge:")
+        self.assertEqual(len(judge), 1)
+        self.assertEqual(judge[0]["argv"][judge[0]["argv"].index("--model") + 1], "fable")
+
+    def test_fable_seat_taken_too_long_falls_back_to_opus(self):
+        """G1 (D-L26): a Fable role that has waited longer than `fable_wait_s` for the seat runs on its fallback
+        (Opus), and the fallback is logged (chain.log and `notes/FALLBACKS.md`)."""
+        self.hold_seat()
+        self.setting("fable_wait_s = 2")
+        self.at("judgement")
+        self.assertEqual(self.chain(), 10, self.out)
+        judge = self.calls("audit-judge:")
+        self.assertEqual(len(judge), 1)
+        argv = judge[0]["argv"]
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-5-5")
+        self.assertNotIn("--fallback-model", argv)
+        self.assertIn("FALLBACK audit-judge claude-opus-5-5 (the Fable seat was taken for", self.chain_log())
+
+
+class LandLock(RepoCase):
+    def test_a_lock_with_git_running_in_the_copy_stays(self):
+        """F9 (D-L26): the landing copy's `index.lock` is removed only when no git process works there."""
+        from ship.land import clear_stale_index_lock
+        from ship.worktree import checkout_copy
+
+        settings = load_settings(self.program.dir)
+        copy = checkout_copy(self.repo, self.program.tmp / "landing", self.tip(), settings)
+        lock = Path(sh(copy, "git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock"))
+        write(lock, "")
+        busy = subprocess.Popen(["git", "-C", str(copy), "hash-object", "--stdin"], stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL)
+        self.addCleanup(lambda: busy.poll() is None and busy.kill())
+        self.assertIn("stays: git runs in the landing copy", clear_stale_index_lock(self.repo, copy, 60))
+        self.assertTrue(lock.exists())
+        busy.communicate(b"x")
+        self.assertIn("removed a stale", clear_stale_index_lock(self.repo, copy, 60))
+        self.assertFalse(lock.exists())
+        self.assertEqual(clear_stale_index_lock(self.repo, copy, 60), "", "no lock: nothing to do")
+
+
+class FallbackReport(RepoCase):
+    def test_the_run_report_lists_every_fable_fallback(self):
+        """F5 (D-L26): the run report has a "Fable fallbacks" section from `notes/FALLBACKS.md`."""
+        from ship.launch import note_fallback
+        from ship.run_report import build
+
+        self.assertIn("## Fable fallbacks (0)", build(self.program, load_settings(self.program.dir))[1])
+        note_fallback(self.program, "FALLBACK fault-reader claude-opus-5-5 (reader: program A faults)")
+        text = build(self.program, load_settings(self.program.dir))[1]
+        self.assertIn("## Fable fallbacks (1)", text)
+        self.assertIn("FALLBACK fault-reader claude-opus-5-5", text)
 
 
 # ---- row 57: every loop of 3.9 stops where it says -------------------------------------------------------
@@ -934,20 +1053,31 @@ class Loops(ChaosCase):
         """2 long waits, then WAITS: chaos row 33."""
         covered("test_chain_chaos.Ci.test_ci_stuck_waits_no_local_merge")
 
-    @unittest.expectedFailure
     def test_merge_when_the_target_moved(self):
-        """2 tries, then he is told who keeps merging first. FINDING F8: GitHub refusing because the target moved is
-        exit 3 and retried every tick with no count, so a program that always loses the race loops forever and
-        nobody is told. (Turn order among waiters is `test_locks.MergeQueue`; one moved target merged in is
+        """Merge when the target moved. F8 (D-L26, fixed; D-L26 sets 5 tries, `merge_moved_max`, where the design
+        said 2): each refusal because the target moved is counted; at the fifth the conveyor WAITS, naming the
+        merges that moved the target, and exits 10. Before the fix it retried every tick forever. (Turn order among
+        waiters is `test_locks.MergeQueue`; one moved target merged in is
         `test_merge.Clean.test_the_merge_names_the_reviewed_head_and_a_moved_target_is_a_retry`.)"""
         covered("test_merge.Clean.test_the_merge_names_the_reviewed_head_and_a_moved_target_is_a_retry")
         self.make_program(stops=self.stops, slices=(("a1", "A", "L1"),))
         self.gh_flag("fake-gh-merge-moves-base-always", True)
-        proc = self.start()
-        self.until(lambda: self.chain_log().count("MERGE A exit 3") >= 3 or proc.poll() is not None, timeout=400,
-                   what="three refused merges or the end")
-        self.assertEqual(proc.poll(), 10, "it stops after two tries and asks him")
-        self.assertTrue(any("keeps merging first" in w or "moved" in w for w in self.waits()), self.waits())
+        self.assertEqual(self.chain(), 10, self.out)
+        self.assertEqual(self.chain_log().count("the target moved ("), 4, "four retries, then the fifth waits")
+        waits = [w for w in self.waits() if "because the target moved" in w]
+        self.assertEqual(len(waits), 1, self.waits())
+        self.assertIn("5 times", waits[0])
+        self.assertIn("other program: merged", waits[0])
+        self.assertEqual(self.state().merged, [])
+
+    def test_plan_review_with_no_result_waits_after_its_restarts(self):
+        """D-L26's general rule, the plan-review loop: a reviewer that ends DONE but writes no `RESULT:` line was
+        started again every tick; now its runs count toward `max_restarts`, then WAITS."""
+        self.rule({"match": "plan-review:", "reply": "DONE nothing written"})
+        self.assertEqual(self.chain(), 10, self.out)
+        self.assertEqual(len(self.calls("plan-review:")), 3)
+        self.assertTrue(any("plan-review worker was started 3 times" in w for w in self.waits()), self.waits())
+        self.assertFalse(self.program.state.exists())
 
     @unittest.skipUnless(FACTORY_TESTS.exists(), "the factory checkout is not here")
     def test_budget_growth(self):
@@ -1099,14 +1229,16 @@ class FactoryFixtures(unittest.TestCase):
     def test_row_58_index_drift(self):
         factory_test("test_check_index", "CheckIndex", "test_each_broken_copy_fails_on_its_own_line")
 
-    @unittest.skip("not testable here: the factory has no `retired-id-cited` fixture (check_chain.py's RETIRED rule "
-                   "has no fixture in its EXPECTED table)")
     def test_row_11_retired_id_cited(self):
-        """Row 11."""
+        """Row 11: his changed mind retires S1.b; a brief that still cites it fails on exactly
+        `retired-S1.b-still-cited` (factory 2fcbb35, `h01`)."""
+        self.expect(self, "h01-retired-id-cited")
 
-    @unittest.skip("not testable here: the factory has no `he-overrules-a-drop` fixture yet (U20)")
     def test_row_15_he_overrules_a_drop(self):
-        """Row 15."""
+        """Row 15: his settled word keeps a row the challenger dropped (`h02` passes); the same overrule written by
+        an agent fails on `verdict-S2-his-call-settled` (`h03`)."""
+        self.expect(self, "h02-he-overrules-a-drop")
+        self.expect(self, "h03-agent-overrules-a-drop")
 
 
 def factory_module_at(folder: Path, name: str):

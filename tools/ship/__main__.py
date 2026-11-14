@@ -408,6 +408,10 @@ def cmd_claims(a, program, settings):
         area = [str(x) for x in prog.load(program).area] if program.project_file.exists() else []
         claims.notice(name, area)
         lines = [f"NOTICE {name} {x}" for x in area]
+        # F4 (D-L26): another program's live notice or claim on the same area is reported, never a block
+        others = sorted({(r.kind, r.program) for r in claims.live() if r.program != name
+                         and any(cl.overlaps([x], [r.pattern]) for x in area)})
+        lines += [f"OVERLAP {kind} {other}" for kind, other in others]
     elif a.action == "release":
         lines = [f"RELEASED {claims.release(name)} patterns of {name}"]
     elif a.action == "sweep":
