@@ -1639,8 +1639,9 @@ def build_summary(
 ) -> dict[str, object]:
     """summary.json (factory design 11.11): every job of the level (named as its artifact is,
     `suite-linux-3`), every red (new, known, flaky, or a test shard that never finished, each with
-    `blocks`), every new and gone quality row, mutant counts, the level's skipped jobs. A red id is
-    `unit|module::name`; an unfinished shard's is `shard <system>-<n>`."""
+    `blocks`), every new and gone quality row (`blocks` is false for a note), mutant counts, the
+    level's skipped jobs. A red id is `unit|module::name`; an unfinished shard's is
+    `shard <system>-<n>`."""
     result = {job: str(needs.get(job, {}).get("result", "missing")) for job in jobs_of_level}
     jobs: list[dict[str, object]]
     if api_jobs is None:
@@ -1687,15 +1688,21 @@ def build_summary(
                 "blocks": True,
             }
         )
-    quality: list[dict[str, str]] = []
+    quality: list[dict[str, object]] = []
     for path in sorted(artifacts.rglob("*-ratchet.json")):
         record = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
         tool = str(record["tool"])
         for item in cast("list[dict[str, object]]", record.get("new", [])):
-            row = {"tool": tool, "key": str(item["key"]), "file": str(item["file"]), "kind": "new"}
-            quality.append(row)
+            key, file = str(item["key"]), str(item["file"])
+            blocks = bool(item.get("blocking", True))
+            quality.append(
+                {"tool": tool, "key": key, "file": file, "kind": "new", "blocks": blocks}
+            )
         for key in cast("list[str]", record.get("gone", [])):
-            quality.append({"tool": tool, "key": key, "file": key.split("|", 1)[0], "kind": "gone"})
+            file = key.split("|", 1)[0]
+            quality.append(
+                {"tool": tool, "key": key, "file": file, "kind": "gone", "blocks": False}
+            )
     killed = survived = 0
     for path in sorted(artifacts.rglob("mutmut-counts-*.json")):
         counts = cast("dict[str, int]", json.loads(path.read_text("utf-8")))
@@ -1744,7 +1751,7 @@ def unfinished_shards(
 def summary_markdown(summary: Mapping[str, object]) -> str:
     jobs = cast("list[dict[str, object]]", summary["jobs"])
     reds = cast("list[dict[str, object]]", summary["reds"])
-    quality = cast("list[dict[str, str]]", summary["quality"])
+    quality = cast("list[dict[str, object]]", summary["quality"])
     mutants = cast("dict[str, int]", summary["mutants"])
     skipped = cast("list[str]", summary["skipped"])
     verdict = "GREEN" if summary["green"] else "RED"
