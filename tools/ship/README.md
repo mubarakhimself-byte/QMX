@@ -189,7 +189,7 @@ pid and creation time of the run and of each child: a dead holder's children are
 and a lock written before the machine last started is taken over with no kill (D-L14). Each `verify_ready`,
 `slice_checks` and `land` child is stopped past its time limit and started again on the next tick. `BLOCKED chain` and `BLOCKED files` go to `notes/CHAIN-ISSUES.md`; any other
 `BLOCKED` and a brief mismatch go to WAITS. A usage limit records the reset and restarts the slice after it.
-A missing build branch is one WAITS line and exit 10. A builder's prompt gets `run.PROMPT_KEYS`: its slice's values, `RULES` (the project's PROJECT-RULES.md) and `PROJECT.<key>` for every key of the profile's [project] table; roles come from `roles.toml` with the profile's `[roles.<name>]` overrides, here and in the checkpoint review. A fix round's reason and paths stay in `run.json` (`fixing`) until `verify_ready` passes, so a fixer that dies is restarted as a fixer with the same `FIX_REASON` and `FIX_PATHS`. When a builder replies `READY <sha>`, the kit stamps `END <sha> <dispatch id>` on each `evidence_required` file in its evidence folder (replacing any END line already there), then `verify_ready` reads them. Routing reads `state.json`, so a run killed anywhere
+A missing build branch is one WAITS line and exit 10. A `land` that crashes (a traceback, or an exit other than 0 or 1) is counted; the `max_restarts`-th crash in a row is one WAITS line and exit 10 (D-L26 F9). A builder's prompt gets `run.PROMPT_KEYS`: its slice's values, `RULES` (the project's PROJECT-RULES.md) and `PROJECT.<key>` for every key of the profile's [project] table; roles come from `roles.toml` with the profile's `[roles.<name>]` overrides, here and in the checkpoint review. A fix round's reason and paths stay in `run.json` (`fixing`) until `verify_ready` passes, so a fixer that dies is restarted as a fixer with the same `FIX_REASON` and `FIX_PATHS`. When a builder replies `READY <sha>`, the kit stamps `END <sha> <dispatch id>` on each `evidence_required` file in its evidence folder (replacing any END line already there), then `verify_ready` reads them. Routing reads `state.json`, so a run killed anywhere
 carries on when started again; `run.json` holds the rest (READY replies waiting for `verify_ready`, fix rounds
 for checked slices, a red batch being landed one slice at a time). `--once` starts work in one tick, then only
 routes until nothing runs. `verify_ready` exits 3 and changes nothing when the remote or `gh` does not answer.
@@ -278,6 +278,30 @@ Add to the settings of every Claude Code session in the run:
 
 Every worker runs with `SHIP_ROLE`; the guard refuses a missing or unknown role. D-L25: no role writes `<program>/.desk/` (his answers, the desk's), a worktree's `ci/baselines/` or `contracts/` (by file tool, redirection or a git write naming them; they change only through the generators at merge), and no role but a builder writes `*.py`, `conftest.py`, `pytest.ini`, `pyproject.toml`, `setup.cfg` or `tox.ini`; such a role runs pytest only on code it did not write (no path in the program folder, no `-p` but `-p no:...`, no `-c`, `-o`, `--rootdir`, `--confcutdir`, `--doctest-glob`). Each role runs only the factory scripts on its list (`hook.ROLE_SCRIPTS`), whose output paths (`--out`, `-o`, the program folder of `chain_packet.py` and `sweep_briefs.py`) must be its own, whose `--ship` must be this kit, with no `check_chain.py --rerun-facts`, and `probe_tests.py --python` only the checkout's interpreter or the kit's. File tools write only the role's paths (the table in `hook.py`): a builder its held worktrees, evidence folders, `review/` and `notes/` (never `notes/stop-*.json`), a verdict only `stop-review/<X>/REVIEW*.md` and `WAITS.md`, `merge/<X>-pr.md` and the plan files of its fix folder. No role writes `.kit/`, the kit's own folder (`review-run.json`, `MERGE-BASE`, `gates.log`). Bash is an allow-list (D-L22): `git`, `uv run [flags]` and the kit's `timed` followed by pytest, `python -m pytest`, ruff, pyright or mypy, the kit's read-only `phase`, and the role's own factory scripts. The role settings files allow the same, script by script: `grounding.json` his_words, check_chain, check_plan; `plan-review.json` check_chain, check_plan; `verdict.json` check_plan; `planner.json` chain_packet, check_chain, check_plan, sweep_briefs; `audit.json` his_words, check_chain, callers, lint_findings (the hook narrows each role further). `gh`, `uvx`, `uv run --with`, inline python (any flag cluster holding `c`, any python name such as `python3.12` or `pythonw`), a nested shell, `$(...)`, a leading `VAR=value`, `git -c`, `git --output` and the git commands that run other programs are refused; redirection (`>`, `>>`, `tee`) is refused for every role but a builder, which may redirect only into its worktree. A path a command names may not be the main checkout, `~/.claude`, `.kit/`, or a program file the role does not write. Git writes stay in a held worktree (builders) or the docs worktree, never through `-C`, `cd`, `--git-dir` or `--work-tree` elsewhere; no force push, no `--mirror`, `--all`, `--tags`, `--delete` or `--prune`, no remote branch deletion, and a push only to the worker's own branch. It fails closed: any error in the guard, a bad `ship.toml` or an unreadable `state.json` refuses with exit 2, and the role settings run it as `... hook ... || exit 2`. Claude Code's hook input does not say which agent is calling, so a builder's allowed set is the union over held slices; it does not stop one builder writing into another held builder's worktree.
 
+## Restart loops and the chaos findings (D-L26)
+
+Every worker restart loop counts toward `max_restarts`, then WAITS. In the conveyor a worker's starts are counted
+per name, and the count starts again only when another activity finishes (its step moved on); a usage limit is
+never one of its runs. So a plan review that writes no `RESULT:` line, a later or sweep hand-off that writes no
+slice, and an audit hand-off are asked at most `max_restarts` times. Also:
+
+- **F1:** `init_state` appends the rows a later hand-off adds for a stop PROGRAM.yaml marks `handoff: deferred`
+  (existing rows unchanged, else refused); the conveyor then runs those briefs' facts at the target's tip.
+- **F2:** after the intent stage the audit waits on `gates.intent` (a WAITS line naming his questions); no
+  reader, judge or screen starts before it.
+- **F3:** a scoped audit (one with a `parent`) stops after its judgement: its findings go to the parent's
+  `notes/AUDIT-<audit>.md`, no verdicts gate, and `ship phase` says done.
+- **F4:** `ship claims notice` prints `OVERLAP <kind> <program>` for another program's live row on the area.
+- **F5:** a Fable worker that ran on its fallback gets a line in `notes/FALLBACKS.md`; the conveyor copies it to
+  `chain.log` and the run report lists it.
+- **F6:** an audit's sweep briefs are armed like a feature's: facts at `parent_tip` and at the target's tip, so a
+  merge into the area since the census reruns them (a failing one starts the grounding worker).
+- **F7:** an audit hand-off that writes no `SLICES.md` ends the program done, its rows listed in
+  `notes/HANDOFF.md`.
+- **F8:** a merge refused because the target moved is counted; at `merge_moved_max` it WAITS, naming the merges.
+- **F9:** `land` removes a stale `index.lock` in its landing copy when no git process works there.
+- **G1:** see `fable_wait_s`.
+
 ## Settings
 
 Every number is a named setting in `settings.py` with its default. Override any of them in `<program>/ship.toml` under `[settings]`; an unknown key is an error.
@@ -331,6 +355,8 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `chain_poll_s` | 20 | run: seconds between ticks |
 | `verify_timeout_s`, `slice_checks_timeout_s`, `land_run_timeout_s` | 1800, 14400, 14400 | run: a child past this is stopped and started again |
 | `worker_env_extra` | none | launch: variables passed to workers beyond the allow-list |
+| `merge_moved_max` | 5 | chain: merges GitHub refused because the target moved, then WAITS naming the merges that moved it (D-L26 F8) |
+| `fable_wait_s` | 1800 | launch: a Fable role that waited longer for the Fable seat runs on its fallback, logged in `notes/FALLBACKS.md` (D-L26 G1) |
 
 ## Edge cases these scripts own
 
@@ -370,6 +396,9 @@ cd tools
 python -m unittest discover -s ship/tests -t .
 ```
 
-or, from the repo root, `python -m pytest tools/ship -q -p no:cacheprovider`.
+or, from the repo root, `python -m pytest tools/ship -q -p no:cacheprovider`. Both run one test at a time (about 45
+minutes on the laptop). `cd tools && python ship/tests/run_parallel.py` runs the same tests one class per job,
+four at a time (about 17 minutes): every test makes its own temp repo, program and factory home, so classes share
+nothing; a failing class prints its whole output and the exit is 1.
 
 The tests build real git repositories (a bare remote and a clone) in temp folders. Only `gh` is replaced, by `tests/fake_gh.py` (PRs, and Actions runs with their jobs and artifacts, each call logged), and Vulture, Skylos, mutmut and pyright, by `tests/fake_tools.py`, which prints their real output shapes; the quality tests plant qmx-ci's own `tools/ci` (`tests/repo_ci/`, origin/ci/c2 at 812b87c98, byte for byte) and `ci/baselines/` in the fixture repo, and `tests/test_k4a.py` runs the same inputs through the kit and through `repo_ci/qci.py`'s own functions and asserts one verdict for Skylos, Vulture, types and flaky (refresh `repo_ci/` when CI's rules change); `pytest` must be installed for the slice-check, landing, nightly and quality tests. Every test's factory home is a temp folder (`factory_home` in the fixture's `ship.toml`), so no test touches the real `<factory_home>/run/`. `tests/test_dl22.py` holds the K3 fix round's checks: the hook's bypasses refused for every role, the review, merge, claims, chain and lock mutants, and the races. `tests/test_chain_chaos.py` is the chaos suite (U12, FACTORY-DESIGN section 13): one named scenario per row of the edge-case matrix, per loop of 3.9 (row 57) and per hand-off X1 to X10, run through `ship chain` with the harness in `tests/chaos.py` (faults: a hard kill after any activity, the remote gone, mains lost through a file `SHIP_FAKE_MAINS` names, a fake clock, a queued or red deep run, another program's merge on the target); its docstring holds the coverage table, rows another test covers name that test, and a scenario that shows a kit bug is an `expectedFailure` with the bug in one line. `DRILLS.md` holds the real-machine drills (13.5), done during U19.
