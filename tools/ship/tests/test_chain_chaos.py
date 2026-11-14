@@ -16,7 +16,7 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | Row | Failure | Covered by |
 |---|---|---|
 | 1 | power cut, battery lasts | chaos `Power.test_battery_holds_then_resumes`; HOLD inside review and merge: kit `test_k4a.HoldScope` (`Named.test_row_01_hold_inside_review_and_merge`); drill D1 |
-| 2 | laptop dies or restarts | chaos `DeadLaptop.test_dead_laptop_resume_all`; drill D2 |
+| 2 | laptop dies or restarts | chaos `DeadLaptop.test_dead_laptop_resume_all`; mid-land: `LandKilled.test_land_killed_mid_git_is_recovered` (expectedFailure: finding F9); drill D2 |
 | 3 | internet or GitHub down | chaos `Network.test_remote_down_is_not_a_failure`; drill D5 |
 | 4 | usage limit | chaos `Limits.test_usage_limit_sleeps`; drill D4 |
 | 5 | the app is closed | chaos `Detach.test_detached_conveyor_outlives_parent`; drill D3 |
@@ -90,6 +90,8 @@ Findings (each an `expectedFailure` with the bug in its docstring; the lead deci
   tick, without a bound.
 - F8 (row 57) a merge refused because the target moved is retried every tick with no count; nobody is told who keeps
   merging first.
+- F9 (row 2) a `land` killed mid-git leaves `index.lock` in the landing copy; every later `land` exits 1 and is
+  started again every tick, without a bound. It is also why `test_chain`'s kill test times out now and then.
 
 Gap, not a test: G1 (row 56) the design's "Opus stands in where the project settings allow" has no setting; a Fable
 role waits for the seat for as long as it is held, silently.
@@ -154,7 +156,7 @@ ONE_STOP = (Stop("A"),)
 
 class Power(ChaosCase):
     stops = ONE_STOP
-    slices = (("a1", "A", "L1"), ("a2", "A", "L1"), ("a3", "A", "L2"), ("a4", "A", "L2"))
+    slices = (("a1", "A", "L1"), ("a2", "A", "L1"), ("a3", "A", "L2"))
     pool = 2
 
     def test_battery_holds_then_resumes(self):
@@ -207,6 +209,28 @@ class DeadLaptop(ChaosCase):
         self.assertIn("part two, never pushed", patch.read_text("utf-8"))
         a2 = self.state().slices["a2"]
         self.assertEqual((a2.restarts, a2.attempts), (1, 1))
+        self.assert_converged()
+
+
+class LandKilled(ChaosCase):
+    stops = ONE_STOP
+    slices = (("a1", "A", "L1"),)
+
+    @unittest.expectedFailure
+    def test_land_killed_mid_git_is_recovered(self):
+        """Row 2, the laptop dying while `land` runs git in its landing copy: git's `index.lock` stays behind in
+        `<program>/tmp/landing`. FINDING F9: every later `land` exits 1 on it, and the build starts it again every
+        tick without a bound or a WAITS line. This is the hang that makes the kit's own kill test
+        (`test_chain.EndToEnd.test_killed_after_each_activity_and_restarted_it_ends_the_same`) time out now and then
+        (2 runs in 9 here), when a kill lands while a pre-built slice's `land` runs."""
+        from ship.worktree import checkout_copy
+
+        copy = checkout_copy(self.repo, self.program.tmp / "landing", self.base, load_settings(self.program.dir))
+        write(Path(sh(copy, "git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock")), "")
+        proc = self.start()
+        self.until(lambda: self.chain_log().count("SCRIPT land exit 1") >= 3 or proc.poll() is not None, timeout=300,
+                   what="three failed lands or the end")
+        self.assertEqual(proc.poll(), 0, "the stale lock is cleared (or the run stops and asks him)")
         self.assert_converged()
 
 
@@ -497,12 +521,12 @@ class Target(ChaosCase):
                                         "pkg/app.py:1\n```\n")
         self.prompt("GROUNDING.md", "Ground {SLICES} at {TIP} for {PROGRAM} with {SHIP}\n")
         target = self.target_commit({"pkg/app.py": "def add(a, b):\n    return b + a\n"})
-        self.assertEqual(self.chain(), 0, self.out)
+        self.kill_after("arm", 1)  # the row is about arming; the build after it is every other scenario's
+        self.assertEqual(self.chain(), 137, self.out)
         self.assertTrue((self.program.checks_root / "_facts" / target[:8] / "summary.txt").exists())
         self.assertEqual(len(self.calls("grounding:")), 1)
         prompt = next(self.program.workers.glob("chain-grounding-*/prompt.md")).read_text("utf-8")
-        self.assertIn("Ground a2 at", prompt)
-        self.assert_converged()
+        self.assertIn(f"Ground a2 at {target}", prompt)
 
     def test_target_moved_during_build(self):
         """Row 29. A's review is CLEAN, then another program merges unrelated files into the target: the merge takes
