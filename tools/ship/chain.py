@@ -489,7 +489,7 @@ class Conveyor:
             from ship.plan import init_state
 
             lines.append(init_state(folder.dir, repo, index.build_branch,
-                                    Path(proj.get("worktree_root") or self.settings.quality_dir or repo.parent),
+                                    Path(proj.get("worktree_root") or repo.parent),
                                     remote))
         if self.settings.arm_preflight and not book.get("preflight"):
             got = self.ended("preflight")

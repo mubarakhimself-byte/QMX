@@ -35,14 +35,13 @@ class Settings:
     updates_paused_min_h: float = 12  # Windows updates must stay paused at least this long
     evidence_required: tuple[str, ...] = ("how.md", "red.log", "report.md", "pr.md")
     slice_verdict_required: bool = False  # land wants a CLEAN slice verdict; off: machine checks gate, review is at checkpoints
-    quality_dir: str = ""  # quality baselines and BACKLOG.md; "" means <worktree_root>/ship-quality, shared by programs
     quality_timeout_s: int = 3600  # one Skylos, Vulture or mutmut command
     watcher_stale_s: int = 300  # power.json older than this means no power_watch is running
     data_env_vars: tuple[str, ...] = ("QMX_HOME", "QMX_DATA_DIR")  # pointed at the run's temp folder
     strip_env_prefixes: tuple[str, ...] = ("CLAUDE", "ANTHROPIC")  # removed from every test run
     gh: tuple[str, ...] = ("gh",)
     lock_cmd: tuple[str, ...] = ("uv", "lock")  # regenerates a uv.lock after a landing rebase
-    protected_branches: tuple[str, ...] = ("main", "integration", "engine/base")
+    protected_branches: tuple[str, ...] = ("main", "engine/base")
     # CI (ci.py). "github": qmx-ci on GitHub Actions runs the checkpoint deep run and gives Linux
     # evidence for slices and landings; "local": this machine only. github falls back to local by
     # itself when gh or GitHub cannot be reached, or the workflow is not on the branch.

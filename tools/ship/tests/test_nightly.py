@@ -25,15 +25,26 @@ class Nightly(RepoCase):
             state.log("status", sid, **{"from": "checked", "to": "landed", "reason": "test"})
         return sha
 
-    def test_first_run_writes_baseline_and_green_sets_last_green(self):
+    def test_green_sets_last_green_and_writes_no_list_of_its_own(self):
         ok, lines = nightly(self.program, self.settings)
         self.assertTrue(ok, lines)
-        self.assertEqual(lines, [f"BASELINE written with 0 reds at {self.first_tip[:8]}",
-                                 f"PASS nightly {self.first_tip[:8]} 0 baseline reds, no new red"])
+        self.assertEqual(lines, [f"PASS nightly {self.first_tip[:8]} 0 baseline reds, no new red"])
         self.assertEqual(st.load(self.program).last_green, self.first_tip)
+        self.assertFalse(any(p.name.startswith("baseline") for p in self.program.dir.iterdir()))
+
+    def test_a_red_the_repo_lists_is_known(self):
+        from ship.suite import this_system
+
+        self.land_directly("s1", "ci/baselines/known-reds.txt",
+                           f"# known\n{this_system()}|.|pkg.tests.test_app::test_add\n")
+        with st.locked(self.program) as state:
+            state.last_green = self.first_tip
+        self.land_directly("s2", "pkg/app.py", "def add(a, b):\n    return a - b\n")
+        ok, lines = nightly(self.program, self.settings)
+        self.assertTrue(ok, lines)
+        self.assertEqual(lines, [f"PASS nightly {self.tip()[:8]} 1 baseline reds, no new red"])
 
     def test_new_red_is_bisected_to_its_slice_and_dependents_blocked(self):
-        write(self.program.baseline_reds, "")
         with st.locked(self.program) as state:
             state.last_green = self.first_tip
         bad = self.land_directly("s1", "pkg/app.py", "def add(a, b):\n    return a - b\n")

@@ -7,9 +7,10 @@ The slice's checks carry over only when its `git patch-id` is unchanged and no f
 changed by a slice that landed after its dispatch; otherwise the rebased commit goes back to `ready`
 for slice_checks (RECHECK). With `slice_verdict_required` on, a CLEAN slice verdict is also needed,
 and a changed patch waits for a range verdict on the range-diff the script writes. Then it runs the tests of every package the batch and the slices landed since touched,
-blocks only on reds missing from baseline-reds.txt, fast-forwards the build branch, rewrites the
-baseline, marks the slices landed, closes their PRs, and removes each slice worktree once its remote
-branch equals its local head (never --force).
+blocks only on reds the repo's `ci/baselines/known-reds.txt` and `flaky.txt` do not name (read at the
+batch's tip), fast-forwards the build branch, marks the slices landed, closes their PRs, and removes each
+slice worktree once its remote branch equals its local head (never --force). A known red that passes now
+is a NOTE: the kit never edits the baseline; `tools/ci/pull_reds.py` shrinks it.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from ship.gitx import GitError, changed_files, git, git_rc, patch_id, remote_sha
 from ship.layout import Program
 from ship.settings import Settings, repo_args
 from ship.state import Status
-from ship.suite import baseline_for, canon, load_packages, run_packages, touched, write_baseline
+from ship.suite import baseline_for, load_packages, run_packages, touched
 from ship.worktree import checkout_copy, drop_copy, note_leftover, remove_worktree
 from ship.wrapper import run_timed
 
@@ -212,7 +213,7 @@ class Landing:
         runs = run_packages(copy, packages, self.out, settings.land_timeout_s, settings, program.runs)
         reds = set().union(*(r.red() for r in runs.values())) if runs else set()
         broken = [root for root, r in runs.items() if not r.junit_ok]
-        baseline = baseline_for(program, repo, cur, t)
+        baseline = baseline_for(repo, cur, t)
         new_reds = baseline.new(reds)
         if new_reds or broken:
             self.say(f"FAIL land-tests {self.batch} batch {included}: new reds {new_reds}"
@@ -232,13 +233,9 @@ class Landing:
             drop_copy(repo, copy, settings)
             return self.finish(False)
         passed = set().union(*(set(r.outcomes) - r.red() for r in runs.values())) if runs else set()
-        fixed = baseline.known(passed)
-        if fixed and baseline.mirrored:
+        fixed = baseline.passing(passed)
+        if fixed:
             self.say(f"NOTE known reds pass now {fixed}; shrink {baseline.source.split(' at ')[0]} with pull_reds.py")
-        elif fixed:
-            gone = {canon(f) for f in fixed}
-            write_baseline(program.baseline_reds, {r for r in read_lines(program) if canon(r) not in gone})
-            self.say(f"BASELINE removed {fixed}")
         drop_copy(repo, copy, settings)
 
         with st.locked(program) as fresh:
@@ -268,12 +265,6 @@ class Landing:
     def finish(self, ok: bool) -> bool:
         (self.out / "summary.txt").write_text("\n".join(self.lines) + "\n", "utf-8", newline="\n")
         return ok
-
-
-def read_lines(program: Program) -> set[str]:
-    from ship.suite import read_baseline
-
-    return read_baseline(program.baseline_reds)
 
 
 def land(program: Program, ids: list[str] | None, settings: Settings) -> tuple[bool, list[str]]:

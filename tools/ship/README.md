@@ -24,15 +24,16 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 | `dispatch <id>` | `state.json`, `HOLD`, `slices/<id>/BRIEF.md`, the build tip | the worktree, `evidence/<id>/<attempt>/facts.log`, `leftover.patch`, `state.json` | 0 dispatched (JSON), 2 refused, 3 parked |
 | `timed --slice <id> --log L [--timeout S] -- <argv>` | nothing | the log, `heartbeat/<id>` | the command's exit code, 124 on timeout |
 | `verify_ready <id> <sha>` | `state.json`, remote, `evidence/<id>/<attempt>/` | the PR, `state.json` | 0 ready, 1 blocked |
-| `slice_checks <id>` | `state.json`, `checks.toml`, the brief, head and parent, the quality baselines, the shared baseline, the Linux slice run (github) | `checks/<id>/<head8>/`, `state.json` | 0 green, 1 red |
-| `land [<id> ...]` | `state.json`, `checks.toml`, the shared baseline, `review/` (verdict mode only), the Linux slice runs (github) | the build branch, `baseline-reds.txt`, `refs/ship/rebased/<id>`, `checks/_land/<batch>/`, `leftovers.md`, `state.json` | 0 all landed, 1 otherwise (a `WAIT` slice lands on a later call) |
-| `nightly [--no-wait]` | `state.json`, `checks.toml`, the shared baseline; with `ci = "github"` the deep run | `checks/_nightly/<tip8>/`, `baseline-reds.txt` (first local run, or the mirror), `state.json` | 0 green, 1 red, 2 still running on GitHub |
+| `slice_checks <id>` | `state.json`, `checks.toml`, the brief, head and parent, the repo's `ci/baselines/` (quality and `pyright.txt` at the parent, known reds at the head), the Linux slice run (github) | `checks/<id>/<head8>/`, `state.json` | 0 green, 1 red |
+| `land [<id> ...]` | `state.json`, `checks.toml`, the repo's known reds at the batch tip, `review/` (verdict mode only), the Linux slice runs (github) | the build branch, `refs/ship/rebased/<id>`, `checks/_land/<batch>/`, `leftovers.md`, `state.json` | 0 all landed, 1 otherwise (a `WAIT` slice lands on a later call) |
+| `nightly [--no-wait]` | `state.json`, `checks.toml`, the repo's known reds at the tip; with `ci = "github"` the deep run and its `summary.json` | `checks/_nightly/<tip8>/`, `state.json` | 0 green, 1 red, 2 still running on GitHub |
 | `ci start [--level L] [--fresh]` | `state.json`, the build tip, GitHub | `state.json` (`ci.deep`) | 0 dispatched or attached, 1 GitHub cannot run it |
 | `ci status [--wait]` | `state.json`, the recorded run and its artifacts | `checks/_nightly/<tip8>/` (`ci/` holds the artifacts), `state.json` | 0 green, 1 red, 2 still running |
 | `ci gate [--pr N] [--wait]` | `state.json`, the checkpoint PR and its gate run | `state.json` (`ci.gate`), one gate-job rerun | 0 gate passed, 1 it cannot, 2 running |
 | `ci read <run id>` | any qmx-ci run | `tmp/ci-read/<run id>/` | 0 green, 1 red, 2 still running |
-| `quality --from <sha> [--tools vulture,skylos,mutmut]` | `state.json`, `checks.toml`, the quality baselines | `checks/_quality/<tip8>/` | 0 no new finding, 1 otherwise |
-| `baseline [--at REF] [--tools ...] [--part K/N]` | `checks.toml`, the code at REF (default the build tip) | `<quality dir>/baseline-<tool>.tsv`, `BACKLOG.md`, `runs/` | 0, 1 when a tool did not run |
+| `ci summary [--sha SHA]` | the deep run on SHA (default the build tip): the recorded one, else the newest GitHub lists | `checks/_nightly/<sha8>/summary.json`, only when the summary's `sha` is SHA | 0 saved (its blocking reds and quality rows printed as FAIL lines), 1 none for SHA or only one of another commit, 3 GitHub unreachable |
+| `quality --from <sha> [--tools vulture,skylos,mutmut]` | `state.json`, `checks.toml`, the repo's `ci/baselines/` and `tools/ci/ratchet.py` at `<sha>`; with `ci = "github"` the tip's `summary.json` first | `checks/_quality/<tip8>/` | 0 no new finding, 1 otherwise |
+| `baseline` | nothing | nothing: it prints that CI's `baseline` level takes the baselines | 1 |
 | `merged <checkpoint>` | `state.json` | `state.json` (`merged`) | 0 recorded or already, 1 refused |
 | `power_watch [--once]` | the power line, the remote | `HOLD`, `power.json`, `state.json` events | 0 |
 | `power` | `power.json`, `HOLD` | nothing | 0 go, 1 HOLD (wait), 2 no watcher (start one) |
@@ -62,32 +63,17 @@ The program folder is the planner's handoff (`PROGRAM.yaml`, `SLICES.md`, `slice
 
 `bisect-step` is internal: `nightly` hands it to `git bisect run`.
 
-## How the coordinator uses them
-
-There is no AI reviewer per slice: machine checks gate each slice, and all AI review happens in the checkpoint review session every 5 to 8 slices (`slice_verdict_required` turns the old per-slice verdict back on).
-
-1. Once per run: `init`, then `preflight`. Fix every FAIL line it prints and run it again. It arms nothing until every check passes. Start `power_watch` in the background.
-2. On every wake and every 600-second tick: `recover` if the session just started, then `main-check` and `status`. Stop on `MAIN CHANGED` or `BREAKER`. A `STALE` slice gets `recover`, then `dispatch` again (a restart).
-3. Fill free seats: `dispatch <id>` for each slice in `status`'s "could start" list, then its `PREBUILD` list. Exit 2 means refused (the reason is printed); exit 3 means parked.
-4. A builder replies `READY <sha>`: `verify_ready <id> <sha>`. Exit 1 is BLOCKED; send a fix round with `dispatch <id>`.
-5. After ready: `slice_checks <id>`. Red sends a fix round with the summary. Green goes to `land`.
-6. `land` (every checked slice of the open checkpoint) or `land <ids>`. `HELD` names pre-built slices that wait for the open checkpoint to merge. `RECHECK <id>` means the rebase changed the slice: run `slice_checks <id>` again (it checks the rebased commit), then `land`. `WAIT <id>` means its Linux slice run has not finished: `land` again on the next tick. A red Linux slice run moves the slice to `red`: send a fix round.
-7. `status` prints `CHECKPOINT <X> built` when every slice of the open checkpoint is landed, parked or blocked-by: the checkpoint review starts. It runs `nightly` (the deep run on GitHub, or the whole suite on Windows when GitHub cannot run it) and, for the local fallback, `quality --from <checkpoint start>`; then `ci gate --wait`, merges only on exit 0, and records `merged <X>`, after which the pre-built slices land. `status` also prints `LAND-RED` for a red land run; it never stops the run.
-8. End of run: `run_report`, then `teardown`. Add only a "Waits on you" section under the report.
-
-### Checkpoints and pre-building
+## Checkpoints and pre-building
 
 A slice's checkpoint is SLICES.md's `stop` column (`checkpoint` is read too); with neither, the program is one checkpoint. The open checkpoint is the first, in table order, not recorded by `merged`. A slice of the next checkpoint may be dispatched before then (pre-built), but only when its files overlap no slice of the open checkpoint, which is building or in review and may get a fix batch. Two checkpoints ahead is refused. A pre-built slice passes its checks and waits in `checked`; `land` holds it until `merged <open>`.
 
-### Quality ratchet
+## Quality ratchet
 
-Skylos, Vulture and mutmut run through `quality.py`. Only a NEW finding blocks. A finding is keyed by tool, file and the tool's words (never the line), and is known when it is in the baseline file or, for Vulture and Skylos, already at the commit the work started from. Every baseline finding is a row in `BACKLOG.md` for a later fixer and never blocks, so no agent loops on old findings.
+There is one ratchet, and it lives in the repo (FACTORY-DESIGN section 5): `ci/baselines/` holds `vulture.txt`, `skylos.txt`, `mutmut.txt`, `pyright.txt`, `known-reds.txt` and `flaky.txt`, the files qmx-ci judges by. The kit reads them and never writes them. Only a NEW finding blocks. A finding is keyed exactly as qmx-ci keys it, `path|rule|message` with no line number (mutmut's path is its package folder, pyright's message has every number as `#`), by the checkout's own `tools/ci/ratchet.py`, loaded from the checkout; keys are counted, so a second copy of a known finding in the same file is new. A checkout without `tools/ci/ratchet.py`, or without the tool's baseline file, gives `NOTRUN no baseline`.
 
-- Per slice, in `slice_checks`: Vulture and Skylos over each touched package at the head and the parent; only findings in the slice's changed files count. Both tools are fast.
-- Per checkpoint, `quality --from <sha>`: the same at the build tip against `<sha>`, plus mutmut on every function holding a changed line (mutmut 3 mutates whole functions, so that is its finest grain).
-- `baseline` once (it is not taken yet), then mutmut in parts on a schedule: `baseline --tools mutmut --part K/N` replaces only that part's rows. Rows keep their first-seen date; a rerun at the same commit changes nothing.
-
-The quality folder is the `quality_dir` setting, by default `<worktree_root>/ship-quality`, shared by every program. Only `baseline` writes the baseline files, so one program's fixes never make another program's old findings look new.
+- Per slice, in `slice_checks`: Vulture and Skylos over each touched package at the head and the parent; only findings in the slice's changed files count, and those at the parent are known too. The baseline is read at the parent, so a slice cannot excuse its own finding. A `types` command that fails is ratcheted against `pyright.txt` the same way, as qmx-ci's slice level does: only an error in a changed file that the baseline (and the parent, run only when needed) does not hold blocks; output whose error count does not add up stays FAIL.
+- Per checkpoint, `quality --from <sha>`: with `ci = "github"` and the tip's `summary.json` (`ci summary`), its `quality` rows are the verdict (a `new` row that `blocks` fails) and nothing runs here; otherwise the same tools at the build tip against `<sha>`, plus mutmut on every function holding a changed line (mutmut 3 mutates whole functions, so that is its finest grain).
+- Baselines are taken by CI's `baseline` level and shrink only through `qci ratchet --prune`, which `ship merge` runs as a generator (the profile's `[generators]`) after merging a moved target, under the project's merge lock. `ship baseline` only says so and exits 1.
 
 ## Formats
 
@@ -148,15 +134,15 @@ mutmut = [["wsl", "-d", "Ubuntu-24.04", "--", "mutmut", "run", "{mutants}"], ["w
 
 Each command runs from the package root through the timed wrapper. In `test`, `{junit}` becomes the JUnit XML path and `{tests}` the test files (none means the whole package). A changed file belongs to the package with the longest matching root. Without `checks.toml` there is one package, `.`, tested with `python -m pytest`. A package without `lint` or `types` gets a `NOTRUN` line.
 
-Test ids are `<root>::<classname>::<name>` from the JUnit report. `baseline-reds.txt` holds one id per line.
+Test ids are `<root>::<classname>::<name>` from the JUnit report.
 
 Fail-at-parent counts a JUnit `<failure>` whose message starts with `assert`, `AssertionError`, `Failed: DID NOT RAISE` or `Failed: DID NOT WARN`. Any other failure (an `ImportError` inside the test, a `NameError`) and every `<error>` (collection, module-level import, fixture) do not count, and a test that is not collected at the parent fails the check.
 
 `suite.run_packages` is the one function `land` and `nightly` call to run tests locally. The GitHub backend (`ci.read_run`) returns the same shape, keyed by shard (`suite-linux-3`) with ids `system|unit|class::name`; see "CI on GitHub".
 
-### The shared baseline of known reds
+### Known reds
 
-`suite.baseline_for` gives `slice_checks`, `land` and `nightly` one list of reds that do not block. When the commit holds `ci/baselines/known-reds.txt` (qmx-ci's list, written by `tools/ci/pull_reds.py`, key `system|unit|class::name`), that file is the list, read at the commit under test, so a red qmx-ci accepts is accepted here and a red it blocks is blocked here. `baseline-reds.txt` is then a generated mirror with a `# Generated by ship from ...` header; the scripts never add to it or remove from it, and a known red that passes prints `NOTE known red passes now` (shrink the list with `pull_reds.py`). Without that file, `baseline-reds.txt` works as before: the first local nightly writes it and landings remove reds that pass.
+`suite.baseline_for` gives `slice_checks`, `land` and `nightly` one list of reds that do not block: the repo's `ci/baselines/known-reds.txt` and `ci/baselines/flaky.txt` (qmx-ci's lists, written by `tools/ci/pull_reds.py`, key `system|unit|class::name`), read at the commit under test, so a red qmx-ci accepts is accepted here and a red it blocks is blocked here. A commit without them has no known reds. The kit never writes either file; a known red that passes prints `NOTE known red passes now` (shrink the list with `pull_reds.py`). With `ci = "github"`, the deep run's `summary.json` adds what qmx-ci itself blocks (a newly flaky test, an unfinished shard, a blocking quality row) as FAIL lines.
 
 Ids are compared in one spelling, `system|root|class::name`, where the class loses a leading dotted form of its root (`qml.tests.test_x` under `qml` is `tests.test_x`), because qmx-ci runs some units from the repo root and `checks.toml` runs each package from its own. A local id is on this machine's system: a red known only on Linux still blocks a local Windows run. `slice_checks`' test check fails only on a red outside this list (before, it failed on any red).
 
@@ -187,7 +173,7 @@ names), as `gh` is replaced by `fake_gh.py`. `roles/SPIKE.md` is the spike log f
 
 ## The build loop: `ship run`
 
-`run` does what the coordinator's rules card did, as a script: it holds `chain.lock` (a live holder means
+`run` is the build loop, as a script: it holds `chain.lock` (a live holder means
 exit 11; a dead holder's children are stopped and its seats recovered), then ticks every `chain_poll_s`. Each
 tick: `main-check` (when armed), power and network (`HOLD` on battery or when the internet or GitHub does not
 answer: route, start nothing), a pending usage reset (start no worker), route every finished builder,
@@ -219,7 +205,7 @@ routes until nothing runs. `verify_ready` exits 3 and changes nothing when the r
 
 Builders never wait on any of this: `slice_checks`, `land` and `status` read whatever GitHub has and return.
 
-**The deep run.** `nightly` calls `ci start`, then `ci status --wait`. `ci start` attaches instead of dispatching when `state.json` holds a run for the same tip that was not cancelled, or when GitHub already lists a deep `workflow_dispatch` run on that tip (a crash between the dispatch and the record); `--fresh` dispatches anyway. `ci status` exits 2 while the run is going and prints the new reds finished shards already show (`SO-FAR`). A finished run is judged once: its lines go to `checks/_nightly/<tip8>/summary.txt` and later calls read them back. New reds on this machine's system are bisected locally as before; reds only on the other system are reported with the slices landed since the last green tip as suspects. `nightly --no-wait` returns after the dispatch, for a coordinator that polls with `ci status`.
+**The deep run.** `nightly` calls `ci start`, then `ci status --wait`. `ci start` attaches instead of dispatching when `state.json` holds a run for the same tip that was not cancelled, or when GitHub already lists a deep `workflow_dispatch` run on that tip (a crash between the dispatch and the record); `--fresh` dispatches anyway. `ci status` exits 2 while the run is going and prints the new reds finished shards already show (`SO-FAR`). A finished run is judged once: its lines go to `checks/_nightly/<tip8>/summary.txt` and later calls read them back. New reds on this machine's system are bisected locally as before; reds only on the other system are reported with the slices landed since the last green tip as suspects. `nightly --no-wait` returns after the dispatch, for a caller that polls with `ci status`.
 
 **Fallback.** When `ci start` cannot reach GitHub (no `gh`, no network, gh signed out) or the workflow file is not at the tip, `nightly` prints `CI github unavailable: <why>; the local run stands in` and runs the whole suite on this machine. `ci = "local"`, the default, always runs locally and reads no GitHub evidence.
 
@@ -316,14 +302,13 @@ Every number is a named setting in `settings.py` with its default. Override any 
 | `updates_paused_min_h` | 12 | preflight |
 | `evidence_required` | `how.md`, `red.log`, `report.md`, `pr.md` | verify_ready |
 | `slice_verdict_required` | false | land: also want a CLEAN slice verdict, and a range verdict after a changed rebase |
-| `quality_dir` | `""` (`<worktree_root>/ship-quality`) | quality, baseline, slice_checks |
 | `quality_timeout_s` | 3600 | one Skylos, Vulture or mutmut command |
 | `watcher_stale_s` | 300 | power: `power.json` older than this means no watcher runs |
 | `data_env_vars` | `QMX_HOME`, `QMX_DATA_DIR` | the wrapper |
 | `strip_env_prefixes` | `CLAUDE`, `ANTHROPIC` | the wrapper |
 | `gh` | `gh` | verify_ready, land |
 | `lock_cmd` | `uv lock` | land |
-| `protected_branches` | `main`, `integration`, `engine/base` | the protection push test |
+| `protected_branches` | `main`, `engine/base` | the protection push test |
 | `ci` | `local` | `github` or `local`; see "CI on GitHub" |
 | `github_repo` | `mubarakhimself-byte/QMX` | `-R` on every gh call |
 | `ci_workflow` | `qmx-ci.yml` | ci |
@@ -358,7 +343,7 @@ Numbers refer to `tracker/shipping-method/EDGE-CASES-2026-11-12.md`.
 | 6. brief wrong about the code | `dispatch` facts, park as `brief-mismatch` |
 | 7. run report lies by omission | `run_report` |
 | 8. hung agent | `status` liveness, `timed` heartbeat and time limit, no-prompt git env |
-| 9. old failures on the tip | the shared baseline (`ci/baselines/known-reds.txt`, else `baseline-reds.txt`) in `slice_checks`, `land` and `nightly` |
+| 9. old failures on the tip | the repo's `ci/baselines/known-reds.txt` and `flaky.txt` in `slice_checks`, `land` and `nightly` |
 | 10. usage limit counted as an attempt | `attempts` and `restarts`, `recover --usage-reset`, `dispatch` refusal until reset |
 | 12. two builders touch one file | `dispatch` overlap refusal, `verify_ready` overlap check, `land` uv.lock regeneration |
 | 13. no convergence | `dispatch` parks after `max_attempts`; `park --cause dispute` |
@@ -373,7 +358,7 @@ Numbers refer to `tracker/shipping-method/EDGE-CASES-2026-11-12.md`.
 
 | 20. tests that cannot fail | fail-at-parent in `slice_checks`; mutmut on changed functions in `quality` at each checkpoint |
 
-Not owned here: 11 (the coordinator's context) and 19 (spawning skills in briefs) are rules for the coordinator and the planner. Not built: from 14, the machine-wide pytest worker slot file, `flaky.tsv`, and per-run ports (tests should bind port 0); from 22, the money scan's grep for keyring calls, which belongs in a package's `lint` command in `checks.toml`.
+Not owned here: 11 (a long session's context) and 19 (spawning skills in briefs) are rules for the planner. Not built: from 14, the machine-wide pytest worker slot file, `flaky.tsv`, and per-run ports (tests should bind port 0); from 22, the money scan's grep for keyring calls, which belongs in a package's `lint` command in `checks.toml`.
 
 ## Tests
 
@@ -384,4 +369,4 @@ python -m unittest discover -s ship/tests -t .
 
 or, from the repo root, `python -m pytest tools/ship -q -p no:cacheprovider`.
 
-The tests build real git repositories (a bare remote and a clone) in temp folders. Only `gh` is replaced, by `tests/fake_gh.py` (PRs, and Actions runs with their jobs and artifacts, each call logged), and Vulture and mutmut, by `tests/fake_tools.py`, which prints their real output shapes; `pytest` must be installed for the slice-check, landing, nightly and quality tests. Every test's factory home is a temp folder (`factory_home` in the fixture's `ship.toml`), so no test touches the real `<factory_home>/run/`. `tests/test_dl22.py` holds the K3 fix round's checks: the hook's bypasses refused for every role, the review, merge, claims, chain and lock mutants, and the races.
+The tests build real git repositories (a bare remote and a clone) in temp folders. Only `gh` is replaced, by `tests/fake_gh.py` (PRs, and Actions runs with their jobs and artifacts, each call logged), and Vulture, mutmut and pyright, by `tests/fake_tools.py`, which prints their real output shapes; the quality tests plant the repo's ratchet (`tests/repo_ratchet.py`, a copy of qmx-ci's `tools/ci/ratchet.py`) and `ci/baselines/` in the fixture repo; `pytest` must be installed for the slice-check, landing, nightly and quality tests. Every test's factory home is a temp folder (`factory_home` in the fixture's `ship.toml`), so no test touches the real `<factory_home>/run/`. `tests/test_dl22.py` holds the K3 fix round's checks: the hook's bypasses refused for every role, the review, merge, claims, chain and lock mutants, and the races.

@@ -17,6 +17,10 @@ Here:
 - `slice_linux` and `linux_gate`: the Linux slice run as evidence for slice_checks and land.
 - `land_runs`: the land run of each landing, as evidence for status and the checkpoint.
 - `gate`: the checkpoint PR's gate job; rerun once after the deep run is green.
+- `fetch_summary` and `summary` (`ship ci summary [--sha SHA]`): the deep run's `summary.json` (FACTORY-DESIGN
+  11.11) into `checks/_nightly/<tip8>/summary.json`, only when its `sha` is that very commit (D-L22): a
+  summary of another commit never stands for this one. Its `reds` (each with `kind` and `blocks`) and its
+  `quality` rows are qmx-ci's own verdict; `summary_fails` turns the blocking ones into FAIL lines.
 """
 
 from __future__ import annotations
@@ -289,6 +293,112 @@ def progress(read: RunRead, baseline_new, label: str) -> list[str]:
     return lines
 
 
+# ---- summary.json ------------------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class Summary:
+    path: Path | None  # checks/_nightly/<sha8>/summary.json, when it is there and names the sha
+    why: str = ""  # why there is none
+    mismatch: str = ""  # the sha a downloaded summary named instead
+    unreachable: bool = False
+
+
+def deep_run_of(program: Program, settings: Settings, sha: str) -> str | None:
+    """The deep run on `sha`: the one state.json records, else the newest GitHub lists (not cancelled)."""
+    state = st.load(program)
+    rec = state.ci.get("deep") or {}
+    if rec.get("tip") == sha and rec.get("run_id"):
+        return str(rec["run_id"])
+    listed = gh_for(state, settings).runs(state.build_branch, "workflow_dispatch", sha)
+    found = next((r for r in listed if level_of(r) == "deep" and outcome(r) != "cancelled"), None)
+    return str(found["databaseId"]) if found else None
+
+
+def fetch_summary(program: Program, settings: Settings, sha: str, run_id: str | None = None) -> Summary:
+    """The deep run's `summary` artifact as checks/_nightly/<sha8>/summary.json, only when it names `sha`."""
+    target = program.nightly(sha) / "summary.json"
+    if target.exists():
+        try:
+            if str(json.loads(target.read_text("utf-8")).get("sha") or "") == sha:
+                return Summary(target)
+        except (OSError, ValueError, AttributeError):
+            pass
+        target.unlink(missing_ok=True)
+    try:
+        run_id = run_id or deep_run_of(program, settings, sha)
+    except GitError as exc:
+        return Summary(None, f"GitHub unreachable ({short(exc)})", unreachable=True)
+    if not run_id:
+        return Summary(None, f"no deep run on {sha[:8]}")
+    folder = program.nightly(sha) / "ci-summary"
+    try:
+        ok = gh_for(st.load(program), settings).download(str(run_id), "summary", folder)
+    except GitError as exc:
+        return Summary(None, f"GitHub unreachable ({short(exc)})", unreachable=True)
+    if not ok or not (folder / "summary.json").exists():
+        return Summary(None, f"deep run {run_id} has no summary artifact (yet)")
+    try:
+        named = str(json.loads((folder / "summary.json").read_text("utf-8")).get("sha") or "")
+    except (OSError, ValueError, AttributeError):
+        named = ""
+    if named != sha:  # D-L22: a summary of another commit never stands for this one
+        shutil.rmtree(folder, ignore_errors=True)
+        return Summary(None, f"deep run {run_id}'s summary.json names {named[:8] or '(no sha)'}, not {sha[:8]}",
+                       mismatch=named or "(none)")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(folder / "summary.json", target)
+    return Summary(target)
+
+
+def summary_fails(summary: dict, already: set[str] = frozenset()) -> list[str]:
+    """FAIL lines for what qmx-ci's summary says blocks: every red with `blocks` (a newly flaky test, an
+    unfinished shard, a new red; `already` holds canonical ids the caller reports itself) and every new
+    quality row with `blocks`."""
+    from ship.suite import canon
+
+    out = []
+    for red in summary.get("reds") or []:
+        if not isinstance(red, dict) or not red.get("blocks"):
+            continue
+        key = f"{red.get('system')}|{red.get('id')}"
+        if red.get("kind") in ("new", "known") and canon(key) in already:
+            continue
+        out.append(f"FAIL ci-red {red.get('kind')} {key}")
+    for row in summary.get("quality") or []:
+        if isinstance(row, dict) and row.get("kind") == "new" and row.get("blocks", True):
+            out.append(f"FAIL ci-quality {row.get('tool')} {row.get('key')}")
+    return out
+
+
+def summary(program: Program, settings: Settings, sha: str | None = None) -> tuple[int, list[str]]:
+    """`ship ci summary [--sha SHA]` (default: the build tip). 0 the summary names that sha and is saved,
+    1 there is none for it (or only one of another commit), 3 GitHub cannot be reached."""
+    state = st.load(program)
+    repo, t = Path(state.repo), settings.git_timeout_s
+    try:
+        if sha:
+            run(["git", "fetch", "-q", state.remote], repo, t, check=False)
+            full = run(["git", "rev-parse", "--verify", f"{sha}^{{commit}}"], repo, t).stdout.strip()
+        else:
+            run(["git", "fetch", "-q", state.remote], repo, t)
+            full = remote_sha(repo, state.remote, state.build_branch, t) or ""
+    except GitError as exc:
+        return 1, [f"FAIL summary: {sha or state.build_branch} is not a commit here ({short(exc)})"]
+    if not full:
+        return 1, [f"FAIL summary: {state.build_branch} is not on {state.remote}"]
+    got = fetch_summary(program, settings, full)
+    if got.path is None:
+        return (3 if got.unreachable else 1), [f"{'UNREACHABLE' if got.unreachable else 'NONE'} summary for "
+                                               f"{full[:8]}: {got.why}"]
+    body = json.loads(got.path.read_text("utf-8"))
+    reds = [r for r in body.get("reds") or [] if isinstance(r, dict)]
+    lines = [f"SUMMARY {got.path}",
+             f"{'GREEN' if body.get('green') else 'RED'} {body.get('level')} {full[:8]} {body.get('url', '')}".rstrip(),
+             f"REDS {sum(1 for r in reds if r.get('blocks'))} block of {len(reds)}"]
+    return 0, lines + summary_fails(body)
+
+
 # ---- slice and land evidence ---------------------------------------------------------------------
 
 
@@ -459,7 +569,7 @@ def report(program: Program, settings: Settings, run_id: str) -> tuple[int, list
         return 2, [f"PENDING ci {run_id}: GitHub unreachable ({short(exc)})"]
     sha = read.run.get("headSha", "")
     run(["git", "fetch", "-q", state.remote, sha], repo, settings.git_timeout_s, check=False)
-    baseline = baseline_for(program, repo, sha, settings.git_timeout_s)
+    baseline = baseline_for(repo, sha, settings.git_timeout_s)
     label = f"ci {level_of(read.run)} {run_id} on {read.run.get('headBranch')} {sha[:8]}"
     lines = [f"RUN {label}: {read.run.get('status')} {read.run.get('conclusion') or ''} {read.run.get('url')}"]
     for key, shard in sorted(read.tests.items()):

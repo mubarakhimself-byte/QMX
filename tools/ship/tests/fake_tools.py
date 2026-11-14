@@ -1,5 +1,6 @@
-"""Stand-ins for Vulture and mutmut 3 in the tests. Same output shapes; what they report follows the
-source text: every `def unused_*` is dead code, and every mutant a run was asked for survives."""
+"""Stand-ins for Vulture, mutmut 3 and pyright in the tests. Same output shapes; what they report follows
+the source text: every `def unused_*` is dead code, every mutant a run was asked for survives, and every
+line holding `# type-error` is a pyright error (printed over two lines, as pyright prints a long one)."""
 
 import re
 import sys
@@ -15,6 +16,19 @@ if tool == "vulture":
                 found += 1
                 print(f"{path}:{n}: unused function '{hit.group(1)}' (60% confidence)")
     sys.exit(3 if found else 0)
+if tool == "pyright":
+    errors = 0
+    for path in sorted(Path(".").rglob("*.py")):
+        full = str(path.resolve())
+        hits = [n for n, line in enumerate(path.read_text("utf-8").splitlines(), 1) if "# type-error" in line]
+        if hits:
+            print(full)
+        for n in hits:
+            errors += 1
+            print(f"  {full}:{n}:5 - error: Argument count 2 is wrong")
+            print('    "int" is not "str" (reportCallIssue)')
+    print(f"{errors} error{'' if errors == 1 else 's'}, 0 warnings, 0 informations ")
+    sys.exit(1 if errors else 0)
 if tool == "mutmut-run":
     Path(".fake-mutmut").write_text("\n".join(sys.argv[2:]), "utf-8")
 elif tool == "mutmut-results":

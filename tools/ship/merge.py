@@ -190,11 +190,23 @@ class Merge:
     def generate(self, copy: Path) -> None:
         """Rebuild the shared generated files after a merge of the target, by script, one commit each."""
         from ship.plan import matches
+        from ship.project_profile import generator_commands
 
-        for pattern, argv in (self.profile.get("generators") or {}).items():
-            log = self.program.tmp / "merge-logs" / f"gen-{re.sub(r'[^A-Za-z0-9]+', '-', pattern)}.log"
-            if run_timed(list(argv), copy, log, self.settings.check_timeout_s, self.settings, self.program.runs).rc != 0:
-                self.say(f"GENERATOR {pattern} failed (see {log}); the files stay as merged, CI's drift check judges")
+        for pattern, value in (self.profile.get("generators") or {}).items():
+            runs = generator_commands(value)
+            scripts = [a for argv in runs for a in argv[1:] if a.endswith(".py") and not Path(a).is_absolute()]
+            absent = [s for s in scripts if not (copy / s).is_file()]
+            if absent:
+                self.say(f"GENERATOR {pattern} skipped: {absent[0]} is not in the repo")
+                continue
+            failed = None
+            for n, argv in enumerate(runs):
+                log = self.program.tmp / "merge-logs" / f"gen-{re.sub(r'[^A-Za-z0-9]+', '-', pattern)}-{n}.log"
+                if run_timed(argv, copy, log, self.settings.check_timeout_s, self.settings, self.program.runs).rc != 0:
+                    failed = log
+                    break
+            if failed is not None:
+                self.say(f"GENERATOR {pattern} failed (see {failed}); the files stay as merged, CI's drift check judges")
                 continue
             status = git(copy, "status", "--porcelain", "--untracked-files=all", timeout=self.t).splitlines()
             changed = [line[3:].strip().strip('"') for line in status if matches(pattern, line[3:].strip().strip('"'))]

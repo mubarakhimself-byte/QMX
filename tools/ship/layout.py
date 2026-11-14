@@ -39,10 +39,6 @@ class Program:
         return self.dir / "checks.toml"
 
     @property
-    def baseline_reds(self) -> Path:
-        return self.dir / "baseline-reds.txt"
-
-    @property
     def main_snapshot(self) -> Path:
         return self.dir / "main-status.txt"
 

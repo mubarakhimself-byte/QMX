@@ -1,16 +1,21 @@
-"""The quality ratchet: Skylos, Vulture and mutmut, where only a NEW finding blocks.
+"""The quality ratchet, read from the repo: only a NEW finding blocks (FACTORY-DESIGN 5, "One ratchet").
 
-A finding is keyed by tool, file and the tool's words, never its line, so it survives code moving.
-Known findings never block: those in the baseline files (`ship baseline`, taken once and refreshed
-on a schedule) and, for Vulture and Skylos, those already at the commit the work started from.
-Every baseline finding is a row in BACKLOG.md for a later fixer.
+There is one baseline and it lives in the repo: `ci/baselines/<tool>.txt` (`vulture`, `skylos`, `mutmut`,
+`pyright`), the files qmx-ci judges by. A finding is keyed exactly as qmx-ci keys it, `path|rule|message`
+with no line number, by the checkout's own `tools/ci/ratchet.py` (loaded from the checkout, standard
+library only), so a finding CI accepts is accepted here and one it blocks is blocked here. Keys are
+counted: a second copy of a known finding in the same file is new. A checkout without `tools/ci/ratchet.py`,
+or without the tool's baseline file, gives `NOTRUN no baseline`. The kit never writes a baseline: CI's
+`baseline` level takes them, and `qci ratchet --prune` (run at merge, the profile's `[generators]`)
+shrinks them.
 
-- Per slice, inside slice_checks: Vulture and Skylos over each touched package, at the head and at
-  the parent, keeping findings in the slice's changed files.
-- Per checkpoint (`ship quality --from <sha>`): the same at the build tip against <sha>, plus mutmut
-  on the functions that hold a changed line.
-- `ship baseline [--part K/N]`: every finding of the named tools over every package. mutmut is slow,
-  so it can run in parts on a schedule; each part replaces only its own modules' rows.
+- Per slice, inside slice_checks: Vulture and Skylos over each touched package at the head and at the
+  parent; only findings in the slice's changed files count, and those already at the parent are known
+  too. The baseline is read at the parent, so a slice cannot add its own finding to it. The package's
+  `types` command, when it fails, is ratcheted the same way against `pyright.txt` (`types_ratchet`).
+- Per checkpoint (`ship quality --from <sha>`): with `ci = "github"` and qmx-ci's `summary.json` for the
+  tip (`ci.fetch_summary`), its `quality` rows are the verdict and nothing runs here; otherwise the same
+  tools at the build tip against <sha>, plus mutmut on the functions that hold a changed line.
 
 The commands come from checks.toml (`vulture`, `skylos`, `mutmut` per package: one argv, or a list of
 argv run in order). `{mutants}` expands to mutmut 3 name globs. A tool without a command is NOTRUN.
@@ -21,10 +26,12 @@ from __future__ import annotations
 import ast
 import collections
 import dataclasses
-import datetime as dt
 import fnmatch
+import hashlib
 import json
 import re
+import sys
+import types
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
@@ -34,30 +41,113 @@ from ship.layout import Program
 from ship.settings import Settings
 from ship.suite import Package, load_packages, package_of, touched
 from ship.worktree import checkout_copy, drop_copy
-from ship.wrapper import TIMEOUT_RC, run_timed
+from ship.wrapper import TIMEOUT_RC, RunResult, run_timed
 
 TOOLS = ("vulture", "skylos", "mutmut")
 VULTURE = re.compile(r"^(?P<path>\S.*?\.py):(?P<line>\d+): (?P<what>.+?)(?: \(\d+% confidence[^)]*\))?\s*$")
 MUTANT = re.compile(r"^\s*(?P<name>\S+__mutmut_\d+): (?P<status>.+?)\s*$")
-MUTANT_FINDINGS = ("survived", "no tests")
-FILE_KEYS, LINE_KEYS = ("file", "filename", "path"), ("line", "lineno", "line_number")
-RULE_KEYS, NAME_KEYS = ("rule_id", "rule"), ("full_name", "name", "symbol", "simple_name", "message")
+MUTANT_FINDINGS = ("survived", "no tests")  # qmx-ci's ci_mutate.SURVIVING
+# The finding lists in Skylos's JSON, as qmx-ci reads them (qci.SKYLOS_FINDING_CATEGORIES); other top-level
+# lists (`whitelisted`, `suppressed`) are not findings.
+SKYLOS_CATEGORIES = frozenset({
+    "unused_functions", "unused_imports", "unused_classes", "unused_variables", "unused_parameters",
+    "unused_files", "unused_fixtures", "unused_exports", "forgotten", "danger", "reliability", "ai_defects",
+    "quality", "secrets", "custom_rules", "circular_dependencies", "dependency_vulnerabilities",
+    "publisher_change_findings"})
+PYRIGHT_DIAG = re.compile(r"^\s+(?P<path>\S.*?):(?P<line>\d+):(?P<col>\d+) - (?P<sev>error|warning|information): "
+                          r"(?P<msg>.*)$")
+PYRIGHT_SUMMARY = re.compile(r"^(?P<errors>\d+|No) errors?, (?:\d+|No) warnings?, (?:\d+|No) informations?\s*$",
+                             re.M)
+PYRIGHT_RULE = re.compile(r"\s+\((report\w+)\)\s*$")
+NUMBER = re.compile(r"\d+")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 
 @dataclasses.dataclass(frozen=True)
 class Finding:
     tool: str
-    path: str  # repo-relative, forward slashes
-    line: int  # 0 when the tool gives none
-    what: str  # the tool's words, without anything that moves with the line
+    path: str  # the key's path: a repo-relative file, or for mutmut the package folder, as qmx-ci keys it
+    line: int  # 0 when the tool gives none; never part of the key
+    rule: str
+    message: str
+    file: str = ""  # the file it sits in, when the key's path is not one (mutmut)
+    raw: str = ""  # the tool's own name for it (a mutant's name), never part of the key
 
     @property
-    def key(self) -> str:
-        return f"{self.tool}\t{self.path}\t{self.what}"
+    def where(self) -> str:
+        return self.file or self.path
 
     def __str__(self) -> str:
-        return f"{self.path}:{self.line} {self.what}" if self.line else f"{self.path} {self.what}"
+        at = f"{self.where}:{self.line}" if self.line else self.where
+        return f"{at} [{self.rule}] {self.message}"
+
+
+# ---- the repo's own ratchet ----------------------------------------------------------------------------
+
+
+class RatchetError(Exception):
+    pass
+
+
+def _load(script: Path) -> types.ModuleType:
+    """The checkout's `tools/ci/ratchet.py` as a module, once per distinct file content."""
+    code = script.read_bytes()
+    name = f"_ship_repo_ratchet_{hashlib.sha1(code).hexdigest()[:16]}"
+    module = sys.modules.get(name)
+    if module is not None:
+        return module
+    module = types.ModuleType(name)
+    module.__file__ = str(script)
+    sys.modules[name] = module  # a dataclass looks its module up while it is being made
+    try:
+        exec(compile(code, str(script), "exec"), module.__dict__)  # noqa: S102 - the repo's own CI code
+    except BaseException as exc:
+        del sys.modules[name]
+        raise RatchetError(f"{script} does not load: {exc!r}") from exc
+    missing = [n for n in ("Finding", "read_baseline", "new_findings") if not hasattr(module, n)]
+    if missing:
+        del sys.modules[name]
+        raise RatchetError(f"{script} has no {missing}")
+    return module
+
+
+@dataclasses.dataclass
+class RepoRatchet:
+    """`tools/ci/ratchet.py` and `ci/baselines/` of one checkout."""
+
+    module: types.ModuleType
+    baselines: Path
+
+    @classmethod
+    def at(cls, checkout: Path) -> "RepoRatchet | None":
+        """None when the checkout has no ratchet (or it does not load): every tool is then NOTRUN."""
+        script = checkout / "tools" / "ci" / "ratchet.py"
+        if not script.is_file():
+            return None
+        try:
+            return cls(_load(script), checkout / "ci" / "baselines")
+        except (OSError, RatchetError):
+            return None
+
+    def baseline(self, tool: str) -> list[str] | None:
+        """The tool's baseline keys, or None when the repo has no baseline file for it."""
+        path = self.baselines / f"{tool}.txt"
+        return list(self.module.read_baseline(path)) if path.is_file() else None
+
+    def _theirs(self, f: Finding):
+        return self.module.Finding(f.path, f.line, f.rule, f.message)
+
+    def key(self, f: Finding) -> str:
+        return self._theirs(f).key
+
+    def new(self, found: list[Finding], known: Iterable[str]) -> list[Finding]:
+        """The findings beyond the known keys' counts, by the repo's own `new_findings`."""
+        theirs = [self._theirs(f) for f in found]
+        back = {id(t): f for t, f in zip(theirs, found)}
+        return [back[id(t)] for t in self.module.new_findings(theirs, list(known))]
+
+
+# ---- reading the tools ---------------------------------------------------------------------------------
 
 
 def _repo_path(raw: str, checkout: Path, package: Package) -> str:
@@ -80,18 +170,6 @@ def _module_file(checkout: Path, package: Package, module: str) -> str:
     return module
 
 
-def _skylos_items(node: object, where: str) -> Iterable[tuple[str, dict]]:
-    if isinstance(node, dict):
-        if any(isinstance(node.get(k), str) for k in FILE_KEYS) and any(k in node for k in LINE_KEYS):
-            yield where, node
-            return
-        for key, value in node.items():
-            yield from _skylos_items(value, f"{where}.{key}" if where else key)
-    elif isinstance(node, list):
-        for item in node:
-            yield from _skylos_items(item, where)
-
-
 def _json_in(text: str) -> object:
     decoder = json.JSONDecoder()
     for match in re.finditer(r"^[{\[]", text, re.M):
@@ -102,43 +180,100 @@ def _json_in(text: str) -> object:
     raise ValueError("no JSON report in the output")
 
 
+def _function_of(mangled: str) -> str:
+    """mutmut 3's mangled name back to qmx-ci's: `x_f` is `f`, `xǁCǁm` is `C.m`."""
+    if mangled.startswith("xǁ"):
+        return ".".join(p for p in mangled[2:].split("ǁ") if p)
+    return mangled[2:] if mangled.startswith("x_") else mangled
+
+
 def parse(tool: str, text: str, checkout: Path, package: Package) -> list[Finding]:
-    """The findings in one tool's output. Raises ValueError when Skylos printed no JSON report."""
+    """The findings in one tool's output, keyed as qmx-ci keys them. Raises ValueError when Skylos printed
+    no JSON report."""
     found: list[Finding] = []
     if tool == "vulture":
         for line in text.splitlines():
             hit = VULTURE.match(line)
             if hit:
-                found.append(Finding(tool, _repo_path(hit["path"], checkout, package), int(hit["line"]), hit["what"]))
+                found.append(Finding(tool, _repo_path(hit["path"], checkout, package), int(hit["line"]), "vulture",
+                                     hit["what"]))
     elif tool == "skylos":
-        for category, item in _skylos_items(_json_in(text), ""):
-            path = next(item[k] for k in FILE_KEYS if isinstance(item.get(k), str))
-            line = next((item[k] for k in LINE_KEYS if isinstance(item.get(k), int)), 0)
-            rule = next((str(item[k]) for k in RULE_KEYS if item.get(k)), "")
-            name = next((str(item[k]) for k in NAME_KEYS if item.get(k)), "")
-            what = " ".join(part for part in (category, rule, name) if part)
-            found.append(Finding(tool, _repo_path(path, checkout, package), line, what))
+        data = _json_in(text)
+        if not isinstance(data, dict):
+            raise ValueError("the Skylos report is not an object")
+        for category, items in sorted(data.items()):
+            if category not in SKYLOS_CATEGORIES or not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                path = str(item.get("file") or item.get("filename") or "")
+                if not path:
+                    continue
+                rule = str(item.get("rule_id") or item.get("rule") or category)
+                name = str(item.get("full_name") or item.get("name") or item.get("message") or "")
+                line = item.get("line")
+                found.append(Finding(tool, _repo_path(path, checkout, package), line if isinstance(line, int) else 0,
+                                     f"{category}:{rule}", name))
     elif tool == "mutmut":
         for line in text.splitlines():
             hit = MUTANT.match(line)
             if hit and hit["status"] in MUTANT_FINDINGS:
-                module = hit["name"].rsplit(".", 1)[0]
-                found.append(Finding(tool, _module_file(checkout, package, module), 0, f"{hit['status']} {hit['name']}"))
+                module, _, last = hit["name"].rpartition(".")
+                function = _function_of(re.sub(r"__mutmut_\d+$", "", last))
+                found.append(Finding(tool, package.root, 0, "mutmut", f"{module}.{function} {hit['status']}",
+                                     file=_module_file(checkout, package, module), raw=hit["name"]))
     else:
         raise ValueError(f"unknown quality tool {tool}")
     return found
 
 
-def new_findings(found: list[Finding], known: Iterable[str]) -> list[Finding]:
-    """Findings beyond the known ones, compared by key and counted, so a moved finding stays known."""
-    left = collections.Counter(known)
-    new = []
-    for finding in sorted(found, key=lambda f: (f.path, f.what, f.line)):
-        if left[finding.key] > 0:
-            left[finding.key] -= 1
+def parse_pyright(text: str, checkout: Path, package: Package) -> tuple[list[Finding], bool]:
+    """pyright's errors, keyed as qmx-ci keys them (`path|rule|message`, every number in the message `#`),
+    from its `--outputjson` report or its text output; and whether the reading is complete (the text's
+    summary line counts as many errors as were read)."""
+    if '"generalDiagnostics"' in text:
+        try:
+            report = _json_in(text[text.index("{"):])
+        except ValueError:
+            return [], False
+        found = []
+        for item in (report.get("generalDiagnostics") or []) if isinstance(report, dict) else []:
+            if not isinstance(item, dict) or item.get("severity") != "error":
+                continue
+            start = (item.get("range") or {}).get("start") or {}
+            message = NUMBER.sub("#", " ".join(str(item.get("message") or "").split()))
+            found.append(Finding("pyright", _repo_path(str(item.get("file") or ""), checkout, package),
+                                 int(start.get("line", -1)) + 1, str(item.get("rule") or "pyright"), message))
+        return found, True
+    rows: list[list] = []  # [path, line, severity, message lines]
+    current: list | None = None
+    for line in text.splitlines():
+        hit = PYRIGHT_DIAG.match(line)
+        if hit:
+            current = [hit["path"], int(hit["line"]), hit["sev"], [hit["msg"]]]
+            rows.append(current)
+        elif current is not None and line.startswith("    ") and line.strip():
+            current[3].append(line.strip())  # a message pyright printed over more lines
         else:
-            new.append(finding)
-    return new
+            current = None  # a file header, a blank line or the summary ends the message
+    found = []
+    for path, number, severity, parts in rows:
+        if severity != "error":
+            continue
+        message = " ".join(" ".join(parts).split())
+        rule = PYRIGHT_RULE.search(message)
+        if rule:
+            message = message[:rule.start()].rstrip()
+        found.append(Finding("pyright", _repo_path(path, checkout, package), number,
+                             rule.group(1) if rule else "pyright", NUMBER.sub("#", message)))
+    summary = PYRIGHT_SUMMARY.search(text)
+    errors = 0 if summary is None or summary["errors"] == "No" else int(summary["errors"])
+    return found, summary is not None and errors == len(found)
+
+
+def new_findings(found: list[Finding], known: Iterable[str], ratchet: RepoRatchet) -> list[Finding]:
+    return ratchet.new(found, known)
 
 
 def _module_name(rel: str) -> str:
@@ -198,6 +333,9 @@ def _is_source(path: str) -> bool:
             and name != "conftest.py" and not any(p in ("tests", "test") for p in parts[:-1]))
 
 
+# ---- running and judging -------------------------------------------------------------------------------
+
+
 @dataclasses.dataclass(frozen=True)
 class ToolRun:
     ok: bool  # the tool ran and its output parsed
@@ -221,59 +359,113 @@ def run_tool(tool: str, package: Package, checkout: Path, out: Path, tag: str, s
     except ValueError as exc:
         return ToolRun(False, [], f"{tool} output unreadable: {exc}")
     if globs is not None:
-        found = [f for f in found if any(fnmatch.fnmatchcase(f.what.split(" ")[-1], g) for g in globs)]
+        found = [f for f in found if any(fnmatch.fnmatchcase(f.raw, g) for g in globs)]
     return ToolRun(True, found)
 
 
-def quality_dir(program: Program, settings: Settings) -> Path:
-    if settings.quality_dir:
-        return Path(settings.quality_dir)
-    return Path(st.load(program).worktree_root) / "ship-quality"
+def no_baseline(ratchet: RepoRatchet | None, tool: str) -> str | None:
+    """Why `tool` cannot be ratcheted here, or None."""
+    if ratchet is None:
+        return "no baseline: the checkout has no tools/ci/ratchet.py"
+    if ratchet.baseline(tool) is None:
+        return f"no baseline: the checkout has no ci/baselines/{tool}.txt"
+    return None
 
 
-def _baseline_path(folder: Path, tool: str) -> Path:
-    return folder / f"baseline-{tool}.tsv"
+def known_union(baseline: Iterable[str], at_base: Iterable[str]) -> list[str]:
+    """The keys known from either side, each as often as the side that has it most: a finding the baseline
+    holds and the base also shows is one finding, not two (so a second copy at the head is still new)."""
+    return list((collections.Counter(baseline) | collections.Counter(at_base)).elements())
 
 
-def read_baseline(folder: Path, tool: str) -> list[tuple[Finding, str]]:
-    """(finding, first seen) rows of one tool's baseline file."""
-    path = _baseline_path(folder, tool)
-    if not path.exists():
-        return []
-    rows = []
-    for line in path.read_text("utf-8").splitlines():
-        if line.startswith("#") or not line.strip():
-            continue
-        file, line_no, what, first = line.split("\t")
-        rows.append((Finding(tool, file, int(line_no), what), first))
-    return rows
+def _write_new(out: Path, tool: str, package: Package, new: list[Finding], ratchet: RepoRatchet) -> None:
+    (out / f"new-{tool}-{package.label}.txt").write_text("".join(f"{ratchet.key(f)}\t{f}\n" for f in new), "utf-8",
+                                                          newline="\n")
 
 
 def check_package(tool: str, package: Package, head: Path, base: Path | None, files: list[str], out: Path,
-                  tag: str, settings: Settings, program: Program, heartbeat: Path | None = None,
-                  globs: list[str] | None = None) -> tuple[str, str]:
-    """(PASS | FAIL | NOTRUN, detail) for one tool on one package. Only findings in `files` count;
-    known ones are the baseline's and, when `base` is given, those already at `base`."""
+                  tag: str, settings: Settings, program: Program, ratchet: RepoRatchet | None,
+                  heartbeat: Path | None = None, globs: list[str] | None = None) -> tuple[str, str]:
+    """(PASS | FAIL | NOTRUN, detail) for one tool on one package. Only findings in `files` count; known
+    ones are the repo baseline's (`ratchet`) and, when `base` is given, those already at `base`."""
     if not package.quality(tool):
         return "NOTRUN", "no command in checks.toml"
+    why = no_baseline(ratchet, tool)
+    if why:
+        return "NOTRUN", why
     if globs is not None and not globs:
         return "NOTRUN", "no changed function to mutate"
     scope = set(files)
     at_head = run_tool(tool, package, head, out, f"{tag}-head", settings, program, globs, heartbeat)
     if not at_head.ok:
         return "FAIL", at_head.problem
-    found = [f for f in at_head.findings if f.path in scope]
-    known = [f.key for f, _ in read_baseline(quality_dir(program, settings), tool)]
+    found = [f for f in at_head.findings if f.where in scope]
+    known = ratchet.baseline(tool) or []
     if base is not None:
         at_base = run_tool(tool, package, base, out, f"{tag}-base", settings, program, globs, heartbeat)
         if not at_base.ok:
             return "FAIL", at_base.problem
-        known += [f.key for f in at_base.findings if f.path in scope]
-    new = new_findings(found, known)
-    (out / f"new-{tool}-{package.label}.txt").write_text("".join(f"{f}\n" for f in new), "utf-8", newline="\n")
+        known = known_union(known, [ratchet.key(f) for f in at_base.findings if f.where in scope])
+    new = ratchet.new(found, known)
+    _write_new(out, tool, package, new, ratchet)
     if new:
         return "FAIL", f"{len(new)} new: " + "; ".join(str(f) for f in new)
     return "PASS", f"no new findings ({len(found)} known)"
+
+
+def types_ratchet(package: Package, head: Path, base: Path | None, files: list[str], done: RunResult, out: Path,
+                  settings: Settings, program: Program, ratchet: RepoRatchet | None,
+                  heartbeat: Path | None = None) -> tuple[str, str]:
+    """A failed `types` run judged against `ci/baselines/pyright.txt`, as qmx-ci's slice level judges it:
+    only an error not in the baseline, in a file the slice changed, blocks; one already at `base` (run only
+    when needed) is known too. Fails closed: no baseline, a pyright that did not finish, or output whose
+    error count does not add up stays FAIL."""
+    if done.rc == 0:
+        return "PASS", "rc=0"
+    why = no_baseline(ratchet, "pyright")
+    if why:
+        return "FAIL", f"rc={done.rc} ({why})"
+    if done.rc != 1:
+        return "FAIL", f"rc={done.rc}: pyright did not finish"
+    found, complete = parse_pyright(done.log.read_text("utf-8", errors="replace"), head, package)
+    if not complete:
+        return "FAIL", f"rc={done.rc}: pyright's errors could not be read from {done.log.name}"
+    scope = set(files)
+    mine = [f for f in found if f.path in scope]
+    known = ratchet.baseline("pyright") or []
+    new = ratchet.new(mine, known)
+    if new and base is not None and package.types:
+        log = out / f"types-{package.label}-base.log"
+        at_base = run_timed(list(package.types), base / package.root, log, settings.check_timeout_s, settings,
+                            program.runs, heartbeat)
+        theirs, ok = parse_pyright(log.read_text("utf-8", errors="replace"), base, package)
+        if at_base.rc in (0, 1) and ok:
+            new = ratchet.new(mine, known_union(known, [ratchet.key(f) for f in theirs if f.path in scope]))
+    _write_new(out, "pyright", package, new, ratchet)
+    if new:
+        return "FAIL", f"rc={done.rc}: {len(new)} new: " + "; ".join(str(f) for f in new)
+    return "PASS", f"rc={done.rc}: {len(found)} errors, none new in the slice's files ({len(mine)} known)"
+
+
+# ---- the checkpoint ------------------------------------------------------------------------------------
+
+
+def summary_quality(summary: dict, tools: tuple[str, ...], tip: str) -> list[str]:
+    """qmx-ci's verdict on the quality tools, read from its summary.json: a `new` row that `blocks` fails."""
+    rows = [q for q in summary.get("quality") or [] if isinstance(q, dict)]
+    lines = []
+    for tool in tools:
+        mine = [q for q in rows if q.get("tool") == tool]
+        blocking = [q for q in mine if q.get("kind") == "new" and q.get("blocks", True)]
+        notes = sum(1 for q in mine if q.get("kind") == "new" and not q.get("blocks", True))
+        gone = sum(1 for q in mine if q.get("kind") == "gone")
+        if blocking:
+            lines.append(f"FAIL quality-{tool}-ci {tip[:8]} {len(blocking)} new: "
+                         + "; ".join(str(q.get("key")) for q in blocking))
+        else:
+            lines.append(f"PASS quality-{tool}-ci {tip[:8]} no new blocking rows in summary.json "
+                         f"({notes} notes, {gone} gone)")
+    return lines
 
 
 def checkpoint_quality(program: Program, settings: Settings, base: str, tools: tuple[str, ...]) -> tuple[bool, list[str]]:
@@ -284,10 +476,20 @@ def checkpoint_quality(program: Program, settings: Settings, base: str, tools: t
     tip = remote_sha(repo, state.remote, state.build_branch, t)
     out = program.quality(tip)
     out.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if settings.ci == "github":
+        from ship import ci
+
+        found = ci.fetch_summary(program, settings, tip)
+        if found.path is not None:
+            lines = summary_quality(json.loads(found.path.read_text("utf-8")), tools, tip)
+            (out / "summary.txt").write_text("\n".join(lines) + "\n", "utf-8", newline="\n")
+            return not any(ln.startswith("FAIL ") for ln in lines), lines
+        lines.append(f"NOTE no qmx-ci summary.json for {tip[:8]} ({found.why}); the tools run here")
     files = changed_files(repo, base, tip, t)
     tip_copy = checkout_copy(repo, program.tmp / "quality-tip", tip, settings)
     base_copy = checkout_copy(repo, program.tmp / "quality-base", base, settings)
-    lines: list[str] = []
+    ratchet = RepoRatchet.at(base_copy)
     try:
         for package in touched(load_packages(program), files):
             mine = [f for f in files if package_of(load_packages(program), f) == package]
@@ -296,10 +498,10 @@ def checkpoint_quality(program: Program, settings: Settings, base: str, tools: t
                     sources = [f for f in mine if _is_source(f)]
                     globs = mutant_globs(tip_copy, package, changed_lines(repo, base, tip, sources, t)) if sources else []
                     verdict, detail = check_package(tool, package, tip_copy, None, sources, out, "tip", settings,
-                                                    program, globs=globs)
+                                                    program, ratchet, globs=globs)
                 else:
                     verdict, detail = check_package(tool, package, tip_copy, base_copy, mine, out, "tip", settings,
-                                                    program)
+                                                    program, ratchet)
                 lines.append(f"{verdict} quality-{tool}-{package.label} {tip[:8]} {detail}")
     finally:
         drop_copy(repo, tip_copy, settings)
@@ -308,65 +510,5 @@ def checkpoint_quality(program: Program, settings: Settings, base: str, tools: t
     return not any(ln.startswith("FAIL ") for ln in lines), lines
 
 
-def baseline(program: Program, settings: Settings, at: str | None, tools: tuple[str, ...],
-             part: tuple[int, int] | None) -> tuple[bool, list[str]]:
-    """Take the baseline at `at` (default: the build tip). Rewrites only the rows in scope, keeps each
-    row's first-seen date, and regenerates BACKLOG.md. Run twice, the second run changes nothing."""
-    state = st.load(program)
-    repo, t = Path(state.repo), settings.git_timeout_s
-    git(repo, "fetch", "-q", state.remote, timeout=t)
-    sha = git(repo, "rev-parse", at, timeout=t).strip() if at else remote_sha(repo, state.remote, state.build_branch, t)
-    folder = quality_dir(program, settings)
-    folder.mkdir(parents=True, exist_ok=True)
-    out = folder / "runs" / sha[:8]
-    out.mkdir(parents=True, exist_ok=True)
-    copy = checkout_copy(repo, program.tmp / "quality-baseline", sha, settings)
-    today = dt.date.today().isoformat()
-    lines: list[str] = []
-    try:
-        tracked = git(copy, "ls-files", timeout=t).splitlines()
-        for tool in tools:
-            rows = read_baseline(folder, tool)
-            first = {f.key: seen for f, seen in rows}
-            for package in load_packages(program):
-                if not package.quality(tool):
-                    lines.append(f"NOTRUN baseline-{tool}-{package.label} no command in checks.toml")
-                    continue
-                owned = [f for f in tracked if package_of(load_packages(program), f) == package]
-                globs = None
-                scope = set(owned)
-                if tool == "mutmut":
-                    modules = sorted(f for f in owned if _is_source(f))
-                    if part:
-                        modules = modules[part[0] - 1::part[1]]
-                    scope = set(modules)
-                    whole = {m: set(range(1, len((copy / m).read_text("utf-8", errors="replace").splitlines()) + 2))
-                             for m in modules}
-                    globs = mutant_globs(copy, package, whole)
-                ran = run_tool(tool, package, copy, out, "baseline", settings, program, globs) if globs != [] \
-                    else ToolRun(True, [])
-                if not ran.ok:
-                    lines.append(f"FAIL baseline-{tool}-{package.label} {ran.problem}")
-                    continue
-                rows = [r for r in rows if r[0].path not in scope]
-                rows += [(f, first.get(f.key, today)) for f in ran.findings if f.path in scope]
-                lines.append(f"PASS baseline-{tool}-{package.label} {sum(f.path in scope for f in ran.findings)} findings")
-            body = "".join(f"{f.path}\t{f.line}\t{f.what}\t{seen}\n"
-                           for f, seen in sorted(rows, key=lambda r: (r[0].path, r[0].what, r[0].line)))
-            _baseline_path(folder, tool).write_text(f"# {tool} baseline at {sha}\n{body}", "utf-8", newline="\n")
-    finally:
-        drop_copy(repo, copy, settings)
-    write_backlog(folder)
-    return not any(ln.startswith("FAIL ") for ln in lines), lines
-
-
-def write_backlog(folder: Path) -> None:
-    rows = [(f, seen) for tool in TOOLS for f, seen in read_baseline(folder, tool)]
-    table = "".join(f"| {f.tool} | {f.path} | {f.line} | {f.what.replace('|', '/')} | {seen} |\n" for f, seen in rows)
-    (folder / "BACKLOG.md").write_text(
-        "# Quality backlog\n\n"
-        "Generated by `ship baseline`; do not edit. These findings were in the code when the baseline was taken.\n"
-        "They never block a slice or a checkpoint. A later fixer works through them; the next baseline drops\n"
-        "the ones that are gone.\n\n"
-        f"{len(rows)} findings.\n\n| tool | file | line | finding | first seen |\n|---|---|---|---|---|\n{table}",
-        "utf-8", newline="\n")
+BASELINE_MOVED = ("REFUSED the kit takes no baseline: the repo's ci/baselines/ is the one ratchet. Run the "
+                  "`baseline` level in CI (push a `baseline/<name>` branch); `qci ratchet --prune` shrinks it at merge.")

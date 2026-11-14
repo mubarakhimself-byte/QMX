@@ -45,7 +45,6 @@ import dataclasses
 import datetime as dt
 import json
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -394,36 +393,13 @@ class Checkpoint:
         from ship import ci
 
         tip = self.memo["tip"]
-        dest = self.program.nightly(tip)
-        target = dest / "summary.json"
-        if target.exists():
-            try:
-                if str(json.loads(target.read_text("utf-8")).get("sha") or "") == tip:
-                    return str(target)
-            except (OSError, ValueError, AttributeError):
-                pass
-            target.unlink(missing_ok=True)
-        state = st.load(self.program)
-        run_id = (state.ci.get("deep") or {}).get("run_id")
-        if not run_id:
+        run_id = (st.load(self.program).ci.get("deep") or {}).get("run_id")
+        if not run_id and not self.program.nightly(tip).joinpath("summary.json").exists():
             return None
-        folder = dest / "ci-summary"
-        try:
-            ok = ci.gh_for(state, self.settings).download(str(run_id), "summary", folder)
-        except GitError:
-            return None
-        if not ok or not (folder / "summary.json").exists():
-            return None
-        try:
-            sha = str(json.loads((folder / "summary.json").read_text("utf-8")).get("sha") or "")
-        except (OSError, ValueError, AttributeError):
-            sha = ""
-        if sha != tip:  # D-L22: a summary of another commit never stands for this tip
-            self.memo.setdefault("deep", {})["summary_mismatch"] = sha or "(none)"
-            shutil.rmtree(folder, ignore_errors=True)
-            return None
-        shutil.copyfile(folder / "summary.json", target)
-        return str(target)
+        got = ci.fetch_summary(self.program, self.settings, tip, str(run_id) if run_id else None)
+        if got.mismatch:  # D-L22: a summary of another commit never stands for this tip
+            self.memo.setdefault("deep", {})["summary_mismatch"] = got.mismatch
+        return str(got.path) if got.path else None
 
     # -- readers --
 

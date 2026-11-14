@@ -7,9 +7,9 @@ job of the run (lint, Vulture, Skylos, mutmut) must be green too, and a deep run
 deep-verdict naming the tip, or the pull-request gate will not pass. When GitHub cannot run it (gh
 missing, no network, the workflow not on the branch), the local run below stands in.
 
-Locally: without baseline-reds.txt or CI's known-reds.txt, the first run writes baseline-reds.txt
-from the reds it finds. A red not in the baseline starts a bisect from the last green tip (or the
-first landed slice's parent) to the tip, running only the test modules that went red. A GitHub run's
+The reds that do not block are the repo's own `ci/baselines/known-reds.txt` and `flaky.txt` at the tip
+(suite.baseline_for); the kit never writes them. A red not in them starts a bisect from the last green
+tip (or the first landed slice's parent) to the tip, running only the test modules that went red. A GitHub run's
 new reds are bisected here only when they are red on this machine's system. The first bad commit is
 mapped to its slice; that slice's pending dependents become blocked-by it, and the result goes to
 state.json and checks/_nightly/<tip8>/.
@@ -27,7 +27,7 @@ from ship.gitx import GitError, git, remote_sha, run
 from ship.layout import Program
 from ship.settings import Settings
 from ship.suite import (Baseline, Package, TestRun, baseline_for, canon, load_packages, local_id, run_packages,
-                        run_tests, system_of, this_system, write_baseline)
+                        run_tests, system_of, this_system)
 from ship.worktree import checkout_copy, drop_copy
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -100,12 +100,7 @@ def local_nightly(program: Program, settings: Settings) -> tuple[bool, list[str]
     copy = checkout_copy(repo, program.tmp / "nightly", tip, settings)
     try:
         runs = run_packages(copy, load_packages(program), out, settings.nightly_timeout_s, settings, program.runs)
-        baseline = baseline_for(program, repo, tip, t)
-        if not baseline.mirrored and not program.baseline_reds.exists():
-            reds = _reds(runs)
-            write_baseline(program.baseline_reds, reds)
-            lines.append(f"BASELINE written with {len(reds)} reds at {tip[:8]}")
-            baseline = baseline_for(program, repo, tip, t)
+        baseline = baseline_for(repo, tip, t)
         broken = sorted(root for root, r in runs.items() if not r.junit_ok)
         ok = conclude(program, state, tip, runs, baseline, broken, [], {"backend": "local"}, lines,
                       lambda: copy, settings)
@@ -134,7 +129,7 @@ def ci_status(program: Program, settings: Settings) -> tuple[int, list[str]]:
         read = ci.read_run(gh, run_id, out / "ci")
     except GitError as exc:
         return 2, [f"PENDING ci {level} {run_id}: GitHub unreachable ({ci.short(exc)}); the run goes on there"]
-    baseline = baseline_for(program, repo, tip, t)
+    baseline = baseline_for(repo, tip, t)
     if ci.outcome(read.run) == "pending":
         return 2, ci.progress(read, baseline.new, f"ci {level} {run_id} on {tip[:8]}")
     lines: list[str] = [f"CI {level} {run_id} {read.run.get('conclusion')}: {read.run.get('url')}"]
@@ -150,6 +145,12 @@ def ci_status(program: Program, settings: Settings) -> tuple[int, list[str]]:
             if land.get("result") == "red":
                 lines.append(f"NOTE land run red at {land['tip'][:8]} batch {land['slices']} {land.get('url', '')}; "
                              "this run decides")
+    found = ci.fetch_summary(program, settings, tip, str(run_id))  # qmx-ci's own verdict, when it left one
+    if found.path is not None:
+        import json
+
+        already = {canon(r) for r in baseline.new(_reds(read.tests))}
+        extra += ci.summary_fails(json.loads(found.path.read_text("utf-8")), already)
     verdict = {"backend": "github", "run_id": run_id, "url": read.run.get("url")}
     copy_dir = program.tmp / "nightly"
     try:
@@ -194,7 +195,7 @@ def conclude(program: Program, state: st.State, tip: str, runs: dict[str, TestRu
     lines.extend(extra)
     passed = set().union(*(set(r.outcomes) - r.red() for r in runs.values())) if runs else set()
     lines.extend(f"NOTE known red passes now: {r} (shrink {baseline.source.split(' at ')[0]})"
-                 for r in baseline.known(passed))
+                 for r in baseline.passing(passed))
     new = baseline.new(reds)
     verdict = {"tip": tip, "new_reds": new, **verdict}
     if not new and not broken and not extra:

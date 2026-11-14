@@ -8,6 +8,7 @@ from ship.land import land
 from ship.settings import load_settings
 from ship.slice_checks import slice_checks
 from ship.state import Status
+from ship.suite import this_system
 from ship.tests.fixture import RepoCase, sh, write
 
 MUL = "def mul(a, b):\n    return a * b\n"
@@ -78,11 +79,28 @@ class Land(LandCase):
         self.assertIn("new reds ['.::pkg.tests.test_mul::test_mul']", lines[-1])
         self.assertEqual(self.build_log(), ["initial"])
         self.assertEqual(self.status("s1"), Status.CHECKED)
-        write(self.program.baseline_reds, ".::pkg.tests.test_mul::test_mul\n.::pkg.tests.test_app::test_add\n")
+        system = this_system()
+        sh(self.repo, "git", "checkout", "-q", "-B", "b", f"origin/{self.build_branch}")
+        write(self.repo / "ci" / "baselines" / "known-reds.txt",
+              f"# known\n{system}|.|pkg.tests.test_mul::test_mul\n{system}|.|pkg.tests.test_app::test_add\n")
+        self.commit("known reds")
+        sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
         ok, lines = land(self.program, ["s1"], self.settings)
         self.assertTrue(ok, lines)
-        self.assertIn("BASELINE removed ['.::pkg.tests.test_app::test_add']", lines)
-        self.assertEqual(self.program.baseline_reds.read_text("utf-8"), ".::pkg.tests.test_mul::test_mul\n")
+        self.assertIn("NOTE known reds pass now ['.::pkg.tests.test_app::test_add']; shrink "
+                      "ci/baselines/known-reds.txt with pull_reds.py", lines)
+        self.assertFalse(any(p.name.startswith("baseline") for p in self.program.dir.iterdir()),
+                         "the kit keeps no list of its own")
+
+    def test_a_flaky_listed_test_does_not_block(self):
+        system = this_system()
+        sh(self.repo, "git", "checkout", "-q", "-B", "b", f"origin/{self.build_branch}")
+        write(self.repo / "ci" / "baselines" / "flaky.txt", f"# flaky\n{system}|.|pkg.tests.test_mul::test_mul\n")
+        self.commit("flaky list")
+        sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
+        self.checked("s1", {"pkg/mul.py": MUL, "pkg/tests/test_mul.py": "def test_mul():\n    assert 1 == 2\n"})
+        ok, lines = land(self.program, ["s1"], self.settings)
+        self.assertTrue(ok, lines)
 
     def test_overlap_with_slice_landed_since_needs_range_review_when_verdicts_are_required(self):
         self.verdicts_required()

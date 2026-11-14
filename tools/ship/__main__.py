@@ -103,6 +103,8 @@ def cmd_ci(a, program, settings):
     elif a.action == "gate":
         step = lambda: ci.gate(program, settings, a.pr)
         rc, lines = ci.wait(step, settings) if a.wait else step()
+    elif a.action == "summary":
+        rc, lines = ci.summary(program, settings, a.sha)
     else:
         if not a.run_id:
             raise SystemExit("ship ci read needs a run id")
@@ -152,15 +154,10 @@ def cmd_quality(a, program, settings):
 
 
 def cmd_baseline(a, program, settings):
-    from ship.quality import baseline
+    from ship.quality import BASELINE_MOVED
 
-    part = None
-    if a.part:
-        k, _, n = a.part.partition("/")
-        part = (int(k), int(n))
-        if not 1 <= part[0] <= part[1]:
-            raise SystemExit(f"--part {a.part}: want K/N with 1 <= K <= N")
-    return _lines(*baseline(program, settings, a.at, _tools(a.tools), part))
+    print(BASELINE_MOVED)
+    return 1
 
 
 def _tools(text: str) -> tuple[str, ...]:
@@ -481,17 +478,17 @@ def parser() -> argparse.ArgumentParser:
         (["--timeout"], {"type": float}), (["argv"], {"nargs": argparse.REMAINDER}))
     add("land", cmd_land, (["slices"], {"nargs": "*"}))
     add("nightly", cmd_nightly, (["--no-wait"], {"action": "store_true"}))
-    add("ci", cmd_ci, (["action"], {"choices": ["start", "status", "gate", "read"]}),
+    add("ci", cmd_ci, (["action"], {"choices": ["start", "status", "gate", "read", "summary"]}),
         (["run_id"], {"nargs": "?"}), (["--level"], {"default": "deep"}),
-        (["--fresh"], {"action": "store_true"}), (["--wait"], {"action": "store_true"}), (["--pr"], {}))
+        (["--fresh"], {"action": "store_true"}), (["--wait"], {"action": "store_true"}), (["--pr"], {}),
+        (["--sha"], {}))
     add("bisect-step", cmd_bisect_step, (["--ids"], {"required": True}))
     add("power_watch", cmd_power_watch, (["--once"], {"action": "store_true"}))
     add("power", cmd_power)
     add("merged", cmd_merged, (["checkpoint"], {}))
     add("quality", cmd_quality, (["--from"], {"required": True, "dest": "base"}),
         (["--tools"], {"default": "vulture,skylos,mutmut"}))
-    add("baseline", cmd_baseline, (["--at"], {}), (["--tools"], {"default": "vulture,skylos,mutmut"}),
-        (["--part"], {}))
+    add("baseline", cmd_baseline, (["--at"], {}), (["--tools"], {}), (["--part"], {}))
     add("recover", cmd_recover, (["--usage-reset"], {}))
     add("run_report", cmd_run_report)
     add("preflight", cmd_preflight, (["--protection-push-test"], {"action": "store_true"}))

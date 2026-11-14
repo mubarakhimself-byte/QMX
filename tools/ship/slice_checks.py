@@ -6,10 +6,12 @@ summary.txt with the same lines. One FAIL anywhere moves the slice to `red`; oth
 Checks: `git diff --check`, case-only path collisions, then per touched package its setup, lint,
 types and tests at the head; fail-at-parent: each new test case must fail at the parent on an
 assertion (an import, collection or other error does not count) and pass at the head; Vulture and
-Skylos, failing only on a finding in the slice's files that is neither at the parent nor in the
-baseline (see quality.py). Last, the brief's SAFETY fact at the head. A touched package's test run
-fails only on a red missing from the shared baseline (CI's known-reds.txt at the head, see suite.py),
-so a red qmx-ci accepts is accepted here too.
+Skylos, failing only on a finding in the slice's files that is neither at the parent nor in the repo's
+`ci/baselines/` (see quality.py). A failed `types` run is ratcheted the same way against
+`ci/baselines/pyright.txt`: only an error in the slice's files that the baseline (read at the parent)
+does not hold blocks. Last, the brief's SAFETY fact at the head. A touched package's test run fails
+only on a red the repo's `ci/baselines/known-reds.txt` and `flaky.txt` do not name (at the head, see
+suite.py), so a red qmx-ci accepts is accepted here too.
 
 With `ci = "github"`, the Linux line is qmx-ci's slice run on the pushed head: PASS, FAIL (red), or
 PENDING while it queues or runs; land reads it again before landing (ci.linux_gate).
@@ -29,7 +31,7 @@ from ship.dispatch import run_facts
 from ship.gitx import changed_files, git, git_rc
 from ship.layout import Program
 from ship.plan import PlanError, read_brief_facts
-from ship.quality import check_package
+from ship.quality import RepoRatchet, check_package, types_ratchet
 from ship.settings import Settings
 from ship.state import Status
 from ship.suite import Outcome, Package, baseline_for, load_packages, package_of, run_tests, touched
@@ -154,7 +156,8 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
     head_copy = checkout_copy(repo, program.tmp / f"check-{slice_id}-head", head, settings)
     parent_copy = checkout_copy(repo, program.tmp / f"check-{slice_id}-parent", parent, settings)
     support = [f for f in files if is_test_support(f)]
-    baseline = baseline_for(program, repo, head, t)
+    baseline = baseline_for(repo, head, t)
+    ratchet = RepoRatchet.at(parent_copy)  # the parent's baseline: a slice cannot excuse its own finding
     for package in touched(packages, files):
         for copy in (head_copy, parent_copy):
             if package.setup:
@@ -163,6 +166,7 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
                                  settings.check_timeout_s, settings, program.runs, beat)
                 rec.record("PASS" if done.rc == 0 else "FAIL", f"setup-{package.label}-{where}",
                            f"rc={done.rc}", done.log)
+        mine = [f for f in files if package_of(packages, f) == package]
         for kind in ("lint", "types"):
             argv = getattr(package, kind)
             name = f"{kind}-{package.label}"
@@ -171,11 +175,16 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
                 continue
             done = run_timed(list(argv), head_copy / package.root, out / f"{name}.log", settings.check_timeout_s,
                              settings, program.runs, beat)
+            if kind == "types" and done.rc != 0:
+                verdict, detail = types_ratchet(package, head_copy, parent_copy, mine, done, out, settings, program,
+                                                ratchet, beat)
+                rec.record(verdict, name, detail, done.log)
+                continue
             rec.record("PASS" if done.rc == 0 else "FAIL", name, f"rc={done.rc}", done.log)
         name = f"test-{package.label}"
         run = run_tests(head_copy, package, [], out / f"{name}.log", settings.check_timeout_s, settings,
                         program.runs, beat)
-        known = baseline.known(run.red())
+        known = baseline.excused(run.red())
         detail = (f"rc={run.run.rc} red={len(run.red())}" + (f" known={len(known)}" if known else "")
                   + ("" if run.junit_ok else " no JUnit report"))
         green = run.junit_ok and not baseline.new(run.red()) and (run.run.rc == 0 or bool(known))
@@ -185,10 +194,9 @@ def slice_checks(program: Program, slice_id: str, settings: Settings) -> tuple[b
         if modules:
             fail_at_parent(rec, package, modules, support, repo, head, parent, head_copy, parent_copy,
                            settings, program, beat)
-        mine = [f for f in files if package_of(packages, f) == package]
         for tool in ("vulture", "skylos"):
             verdict, detail = check_package(tool, package, head_copy, parent_copy, mine, out, "slice", settings,
-                                            program, beat)
+                                            program, ratchet, beat)
             rec.record(verdict, f"quality-{tool}-{package.label}", detail)
     rec.record(*safety_at_head(program, slice_id, head_copy, out, settings))
     other = "linux" if sys.platform == "win32" else "windows"

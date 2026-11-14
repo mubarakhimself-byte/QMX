@@ -2,12 +2,27 @@
 
 `load(index, settings)` returns the file's tables over the built-in defaults, so a program whose project has
 no profile yet still runs: `project.shared_generated` is `uv.lock` and `**/uv.lock`, `pool.workers` is the
-`seats` setting, and there are no `generators`. `[generators]` maps a shared-generated pattern to the argv
-that rebuilds it at merge time, run from the repo root.
+`seats` setting, and `[generators]` holds the two the one ratchet needs (FACTORY-DESIGN 5).
+
+`[generators]` maps a shared-generated pattern to what rebuilds it at merge time (`ship merge`, after a moved
+target is merged in, under the project's merge lock): one argv, or a list of argv run in order, from the repo
+root through the timed wrapper. Each run that changes files matching its pattern is one commit (`ratchet: prune
+<n> rows` under `ci/baselines/`, else `contract: regenerate <pattern>`). A generator whose `.py` script is not
+in the repo is skipped. The defaults, which a profile's own `[generators]` table adds to or replaces key by key:
+
+```toml
+[generators]
+"ci/baselines/*" = ["python", "tools/ci/qci.py", "ratchet", "--prune"]  # drop the rows fixed code left behind
+"contracts/*.json" = [["uv", "sync", "--frozen", "--project", "qmx-agents"],
+                      ["uv", "run", "--frozen", "python", "tools/contract_dump.py"]]  # the contract dump
+```
+
+`python` here is the interpreter running the kit.
 """
 
 from __future__ import annotations
 
+import sys
 import tomllib
 from pathlib import Path
 
@@ -24,11 +39,25 @@ def path_of(project: str, settings: Settings) -> Path:
     return home(settings) / "projects" / project / "project.toml"
 
 
+def default_generators() -> dict[str, list]:
+    """The baselines prune and the contract dump, run at merge (the module's docstring)."""
+    return {"ci/baselines/*": [sys.executable, "tools/ci/qci.py", "ratchet", "--prune"],
+            "contracts/*.json": [["uv", "sync", "--frozen", "--project", "qmx-agents"],
+                                 ["uv", "run", "--frozen", "python", "tools/contract_dump.py"]]}
+
+
+def generator_commands(value) -> list[list[str]]:
+    """A `[generators]` value as a list of argv: one argv, or a list of them. `python` is the kit's own."""
+    runs = value if value and isinstance(value[0], (list, tuple)) else [value]
+    return [[sys.executable if (i == 0 and a == "python") else str(a) for i, a in enumerate(argv)]
+            for argv in runs if argv]
+
+
 def defaults(project: str, settings: Settings) -> dict:
     return {"project": {"name": project, "shared_generated": ["uv.lock", "**/uv.lock"],
                         "target_branch": settings.ci_gate_base},
             "pool": {"workers": settings.seats},
-            "generators": {}}
+            "generators": default_generators()}
 
 
 def load(index, settings: Settings) -> dict:

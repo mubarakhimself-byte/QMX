@@ -91,7 +91,6 @@ class ProtectionPush(RepoCase):
         (self.remote / "hooks" / "pre-receive").chmod(0o755)
         results = protection_push_test(self.repo, "origin", settings)
         self.assertEqual(results, [(True, "main: push rejected as required"),
-                                   (True, "integration: not on origin, nothing to protect"),
                                    (True, "engine/base: not on origin, nothing to protect")])
         (self.remote / "hooks" / "pre-receive").unlink()
         results = protection_push_test(self.repo, "origin", settings)
