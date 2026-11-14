@@ -16,8 +16,9 @@ and new lines, outside quotes), following `cd`/`Set-Location`/`Push-Location`. E
   another `uv` command);
 - the kit's `timed` wrapper (`python -m ship timed ... -- <argv>`, `python <kit> timed ... -- <argv>`)
   followed by an allowed tool or `uv run`, or the kit's read-only `phase`;
-- an allowed tool: `pytest`, `python -m pytest`, `ruff`, `pyright`, `mypy`, and for the planning and audit
-  roles a factory script `python <factory_home>/skills/<skill>/scripts/<name>.py`.
+- an allowed tool: `pytest`, `python -m pytest`, `ruff`, `pyright`, `mypy`, and for the planning, grounding,
+  plan-review and audit roles a factory script `python <factory_home>/skills/<skill>/scripts/<name>.py`; the
+  verdict role may run one, `skills/factory-core/scripts/check_plan.py` (it checks the fix folder it writes).
 Python is any name `python`, `python3.12`, `pythonw`, `py` (with `.exe`); a flag cluster holding `c`
 (`-c`, `-Ic`) or a lone `-` is inline code and refused. Anything else (`gh`, `node`, `cp`, `env`, a nested
 shell, a leading `VAR=value`, `$(...)` or backticks) is refused. Redirection (`>`, `>>`, `tee`) is refused
@@ -127,6 +128,8 @@ PLAN_FILES = ("PROGRAM.yaml", "SCOPE.md", "GROUND.md", "CHALLENGE.md", "PLAN.md"
 FIX_FILES = tuple(f for f in PLAN_FILES if f != "checks.toml")  # D-L22: the kit copies a fix folder's settings
 SCRIPT_ROLES = ("planner-fix", "later-handoff", "sweep-handoff", "challenger", "answer-linker", "audit-judge",
                 "audit-intent", "audit-reader", "audit-screen", "grounding", "plan-review")
+# Roles that may run only the named factory scripts (skill/scripts/name.py), not every one.
+ONE_SCRIPT_ROLES = {"verdict": ("factory-core/scripts/check_plan.py",)}
 OTHER_ROLES = ("reader", "fault-reader", "verdict", "docs") + SCRIPT_ROLES
 
 
@@ -433,15 +436,19 @@ def _path_tokens(tokens: list[str], here: str) -> list[str]:
 
 
 def factory_script(run: Run, script: str, here: str) -> bool:
-    """`<factory_home>/skills/<skill>/scripts/<name>.py`, for the planning and audit roles (D-L18)."""
-    if run.role not in SCRIPT_ROLES or not run.factory:
+    """`<factory_home>/skills/<skill>/scripts/<name>.py`, for the planning and audit roles (D-L18); for the
+    verdict role only `check_plan.py`."""
+    if (run.role not in SCRIPT_ROLES and run.role not in ONE_SCRIPT_ROLES) or not run.factory:
         return False
     full = os.path.join(here, script)
     skills = os.path.join(run.factory, "skills")
     if not inside(full, skills):
         return False
     parts = os.path.relpath(_norm(full), _norm(skills)).replace("\\", "/").split("/")
-    return len(parts) == 3 and parts[1] == "scripts" and parts[2].endswith(".py") and ".." not in parts
+    if not (len(parts) == 3 and parts[1] == "scripts" and parts[2].endswith(".py") and ".." not in parts):
+        return False
+    only = ONE_SCRIPT_ROLES.get(run.role)
+    return only is None or os.path.normcase("/".join(parts)) in {os.path.normcase(x) for x in only}
 
 
 def kit_script(script: str, here: str) -> bool:
@@ -643,7 +650,7 @@ def bash_problem(run: Run, command: str, cwd: str) -> str | None:
         if bad:
             return (f"ship hook: Bash refused: {bad}; role {run.role} runs only git, uv run, ship timed, pytest, "
                     "ruff, pyright and mypy" + (" and the factory's skill scripts" if run.role in SCRIPT_ROLES
-                                               else ""))
+                                               else " and check_plan.py" if run.role in ONE_SCRIPT_ROLES else ""))
         name = _name(tokens[0])
         if name in TEE:
             for target in [t for t in tokens[1:] if not t.startswith("-")]:

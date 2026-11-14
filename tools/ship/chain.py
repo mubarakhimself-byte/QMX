@@ -9,7 +9,7 @@ carries on at the first step with no file.
 | next | Activity |
 |---|---|
 | review | `check_chain --stage handoff` and `check_plan` as children; a FAIL writes `plan-review/FIXES.md` and a `RESULT: FIXES` review (so planner-fix runs); else one `plan-review` worker. `RESULT: QUESTIONS` copies `QUESTIONS.md` into `WAITING.md` and exits 10 |
-| planner-fix | one `planner-fix` worker, both checks again, then the review once more (`REVIEW.md` set aside). A second FIXES writes WAITS |
+| planner-fix | one `planner-fix` worker, both checks again, then the review once more (`REVIEW.md` set aside). A second mechanical FIXES writes WAITS; a round started by his answers (every line of `FIXES.md` quotes him with a `<id8>:L<line>` source) never counts as that second one, and resets the memory of the first (`planner_fix_done` in `chain.json`) |
 | go | when rule 8 holds, `gates.go` by him with the advance gate's source; otherwise exits 10 |
 | arm | the gates must be the ones `ship gate` logged, and a fix folder's `ship.toml` and `checks.toml` its parent's; `init_state` (build branch made at `parent_tip` when the remote has none), `preflight`, facts at `parent_tip` and at the target tip; failing facts start one `grounding` worker |
 | build | the `ship run` loop (`run.Build`) on the program, or on the fix folder (`build_folder`, armed first) |
@@ -17,8 +17,16 @@ carries on at the first step with no file.
 | merge | `ship merge X` as a child; 3 and 11 retry next tick. A fix program `merge` wrote is built and reviewed (round 2) before the next try (`phase.read`'s rule) |
 | docs | `ship.docs` when it exists (U36), under the project's merge lock; otherwise `docs/<X>.json` records the skip. Never blocks |
 | later-handoff | one `later-handoff` worker when its prompt exists; else WAITS |
-| audit | the stage in `phase.json`: `census` as a script, the others as workers when their prompts exist; else SKIP and WAITS |
+| audit | the stage in `phase.json`: `census` as a script; `intent` one worker; `quality` (below); `judgement` the judge, then the `audit-screen` worker, then `apply_screen.py`; `audit-handoff` one worker given the audit checkout (`CHECKOUT`). A stage whose prompt is missing: SKIP and WAITS |
 | done | `run_report`, `teardown`, the claims released, the final note in `RUN-REPORT.md` |
+
+The audit's `quality` stage: a frozen checkout of the census tip (`<worktree_root>/audit-<program>`, made once,
+with the area's packages' `setup` run in it) is shared by the stages that read code; `probe_tests.py` runs once
+per package root there (one at a time, as children, each into `probe/<package>.tsv`; a probe that fails is
+noted, never a stop: the readers say so); then one `audit-reader` worker per `## Parts` line of `CENSUS.md`, side
+by side within the worker pool, each launched in that checkout with `SHIP_PART` (a plain name, checked) and the
+`PART` and `CHECKOUT` values; a reader whose notes do not end `DONE` is started again, up to `max_restarts`;
+then `collect_findings.py`. The audit checkout is dropped once the hand-off is done.
 
 Every loop it also refreshes `chain.lock` with its children, reads power, internet and GitHub
 (`power_watch.step`; `HOLD` starts nothing new), and starts no worker before `usage_reset_at`. WAITS lines go
@@ -55,10 +63,27 @@ from ship.run import Build, ChainLock, PromptError, Script, prompt_dir, render
 from ship.settings import Settings, load_settings
 
 CHECK_FAIL = re.compile(r"^FAIL\b", re.M)
+# The audit stages the conveyor runs with a worker: (role, prompt, the stage after it). Each is started by its own
+# start_worker call in `audit_*` below, with the values its prompt needs.
 AUDIT_WORKERS = {"intent": ("audit-intent", "AUDIT-INTENT.md", "intent-check"),
                  "quality": ("audit-reader", "AUDIT-READER.md", "judgement"),
                  "judgement": ("audit-judge", "AUDIT-JUDGE.md", "verdicts"),
+                 "screen": ("audit-screen", "AUDIT-SCREEN.md", "verdicts"),
                  "audit-handoff": ("sweep-handoff", "AUDIT-HANDOFF.md", "")}
+CENSUS_TIP = re.compile(r"^Tip:\s*([0-9a-f]{40})\s*$", re.M)
+CENSUS_PART = re.compile(r"^- \*\*([^*\s]+)\*\* `([^`]+)`", re.M)
+PLAIN_PART = re.compile(r"[A-Za-z0-9_-]+")
+HIS_SOURCE = re.compile(r"\b[0-9a-f]{8}:L\d+\b")  # his_words.py's source for a turn of his: <id8>:L<line>
+
+
+def his_fixes(path: Path) -> bool:
+    """FIXES.md written from his answers: every fix line quotes his words with their `<id8>:L<line>` source."""
+    try:
+        text = path.read_text("utf-8")
+    except OSError:
+        return False
+    fixes = [x for x in text.splitlines() if x.lstrip().startswith(("- ", "* "))]
+    return bool(fixes) and all(HIS_SOURCE.search(x) and ('"' in x or "\u201c" in x) for x in fixes)
 
 
 class Stop(Exception):
@@ -68,7 +93,9 @@ class Stop(Exception):
 
 
 def project_values(profile: dict) -> dict[str, str]:
-    return {f"PROJECT.{k}": str(v) for k, v in (profile.get("project") or {}).items()}
+    from ship import project_profile
+
+    return project_profile.project_values(profile)
 
 
 class Conveyor:
@@ -84,6 +111,8 @@ class Conveyor:
         self.checkpoint: Checkpoint | None = None
         self.cp_key: tuple | None = None
         self.worker: tuple[str, ln.Handle] | None = None
+        self.side: dict[str, ln.Handle] = {}  # workers that run side by side (the audit's readers)
+        self.audit_copy: Path | None = None  # the audit checkout, made once per conveyor process
         self.scripts: list[Script] = []
         self.done_count: Counter = Counter()
         self.exit: int | None = None
@@ -138,8 +167,8 @@ class Conveyor:
             rows += build.children()
         if self.checkpoint:
             rows += self.checkpoint.children()
-        if self.worker:
-            name, h = self.worker
+        workers = ([self.worker] if self.worker else []) + list(self.side.items())
+        for name, h in workers:
             rows.append({"pid": h.pid, "created": h.created, "role": h.role.name, "id": name,
                          "session": h.session_id, "started": h.folder.name})
         rows += [{"pid": s.proc.pid, "created": s.created, "role": s.name, "id": s.slice, "started": s.started}
@@ -154,6 +183,9 @@ class Conveyor:
         if self.worker:
             self.worker[1].kill()
             self.worker = None
+        for handle in self.side.values():
+            handle.kill()
+        self.side.clear()
         for s in self.scripts:
             if s.done() is None:
                 kill_tree(s.proc.pid)
@@ -201,9 +233,10 @@ class Conveyor:
         return bool(until and dt.datetime.fromisoformat(until) > clock.now())
 
     def start_worker(self, name: str, role: str, prompt_file: str, values: dict, cwd: Path,
-                     env: dict | None = None) -> bool:
-        """Start one conveyor worker (plan review, planner fix, grounding, later handoff, audit stages)."""
-        if self.worker or self.no_workers_now():
+                     env: dict | None = None, side: bool = False) -> bool:
+        """Start one conveyor worker (plan review, planner fix, grounding, later handoff, audit stages). A `side`
+        worker (an audit reader) runs beside others and is collected with `side_result`."""
+        if (self.worker and not side) or self.no_workers_now():
             return False
         path = prompt_dir(self.settings) / prompt_file
         try:
@@ -219,10 +252,25 @@ class Conveyor:
                            extra_env=full_env, label=name)
         if handle is None:
             return False
-        self.worker = (name, handle)
-        self.owner = self.current
+        if side:
+            self.side[name] = handle
+        else:
+            self.worker = (name, handle)
+            self.owner = self.current
         self.buf.append(f"START {role} {name} pid {handle.pid}")
         return True
+
+    def side_result(self, name: str) -> ln.Result | None:
+        """A finished side worker's result (a usage limit is recorded and comes back as None)."""
+        handle = self.side.get(name)
+        got = handle.poll() if handle else None
+        if got is None:
+            return None
+        del self.side[name]
+        self.log([f"WORKER {name} ended: {got.kind} {got.line or got.note}".rstrip()])
+        if got.kind == "limit":
+            self.memo["limit_until"] = got.limit_reset
+        return got
 
     def worker_result(self, name: str) -> ln.Result | None:
         if not self.worker or self.worker[0] != name:
@@ -274,8 +322,8 @@ class Conveyor:
         nxt, why = p["next"], p.get("why", "")
         if nxt != self.last_next:
             self.buf.append(f"NEXT {nxt}: {why}")
-            if p.get("status") != "abandoned":
-                phase.set_phase(self.program, nxt, "running", "conveyor")
+            if p.get("status") != "abandoned" and not (nxt == "audit" and p.get("stage") in phase.AUDIT_STAGES):
+                phase.set_phase(self.program, nxt, "running", "conveyor")  # an audit keeps its stage there
             built = self.last_next == "build"
             self.last_next = nxt
             if built:
@@ -400,7 +448,11 @@ class Conveyor:
 
     def planner_fix(self, p: dict) -> list[str]:
         folder = self.program.dir / "plan-review"
-        if (folder / "FIXES.applied.md").exists() and self.memo.get("planner_fix_done"):
+        if "planner_fix_his" not in self.memo:  # decided once per round, before the worker empties FIXES.md
+            self.memo["planner_fix_his"] = his_fixes(folder / "FIXES.md")
+        his = self.memo["planner_fix_his"]
+        if not his and (folder / "FIXES.applied.md").exists() and self.memo.get("planner_fix_done"):
+            self.memo.pop("planner_fix_his", None)
             self.wait("the plan review asked for fixes a second time", str(folder / "REVIEW.md"))
             raise Stop(10)
         if not self.memo.get("planner_fix_worker_done"):
@@ -420,10 +472,12 @@ class Conveyor:
         n = len(list(folder.glob("REVIEW.round-*.md"))) + 1
         if (folder / "REVIEW.md").exists():
             (folder / "REVIEW.md").replace(folder / f"REVIEW.round-{n}.md")
-        self.memo["planner_fix_done"] = True
+        # his answers' round uses up nothing: the next mechanical FIXES gets its one round again
+        self.memo["planner_fix_done"] = not his
         self.memo["planner_fix_worker_done"] = False
+        self.memo.pop("planner_fix_his", None)
         self.finished("planner-fix")
-        return [f"PLANNER-FIX applied; the plan review runs once more"]
+        return [f"PLANNER-FIX applied{' (his answers)' if his else ''}; the plan review runs once more"]
 
     def parent_tip(self) -> str:
         try:
@@ -694,7 +748,7 @@ class Conveyor:
         return ["SWEEP-HANDOFF done"]
 
     def audit(self, p: dict) -> list[str]:
-        stage = p.get("stage") or "census"
+        stage = p.get("stage") if p.get("stage") in phase.AUDIT_STAGES else "census"
         index = prog.load(self.program)
         if stage == "census":
             script = ln.factory_home(self.settings) / "skills" / "audit-area" / "scripts" / "census.py"
@@ -727,24 +781,237 @@ class Conveyor:
         if not role or not (prompt_dir(self.settings) / prompt).exists():
             self.wait(f"SKIP audit stage {stage}: its worker prompt is not there yet (U26)")
             raise Stop(10)
-        got = self.worker_result(f"audit-{stage}")
+        if stage == "quality":
+            return self.audit_quality(index)
+        if stage == "judgement":
+            return self.audit_judgement()
+        if stage == "audit-handoff":
+            return self.audit_handoff()
+        got = self.worker_result("audit-intent")
         if got is None:
             if not self.worker:
-                self.start_worker(f"audit-{stage}", role, prompt, self.values(STAGE=stage), self.program.dir)
+                self.start_worker("audit-intent", "audit-intent", "AUDIT-INTENT.md", self.values(STAGE=stage),
+                                  self.program.dir)
             return []
-        if stage == "intent":
-            intent = self.program.dir / "INTENT.md"
-            open_ = [x for x in (intent.read_text("utf-8").splitlines() if intent.exists() else [])
-                     if x.strip().startswith("- [ ]")]
-            if open_:
-                old = self.program.waiting.read_text("utf-8") if self.program.waiting.exists() else ""
-                self.program.waiting.write_text(old + "".join(f"{x.strip()}\n" for x in open_ if x.strip() not in old),
-                                                "utf-8", newline="\n")
-            after = "quality"  # reading does not wait for him; judgement waits for gates.intent
-        if after:
-            phase.set_phase(self.program, after, "running", "conveyor")
+        intent = self.program.dir / "INTENT.md"
+        open_ = [x for x in (intent.read_text("utf-8").splitlines() if intent.exists() else [])
+                 if x.strip().startswith("- [ ]")]
+        if open_:
+            old = self.program.waiting.read_text("utf-8") if self.program.waiting.exists() else ""
+            self.program.waiting.write_text(old + "".join(f"{x.strip()}\n" for x in open_ if x.strip() not in old),
+                                            "utf-8", newline="\n")
+        phase.set_phase(self.program, "quality", "running", "conveyor")  # reading does not wait for him
         self.finished("audit")
         return [f"AUDIT {stage} done"]
+
+    # -- the audit's checkout, probes and readers --
+
+    def census(self) -> tuple[str, list[tuple[str, str]]]:
+        """(the census tip, [(part, its folder)]) from CENSUS.md's `Tip:` line and `## Parts` list."""
+        path = self.program.dir / "CENSUS.md"
+        text = path.read_text("utf-8") if path.exists() else ""
+        tip = CENSUS_TIP.search(text)
+        section = text.split("## Parts", 1)[1].split("\n## ", 1)[0] if "## Parts" in text else ""
+        return (tip.group(1) if tip else ""), CENSUS_PART.findall(section)
+
+    def audit_packages(self, tip: str) -> list:
+        """The package roots the probe runs over: checks.toml's packages in or around the area, else every folder
+        holding a pyproject.toml in the area (or the nearest one above it), set up with `uv sync --frozen`."""
+        from ship.suite import Package, load_packages
+
+        index = prog.load(self.program)
+        area = [str(a).replace("\\", "/").strip("/") or "." for a in index.area] or ["."]
+
+        def near(root: str) -> bool:
+            return any(a == "." or root == a or root.startswith(a + "/") or a.startswith(root + "/") for a in area)
+
+        listed = [p for p in load_packages(self.program) if p.root != "." and near(p.root)]
+        if listed:
+            return listed
+        repo, t = Path(str(self.project().get("repo") or "")), self.settings.git_timeout_s
+        names = git(repo, "ls-tree", "-r", "--name-only", tip, "--", *[a for a in area if a != "."], timeout=t)
+        roots = {str(Path(n).parent).replace("\\", "/") for n in names.splitlines() if Path(n).name == "pyproject.toml"}
+        for a in area:
+            parts = a.split("/") if a != "." else []
+            for i in range(len(parts), 0, -1):
+                up = "/".join(parts[:i])
+                if git(repo, "cat-file", "-t", f"{tip}:{up}/pyproject.toml", timeout=t, check=False).strip() == "blob":
+                    roots.add(up)
+                    break
+        return [Package(r, setup=("uv", "sync", "--frozen")) for r in sorted(roots - {"."})]
+
+    def audit_checkout(self, tip: str) -> Path:
+        """The frozen checkout of the census tip the probes, readers and hand-off use, its packages set up."""
+        from ship.worktree import Setup, checkout_copy
+
+        proj = self.project()
+        repo = Path(str(proj.get("repo") or ""))
+        path = Path(str(proj.get("worktree_root") or repo.parent)) / f"audit-{self.program.dir.name}"
+        if self.audit_copy is None:
+            packages = tuple(p for p in self.audit_packages(tip) if p.setup)
+            setup = Setup(packages, self.program.runs, self.program.dir / "probe" / "setup")
+            checkout_copy(repo, path, tip, self.settings, setup)
+            self.buf += [f"AUDIT checkout {path} at {tip[:10]}"] + [f"AUDIT {x}" for x in setup.lines]
+            self.audit_copy = path
+        return path
+
+    def probe_argv(self, copy: Path, package) -> list[str]:
+        script = ln.factory_home(self.settings) / "skills" / "audit-area" / "scripts" / "probe_tests.py"
+        root = copy / package.root
+        python = sys.executable
+        for folder in [root, *root.parents]:
+            venv = folder / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+            if venv.is_file():
+                python = str(venv)
+                break
+            if folder == copy:
+                break
+        src = f"{package.root}/src" if (root / "src").is_dir() else package.root
+        name = Path(package.root).name
+        return [sys.executable, str(script), package.root, "--checkout", str(copy), "--out",
+                str(self.program.dir / "probe" / f"{name}.tsv"), "--python", python, "--src", src, "--ship", str(ln.KIT),
+                "--project", str(self.project().get("name") or "qmx")]
+
+    def audit_quality(self, index) -> list[str]:
+        book = self.memo.setdefault("audit", {})
+        tip, parts = self.census()
+        if not tip or not parts:
+            self.wait("the audit cannot read: CENSUS.md has no `Tip:` line or no `## Parts` list",
+                      str(self.program.dir / "CENSUS.md"))
+            raise Stop(10)
+        odd = [part for part, _ in parts if not PLAIN_PART.fullmatch(part)]
+        if odd:  # SHIP_PART names the files a reader may write: a plain name or nothing
+            self.wait(f"the audit parts {odd} are not plain names ([A-Za-z0-9_-]+)", str(self.program.dir / "CENSUS.md"))
+            raise Stop(10)
+        copy = self.audit_checkout(tip)
+        lines: list[str] = []
+        probes = book.setdefault("probes", {})
+        for package in self.audit_packages(tip):
+            if package.root in probes:
+                continue
+            name = f"probe-{package.label}"
+            script = next((sc for sc in self.scripts if sc.name == name), None)
+            if script is not None and script.done() is None and time.monotonic() - script.began > \
+                    self.settings.nightly_timeout_s:
+                kill_tree(script.proc.pid)
+                self.scripts.remove(script)
+                probes[package.root] = "timeout"
+                return lines + [f"PROBE {package.root} killed after {self.settings.nightly_timeout_s}s; the readers "
+                                "go without it"]
+            got = self.ended(name)
+            if got is None:
+                if not self.running(name):
+                    if not Path(self.probe_argv(copy, package)[1]).exists():
+                        probes[package.root] = "no probe_tests.py"
+                        continue
+                    self.child(name, self.probe_argv(copy, package))
+                    lines.append(f"PROBE {package.root} started")
+                return lines
+            probes[package.root] = got[0]
+            lines.append(f"PROBE {package.root} exit {got[0]}" + ("" if got[0] == 0 else f": {'; '.join(got[1][-2:])}"))
+        readers = book.setdefault("readers", {})
+        waiting = False
+        for part, folder in parts:
+            rec = readers.setdefault(part, {"attempts": 0})
+            notes = self.program.dir / "readers" / f"{part}.md"
+            name = f"audit-quality-{part}"
+            if name in self.side:
+                got = self.side_result(name)
+                if got is None:
+                    waiting = True
+                    continue
+                if got.kind == "limit":
+                    waiting = True
+                    continue
+            if rec.get("done") or _ends_done(notes):
+                rec["done"] = True
+                continue
+            if name not in self.side and rec["attempts"] >= self.settings.max_restarts:
+                self.wait(f"the audit reader of part {part} did not finish in {rec['attempts']} runs", str(notes))
+                raise Stop(10)
+            waiting = True
+            if self.start_worker(name, "audit-reader", "AUDIT-READER.md",
+                                 self.values(STAGE="quality", PART=part, CHECKOUT=str(copy)), copy,
+                                 env={"SHIP_PART": part}, side=True):
+                rec["attempts"] += 1
+                lines.append(f"READER {part} ({folder}) run {rec['attempts']}")
+        if waiting:
+            return lines
+        script = ln.factory_home(self.settings) / "skills" / "audit-area" / "scripts" / "collect_findings.py"
+        got = self.ended("collect-findings")
+        if got is None:
+            if not self.running("collect-findings"):
+                self.child("collect-findings", [sys.executable, str(script), str(self.program.dir)])
+            return lines
+        if got[0] != 0:
+            self.wait("collect_findings.py failed: " + "; ".join(got[1][-3:]), str(self.program.dir / "FINDINGS.tsv"))
+            raise Stop(10)
+        book.pop("readers", None)
+        book.pop("probes", None)
+        phase.set_phase(self.program, "judgement", "running", "conveyor")
+        self.finished("audit")
+        return lines + [f"AUDIT quality done: {len(parts)} parts read, FINDINGS.tsv collected"]
+
+    def audit_judgement(self) -> list[str]:
+        """The judge (Fable), then the screen (Opus) on what Fable decided, then `apply_screen.py` makes its moves."""
+        book = self.memo.setdefault("audit", {})
+        if not book.get("judged"):
+            got = self.worker_result("audit-judgement")
+            if got is None:
+                if not self.worker:
+                    self.start_worker("audit-judgement", "audit-judge", "AUDIT-JUDGE.md", self.values(STAGE="judgement"),
+                                      self.program.dir)
+                return []
+            book["judged"] = True
+            return ["AUDIT judgement done; the screen starts"]
+        if not book.get("screened"):
+            if not (prompt_dir(self.settings) / "AUDIT-SCREEN.md").exists():
+                self.wait("SKIP the audit screen: its worker prompt is not there yet")
+                raise Stop(10)
+            got = self.worker_result("audit-screen")
+            if got is None:
+                if not self.worker:
+                    self.start_worker("audit-screen", "audit-screen", "AUDIT-SCREEN.md", self.values(STAGE="judgement"),
+                                      self.program.dir)
+                return []
+            book["screened"] = True
+            return ["AUDIT screen done; apply_screen.py makes its moves"]
+        script = ln.factory_home(self.settings) / "skills" / "audit-area" / "scripts" / "apply_screen.py"
+        got = self.ended("apply-screen")
+        if got is None:
+            if not self.running("apply-screen"):
+                if not script.exists():
+                    self.wait(f"the audit screen cannot be applied: no {script}")
+                    raise Stop(10)
+                self.child("apply-screen", [sys.executable, str(script), str(self.program.dir)])
+            return []
+        if got[0] != 0:
+            self.wait("apply_screen.py failed: " + "; ".join(got[1][-3:]), str(self.program.dir / "AUDIT-SCREEN.md"))
+            raise Stop(10)
+        book.pop("judged", None)
+        book.pop("screened", None)
+        phase.set_phase(self.program, "verdicts", "running", "conveyor")
+        self.finished("audit")
+        return ["AUDIT judgement, screen and its moves done"]
+
+    def audit_handoff(self) -> list[str]:
+        tip, _ = self.census()
+        if not tip:
+            self.wait("the audit hand-off needs CENSUS.md's `Tip:` line", str(self.program.dir / "CENSUS.md"))
+            raise Stop(10)
+        copy = self.audit_checkout(tip)
+        got = self.worker_result("audit-audit-handoff")
+        if got is None:
+            if not self.worker:
+                self.start_worker("audit-audit-handoff", "sweep-handoff", "AUDIT-HANDOFF.md",
+                                  self.values(STAGE="audit-handoff", CHECKOUT=str(copy)), self.program.dir)
+            return []
+        from ship.worktree import drop_copy
+
+        drop_copy(Path(str(self.project().get("repo") or "")), copy, self.settings)
+        self.audit_copy = None
+        self.finished("audit")
+        return ["AUDIT audit-handoff done; the audit checkout is dropped"]
 
     # -- the end --
 
@@ -772,6 +1039,14 @@ class Conveyor:
                            f"({clock.now().isoformat(timespec='seconds')}).\n")
         phase.set_phase(self.program, "done", "done", "conveyor")
         raise Stop(0)
+
+
+def _ends_done(path: Path) -> bool:
+    try:
+        lines = [x.strip() for x in path.read_text("utf-8", errors="replace").splitlines() if x.strip()]
+    except OSError:
+        return False
+    return bool(lines) and lines[-1] == "DONE"
 
 
 def conveyor(program: Program, settings: Settings, poll_s: float | None = None) -> int:

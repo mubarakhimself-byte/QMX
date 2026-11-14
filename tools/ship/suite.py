@@ -74,6 +74,15 @@ def load_packages(program: Program) -> list[Package]:
 QUALITY_KEYS = ("vulture", "skylos", "mutmut")
 
 
+def setup_for(program: Program, paths: list[str] | None, logs: Path, heartbeat: Path | None = None):
+    """A worktree.Setup for the packages `paths` touch (None: every package), logs under `logs`."""
+    from ship.worktree import Setup
+
+    packages = load_packages(program)
+    chosen = packages if paths is None else touched(packages, paths)
+    return Setup(tuple(p for p in chosen if p.setup), program.runs, logs, heartbeat)
+
+
 def package_of(packages: list[Package], path: str) -> Package | None:
     owners = [p for p in packages if p.owns(path)]
     return max(owners, key=lambda p: 0 if p.root == "." else len(p.root), default=None)

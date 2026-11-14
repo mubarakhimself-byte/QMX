@@ -2,7 +2,10 @@
 dependency, files that overlap an in-flight slice, or a checkpoint too far ahead: only the next
 checkpoint after the open one may be pre-built, and only on files the open checkpoint does not touch. A first attempt reruns the brief's facts against
 the build-branch tip and parks the slice on any mismatch. A fix round or a restart saves leftovers as
-a patch and resets the worktree to the last pushed sha. Records the holder in state.json."""
+a patch and resets the worktree to the last pushed sha. Then the checks.toml `setup` of every package the
+slice's files touch runs in the worktree (`uv sync --frozen`, through the timed wrapper; logs in
+`checks/_setup/<id>/a<attempt>-r<restart>/`), so the builder starts in an installed tree. Records the holder in
+state.json."""
 
 from __future__ import annotations
 
@@ -18,7 +21,8 @@ from ship.layout import Program
 from ship.plan import Fact, PlanError, normalize_output, overlaps, read_brief_facts
 from ship.settings import Settings
 from ship.state import IN_FLIGHT, ParkCause, Status
-from ship.worktree import ensure_worktree, fetch_branch, note_leftover, save_and_reset
+from ship.suite import setup_for
+from ship.worktree import ensure_worktree, fetch_branch, note_leftover, prepare, save_and_reset
 
 
 class Refused(Exception):
@@ -37,6 +41,7 @@ class Dispatched:
     parent: str
     evidence: str
     leftover: str | None
+    setup: tuple[str, ...] = ()  # one PASS, FAIL or NOTRUN line per package setup run in the worktree
 
     def to_json(self) -> str:
         return json.dumps(dataclasses.asdict(self), indent=2)
@@ -130,6 +135,8 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
         attempt = sl.attempts + (0 if kind == "restart" else 1)
         restart = sl.restarts + (1 if kind == "restart" else 0)
         evidence = program.evidence(slice_id, attempt)
+        setup = setup_for(program, sl.files, program.checks_root / "_setup" / slice_id / f"a{attempt}-r{restart}",
+                          program.heartbeat(slice_id))
         leftover = None
         if kind == "first":
             tip = fetch_branch(repo, state.remote, state.build_branch, settings)
@@ -137,7 +144,7 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
                 raise Refused(f"build branch {state.build_branch} is not on {state.remote}")
             if fetch_branch(repo, state.remote, sl.branch, settings):
                 raise Refused(f"{sl.branch} already exists on {state.remote}; a first attempt starts clean")
-            ensure_worktree(repo, wt, sl.branch, tip, settings)
+            ensure_worktree(repo, wt, sl.branch, tip, settings, setup)
             save_and_reset(wt, tip, evidence / "leftover.patch", settings)
             parent = tip
             try:
@@ -159,6 +166,7 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
             saved = save_and_reset(wt, pushed or parent, program.evidence(slice_id, sl.attempts) / "leftover.patch",
                                    settings)
             leftover = str(saved) if saved else None
+            prepare(wt, setup, settings)  # after the reset, so it installs what the pushed tree pins
         evidence.mkdir(parents=True, exist_ok=True)
 
         stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
@@ -169,7 +177,7 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
         sl.parent = parent
         sl.head = None
         return Dispatched(slice_id, dispatch_id, kind, attempt, restart, str(wt), sl.branch, parent,
-                          str(evidence), leftover)
+                          str(evidence), leftover, tuple(setup.lines))
 
 
 

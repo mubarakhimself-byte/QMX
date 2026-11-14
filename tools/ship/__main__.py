@@ -135,6 +135,20 @@ def cmd_power(a, program, settings):
     return rc
 
 
+def cmd_hold(a, program, settings):
+    from ship.power_watch import hold
+
+    return _lines(True, hold(program, a.why))
+
+
+def cmd_release(a, program, settings):
+    from ship.power_watch import release
+
+    rc, lines = release(program)
+    _lines(True, lines)
+    return rc
+
+
 def cmd_merged(a, program, settings):
     from ship import state as st
 
@@ -485,6 +499,8 @@ def parser() -> argparse.ArgumentParser:
     add("bisect-step", cmd_bisect_step, (["--ids"], {"required": True}))
     add("power_watch", cmd_power_watch, (["--once"], {"action": "store_true"}))
     add("power", cmd_power)
+    add("hold", cmd_hold, (["--why"], {"required": True}))
+    add("release", cmd_release)
     add("merged", cmd_merged, (["checkpoint"], {}))
     add("quality", cmd_quality, (["--from"], {"required": True, "dest": "base"}),
         (["--tools"], {"default": "vulture,skylos,mutmut"}))

@@ -76,6 +76,17 @@ def load(index, settings: Settings) -> dict:
     return out
 
 
+def project_values(profile: dict) -> dict[str, str]:
+    """`PROJECT.<key>` for every key of the profile's [project] table: the prompt values a worker gets."""
+    return {f"PROJECT.{k}": str(v) for k, v in (profile.get("project") or {}).items()}
+
+
+def rules_file(profile: dict, settings: Settings) -> str:
+    """The project's PROJECT-RULES.md: the profile's `rules`, else the factory home's copy."""
+    project = profile.get("project") or {}
+    return str(project.get("rules") or home(settings) / "projects" / str(project.get("name") or "qmx") / "PROJECT-RULES.md")
+
+
 def of_program(program_dir: Path, settings: Settings) -> dict:
     """The profile of the program in `program_dir` (its PROGRAM.yaml `project`, else qmx)."""
     from ship import program as prog

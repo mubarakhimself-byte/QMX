@@ -1,8 +1,14 @@
 """power_watch: read the power line every power_poll_s. On battery, write the HOLD file, which makes
 dispatch refuse new seats. When mains returns, wait power_settle_s for the router, then require the
 internet probe and GitHub (`git ls-remote`) to answer before removing HOLD. On mains, a failed internet
-or GitHub probe also writes HOLD, and the next passing probe removes it (no settle wait). A HOLD this
-watcher did not write is never removed by it. `SHIP_FAKE_MAINS` (1 or 0) stands in for the power line."""
+or GitHub probe also writes HOLD, and the next passing probe removes it (no settle wait).
+`SHIP_FAKE_MAINS` (1 or 0) stands in for the power line.
+
+Whose HOLD it is lives in its first word: the watcher writes `power: ...` or `network: ...`; anything else (a
+manual hold, `ship hold --why ...`, written `him: ...`, or the front desk's own) is not the watcher's. The
+watcher never writes over, nor removes, a HOLD that is not its own: on battery it leaves a manual hold in place,
+and a manual hold written over the watcher's makes the watcher forget its own. `ship release` removes only a
+manual hold; the watcher's clears itself."""
 
 from __future__ import annotations
 
@@ -67,9 +73,32 @@ def probe_network(program: Program, settings: Settings) -> list[str]:
     return failed
 
 
+WATCHER_WORDS = ("power:", "network:")
+
+
+def watchers(text: str) -> bool:
+    """A HOLD the power watch wrote (its first word)."""
+    return text.lstrip().startswith(WATCHER_WORDS)
+
+
+def hold_text(program: Program) -> str | None:
+    try:
+        return program.hold.read_text("utf-8")
+    except OSError:
+        return None
+
+
 def step(program: Program, settings: Settings, mains: bool, now: float, probe: Callable[[], list[str]]) -> str:
     memo = json.loads(program.power.read_text("utf-8")) if program.power.exists() else {}
+    text = hold_text(program)
+    if memo.get("hold") and not (text is not None and watchers(text)):
+        memo = {"hold": False}  # its HOLD was released or written over by someone else: it is not the watcher's now
     ours = bool(memo.get("hold"))
+    if not mains and not ours and text is not None:
+        memo["mains_since"] = None
+        program.power.write_text(json.dumps(memo), "utf-8")
+        return "HOLD kept: not the watcher's (" + text.strip().splitlines()[0][:80] + ")" if text.strip() else \
+            "HOLD kept: not the watcher's"
     if not mains:
         memo["mains_since"] = None
         if not ours:
@@ -121,6 +150,33 @@ def _event(program: Program, kind: str, **detail: object) -> None:
     if program.state.exists():
         with st.locked(program) as state:
             state.log(kind, None, **detail)
+
+
+def hold(program: Program, why: str) -> list[str]:
+    """`ship hold --why TEXT`: a manual HOLD. The conveyor and the build start nothing new while it is there; the
+    power watch leaves it alone. Running workers finish their turn."""
+    why = " ".join(why.split())
+    if not why:
+        raise ValueError("ship hold needs --why")
+    program.dir.mkdir(parents=True, exist_ok=True)
+    tmp = program.hold.with_name("HOLD.tmp")
+    tmp.write_text(f"him: {why}\n", "utf-8", newline="\n")
+    st.replace(tmp, program.hold)
+    _event(program, "hold", reason="manual", why=why)
+    return [f"HOLD {program.dir.name}: him: {why}"]
+
+
+def release(program: Program) -> tuple[int, list[str]]:
+    """`ship release`: removes a manual HOLD (0); a HOLD the power watch wrote is refused (1): it clears itself."""
+    text = hold_text(program)
+    if text is None:
+        return 0, [f"CLEAR {program.dir.name} has no HOLD"]
+    if watchers(text):
+        return 1, [f"REFUSED the HOLD is the power watch's ({text.strip()[:120]}); it clears itself once mains, "
+                   "the internet and GitHub are back"]
+    program.hold.unlink(missing_ok=True)
+    _event(program, "clear", reason="manual release")
+    return 0, [f"RELEASED {program.dir.name}: {text.strip()[:120]}"]
 
 
 def power_report(program: Program, settings: Settings, now: float | None = None) -> tuple[int, list[str]]:

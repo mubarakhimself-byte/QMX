@@ -487,8 +487,11 @@ def checkpoint_quality(program: Program, settings: Settings, base: str, tools: t
             return not any(ln.startswith("FAIL ") for ln in lines), lines
         lines.append(f"NOTE no qmx-ci summary.json for {tip[:8]} ({found.why}); the tools run here")
     files = changed_files(repo, base, tip, t)
-    tip_copy = checkout_copy(repo, program.tmp / "quality-tip", tip, settings)
-    base_copy = checkout_copy(repo, program.tmp / "quality-base", base, settings)
+    from ship.suite import setup_for
+
+    tip_copy = checkout_copy(repo, program.tmp / "quality-tip", tip, settings, setup_for(program, files, out / "setup-tip"))
+    base_copy = checkout_copy(repo, program.tmp / "quality-base", base, settings,
+                              setup_for(program, files, out / "setup-base"))
     ratchet = RepoRatchet.at(base_copy)
     try:
         for package in touched(load_packages(program), files):

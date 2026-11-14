@@ -145,7 +145,9 @@ class Checkpoint:
             self.memo = {}  # a new round starts its own bookkeeping
         self.round = round
         self.memo["round"] = round
-        self.roles = ln.load_roles(settings)
+        from ship import project_profile
+
+        self.roles = ln.load_roles(settings, project_profile.of_program(program.dir, settings))
         self.handles: dict[str, ln.Handle] = {}
         self.scripts: list[Script] = []
         self.code: int | None = None
@@ -470,10 +472,20 @@ class Checkpoint:
                 return lines
         return lines
 
+    def setup(self, name: str):
+        """The setup of the packages the stop changed (every package when it has no from commit)."""
+        from ship.gitx import changed_files
+        from ship.suite import setup_for
+
+        repo, base, tip = Path(st.load(self.program).repo), self.memo.get("from"), self.memo["tip"]
+        files = changed_files(repo, base, tip, self.settings.git_timeout_s) if base else None
+        return setup_for(self.program, files, self.dir / "runs" / f"setup-{name}")
+
     def start_reader(self, reader: Reader, rec: dict) -> list[str]:
         state = st.load(self.program)
         rules, review_rules = project_files(self.program, self.settings)
-        copy = checkout_copy(Path(state.repo), self.copy_path(reader.name), self.memo["tip"], self.settings)
+        copy = checkout_copy(Path(state.repo), self.copy_path(reader.name), self.memo["tip"], self.settings,
+                             self.setup(reader.name))
         if copy not in self.copies:
             self.copies.append(copy)
         notes = self.notes(reader.name)

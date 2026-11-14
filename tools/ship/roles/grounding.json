@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Write",
+      "Edit",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git rev-parse*)",
+      "Bash(git ls-files*)",
+      "Bash(git grep*)",
+      "Bash(git -C * status*)",
+      "Bash(git -C * diff*)",
+      "Bash(git -C * log*)",
+      "Bash(git -C * show*)",
+      "Bash(git -C * rev-parse*)",
+      "Bash(git -C * ls-files*)",
+      "Bash(git -C * grep*)",
+      "Bash(uv run --no-sync *)",
+      "Bash(python *ship timed *)",
+      "Bash(python *ship\" timed *)",
+      "Bash(python -m ship timed *)",
+      "Bash(python */skills/*/scripts/*.py*)",
+      "Bash(python \"*/skills/*/scripts/*.py\"*)"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "0"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${SHIP_KIT}\" hook --program \"${SHIP_PROGRAM}\" || exit 2"
+          }
+        ]
+      }
+    ]
+  }
+}

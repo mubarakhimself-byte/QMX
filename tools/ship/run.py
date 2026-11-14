@@ -12,6 +12,13 @@
    `PREBUILD`. One `land` at a time.
 7. When the open checkpoint is built and `notes/stop-<X>.json` is missing, write it.
 
+A builder's prompt gets `PROMPT_KEYS`: the slice's own values, `RULES` (the project's PROJECT-RULES.md) and
+`PROJECT.<key>` for every key of the profile's [project] table. Roles come from roles.toml with the profile's
+overrides. A fix round's reason and paths are kept in run.json (`fixing`) until the slice passes `verify_ready`,
+so a fixer that dies and is restarted gets them again. When a builder replies `READY <sha>`, the kit stamps the
+END line (`END <sha> <dispatch id>`) on each `evidence_required` file of its evidence folder, replacing any END
+line already there; `verify_ready` then reads them.
+
 Routing reads `state.json`, so a run killed at any point and started again carries on: a `ready` slice
 gets `slice_checks`, a `checked` one `land`, a `red` one a fix round. The little that is not in
 `state.json` (a READY reply waiting for `verify_ready` while GitHub is down, a slice due a fix round after
@@ -46,7 +53,7 @@ from ship.state import ParkCause, Status
 PLACEHOLDER = re.compile(r"\{([A-Z][A-Z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\}")
 PROMPT_KEYS = ("SLICE", "PROGRAM", "WORKTREE", "WORKTREE_ROOT", "BRANCH", "PARENT", "EVIDENCE", "DISPATCH_ID",
                "KIND", "ATTEMPT", "RESTART", "LEFTOVER", "LEFTOVER_LINE", "RESTART_OF", "FIX_REASON", "FIX_PATHS",
-               "SHIP")
+               "SHIP", "RULES", "PROJECT.*")  # PROJECT.* is every key of the profile's [project] table
 LAND_TESTS = re.compile(r"^FAIL land-tests (\S+) batch \[([^\]]*)\]")
 LAND_ONE = re.compile(r"^FAIL land-(?!tests\b|push\b)(\S+) (.*)$")
 
@@ -176,6 +183,7 @@ class Memo:
     verify: dict[str, str] = dataclasses.field(default_factory=dict)  # slice -> sha its builder reported READY
     fix: dict[str, dict] = dataclasses.field(default_factory=dict)  # slice -> {"reason", "paths"}: due a fix round
     singles: list[str] = dataclasses.field(default_factory=list)  # a red batch landed one slice at a time
+    fixing: dict[str, dict] = dataclasses.field(default_factory=dict)  # slice -> the running fix round's reason, paths
     lands: int = 0  # land runs started, for SHIP_RUN_STOP_AFTER
 
     @classmethod
@@ -205,7 +213,10 @@ class Build:
         self.exit: int | None = None
         self.ticks = 0
         self.started_any = False
-        self.roles = ln.load_roles(settings)
+        from ship import project_profile
+
+        self.profile = project_profile.of_program(program.dir, settings)
+        self.roles = ln.load_roles(settings, self.profile)
         self.prompt = prompt_dir(settings) / "BUILDER.md"
         self.claims = None  # ship.claims.Claims beside the program; None until start()
         self.claim_blocked: dict[str, str] = {}  # slice -> the program whose live claim names one of its files
@@ -218,7 +229,7 @@ class Build:
 
         lines = []
         try:
-            render(self.prompt, {k: "x" for k in PROMPT_KEYS})
+            render(self.prompt, {**{k: "x" for k in PROMPT_KEYS if k != "PROJECT.*"}, **self.project_values()})
         except (PromptError, OSError) as exc:
             self.wait_line(f"the builder prompt cannot be filled: {exc}")
             self.exit = 1
@@ -231,6 +242,12 @@ class Build:
             except GitError as exc:
                 lines.append(f"RECOVER {sid} unreachable: {exc}; again next tick")
         return lines + self.claim_files()
+
+    def project_values(self) -> dict[str, str]:
+        from ship import project_profile
+
+        return {"RULES": project_profile.rules_file(self.profile, self.settings),
+                **project_profile.project_values(self.profile)}
 
     def claim_files(self) -> list[str]:
         """U38: sweep the claims of finished programs, then claim every file this program's slices name."""
@@ -427,8 +444,10 @@ class Build:
         from ship.recover import recover
 
         if got.kind == "ok" and got.contract == "READY":
-            self.memo.verify[sid] = got.value.split()[0]
-            return [f"READY {sid} {got.value}"]
+            sha = got.value.split()[0]
+            stamped = self.stamp(sid, sha)
+            self.memo.verify[sid] = sha
+            return [f"READY {sid} {got.value}"] + ([f"STAMPED {sid} {', '.join(stamped)}"] if stamped else [])
         if got.kind == "ok" and got.contract == "BLOCKED":
             return self.blocked(sid, got.value)
         if got.kind == "limit":
@@ -441,6 +460,19 @@ class Build:
             return out + [f"LIMIT {sid}: restarts after {got.limit_reset}"]
         # nocontract, crash, timeout, or a reply that is not a builder's (DONE, WAITS)
         return self.died(sid, worker, got.kind if got.kind != "ok" else f"replied {got.line!r}")
+
+    def stamp(self, sid: str, sha: str) -> list[str]:
+        """The END line on each required evidence file the builder wrote; the names stamped."""
+        from ship.evidence import stamp
+
+        if not re.fullmatch(r"[0-9a-f]{40}", sha):
+            return []  # verify_ready says what is wrong with the reply
+        sl = st.load(self.program).slices[sid]
+        if sl.holder is None:
+            return []
+        folder = self.program.evidence(sid, sl.attempts)
+        return [name for name in self.settings.evidence_required
+                if stamp(folder / name, sha, sl.holder.dispatch_id)]
 
     def died(self, sid: str, worker: Worker, why: str) -> list[str]:
         from ship.recover import recover
@@ -509,6 +541,8 @@ class Build:
     def after_verify(self, sid: str, rc: int, out: list[str]) -> list[str]:
         if rc in (0, 1):
             self.memo.verify.pop(sid, None)
+        if rc == 0:
+            self.memo.fixing.pop(sid, None)  # the fix round is over
         if rc == 1:
             self.memo.fix[sid] = {"reason": "verify_ready: " + "; ".join(out[-10:]), "paths": []}
             return [f"RED {sid} at verify_ready: fix round"]
@@ -671,6 +705,7 @@ class Build:
                     self.wait_line(f"{sid} parked: {got.reason}")
                 continue
             self.memo.fix.pop(sid, None)
+            lines += [f"SETUP {sid} {x}" for x in got.setup if x.startswith("FAIL ")]
             lines.append(self.start_worker(got, fix, slot))
         return lines
 
@@ -686,18 +721,22 @@ class Build:
         return dead + fixes + by_lane(now, lanes) + by_lane(early, lanes)
 
     def start_worker(self, got, fix: dict | None, slot=None) -> str:
-        kind = "fixer" if got.kind == "fix" else "builder"
         leftover_line = (f"The previous holder's unpushed changes are saved in `{got.leftover}`; reapply only what "
                          f"still fits, with `git -C {got.worktree} apply`." if got.leftover else "Nothing was left over.")
         state = st.load(self.program)
-        reason = (fix or {}).get("reason") or state.slices[got.slice].reason
+        if got.kind == "fix":  # a new fix round: what it fixes is kept until verify_ready passes
+            self.memo.fixing[got.slice] = {"reason": (fix or {}).get("reason") or state.slices[got.slice].reason,
+                                           "paths": list((fix or {}).get("paths") or [])}
+        # a restart of a fix round (attempt 2 and up) is a fixer again, with the same reason and paths
+        fixing = self.memo.fixing.get(got.slice) if got.kind == "fix" or got.attempt > 1 else None
+        kind = "fixer" if got.kind == "fix" or fixing is not None else "builder"
         values = {"SLICE": got.slice, "PROGRAM": str(self.program.dir), "WORKTREE": got.worktree,
                   "WORKTREE_ROOT": state.worktree_root, "BRANCH": got.branch, "PARENT": got.parent,
                   "EVIDENCE": got.evidence, "DISPATCH_ID": got.dispatch_id, "KIND": got.kind,
                   "ATTEMPT": str(got.attempt), "RESTART": str(got.restart), "LEFTOVER": got.leftover or "",
                   "LEFTOVER_LINE": leftover_line, "RESTART_OF": "first" if got.attempt == 1 else "fix",
-                  "FIX_REASON": reason if got.kind == "fix" else "", "SHIP": str(ln.KIT),
-                  "FIX_PATHS": ", ".join((fix or {}).get("paths") or []) if got.kind == "fix" else ""}
+                  "FIX_REASON": (fixing or {}).get("reason") or "", "SHIP": str(ln.KIT),
+                  "FIX_PATHS": ", ".join((fixing or {}).get("paths") or []), **self.project_values()}
         prompt = render(self.prompt, values)
         env = {"SHIP_SLICE": got.slice, "SHIP_EVIDENCE": got.evidence, "SHIP_DISPATCH_ID": got.dispatch_id}
         handle = ln.launch(self.roles[kind], prompt, Path(got.worktree), self.program, got.dispatch_id,

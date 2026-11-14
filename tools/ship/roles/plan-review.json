@@ -24,6 +24,8 @@
       "Bash(python *ship timed *)",
       "Bash(python *ship\" timed *)",
       "Bash(python -m ship timed *)",
+      "Bash(python */skills/*/scripts/*.py*)",
+      "Bash(python \"*/skills/*/scripts/*.py\"*)",
       "Agent"
     ]
   },

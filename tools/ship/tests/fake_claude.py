@@ -13,8 +13,8 @@ Steps run in the working folder, in order:
     {"push": true}   {"file": {"<path with {program}, {evidence}>": "<text>"}}   {"sleep": 0.5}
 
 `{head}` is `git rev-parse HEAD` when the text is filled; `{program}`, `{evidence}`, `{slice}`,
-`{dispatch}`, `{notes}`, `{stop}`, `{tip}` and `{worktree}` come from the run's environment (SHIP_PROGRAM,
-SHIP_EVIDENCE, SHIP_SLICE, SHIP_DISPATCH_ID, SHIP_NOTES, SHIP_STOP, SHIP_TIP) and its working folder. It prints one JSON object in the recorded
+`{dispatch}`, `{notes}`, `{stop}`, `{tip}`, `{part}` and `{worktree}` come from the run's environment (SHIP_PROGRAM,
+SHIP_EVIDENCE, SHIP_SLICE, SHIP_DISPATCH_ID, SHIP_NOTES, SHIP_STOP, SHIP_TIP, SHIP_PART) and its working folder. It prints one JSON object in the recorded
 result shape (roles/RESULT-SHAPE.md): `limit` prints the limit ending, `garbage` a reply with no
 contract line, `crash` exits 2, `hang` sleeps until it is killed. With no matching rule it replies
 `DONE fake`. Each call appends {"argv", "cwd", "env", "rule", "at"} as one JSON line to
@@ -42,7 +42,7 @@ def fill(text: str) -> str:
     values = {"program": os.environ.get("SHIP_PROGRAM", ""), "evidence": os.environ.get("SHIP_EVIDENCE", ""),
               "slice": os.environ.get("SHIP_SLICE", ""), "dispatch": os.environ.get("SHIP_DISPATCH_ID", ""),
               "notes": os.environ.get("SHIP_NOTES", ""), "stop": os.environ.get("SHIP_STOP", ""),
-              "tip": os.environ.get("SHIP_TIP", ""),
+              "tip": os.environ.get("SHIP_TIP", ""), "part": os.environ.get("SHIP_PART", ""),
               "worktree": os.getcwd()}
     for key, value in values.items():
         text = text.replace("{" + key + "}", value)
