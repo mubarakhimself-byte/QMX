@@ -37,6 +37,7 @@ Verdicts and the PR budget are in `CHALLENGE.md`.
 - The 57 non-blocking rows come after CI is green, as up to 3 later PRs. His: "After CI is green (Recommended)" (dd8f4ab2:L10701 (Shipping rate and agent orchestration, 2026-11-14)); `decisions/D1-rest-of-the-type-clean-up-after-ci-is-green.md`.
 - The 7 rows inside his guarded parts (3 in the workflow engine's `nodes/script.py`, 4 in the mini-app core's `supervisor.py`) stay in the baseline; S2's later PRs do not touch those files unless he says otherwise when they are briefed. Agent (`CHALLENGE.md` call-outs; the coordinator, 14 Nov).
 - Builders never edit `ci/baselines/`: the kit's merge step runs `python tools/ci/qci.py ratchet --prune` and commits the gone rows (`ship/project_profile.py` generator `"ci/baselines/*"`). Agent (`CHALLENGE.md` call-outs).
+- S1 ships as two slices in stop A: `cg-01`, kind `pin` (Linux tests of today's credential calls), then `cg-02`, kind `refactor` (the typing and format fix), because the deep run mutates every touched function on Linux and feature-kind fail-at-parent refuses pins. Agent (lead decision D-L27, `tracker/shipping-method/BUILD-LOG-2026-11-13.md`).
 - PR #1's five product edits get a second look in this program's verdict. Fable (`FACTORY-DESIGN-2026-11-13.md`, section on SYSTEM-AUDIT item 5). Taken here as proposal P1, not as part of S1.
 
 ## Proposals

@@ -1,0 +1,23 @@
+# checks.toml for ci-green: the commands ship slice_checks, land and nightly run per package.
+# Each command runs from the package root. Run at the parent tip bef6e808 on Windows (14 Nov):
+# qmn types 0 errors, qmn ruff check clean, qmn tests/test_app_grants.py 9 passed.
+# - qmn's `types` uses the workspace config (pythonPlatform Windows), as CI's lint job does, so it is
+#   green at the parent. The Linux check that qmn-lane runs is cg-02's own done line:
+#   `uv run --no-sync pyright --pythonplatform Linux --project ../pyproject.toml src deploy` from qmn/.
+# - qmx-apps: its workspace (qmx-agents) was not synced on the planner's machine; `lint` is the format
+#   check that CI's lint job runs there. Its types run is left out: cg-02 touches only blank lines.
+# - vulture, skylos and mutmut are left out here (CI runs vulture and skylos at every level; mutmut not tried under WSL).
+#   The deep run's Linux mutation lane is the mutant check (E6).
+
+[[package]]
+root = "qmn"
+setup = ["uv", "sync", "--frozen"]
+lint = ["uv", "run", "--no-sync", "ruff", "check", "."]
+types = ["uv", "run", "--no-sync", "pyright", "--project", "../pyproject.toml", "src", "deploy"]
+test = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml={junit}", "{tests}"]
+
+[[package]]
+root = "qmx-agents/packages/qmx-apps"
+setup = ["uv", "sync", "--frozen"]
+lint = ["uv", "run", "--no-sync", "ruff", "format", "--config", "pyproject.toml", "--check", "src", "tests", "../../../examples/apps"]
+test = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml={junit}", "{tests}"]

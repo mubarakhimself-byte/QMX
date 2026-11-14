@@ -12,17 +12,43 @@ inputs:
 build_branch: build/ci-green
 parent_tip: "bef6e80849161614e669b26952c88aeaf2acbed2"
 # Written by the challenge.
-core_sentence: null
+core_sentence: "With the fix in, a deep CI run on engine/base ends green on Linux and Windows, with no check switched off or silenced."
 budget:
-  core: null
-  later: null
-  checkpoints: null
+  core: 2
+  later: 3
+  checkpoints: 1
   raised: []
 gates:
   cut: {by: him, at: 2026-11-14, source: "dd8f4ab2:L10701", advance: no}
   plan: null
   go: null
 # Written at handoff.
-stop_points: []
-chains: []
+stop_points:
+  - id: A
+    tier: core
+    done_when: "With the fix in, a deep CI run on engine/base ends green on Linux and Windows, with no check switched off or silenced."
+    handoff: ready
+  - id: B
+    tier: later
+    done_when: "The 57 baselined rows from Windows-only code are gone, after CI is green, apart from the 7 in his guarded parts."
+    handoff: deferred
+chains:
+  - ask: S1
+    verdict: core
+    plan: [S1.a, S1.b, S1.c, S1.d]
+    arch: [A1, A2, A3, A4]
+    interfaces: []
+    slices: [cg-01, cg-02]
+    edge_cases: [E1, E2, E3, E4, E5, E6, E7, E8]
+    intent: []
+    findings: []
+  - ask: S2
+    verdict: later
+    plan: [S2.a, S2.b, S2.c]
+    arch: [A5]
+    interfaces: []
+    slices: []
+    edge_cases: []
+    intent: []
+    findings: []
 abandoned: null
