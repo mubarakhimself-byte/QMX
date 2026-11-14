@@ -1,0 +1,28 @@
+# PROGRAM.yaml, version 2: the program's one index (template: D:/factory/skills/funnel-handoff/templates/PROGRAM.yaml).
+project: qmx
+program: ci-green
+kind: feature
+parent: null
+# The Windows-only code pyright on Linux fails, the format error, and the types baseline it shrinks.
+area: [qmn/src/qmn/app/grants.py, qmn/src/qmn/host/_windows_deployment.py, qmx-agents/packages/qma-harness, qmx-agents/packages/qmx-apps, qmx-agents/packages/qmx-engine, qmx-agents/packages/qmx-home, qmx-agents/packages/qmx-host, ci/baselines/pyright.txt]
+inputs:
+  audit: null
+  backlog: []
+  ui_asks: []
+build_branch: build/ci-green
+parent_tip: "bef6e80849161614e669b26952c88aeaf2acbed2"
+# Written by the challenge.
+core_sentence: null
+budget:
+  core: null
+  later: null
+  checkpoints: null
+  raised: []
+gates:
+  cut: null
+  plan: null
+  go: null
+# Written at handoff.
+stop_points: []
+chains: []
+abandoned: null
