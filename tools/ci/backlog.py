@@ -9,15 +9,17 @@ Rows come from three places:
   `mutmut.txt`, `pyright.txt`, `known-reds.txt`, `flaky.txt`);
 - the run's `summary.json` (its artifact `summary`): known reds, flaky tests, and every quality
   finding that did not block (a note);
-- the walk run's `summary.json`: its surviving mutants, which the walk records as notes.
+- the walk run's `summary.json`: its surviving mutants, which the walk records as notes. They are
+  survivors beyond `mutmut.txt`, so they add to the baseline's rows: one row per function, with
+  its count of survivors.
 
 A red or a finding that blocks is not a backlog row: it is the change's to fix. The columns are
 those of `BACKLOG.tsv` (factory design 11.5) without `id`, `status` and `hops`, plus `key` first:
 the tool and the ratchet key, stable across runs, so `ship backlog sync` can match a row to the
 same finding next time. A key a baseline holds twice gets `#2` on its second row. `door` is
-`mechanical` only when the rule is certain (an unused import, a flaky test) and the row touches no
-fixed line, else `triage`. `touches` names the fixed-line module the row is in (one listed in
-`ci/baselines/mutmut-modules.txt`), or `none`.
+`mechanical` only when the rule is certain (an unused import whose name no string in its file
+mentions, a flaky test) and the row touches no fixed line, else `triage`. `touches` names the
+fixed-line module the row is in (one listed in `ci/baselines/mutmut-modules.txt`), or `none`.
 
 `--run` and `--walk` download the `summary` artifact with `gh` (signed in), from the repository
 `QMX_GITHUB_REPO` names (default: the QMX home on GitHub).
@@ -26,10 +28,11 @@ fixed line, else `triage`. `touches` names the fixed-line module the row is in (
 from __future__ import annotations
 
 import argparse
+import ast
 import dataclasses
-import datetime
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -82,6 +85,14 @@ def module_of(path: str) -> str | None:
     return ci_mutate.module_name(found[1]) if found else None
 
 
+def fixed_module(name: str, fixed: Sequence[str]) -> str:
+    """The fixed-line module a dotted name sits in, or `none`."""
+    for module in fixed:
+        if name == module or name.startswith(module + "."):
+            return module
+    return "none"
+
+
 def touches(tool: str, key: str, fixed: Sequence[str]) -> str:
     """The fixed-line module a finding sits in, or `none`. A mutant names its function
     (`package|mutmut|module.function status`); any other quality finding names its file."""
@@ -91,21 +102,37 @@ def touches(tool: str, key: str, fixed: Sequence[str]) -> str:
         name = module_of(key.split("|", 1)[0]) or ""
     else:
         return "none"
-    for module in fixed:
-        if name == module or name.startswith(module + "."):
-            return module
-    return "none"
+    return fixed_module(name, fixed)
 
 
-def door(tool: str, key: str, touched: str) -> str:
+UNUSED_IMPORT = re.compile(r"^unused import '([^']+)'$")
+
+
+def named_in_a_string(path: Path, name: str) -> bool:
+    """Whether a string in the file names `name`, as `cast("Name", ...)` or a string annotation
+    does: Vulture cannot see that use, so removing the import may break the file. A file that
+    cannot be read or parsed counts as naming it."""
+    try:
+        tree = ast.parse(path.read_text("utf-8"))
+    except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+        return True
+    word = re.compile(rf"\b{re.escape(name)}\b")
+    return any(
+        isinstance(n, ast.Constant) and isinstance(n.value, str) and word.search(n.value)
+        for n in ast.walk(tree)
+    )
+
+
+def door(tool: str, key: str, touched: str, root: Path = REPO) -> str:
     """`mechanical` where the rule is certain and no fixed line is touched, else `triage`."""
     if touched != "none":
         return "triage"
     parts = key.split("|")
     if tool == "flaky":
         return "mechanical"
-    if tool == "vulture" and parts[2].startswith("unused import "):
-        return "mechanical"
+    unused = UNUSED_IMPORT.match(parts[2]) if tool == "vulture" else None
+    if unused is not None:
+        return "triage" if named_in_a_string(root / parts[0], unused.group(1)) else "mechanical"
     if tool == "skylos" and parts[1].startswith("unused_imports:"):
         return "mechanical"
     return "triage"
@@ -130,24 +157,48 @@ def describe(tool: str, key: str) -> tuple[str, str]:
             return f"flaky test on {parts[0]}: {parts[2]}", parts[1]
 
 
-def make_row(tool: str, key: str, source: str, seen: str, fixed: Sequence[str]) -> Row:
+def make_row(
+    tool: str, key: str, source: str, seen: str, fixed: Sequence[str], root: Path = REPO
+) -> Row:
     what, where = describe(tool, key)
     touched = touches(tool, key, fixed)
-    return Row(f"{tool}|{key}", source, what, where, seen, "", touched, door(tool, key, touched))
+    found = door(tool, key, touched, root)
+    return Row(f"{tool}|{key}", source, what, where, seen, "", touched, found)
 
 
-def baseline_rows(baselines: Path, seen: str) -> list[Row]:
+def baseline_rows(baselines: Path, seen: str, root: Path = REPO) -> list[Row]:
     fixed = ratchet.read_baseline(baselines / FIXED_MODULES)
     rows: list[Row] = []
     for name, (tool, source) in BASELINE_SOURCES.items():
         for key in ratchet.read_baseline(baselines / name):
-            rows.append(make_row(tool, key, source, seen, fixed))
+            rows.append(make_row(tool, key, source, seen, fixed, root))
     return rows
 
 
-def summary_rows(summary: Mapping[str, object], seen: str, fixed: Sequence[str]) -> list[Row]:
-    """Known reds, flaky tests and non-blocking quality notes from one run's summary.json."""
+def walk_rows(keys: Iterable[str], seen: str, fixed: Sequence[str]) -> list[Row]:
+    """One row per function for a walk's surviving mutants (`package|mutmut|module.function
+    status`), carrying how many survived. They are survivors beyond `mutmut.txt`, so these rows
+    stand beside the baseline's own rows for the same function."""
+    counts: Counter[tuple[str, str]] = Counter()
+    for key in keys:
+        package, _, rest = key.split("|", 2)
+        counts[(package, rest.split(" ", 1)[0])] += 1
     rows: list[Row] = []
+    for (package, function), n in sorted(counts.items()):
+        what = f"{n} surviving mutant{'s' if n > 1 else ''} in {function} (nightly walk)"
+        touched = fixed_module(function, fixed)
+        key = f"mutmut-walk|{package}|{function}"
+        rows.append(Row(key, "ci-mutmut", what, package, seen, "", touched, "triage"))
+    return rows
+
+
+def summary_rows(
+    summary: Mapping[str, object], seen: str, fixed: Sequence[str], root: Path = REPO
+) -> list[Row]:
+    """Known reds, flaky tests and non-blocking quality notes from one run's summary.json. A
+    note's mutants (the walk's survivors) become one row per function."""
+    rows: list[Row] = []
+    mutants: list[str] = []
     for red in cast("list[dict[str, object]]", summary.get("reds") or []):
         kind = red.get("kind")
         if kind not in ("known", "flaky"):
@@ -159,15 +210,19 @@ def summary_rows(summary: Mapping[str, object], seen: str, fixed: Sequence[str])
         tool = str(item.get("tool"))
         if item.get("kind") != "new" or item.get("blocks", True) or tool not in QUALITY_SOURCES:
             continue
-        rows.append(make_row(tool, str(item["key"]), QUALITY_SOURCES[tool], seen, fixed))
-    return rows
+        if tool == "mutmut":
+            mutants.append(str(item["key"]))
+            continue
+        rows.append(make_row(tool, str(item["key"]), QUALITY_SOURCES[tool], seen, fixed, root))
+    return rows + walk_rows(mutants, seen, fixed)
 
 
 def merge(groups: Iterable[Sequence[Row]]) -> list[Row]:
     """One row per occurrence. Within one source (a baseline file, one run's summary) a key seen
     twice is two findings, as the ratchet counts them, and the second copy's key gets `#2`. The
     same finding from two sources (a known red in known-reds.txt and in the run's summary) is
-    one row: a key gets as many rows as the one source that holds it most often."""
+    one row: a key gets as many rows as the one source that holds it most often. A walk's rows
+    have keys of their own (`mutmut-walk|...`), so they add to the baseline's."""
     ordered: list[Row] = []
     most: Counter[str] = Counter()
     for group in groups:
@@ -219,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--walk", help="a walk run's id: its summary artifact")
     parser.add_argument("--summary", type=Path, action="append", default=[], help="summary.json")
     parser.add_argument("--baselines", type=Path, default=BASELINES)
+    parser.add_argument("--root", type=Path, default=REPO, help="the checkout the rows name")
     parser.add_argument("--date", help="first_seen for every row (default: the run's date)")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -231,11 +287,12 @@ def main(argv: list[str] | None = None) -> int:
             summary, started = fetch_summary(run_id, Path(tmp) / str(n))
             summaries.append(summary)
             dates.append(started)
-    today = datetime.date.today().isoformat()  # ambient-scan: allow - a CLI's default date
-    seen = args.date or (dates[0] if dates and dates[0] else today)
+    seen = args.date or (dates[0] if dates else "")
+    if not seen:
+        parser.error("--date is needed when no --run or --walk gives a run's date")
     fixed = ratchet.read_baseline(args.baselines / FIXED_MODULES)
-    groups = [baseline_rows(args.baselines, seen)]
-    groups += [summary_rows(summary, seen, fixed) for summary in summaries]
+    groups = [baseline_rows(args.baselines, seen, args.root)]
+    groups += [summary_rows(summary, seen, fixed, args.root) for summary in summaries]
     found = merge(groups)
     write_rows(args.out, found)
     by_door = Counter(r.door for r in found)
