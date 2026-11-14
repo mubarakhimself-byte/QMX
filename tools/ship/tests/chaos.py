@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -455,8 +454,3 @@ def audit_yaml(base: str, area=("pkg",), parent: str = "null", extra: str = "") 
             "gates:\n  cut: {by: him, at: 2026-11-14, source: \"t:1\", advance: no}\n"
             "  plan: {by: him, at: 2026-11-14, source: \"t:2\", advance: yes}\n  go: null\n"
             f"stop_points: []\nchains: []\n{extra}abandoned: null\n")
-
-
-def copy_program(src: Path, dst: Path) -> Program:
-    shutil.copytree(src, dst)
-    return Program(dst)

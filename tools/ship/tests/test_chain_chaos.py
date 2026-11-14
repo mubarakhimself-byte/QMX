@@ -25,11 +25,11 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | 8 | a worker replies nonsense | chaos `Garbage.test_garbage_builder_parks_after_three` |
 | 9 | he is away at a gate | chaos `Gates.test_away_at_go` |
 | 10 | he answers days later | chaos `Gates.test_answer_then_go` (10a); kit `test_run.Unpark` and `UnparkPins` (10b): `Named.test_row_10b_unpark_while_open_else_backlog` |
-| 11 | he changes his mind mid-plan | fixture `retired-id-cited` (factory): `FactoryFixtures.test_row_11_retired_id_cited` |
+| 11 | he changes his mind mid-plan | not testable here: the factory has no `retired-id-cited` fixture yet (check_chain.py has the RETIRED rule); `FactoryFixtures.test_row_11_retired_id_cited` is skipped until it does |
 | 12 | he changes his mind mid-build | chaos `StopAfter.test_stop_after_checkpoint` |
 | 13 | he abandons a program | chaos `Abandon.test_abandon` (kit `test_chain.Abandon` too) |
 | 14 | budget overrun at handoff | fixture `d03`/`d04` (factory, U21): `FactoryFixtures.test_row_14_over_budget` |
-| 15 | he insists on a DROP | fixture (factory, U20): `FactoryFixtures.test_row_15_he_overrules_a_drop` |
+| 15 | he insists on a DROP | not testable here: the factory has no `he-overrules-a-drop` fixture yet (U20); `FactoryFixtures.test_row_15_he_overrules_a_drop` is skipped until it does |
 | 16 | the challenger finds nothing | no script ("—"); fixture `e16-no-call-outs` named in `FactoryFixtures.test_row_16_nothing_to_call_out` |
 | 17 | LATER hidden in a CORE slice | fixture `d02` (factory, U21): `FactoryFixtures.test_row_17_later_in_core_slice` |
 | 18 | core sentence not true at the last CORE stop | chaos `CoreThenLater.test_core_not_proven_blocks_later` |
@@ -65,7 +65,7 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | 48 | two programs break each other quietly | not testable here: needs a fake deep run red only for a commit holding both programs (fake `gh` cannot script that yet); the merge's own deep run is in `test_merge.Moved` |
 | 49 | one program keeps merging first | kit `test_locks.MergeQueue.test_three_waiters_...`: `Named.test_row_49` |
 | 50 | a stale claim | kit `test_claims.Build.test_the_claims_of_a_deleted_program_are_swept`: `Named.test_row_50` |
-| 51 | he is away at the intent check | chaos `Audit.test_away_at_intent_check` (also X3; expectedFailure: finding F2) |
+| 51 | he is away at the intent check | chaos `Audit.test_away_at_intent_check_reading_goes_on` (passes) and `Audit.test_away_at_intent_check` (also X3; expectedFailure: finding F2) |
 | 52 | intent changed after quality | fixture `g07` (factory, U28): `FactoryFixtures.test_row_52_intent_changed_after_quality` |
 | 53 | the sources contradict | fixture `g08` (factory, U28): `FactoryFixtures.test_row_53_leave_it_as_it_works` |
 | 54 | a Fable removal he uses | fixture `g14` (factory, U26): `FactoryFixtures.test_row_54_fable_decides_visible_removal`; drill D8 |
@@ -102,7 +102,7 @@ Loops of 3.9 (row 57), each: exit, and what happens at the round count.
 |---|---|
 | Questions to him (3 batches of 4) | fixture: factory `Resume.test_too_many_open_questions_ask_for_a_list`: `Loops.test_questions_to_him` |
 | Self-annealing (5 rounds) | fixture `d08-anneal-round-limit`: `Loops.test_self_annealing` |
-| He changes his mind (no limit) | fixture `retired-id-cited`: `Loops.test_he_changes_his_mind` |
+| He changes his mind (no limit) | fixture `v19-mind-change-after-stage5-global-numbering`: `Loops.test_he_changes_his_mind` |
 | Plan review and planner (1 round trip) | chaos `Loops.test_second_fixes_result_waits` |
 | A slice's fix round (1 fix round) | chaos `Loops.test_second_red_parks`; kit `test_dispatch_recover.FixRounds`, breaker in `test_foundation` |
 | A worker dying (3 restarts) | chaos row 8 `Garbage.test_garbage_builder_parks_after_three`: `Loops.test_worker_dying` |
@@ -128,14 +128,13 @@ Hand-offs between the branches (13.4).
 | X7 a LATER item comes back as an ask | not testable here: U33 and U34 |
 | X8 a builder says the plan is wrong | chaos row 27 (`MAP.md` lists it); the fix slice citing the chain id is the verdict prompt's job (skills lane) |
 | X9 an audit's findings go stale | chaos `Handoffs.test_x9_stale_findings_rerun_at_the_new_tip` (expectedFailure: finding F6) |
-| X10 a fix program crosses nothing | chaos `CoreThenLater.test_core_not_proven_blocks_later` (its claims part) |
+| X10 a fix program crosses nothing | chaos `CoreThenLater.test_core_not_proven_blocks_later` (its claims part; D-L22 wins over "never registers its own": the fix's claims never block its parent and its merge releases them) |
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -144,7 +143,6 @@ from pathlib import Path
 
 from ship import phase
 from ship import state as st
-from ship.launch import KIT
 from ship.layout import Program
 from ship.proc import kill_tree, pid_alive
 from ship.settings import load_settings
