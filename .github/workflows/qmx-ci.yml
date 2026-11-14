@@ -18,7 +18,9 @@
 #            on Linux and Windows and release-verdict: the tag must sit on engine/base or a
 #            release/v* branch, and a green deep run must vouch for the commit.
 #   walk     the nightly schedule: one part of the whole-repo mutmut walk, chosen by run number.
-#            GitHub runs schedules from the default branch's copy of this file only.
+#            GitHub runs schedules from the default branch's copy of this file only. Survivors
+#            beyond ci/baselines/mutmut.txt are notes in summary.json, which tools/ci/backlog.py
+#            turns into backlog rows; the walk never fails on a survivor.
 #   baseline push to baseline/**: Vulture, pyright (the lint job) and Skylos (one part per
 #            top-level folder, joined by skylos-baseline) rewrite ci/baselines (artifact
 #            ci-out-*/baselines), and mutmut runs the modules in ci/baselines/mutmut-modules.txt.

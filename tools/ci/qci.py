@@ -311,12 +311,17 @@ def describe(lvl: Level, base: str | None, at: str, changed: list[str]) -> None:
 ASSERTION_PREFIXES = ("assert", "AssertionError", "Failed: DID NOT RAISE", "Failed: DID NOT WARN")
 
 
+def junit_cases(junit: Path) -> list[ET.Element]:
+    """Every test case of a JUnit report that pytest wrote in CI; none when there is no report."""
+    if not junit.exists():
+        return []
+    return list(ET.parse(junit).iter("testcase"))  # noqa: S314 - pytest wrote it in CI
+
+
 def outcomes(junit: Path) -> dict[str, str]:
     """test id -> passed | skipped | assertion | failed | error (collection and setup errors)."""
-    if not junit.exists():
-        return {}
     found: dict[str, str] = {}
-    for case in ET.parse(junit).iter("testcase"):  # noqa: S314 - pytest wrote this report in this job
+    for case in junit_cases(junit):
         test_id = f"{case.get('classname', '')}::{case.get('name', '')}"
         failure, error, skipped = case.find("failure"), case.find("error"), case.find("skipped")
         if error is not None or not case.get("classname"):
@@ -1298,11 +1303,21 @@ def job_mutmut() -> int:
     )
     for line in broken:
         print(f"FAIL {line}")
+    if lvl == Level.WALK:
+        record_walk(found, shard)
     if lvl in (Level.WALK, Level.BASELINE) or os.environ.get("QMX_MUTATE_MODULES"):
         print(f"{len(found)} surviving mutants recorded (walk: not a gate)")
         return 1 if broken else 0
     verdict = ratchet_verdict("mutmut", found, None, f"mutmut-{shard}").rc if found else 0
     return 1 if broken or verdict else 0
+
+
+def record_walk(found: Sequence[ratchet.Finding], shard: int) -> None:
+    """The walk is no gate. Its survivors beyond ci/baselines/mutmut.txt are recorded as notes
+    (mutmut-<shard>-ratchet.json, each `blocking` false), so the run's summary.json lists them in
+    `quality` with `blocks` false, where tools/ci/backlog.py reads them as backlog rows."""
+    notes = [dataclasses.replace(f, blocking=False) for f in found]
+    ratchet_verdict("mutmut", notes, None, f"mutmut-{shard}")
 
 
 def job_verdict() -> int:

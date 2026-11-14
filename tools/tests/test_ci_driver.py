@@ -13,9 +13,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar, cast
 
+import backlog
 import ci_host
 import ci_mutate
 import ci_units
+import durations
 import guard
 import pull_reds
 import pytest
@@ -1303,3 +1305,116 @@ def test_a_stale_contract_is_a_lint_finding_naming_the_operation(
         "contracts:0: [contract] stale: added   GET /api/ops/probe (ops_probe)",
         "contracts:0: [contract] stale: contracts/apps.json: missing",
     ]
+
+
+# ---- the nightly walk and shard times -----------------------------------------------------------
+
+
+def test_the_nightly_schedule_runs_the_walk_level() -> None:
+    document = WORKFLOW.split("\njobs:\n", 1)[0]
+    assert "  schedule:\n    - cron: " in document
+    assert "(github.event_name == 'schedule' && 'walk')" in document
+    assert qci.level_jobs(WORKFLOW, qci.Level.WALK) == ["mutmut-walk"]
+
+
+def test_walk_survivors_reach_the_summary_as_notes_and_become_backlog_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out, baselines = tmp_path / "ci-out-mutmut-walk-1", tmp_path / "baselines"
+    out.mkdir()
+    baselines.mkdir()
+    (baselines / "mutmut.txt").write_text("packages/qmf-core|mutmut|qmf.core.exact.a survived\n")
+    monkeypatch.setattr(qci, "OUT", out)
+    monkeypatch.setattr(qci, "BASELINES", baselines)
+    monkeypatch.setattr(qci, "head", _returns(HEAD))
+    monkeypatch.setattr(qci, "tree_of", _returns("t1"))
+    known = ratchet.Finding("packages/qmf-core", 0, "mutmut", "qmf.core.exact.a survived")
+    fresh = ratchet.Finding("packages/qmf-core", 0, "mutmut", "qmf.core.exact.b survived")
+    qci.record_walk([known, fresh], 1)
+    summary = qci.build_summary(
+        sha=HEAD,
+        ref="engine/base",
+        run_id="5",
+        url="u",
+        lvl=qci.Level.WALK,
+        jobs_of_level=["mutmut-walk"],
+        needs={"mutmut-walk": {"result": "success"}},
+        api_jobs=None,
+        artifacts=tmp_path,
+        known_reds=[],
+    )
+    assert summary["quality"] == [
+        {
+            "tool": "mutmut",
+            "key": "packages/qmf-core|mutmut|qmf.core.exact.b survived",
+            "file": "packages/qmf-core",
+            "kind": "new",
+            "blocks": False,
+        }
+    ]
+    rows = backlog.summary_rows(summary, "2026-11-14", ["qmf.core.exact"])
+    assert [(r.key, r.source, r.touches, r.door) for r in rows] == [
+        (
+            "mutmut|packages/qmf-core|mutmut|qmf.core.exact.b survived",
+            "ci-mutmut",
+            "qmf.core.exact",
+            "triage",
+        )
+    ]
+
+
+def test_a_timed_file_weighs_its_seconds_and_an_untimed_one_its_count_of_tests(
+    tmp_path: Path,
+) -> None:
+    tests = tmp_path / "qmn" / "tests"
+    tests.mkdir(parents=True)
+    (tests / "test_slow.py").write_text("def test_a(): ...\n", "utf-8")
+    (tests / "test_new.py").write_text("def test_a(): ...\ndef test_b(): ...\n", "utf-8")
+    durations = {".::qmn/tests/test_slow.py": 300.0}
+    files = ci_units.test_files(tmp_path, _unit("qmn"), durations)
+    assert {f.path: f.weight for f in files} == {
+        "qmn/tests/test_slow.py": 300.0,
+        "qmn/tests/test_new.py": ci_units.SECONDS_PER_FILE + 2 * ci_units.SECONDS_PER_TEST,
+    }
+
+
+def test_durations_add_each_files_junit_times_and_keep_the_slower_system(tmp_path: Path) -> None:
+    def shard(system: str, cases: str) -> Path:
+        folder = tmp_path / system
+        (folder / "junit").mkdir(parents=True)
+        plan = {
+            "system": system,
+            "shard": 2,
+            "units": ["qmn", "qmx-agents/packages/qmx-host"],
+            "files": [".::qmn/tests/test_a.py", "qmx-agents/packages/qmx-host::tests/test_a.py"],
+        }
+        (folder / f"plan-{system}-2.json").write_text(json.dumps(plan), "utf-8")
+        (folder / "junit" / f"{system}-2-qmn.xml").write_text(
+            f"<testsuites><testsuite>{cases}</testsuite></testsuites>", "utf-8"
+        )
+        (folder / "junit" / f"{system}-2-qmx-agents_packages_qmx-host-serial.xml").write_text(
+            '<testsuites><testsuite><testcase classname="tests.test_a" name="t" time="4.0"/>'
+            "</testsuite></testsuites>",
+            "utf-8",
+        )
+        return folder
+
+    linux = durations.shard_seconds(
+        shard(
+            "linux",
+            '<testcase classname="qmn.tests.test_a" name="x" time="1.5"/>'
+            '<testcase classname="qmn.tests.test_a.Case" name="y" time="2.5"/>',
+        )
+    )
+    assert linux == {
+        ".::qmn/tests/test_a.py": 4.0,
+        "qmx-agents/packages/qmx-host::tests/test_a.py": 4.0,
+    }
+    windows = durations.shard_seconds(
+        shard("windows", '<testcase classname="qmn.tests.test_a" name="x" time="9.0"/>')
+    )
+    assert durations.durations([linux, windows]) == {
+        ".::qmn/tests/test_a.py": 9.0 + ci_units.SECONDS_PER_FILE,
+        "qmx-agents/packages/qmx-host::tests/test_a.py": 4.0 + ci_units.SECONDS_PER_FILE,
+    }
+
