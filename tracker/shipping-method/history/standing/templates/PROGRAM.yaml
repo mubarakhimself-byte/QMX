@@ -1,0 +1,78 @@
+# PROGRAM.yaml: the planner's handoff. One index, read first by every session.
+# It points at files and never repeats them. Fill every <...>; delete these comment lines.
+# The program folder lives outside the main checkout C:/Users/Mubarak/Desktop/QMX
+# (for example D:/QMX-worktrees/<plan>/tracker/<program>/), because the run stops when
+# the main checkout's git status changes, and the scripts write into this folder.
+
+program: <short-name>                 # also the folder name
+repo: C:/Users/Mubarak/Desktop/QMX    # the main checkout the scripts fetch and push from
+build_branch: build/<short-name>      # pushed to origin at parent_tip before the run
+parent_tip: <full sha>                # the commit the build branch starts from
+target_branch: engine/base            # where MERGE lands a stop point
+worktree_root: D:/QMX-worktrees       # slice worktrees go to <worktree_root>/slice-<id>
+ship: D:/QMX-worktrees/ship-kit/tools/ship
+standing: C:/Users/Mubarak/Desktop/QMX/tracker/shipping-method/standing
+planner_session: <session id, or none>
+scope_gate: null                      # PLAN-REVIEW writes {by: him, at: <date>, where: <session>} on his go
+
+stop_points:                          # in order; each slice names one in SLICES.md's stop column
+  - id: A
+    done_when: <one line, in his words where SCOPE.md has them>
+    merged: null                      # MERGE writes the new target sha
+  - id: B
+    done_when: <...>
+    merged: null
+
+files:
+  - path: SCOPE.md
+    serves: [planner, plan review, reviewer, stop review]
+    holds: destination, his asks S1.., decisions, proposals, not yet specified, out of scope
+    updated_by: planner
+  - path: decisions/
+    serves: [planner, grounding, stop review]
+    holds: one small file per open or settled decision
+    updated_by: planner
+  - path: SLICES.md
+    serves: [coordinator, scripts]
+    holds: id, name, ask, stop, depends on, files, size
+    updated_by: planner, then the step-0 grounding agent (Files column only)
+  - path: slices/<id>/BRIEF.md
+    serves: [builder, reviewer]
+    updated_by: planner, then the step-0 grounding agent
+  - path: checks.toml
+    serves: [scripts]
+    holds: per package, the setup, lint, types and test commands
+    updated_by: planner
+  - path: ship.toml
+    serves: [scripts]
+    holds: "optional: overrides of the ship settings under [settings], e.g. seats = 3"
+    updated_by: planner
+  - path: <arch or plan decision files, e.g. arch/final/SPINE.md>
+    serves: [grounding, stop review]
+    holds: the intent behind the briefs
+    updated_by: planner
+  - path: <standing>/PROJECT-RULES.md
+    serves: [builder, reviewer]
+    standing: true
+  - path: <standing>/REVIEW.md
+    serves: [reviewer, stop review]
+    standing: true
+  - path: <standing>/RULES-CARD.md
+    serves: [coordinator]
+    standing: true
+
+run_files:                            # written during the run; listed here so the index stays whole
+  - {path: grounding/REPORT.md, by: step-0 grounding agent}
+  - {path: plan-review/, by: PLAN-REVIEW session}
+  - {path: state.json, by: ship scripts}
+  - {path: ARMED.md, by: ship preflight and teardown}
+  - {path: main-status.txt, by: ship preflight}
+  - {path: baseline-reds.txt, by: ship land and nightly}
+  - {path: evidence/<id>/<attempt>/, by: builders and ship dispatch}
+  - {path: checks/, by: ship slice_checks, land and nightly}
+  - {path: review/, by: reviewers and ship land}
+  - {path: notes/, by: coordinator}
+  - {path: RUN-REPORT.md, by: ship run_report}
+  - {path: stop-review/<X>/, by: STOP-REVIEW session}
+  - {path: merge/<X>.md, by: MERGE session}
+  - {path: .claude/settings.local.json, by: coordinator at arm time (the ship hook)}

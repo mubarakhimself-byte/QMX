@@ -1,0 +1,28 @@
+program: tiny
+repo: C:/Users/Mubarak/Desktop/QMX
+build_branch: build/tiny
+parent_tip: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+target_branch: engine/base
+worktree_root: D:/QMX-worktrees
+ship: D:/QMX-worktrees/ship-kit/tools/ship
+standing: x
+planner_session: none
+scope_gate: null
+
+stop_points:
+  - id: A
+    done_when: "the heartbeat runs every 30 seconds"
+    merged: null
+
+files:
+  - path: SCOPE.md
+
+run_files:
+  - {path: state.json, by: ship scripts}
+
+chains:
+  - ask: S1
+    plan: [S1.a]
+    arch: [A1]
+    slices: [rc2-01]
+    edge_cases: [E1]

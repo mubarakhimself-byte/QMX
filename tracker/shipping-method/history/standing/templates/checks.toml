@@ -1,0 +1,31 @@
+# checks.toml: the commands ship slice_checks, land and nightly run per package.
+# One [[package]] per package a slice in this program can touch. A changed file belongs
+# to the package with the longest matching root. Without this file the scripts treat the
+# whole repo as one package tested with `python -m pytest`, which QMX's two uv
+# workspaces do not support. Each command runs from the package root through the timed
+# wrapper. In `test`, {junit} becomes the JUnit XML path and {tests} the test files.
+# Run each command once at the parent tip before handing off; a command that fails there
+# turns every slice red. Allowed keys: root, setup, lint, types, test, and the quality
+# tools vulture, skylos, mutmut (ship quality.py; a tool without a command prints NOTRUN,
+# and only a NEW finding against the parent blocks).
+# - skylos stays commented out: it may not install under Windows uv (it needs MSVC build
+#   tools for tree-sitter-dart-orchard). Turn it on where it installs.
+# - mutmut is left out until it has been tried once under WSL.
+
+[[package]]
+root = "qml"
+setup = ["uv", "sync", "--frozen"]
+lint = ["uv", "run", "--no-sync", "ruff", "check", "."]
+types = ["uv", "run", "--no-sync", "pyright"]
+test = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml={junit}", "{tests}"]
+vulture = ["python", "-m", "vulture", "."]
+# skylos = ["python", "-m", "skylos", "."]  # off: may not install under Windows uv
+
+[[package]]
+root = "qmx-agents/packages/qmx-control"
+setup = ["uv", "sync", "--frozen"]
+lint = ["uv", "run", "--no-sync", "ruff", "check", "."]
+types = ["uv", "run", "--no-sync", "pyright"]
+test = ["uv", "run", "--no-sync", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml={junit}", "{tests}"]
+vulture = ["python", "-m", "vulture", "."]
+# skylos = ["python", "-m", "skylos", "."]  # off: may not install under Windows uv
