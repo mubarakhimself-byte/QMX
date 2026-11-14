@@ -1393,3 +1393,69 @@ def test_the_parent_run_keeps_going_past_test_files_it_cannot_collect(
     qci.pytest(tmp_path, ["t.py"], tmp_path / "a.xml", serial=None, keep_going=True)
     qci.pytest(tmp_path, ["t.py"], tmp_path / "b.xml", serial=None)
     assert ["--continue-on-collection-errors" in argv for argv in seen] == [True, False]
+
+
+# ---- fail-at-parent: a symbol or a keyword argument the change adds (D-L24) ----------------------
+
+PARENT_SOURCE = "import os\n\nLIMIT = 3\n\n\ndef run(argv, cwd):\n    return 0\n"
+HEAD_SOURCE = (
+    "import os\n\nLIMIT = 3\nSHARDS: int = 2\n\n\n"
+    "def run(argv, cwd, *, keep_going=False):\n    return 0\n\n\n"
+    "def collection_errors(junit):\n    return {}\n\n\nclass Added:\n    pass\n"
+)
+
+
+def test_what_a_change_adds_to_a_module_is_read_by_ast() -> None:
+    added = qci.added_in(PARENT_SOURCE, HEAD_SOURCE)
+    assert added.names == frozenset({"SHARDS", "collection_errors", "Added"})
+    assert dict(added.kwargs) == {"run": frozenset({"keep_going"})}
+
+
+ADDED = {"tools/ci/qci.py": qci.added_in(PARENT_SOURCE, HEAD_SOURCE)}
+
+
+@pytest.mark.parametrize(
+    ("error", "excused"),
+    [
+        ("E   AttributeError: module 'qci' has no attribute 'collection_errors'", True),
+        ("E   ImportError: cannot import name 'Added' from 'qci' (/r/tools/ci/qci.py)", True),
+        ("E   TypeError: run() got an unexpected keyword argument 'keep_going'", True),
+        ("E   TypeError: qci.run() got an unexpected keyword argument 'keep_going'", True),
+        ("E   AttributeError: module 'qci' has no attribute 'LIMIT'", False),
+        ("E   AttributeError: module 'qci' has no attribute 'never_added'", False),
+        ("E   AttributeError: module 'guard' has no attribute 'collection_errors'", False),
+        ("E   TypeError: unsupported operand type(s) for +: 'int' and 'str'", False),
+        ("E   TypeError: run() got an unexpected keyword argument 'cwd2'", False),
+        ("E   ValueError: module 'qci' has no attribute 'collection_errors'", False),
+    ],
+    ids=[
+        "new-symbol",
+        "new-symbol-import",
+        "new-kwarg",
+        "new-kwarg-qualified",
+        "symbol-at-parent",
+        "symbol-never-added",
+        "other-module",
+        "plain-type-error",
+        "kwarg-not-added",
+        "other-error",
+    ],
+)
+def test_a_failure_at_the_parent_is_excused_only_for_what_the_change_adds(
+    error: str, excused: bool
+) -> None:
+    assert qci.excused_by_new_symbol(error, ADDED) is excused
+
+
+def test_a_failed_tests_text_is_read_by_its_id(tmp_path: Path) -> None:
+    junit = tmp_path / "parent.xml"
+    junit.write_text(
+        '<testsuites><testsuite><testcase classname="tools.tests.test_x" name="test_y">'
+        "<failure message=\"AttributeError: module 'qci' has no attribute 'f'\">E   boom"
+        '</failure></testcase><testcase classname="tools.tests.test_x" name="test_z"/>'
+        "</testsuite></testsuites>",
+        "utf-8",
+    )
+    assert qci.failure_texts(junit) == {
+        "tools.tests.test_x::test_y": "AttributeError: module 'qci' has no attribute 'f'\nE   boom"
+    }

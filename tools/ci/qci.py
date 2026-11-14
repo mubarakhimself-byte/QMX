@@ -13,6 +13,7 @@ It also runs on a laptop: with no host variables the level is `deep` and the hea
 from __future__ import annotations
 
 import argparse
+import ast
 import dataclasses
 import datetime
 import enum
@@ -365,6 +366,104 @@ def excused_at_parent(
             name in tails and missing_new_module(text, added) for name, text in errors.items()
         )
     return False
+
+
+@dataclasses.dataclass(frozen=True)
+class Added:
+    """What a change adds to an existing module: top-level names, and keyword arguments added to a
+    top-level function that was already there."""
+
+    names: frozenset[str]
+    kwargs: Mapping[str, frozenset[str]]
+
+
+def top_level_names(tree: ast.Module) -> set[str]:
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+        elif isinstance(node, ast.TypeAlias):
+            names.add(node.name.id)
+    return names
+
+
+def signatures(tree: ast.Module) -> dict[str, set[str]]:
+    """Each top-level function's parameter names."""
+    return {
+        node.name: {a.arg for a in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)}
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+
+
+def added_in(parent: str, head: str) -> Added:
+    """What `head` adds to the module `parent` was, by ast: new top-level names, and new
+    parameters of the top-level functions both have."""
+    old, new = ast.parse(parent), ast.parse(head)
+    before, after = signatures(old), signatures(new)
+    kwargs = {
+        name: frozenset(params - before[name])
+        for name, params in after.items()
+        if name in before and params - before[name]
+    }
+    return Added(frozenset(top_level_names(new) - top_level_names(old)), kwargs)
+
+
+NO_ATTRIBUTE = re.compile(r"AttributeError: module '([\w.]+)' has no attribute '(\w+)'")
+NO_NAME = re.compile(r"ImportError: cannot import name '(\w+)' from '([\w.]+)'")
+NEW_KWARG = re.compile(
+    r"TypeError: (?:[\w.]+\.)?(\w+)\(\) got an unexpected keyword argument '(\w+)'"
+)
+
+
+def excused_by_new_symbol(error: str, added: Mapping[str, Added]) -> bool:
+    """D-L24: a new test that fails at the parent counts as failing there when its error is an
+    AttributeError or ImportError naming a top-level symbol the change adds to an existing module,
+    or a TypeError for a keyword argument the change adds to that function. `added` holds, per
+    changed module path, what the change adds to it. Every other error still blocks."""
+    missing = [(m, n) for m, n in NO_ATTRIBUTE.findall(error)]
+    missing += [(m, n) for n, m in NO_NAME.findall(error)]
+    for module, name in missing:
+        if any(module in module_tails(path) and name in a.names for path, a in added.items()):
+            return True
+    return any(
+        kwarg in a.kwargs.get(function, frozenset())
+        for function, kwarg in NEW_KWARG.findall(error)
+        for a in added.values()
+    )
+
+
+def failure_texts(junit: Path) -> dict[str, str]:
+    """Each test that failed or errored, by id (`classname::name`), with its message and text."""
+    found: dict[str, str] = {}
+    for case in junit_cases(junit):
+        bad = case.find("failure")
+        bad = bad if bad is not None else case.find("error")
+        if bad is not None and case.get("classname"):
+            test_id = f"{case.get('classname', '')}::{case.get('name', '')}"
+            found[test_id] = f"{bad.get('message') or ''}\n{bad.text or ''}"
+    return found
+
+
+def additions(base: str, at: str, changed: Sequence[str]) -> dict[str, Added]:
+    """What the change from `base` to `at` adds to each Python module that both hold."""
+    found: dict[str, Added] = {}
+    for path in changed:
+        if not path.endswith(".py"):
+            continue
+        old = git("show", f"{base}:{path}", check=False)
+        new = git("show", f"{at}:{path}", check=False)
+        if not old or not new:
+            continue
+        try:
+            found[path] = added_in(old, new)
+        except SyntaxError:
+            continue
+    return found
 
 
 def outcomes(junit: Path) -> dict[str, str]:
@@ -794,9 +893,11 @@ def contract_findings() -> list[ratchet.Finding]:
 
 def job_fail_at_parent() -> int:
     """Each new test case must fail at the parent on an assertion and pass at the head. An import,
-    collection or setup error at the parent does not count as failing, with one exception
-    (D-L19): a test file new in the change that the parent cannot collect only because a module
-    the change adds is missing (`excused_at_parent`)."""
+    collection or setup error at the parent does not count as failing, with two exceptions: a test
+    file new in the change that the parent cannot collect only because a module the change adds
+    is missing (D-L19, `excused_at_parent`), and a test whose error at the parent names a symbol
+    or a keyword argument the change adds to an existing module (D-L24,
+    `excused_by_new_symbol`)."""
     lvl = level()
     at = head()
     base = base_for(lvl, at)
@@ -810,6 +911,7 @@ def job_fail_at_parent() -> int:
     modules = [p for p in changed if ci_units.is_test_module(p) and p in present]
     support = [p for p in changed if ci_units.is_test_support(p) and not ci_units.is_test_module(p)]
     units = ci_units.discover(REPO)
+    new_symbols = additions(base, at, [p for p in changed if p not in added])
     by_unit: dict[ci_units.Unit, list[str]] = {}
     for m in modules:
         unit = ci_units.owner(units, m)
@@ -855,6 +957,7 @@ def job_fail_at_parent() -> int:
         pytest(REPO / unit.cwd, rel, OUT / "junit" / f"fap-{stem}-head.xml", serial=None)
         at_parent = outcomes(OUT / "fap" / f"{stem}-parent.xml")
         errors = collection_errors(OUT / "fap" / f"{stem}-parent.xml")
+        texts = failure_texts(OUT / "fap" / f"{stem}-parent.xml")
         new_tests = [m for m in mods if m in added]
         at_head = outcomes(OUT / "junit" / f"fap-{stem}-head.xml")
         if not at_head:
@@ -865,8 +968,20 @@ def job_fail_at_parent() -> int:
         new = sorted(k for k in at_head if k not in before and "::::" not in k)
         for test_id in new:
             p, h = at_parent.get(test_id, "not collected"), at_head[test_id]
-            excused = p == "not collected" and excused_at_parent(test_id, new_tests, errors, added)
-            why = " (a module the change adds)" if excused else ""
+            new_module = p == "not collected" and excused_at_parent(
+                test_id, new_tests, errors, added
+            )
+            new_symbol = p in ("failed", "error") and excused_by_new_symbol(
+                texts.get(test_id, ""), new_symbols
+            )
+            excused = new_module or new_symbol
+            why = (
+                " (a module the change adds)"
+                if new_module
+                else " (a symbol the change adds)"
+                if new_symbol
+                else ""
+            )
             log.append(f"{test_id} parent={p}{why} head={h}")
             if p != "assertion" and not excused:
                 problems.append(
