@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 import backlog
 import pytest
 import qci
 import ratchet
 
+T = TypeVar("T")
 SIZING = "packages/qmf-risk/src/qmf/risk/sizing.py"
 BASELINES = {
     "vulture.txt": (
@@ -124,7 +126,7 @@ def _fixture(tmp_path: Path) -> tuple[list[str], Path]:
     return argv, walk
 
 
-def _const[T](value: T) -> Callable[..., T]:
+def _const(value: T) -> Callable[..., T]:
     """A stand-in for a function: whatever it is called with, it returns `value`."""
 
     def answer(*_args: object, **_kwargs: object) -> T:
