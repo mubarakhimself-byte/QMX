@@ -2,7 +2,9 @@
 # Which jobs a run holds follows its level; what each job does at that level lives in
 # tools/ci/qci.py. Levels, and what starts each:
 #   slice    push to slice/**: Linux only. Format, lint and types of touched folders, touched tests,
-#            fail-at-parent, Vulture and Skylos (only new findings in changed files block).
+#            fail-at-parent, Vulture and Skylos (only new findings in changed files block). The
+#            lint job also checks contracts/ against the code (tools/contract_dump.py --check)
+#            when the change touches qmx-agents/ or contracts/, and at every deep run.
 #   land     push to build/**: touched tests on Linux and Windows.
 #   deep     a checkpoint, started by hand: `gh workflow run qmx-ci.yml --ref <branch>`. The full
 #            suite on Linux and Windows, lint, Vulture, Skylos, and mutmut on functions changed

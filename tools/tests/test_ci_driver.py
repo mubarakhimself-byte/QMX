@@ -1246,3 +1246,42 @@ def test_prune_never_removes_a_comment_line(tmp_path: Path) -> None:
     path.write_text("# header\na|r|1\n", "utf-8")
     assert ratchet.prune(path, ["# header", "a|r|1"]) == 1
     assert path.read_text("utf-8") == "# header\n"
+
+
+# ---- contracts ----------------------------------------------------------------------------------
+
+
+def test_the_contract_check_runs_when_a_slice_touches_the_host_and_at_every_deep_run() -> None:
+    host = ["qmx-agents/packages/qmx-control/src/qmx_control/service.py"]
+    assert qci.contract_due(qci.Level.SLICE, host)
+    assert qci.contract_due(qci.Level.SLICE, ["contracts/apps.json"])
+    assert not qci.contract_due(qci.Level.SLICE, ["qmn/src/qmn/x.py"])
+    assert qci.contract_due(qci.Level.DEEP, [])
+    assert not qci.contract_due(qci.Level.BASELINE, host)
+
+
+def test_a_stale_contract_is_a_lint_finding_naming_the_operation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = (
+        "contracts/host-openapi.json: stale\n"
+        "  added   GET /api/ops/probe (ops_probe)\n"
+        "contracts/apps.json: missing\n"
+        "FAIL the contract files are stale: run `python tools/contract_dump.py`\n"
+    )
+
+    def fake_run(argv: list[str], cwd: Path, **kwargs: object) -> int:
+        out = kwargs["stdout_to"]
+        assert isinstance(out, Path)
+        out.write_text(report, "utf-8")
+        assert argv[-2:] == ["tools/contract_dump.py", "--check"]
+        return 1
+
+    monkeypatch.setattr(qci, "OUT", tmp_path)
+    monkeypatch.setattr(qci, "run", fake_run)
+    monkeypatch.setattr(qci, "uv", lambda: "uv")
+    found = qci.contract_findings()
+    assert [f.text() for f in found] == [
+        "contracts:0: [contract] stale: added   GET /api/ops/probe (ops_probe)",
+        "contracts:0: [contract] stale: contracts/apps.json: missing",
+    ]

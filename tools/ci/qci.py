@@ -645,7 +645,8 @@ def job_lint(write_baseline: bool = False) -> int:
     else:
         base, changed, targets = None, [], dirs
     describe(lvl, base, at, changed)
-    if not targets:
+    contract = not write_baseline and contract_due(lvl, changed)
+    if not targets and not contract:
         print("no Python or project file changed; nothing to lint")
         return 0
     for workspace in sorted(
@@ -653,6 +654,7 @@ def job_lint(write_baseline: bool = False) -> int:
             ci_units.AGENTS_WS if d.startswith(ci_units.AGENTS_WS) else ci_units.ROOT_WS
             for d in targets
         }
+        | ({ci_units.AGENTS_WS} if contract else set())
     ):
         sync(workspace)
     tasks = () if write_baseline else ("fmt-check", "lint")
@@ -671,6 +673,8 @@ def job_lint(write_baseline: bool = False) -> int:
         )
         if rc != 0:
             found.append(ratchet.Finding(folder, 0, task, f"poe {task} failed (rc={rc})"))
+    if contract:
+        found += contract_findings()
     errors: list[ratchet.Finding] = []
     for folder in targets:
         some, failed = pyright_run(folder)
@@ -696,6 +700,38 @@ def job_lint(write_baseline: bool = False) -> int:
     complete = not any(f.rule == "types" for f in found)
     verdict = types_verdict(errors, changed if lvl == Level.SLICE else None, complete)
     return 1 if found or verdict else 0
+
+
+CONTRACT_INPUTS = ("qmx-agents/", "contracts/", "tools/contract_dump.py")
+
+
+def contract_due(lvl: Level, changed: Sequence[str]) -> bool:
+    """Whether the lint job checks contracts/ against the code: in a slice, when the change touches
+    the host's code, the contract files or their generator; at every other linting level except a
+    baseline retake, always."""
+    if lvl == Level.BASELINE:
+        return False
+    return lvl != Level.SLICE or any(p.startswith(CONTRACT_INPUTS) for p in changed)
+
+
+def contract_findings() -> list[ratchet.Finding]:
+    """`tools/contract_dump.py --check` in the agents workspace: one finding per stale contract
+    line (each operation added, removed or changed), or one for a check that did not finish."""
+    report = OUT / "contract.txt"
+    argv = [uv(), "run", "--project", ci_units.AGENTS_WS, "--frozen", "--no-sync", "python"]
+    rc = run([*argv, "tools/contract_dump.py", "--check"], REPO, stdout_to=report, timeout=900)
+    text = report.read_text("utf-8", errors="replace") if report.exists() else ""
+    print(text, end="")
+    if rc == 0:
+        return []
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.startswith("  ") or (line.startswith("contracts/") and not line.endswith(": stale"))
+    ]
+    if rc != 1 or not lines:
+        return [ratchet.Finding("contracts", 0, "contract", f"contract check failed (rc={rc})")]
+    return [ratchet.Finding("contracts", 0, "contract", f"stale: {line}") for line in lines]
 
 
 def job_fail_at_parent() -> int:
