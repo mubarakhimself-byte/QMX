@@ -2,7 +2,8 @@
 dispatch refuse new seats. When mains returns, wait power_settle_s for the router, then require the
 internet probe and GitHub (`git ls-remote`) to answer before removing HOLD. On mains, a failed internet
 or GitHub probe also writes HOLD, and the next passing probe removes it (no settle wait).
-`SHIP_FAKE_MAINS` (1 or 0) stands in for the power line.
+`SHIP_FAKE_MAINS` (1 or 0) stands in for the power line; tests may instead name a file holding 1 or 0, so a
+running conveyor can lose mains and get it back (the chaos harness, U12).
 
 Whose HOLD it is lives in its first word: the watcher writes `power: ...` or `network: ...`; anything else (a
 manual hold, `ship hold --why ...`, written `him: ...`, or the front desk's own) is not the watcher's. The
@@ -58,6 +59,8 @@ def on_mains() -> bool:
     fake = os.environ.get("SHIP_FAKE_MAINS")
     if fake in ("0", "1"):
         return fake == "1"
+    if fake and Path(fake).is_file():  # tests (chaos.py): a file holding 1 or 0, read on every call
+        return Path(fake).read_text("utf-8").strip() != "0"
     return on_mains_windows() if sys.platform == "win32" else on_mains_linux()
 
 

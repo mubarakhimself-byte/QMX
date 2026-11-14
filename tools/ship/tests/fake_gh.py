@@ -12,7 +12,7 @@ runs are listed for it (green, or red while a file fake-gh-gate-red exists); `pr
 merges the PR's head into its base on the remote with `git` (refused while fake-gh-gate-red exists).
 `--match-head-commit SHA` refuses when the head moved; fake-gh-merge-noop says merged and merges nothing;
 fake-gh-merge-moves-base (used once) pushes a commit to the base and refuses, as GitHub does when the
-base moved. With a file fake-gh-auto, `workflow run` makes a finished run at once (green, or red while
+base moved; fake-gh-merge-moves-base-always does it on every try (another program always merges first). With a file fake-gh-auto, `workflow run` makes a finished run at once (green, or red while
 fake-gh-deep-red exists) carrying the `deep-verdict` and `summary` artifacts for its head."""
 
 import json
@@ -85,8 +85,8 @@ def pr(home: Path, argv: list[str]) -> int:
         if match and match != head_sha(found["head"]):
             print("Head branch was modified. Review and try the merge again.", file=sys.stderr)
             return 1
-        if (home / "fake-gh-merge-moves-base").exists():
-            (home / "fake-gh-merge-moves-base").unlink()
+        if (home / "fake-gh-merge-moves-base").exists() or (home / "fake-gh-merge-moves-base-always").exists():
+            (home / "fake-gh-merge-moves-base").unlink(missing_ok=True)
             move_base(found["baseRefName"])
             print("Base branch was modified. Review and try the merge again.", file=sys.stderr)
             return 1
@@ -219,7 +219,8 @@ def move_base(base: str) -> None:
         work = Path(tmp) / "other"
         git("worktree", "add", "-q", "--detach", str(work), f"origin/{base}")
         try:
-            (work / "moved-by-another-merge.txt").write_text("x\n", "utf-8")
+            path = work / "moved-by-another-merge.txt"  # one more line each time, so the base can move again
+            path.write_text((path.read_text("utf-8") if path.exists() else "") + "x\n", "utf-8")
             for argv in (["add", "-A"],
                          ["-c", "user.name=other", "-c", "user.email=o@test.invalid", "commit", "-q", "-m",
                           "other program: merged"],
