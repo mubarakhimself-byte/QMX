@@ -29,6 +29,7 @@ BASELINES = {
     "mutmut-modules.txt": "# fixed\nqmf.core.exact\nqmf.risk.sizing\n",
 }
 SOURCES = {
+    "packages/qmf-core/src/qmf/core/exact.py": "from collections.abc import Sized\n",
     "qmn/src/qmn/data/run.py": "import X\n",
     "qmn/src/qmn/data/cast.py": (
         "from collections.abc import Mapping\nfrom typing import cast\n\n"
