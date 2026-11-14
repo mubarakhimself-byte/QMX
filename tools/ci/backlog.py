@@ -231,7 +231,8 @@ def main(argv: list[str] | None = None) -> int:
             summary, started = fetch_summary(run_id, Path(tmp) / str(n))
             summaries.append(summary)
             dates.append(started)
-    seen = args.date or (dates[0] if dates and dates[0] else datetime.date.today().isoformat())
+    today = datetime.date.today().isoformat()  # ambient-scan: allow - a CLI's default date
+    seen = args.date or (dates[0] if dates and dates[0] else today)
     fixed = ratchet.read_baseline(args.baselines / FIXED_MODULES)
     groups = [baseline_rows(args.baselines, seen)]
     groups += [summary_rows(summary, seen, fixed) for summary in summaries]
