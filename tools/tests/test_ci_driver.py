@@ -605,9 +605,27 @@ def test_the_summary_of_a_run_with_one_red_job_is_red_and_lists_every_finding(
             {"id": "qmn|t::flaky", "system": "linux", "kind": "flaky", "blocks": True},
         ],
         "quality": [
-            {"tool": "mutmut", "key": "qmn|mutmut|m.f survived", "file": "qmn", "kind": "new"},
-            {"tool": "vulture", "key": "a.py|vulture|x", "file": "a.py", "kind": "new"},
-            {"tool": "vulture", "key": "b.py|vulture|y", "file": "b.py", "kind": "gone"},
+            {
+                "tool": "mutmut",
+                "key": "qmn|mutmut|m.f survived",
+                "file": "qmn",
+                "kind": "new",
+                "blocks": True,
+            },
+            {
+                "tool": "vulture",
+                "key": "a.py|vulture|x",
+                "file": "a.py",
+                "kind": "new",
+                "blocks": True,
+            },
+            {
+                "tool": "vulture",
+                "key": "b.py|vulture|y",
+                "file": "b.py",
+                "kind": "gone",
+                "blocks": False,
+            },
         ],
         "mutants": {"killed": 10, "survived": 2, "new_survivors": 1},
         "skipped": ["docker-node"],
@@ -1235,3 +1253,208 @@ def test_prune_never_removes_a_comment_line(tmp_path: Path) -> None:
     path.write_text("# header\na|r|1\n", "utf-8")
     assert ratchet.prune(path, ["# header", "a|r|1"]) == 1
     assert path.read_text("utf-8") == "# header\n"
+
+
+# ---- pull_reds, the guard and Skylos paths (C2 fix round) ---------------------------------------
+
+
+def test_pull_reds_names_no_skipped_matrix_job_as_an_unfinished_shard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    jobs = [
+        {"name": "suite-linux 1", "conclusion": "success"},
+        {"name": "tests-linux ${{ matrix.shard }}", "conclusion": "skipped"},
+        {"name": "tests-windows ${{ matrix.shard }}", "conclusion": "skipped"},
+    ]
+
+    def fake_gh(*args: str) -> str:
+        if args[0] == "api" and "/artifacts" in args[1]:
+            return json.dumps({"artifacts": [{"name": "ci-out-suite-linux-1"}]})
+        if args[0] == "api":
+            return json.dumps({"jobs": jobs})
+        folder = Path(args[args.index("-D") + 1])
+        folder.mkdir(parents=True)
+        (folder / "reds-linux-1.txt").write_text("linux|qmn|t::a\n", "utf-8")
+        return ""
+
+    (tmp_path / "ci" / "baselines").mkdir(parents=True)
+    monkeypatch.setattr(pull_reds, "gh", fake_gh)
+    monkeypatch.setattr(pull_reds, "REPO", tmp_path)
+    assert pull_reds.main(["pull_reds.py", "77"]) == 0
+    text = (tmp_path / "ci" / "baselines" / "known-reds.txt").read_text("utf-8")
+    assert "# Shards that did not finish, so their reds are not listed: none.\n" in text
+
+
+def test_a_new_ambient_scan_allow_marker_is_loosening(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    marker = "#" + " ambient-scan: allow - a reason"
+    more = _gcommit(root, {"pkg/b.py": f"import time\nx = time.time()  {marker}\n"})
+    assert guard.problems(root, base, more, "x") == [
+        "1 more ambient-scan-allow marker(s), in pkg/b.py"
+    ]
+
+
+def test_skylos_keys_name_the_repo_itself_as_a_dot_and_files_repo_relative(
+    tmp_path: Path,
+) -> None:
+    report = tmp_path / "skylos.json"
+    root = qci.REPO.as_posix()
+    report.write_text(
+        json.dumps(
+            {
+                "quality": [
+                    {"file": root, "rule_id": "SKY-R104", "name": "pre-commit-policy"},
+                    {"file": f"{root}/qmn/src/qmn/a.py", "rule_id": "SKY-Q1", "name": "f"},
+                ]
+            }
+        ),
+        "utf-8",
+    )
+    keys = [f.key for f in qci.skylos_findings(report)]
+    assert keys == [".|quality:SKY-R104|pre-commit-policy", "qmn/src/qmn/a.py|quality:SKY-Q1|f"]
+    assert qci.repo_path("apps", ".") == "."
+
+
+# ---- fail-at-parent: a new test file and a module the change adds (D-L19) -----------------------
+
+NO_BACKLOG = "collection failure\nE   ModuleNotFoundError: No module named 'backlog'"
+
+
+@pytest.mark.parametrize(
+    ("test_file", "error", "added", "excused"),
+    [
+        ("tools/tests/test_ci_backlog.py", NO_BACKLOG, ["tools/ci/backlog.py"], True),
+        (
+            "tools/tests/test_ci_backlog.py",
+            "E   ImportError: cannot import name 'x' from 'pkg.new' (/r/pkg/new/__init__.py)",
+            ["pkg/new/__init__.py"],
+            True,
+        ),
+        ("tools/tests/test_ci_backlog.py", NO_BACKLOG, ["tools/ci/other.py"], False),
+        (
+            "tools/tests/test_ci_backlog.py",
+            "E   ImportError: cannot import name 'contract_due' from 'qci' (/r/tools/ci/qci.py)",
+            ["tools/ci/backlog.py"],
+            False,
+        ),
+        (
+            "tools/tests/test_ci_backlog.py",
+            "E   NameError: name 'backlog' is not defined",
+            ["tools/ci/backlog.py"],
+            False,
+        ),
+    ],
+    ids=["missing-new-module", "import-from-new-package", "other-module", "old-module", "name"],
+)
+def test_a_new_test_file_is_excused_only_for_a_module_the_change_adds(
+    test_file: str, error: str, added: list[str], excused: bool
+) -> None:
+    errors = {"tools.tests.test_ci_backlog": error}
+    test_id = "tools.tests.test_ci_backlog::test_rows"
+    new_tests = [test_file]
+    assert qci.excused_at_parent(test_id, new_tests, errors, [*added, test_file]) is excused
+
+
+def test_an_existing_test_file_that_stops_collecting_is_never_excused() -> None:
+    errors = {"tools.tests.test_ci_driver": NO_BACKLOG}
+    test_id = "tools.tests.test_ci_driver::test_new_case"
+    added = ["tools/ci/backlog.py"]
+    assert not qci.excused_at_parent(test_id, [], errors, added)
+
+
+def test_a_collection_error_is_read_with_its_text(tmp_path: Path) -> None:
+    junit = tmp_path / "parent.xml"
+    junit.write_text(
+        '<testsuites><testsuite><testcase classname="" name="tools.tests.test_ci_backlog">'
+        '<error message="collection failure">E   ModuleNotFoundError: No module named '
+        "'backlog'</error></testcase>"
+        '<testcase classname="tools.tests.test_x" name="test_y"/></testsuite></testsuites>',
+        "utf-8",
+    )
+    assert qci.collection_errors(junit) == {
+        "tools.tests.test_ci_backlog": (
+            "collection failure\nE   ModuleNotFoundError: No module named 'backlog'"
+        )
+    }
+
+
+def test_the_parent_run_keeps_going_past_test_files_it_cannot_collect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(argv: list[str], cwd: Path, **kwargs: object) -> int:
+        seen.append(list(argv))
+        return 0
+
+    monkeypatch.setattr(qci, "OUT", tmp_path)
+    monkeypatch.setattr(qci, "run", fake_run)
+    monkeypatch.setattr(qci, "uv", _returns("uv"))
+    qci.pytest(tmp_path, ["t.py"], tmp_path / "a.xml", serial=None, keep_going=True)
+    qci.pytest(tmp_path, ["t.py"], tmp_path / "b.xml", serial=None)
+    assert ["--continue-on-collection-errors" in argv for argv in seen] == [True, False]
+
+
+# ---- fail-at-parent: a symbol or a keyword argument the change adds (D-L24) ----------------------
+
+PARENT_SOURCE = "import os\n\nLIMIT = 3\n\n\ndef run(argv, cwd):\n    return 0\n"
+HEAD_SOURCE = (
+    "import os\n\nLIMIT = 3\nSHARDS: int = 2\n\n\n"
+    "def run(argv, cwd, *, keep_going=False):\n    return 0\n\n\n"
+    "def collection_errors(junit):\n    return {}\n\n\nclass Added:\n    pass\n"
+)
+
+
+def test_what_a_change_adds_to_a_module_is_read_by_ast() -> None:
+    added = qci.added_in(PARENT_SOURCE, HEAD_SOURCE)
+    assert added.names == frozenset({"SHARDS", "collection_errors", "Added"})
+    assert dict(added.kwargs) == {"run": frozenset({"keep_going"})}
+
+
+@pytest.mark.parametrize(
+    ("error", "excused"),
+    [
+        ("E   AttributeError: module 'qci' has no attribute 'collection_errors'", True),
+        ("E   ImportError: cannot import name 'Added' from 'qci' (/r/tools/ci/qci.py)", True),
+        ("E   TypeError: run() got an unexpected keyword argument 'keep_going'", True),
+        ("E   TypeError: qci.run() got an unexpected keyword argument 'keep_going'", True),
+        ("E   AttributeError: module 'qci' has no attribute 'LIMIT'", False),
+        ("E   AttributeError: module 'qci' has no attribute 'never_added'", False),
+        ("E   AttributeError: module 'guard' has no attribute 'collection_errors'", False),
+        ("E   TypeError: unsupported operand type(s) for +: 'int' and 'str'", False),
+        ("E   TypeError: run() got an unexpected keyword argument 'cwd2'", False),
+        ("E   ValueError: module 'qci' has no attribute 'collection_errors'", False),
+    ],
+    ids=[
+        "new-symbol",
+        "new-symbol-import",
+        "new-kwarg",
+        "new-kwarg-qualified",
+        "symbol-at-parent",
+        "symbol-never-added",
+        "other-module",
+        "plain-type-error",
+        "kwarg-not-added",
+        "other-error",
+    ],
+)
+def test_a_failure_at_the_parent_is_excused_only_for_what_the_change_adds(
+    error: str, excused: bool
+) -> None:
+    # Built in the test, not at import: the parent must still collect this file.
+    added = {"tools/ci/qci.py": qci.added_in(PARENT_SOURCE, HEAD_SOURCE)}
+    assert qci.excused_by_new_symbol(error, added) is excused
+
+
+def test_a_failed_tests_text_is_read_by_its_id(tmp_path: Path) -> None:
+    junit = tmp_path / "parent.xml"
+    junit.write_text(
+        '<testsuites><testsuite><testcase classname="tools.tests.test_x" name="test_y">'
+        "<failure message=\"AttributeError: module 'qci' has no attribute 'f'\">E   boom"
+        '</failure></testcase><testcase classname="tools.tests.test_x" name="test_z"/>'
+        "</testsuite></testsuites>",
+        "utf-8",
+    )
+    assert qci.failure_texts(junit) == {
+        "tools.tests.test_x::test_y": "AttributeError: module 'qci' has no attribute 'f'\nE   boom"
+    }

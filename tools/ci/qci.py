@@ -13,6 +13,7 @@ It also runs on a laptop: with no host variables the level is `deep` and the hea
 from __future__ import annotations
 
 import argparse
+import ast
 import dataclasses
 import datetime
 import enum
@@ -311,12 +312,164 @@ def describe(lvl: Level, base: str | None, at: str, changed: list[str]) -> None:
 ASSERTION_PREFIXES = ("assert", "AssertionError", "Failed: DID NOT RAISE", "Failed: DID NOT WARN")
 
 
+def junit_cases(junit: Path) -> list[ET.Element]:
+    """Every test case of a JUnit report that pytest wrote in CI; none when there is no report."""
+    if not junit.exists():
+        return []
+    return list(ET.parse(junit).iter("testcase"))  # noqa: S314 - pytest wrote it in CI
+
+
+def collection_errors(junit: Path) -> dict[str, str]:
+    """Each test module pytest could not collect, named as JUnit names it (`dotted.module`), with
+    its error's message and traceback."""
+    found: dict[str, str] = {}
+    for case in junit_cases(junit):
+        error = case.find("error")
+        if error is not None and not case.get("classname"):
+            found[case.get("name", "")] = f"{error.get('message') or ''}\n{error.text or ''}"
+    return found
+
+
+MISSING_MODULE = re.compile(r"No module named '([\w.]+)'|cannot import name '\w+' from '([\w.]+)'")
+
+
+def module_tails(path: str) -> set[str]:
+    """Every dotted name a Python file may be imported or reported by: each tail of its path."""
+    parts = path.removesuffix(".py").split("/")
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return {".".join(parts[i:]) for i in range(len(parts))}
+
+
+def missing_new_module(error: str, added: Sequence[str]) -> bool:
+    """Whether a collection error is a ModuleNotFoundError or ImportError naming a module that a
+    file new in the change provides."""
+    if "ModuleNotFoundError" not in error and "ImportError" not in error:
+        return False
+    named = {a or b for a, b in MISSING_MODULE.findall(error)}
+    provided = {t for f in added if f.endswith(".py") for t in module_tails(f)}
+    return bool(named & provided)
+
+
+def excused_at_parent(
+    test_id: str, new_tests: Sequence[str], errors: Mapping[str, str], added: Sequence[str]
+) -> bool:
+    """D-L19: a new test the parent could not collect counts as failing there only when its test
+    file is new in the change and that file's collection error is a missing module the change
+    adds. A test file that already existed and stops collecting at the parent is no excuse."""
+    classname = test_id.split("::", 1)[0]
+    for path in new_tests:
+        tails = module_tails(path)
+        if not any(classname == t or classname.startswith(t + ".") for t in tails):
+            continue
+        return any(
+            name in tails and missing_new_module(text, added) for name, text in errors.items()
+        )
+    return False
+
+
+@dataclasses.dataclass(frozen=True)
+class Added:
+    """What a change adds to an existing module: top-level names, and keyword arguments added to a
+    top-level function that was already there."""
+
+    names: frozenset[str]
+    kwargs: Mapping[str, frozenset[str]]
+
+
+def top_level_names(tree: ast.Module) -> set[str]:
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+        elif isinstance(node, ast.TypeAlias):
+            names.add(node.name.id)
+    return names
+
+
+def signatures(tree: ast.Module) -> dict[str, set[str]]:
+    """Each top-level function's parameter names."""
+    return {
+        node.name: {a.arg for a in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)}
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+
+
+def added_in(parent: str, head: str) -> Added:
+    """What `head` adds to the module `parent` was, by ast: new top-level names, and new
+    parameters of the top-level functions both have."""
+    old, new = ast.parse(parent), ast.parse(head)
+    before, after = signatures(old), signatures(new)
+    kwargs = {
+        name: frozenset(params - before[name])
+        for name, params in after.items()
+        if name in before and params - before[name]
+    }
+    return Added(frozenset(top_level_names(new) - top_level_names(old)), kwargs)
+
+
+NO_ATTRIBUTE = re.compile(r"AttributeError: module '([\w.]+)' has no attribute '(\w+)'")
+NO_NAME = re.compile(r"ImportError: cannot import name '(\w+)' from '([\w.]+)'")
+NEW_KWARG = re.compile(
+    r"TypeError: (?:[\w.]+\.)?(\w+)\(\) got an unexpected keyword argument '(\w+)'"
+)
+
+
+def excused_by_new_symbol(error: str, added: Mapping[str, Added]) -> bool:
+    """D-L24: a new test that fails at the parent counts as failing there when its error is an
+    AttributeError or ImportError naming a top-level symbol the change adds to an existing module,
+    or a TypeError for a keyword argument the change adds to that function. `added` holds, per
+    changed module path, what the change adds to it. Every other error still blocks."""
+    missing = [(m, n) for m, n in NO_ATTRIBUTE.findall(error)]
+    missing += [(m, n) for n, m in NO_NAME.findall(error)]
+    for module, name in missing:
+        if any(module in module_tails(path) and name in a.names for path, a in added.items()):
+            return True
+    return any(
+        kwarg in a.kwargs.get(function, frozenset())
+        for function, kwarg in NEW_KWARG.findall(error)
+        for a in added.values()
+    )
+
+
+def failure_texts(junit: Path) -> dict[str, str]:
+    """Each test that failed or errored, by id (`classname::name`), with its message and text."""
+    found: dict[str, str] = {}
+    for case in junit_cases(junit):
+        bad = case.find("failure")
+        bad = bad if bad is not None else case.find("error")
+        if bad is not None and case.get("classname"):
+            test_id = f"{case.get('classname', '')}::{case.get('name', '')}"
+            found[test_id] = f"{bad.get('message') or ''}\n{bad.text or ''}"
+    return found
+
+
+def additions(base: str, at: str, changed: Sequence[str]) -> dict[str, Added]:
+    """What the change from `base` to `at` adds to each Python module that both hold."""
+    found: dict[str, Added] = {}
+    for path in changed:
+        if not path.endswith(".py"):
+            continue
+        old = git("show", f"{base}:{path}", check=False)
+        new = git("show", f"{at}:{path}", check=False)
+        if not old or not new:
+            continue
+        try:
+            found[path] = added_in(old, new)
+        except SyntaxError:
+            continue
+    return found
+
+
 def outcomes(junit: Path) -> dict[str, str]:
     """test id -> passed | skipped | assertion | failed | error (collection and setup errors)."""
-    if not junit.exists():
-        return {}
     found: dict[str, str] = {}
-    for case in ET.parse(junit).iter("testcase"):  # noqa: S314 - pytest wrote this report in this job
+    for case in junit_cases(junit):
         test_id = f"{case.get('classname', '')}::{case.get('name', '')}"
         failure, error, skipped = case.find("failure"), case.find("error"), case.find("skipped")
         if error is not None or not case.get("classname"):
@@ -341,11 +494,14 @@ def pytest(
     cache: Path | None = None,
     last_failed: bool = False,
     timeout_s: int | None = None,
+    keep_going: bool = False,
 ) -> int:
     """Run pytest on `files` (relative to `cwd`) through an argument file, so a long shard never
     hits the Windows command-line limit. serial=None runs every test with no worker split. With a
     `cache` folder pytest records there what failed, and `last_failed` reruns only that.
-    `timeout_s` stops any one test after that many seconds (pytest-timeout), so a hang is a red."""
+    `timeout_s` stops any one test after that many seconds (pytest-timeout), so a hang is a red.
+    `keep_going` runs the files that collect even when others do not (the parent of a change
+    that adds a module cannot collect the new test files that import it)."""
     junit.parent.mkdir(parents=True, exist_ok=True)
     args = OUT / "tmp" / f"{junit.stem}.args"
     args.parent.mkdir(parents=True, exist_ok=True)
@@ -372,6 +528,7 @@ def pytest(
         *(["-p", "no:cacheprovider"] if cache is None else ["-o", f"cache_dir={cache}"]),
         *(["--last-failed", "--last-failed-no-failures", "none"] if last_failed else []),
         *(["--timeout", str(timeout_s)] if timeout_s is not None else []),
+        *(["--continue-on-collection-errors"] if keep_going else []),
         *split,
         "--basetemp",
         str(basetemp),
@@ -645,7 +802,8 @@ def job_lint(write_baseline: bool = False) -> int:
     else:
         base, changed, targets = None, [], dirs
     describe(lvl, base, at, changed)
-    if not targets:
+    contract = not write_baseline and contract_due(lvl, changed)
+    if not targets and not contract:
         print("no Python or project file changed; nothing to lint")
         return 0
     for workspace in sorted(
@@ -653,6 +811,7 @@ def job_lint(write_baseline: bool = False) -> int:
             ci_units.AGENTS_WS if d.startswith(ci_units.AGENTS_WS) else ci_units.ROOT_WS
             for d in targets
         }
+        | ({ci_units.AGENTS_WS} if contract else set())
     ):
         sync(workspace)
     tasks = () if write_baseline else ("fmt-check", "lint")
@@ -671,6 +830,8 @@ def job_lint(write_baseline: bool = False) -> int:
         )
         if rc != 0:
             found.append(ratchet.Finding(folder, 0, task, f"poe {task} failed (rc={rc})"))
+    if contract:
+        found += contract_findings()
     errors: list[ratchet.Finding] = []
     for folder in targets:
         some, failed = pyright_run(folder)
@@ -698,9 +859,45 @@ def job_lint(write_baseline: bool = False) -> int:
     return 1 if found or verdict else 0
 
 
+CONTRACT_INPUTS = ("qmx-agents/", "contracts/", "packages/", "qmn/", "tools/contract_dump.py")
+
+
+def contract_due(lvl: Level, changed: Sequence[str]) -> bool:
+    """Whether the lint job checks contracts/ against the code: in a slice, when the change touches
+    the host's code, the packages and node it imports (`packages/`, `qmn/`), the contract files or
+    their generator; at every other linting level except a baseline retake, always."""
+    if lvl == Level.BASELINE:
+        return False
+    return lvl != Level.SLICE or any(p.startswith(CONTRACT_INPUTS) for p in changed)
+
+
+def contract_findings() -> list[ratchet.Finding]:
+    """`tools/contract_dump.py --check` in the agents workspace: one finding per stale contract
+    line (each operation added, removed or changed), or one for a check that did not finish."""
+    report = OUT / "contract.txt"
+    argv = [uv(), "run", "--project", ci_units.AGENTS_WS, "--frozen", "--no-sync", "python"]
+    rc = run([*argv, "tools/contract_dump.py", "--check"], REPO, stdout_to=report, timeout=900)
+    text = report.read_text("utf-8", errors="replace") if report.exists() else ""
+    print(text, end="")
+    if rc == 0:
+        return []
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.startswith("  ") or (line.startswith("contracts/") and not line.endswith(": stale"))
+    ]
+    if rc != 1 or not lines:
+        return [ratchet.Finding("contracts", 0, "contract", f"contract check failed (rc={rc})")]
+    return [ratchet.Finding("contracts", 0, "contract", f"stale: {line}") for line in lines]
+
+
 def job_fail_at_parent() -> int:
     """Each new test case must fail at the parent on an assertion and pass at the head. An import,
-    collection or setup error at the parent does not count as failing."""
+    collection or setup error at the parent does not count as failing, with two exceptions: a test
+    file new in the change that the parent cannot collect only because a module the change adds
+    is missing (D-L19, `excused_at_parent`), and a test whose error at the parent names a symbol
+    or a keyword argument the change adds to an existing module (D-L24,
+    `excused_by_new_symbol`)."""
     lvl = level()
     at = head()
     base = base_for(lvl, at)
@@ -710,9 +907,11 @@ def job_fail_at_parent() -> int:
         print("no parent to compare with")
         return 0
     present = set(git("ls-tree", "-r", "--name-only", at).splitlines())
+    added = [p for p in changed if p in present and not git_ok("cat-file", "-e", f"{base}:{p}")]
     modules = [p for p in changed if ci_units.is_test_module(p) and p in present]
     support = [p for p in changed if ci_units.is_test_support(p) and not ci_units.is_test_module(p)]
     units = ci_units.discover(REPO)
+    new_symbols = additions(base, at, [p for p in changed if p not in added])
     by_unit: dict[ci_units.Unit, list[str]] = {}
     for m in modules:
         unit = ci_units.owner(units, m)
@@ -735,8 +934,9 @@ def job_fail_at_parent() -> int:
         stem = unit.root.replace("/", "_")
         before = {}
         if own:
-            pytest(parent_copy / unit.cwd, own, OUT / "fap" / f"{stem}-parent-own.xml", serial=None)
-            before = outcomes(OUT / "fap" / f"{stem}-parent-own.xml")
+            own_report = OUT / "fap" / f"{stem}-parent-own.xml"
+            pytest(parent_copy / unit.cwd, own, own_report, serial=None, keep_going=True)
+            before = outcomes(own_report)
         for path in [*support, *mods]:
             target = parent_copy / path
             if path in present:
@@ -752,9 +952,13 @@ def job_fail_at_parent() -> int:
                 )
             else:
                 target.unlink(missing_ok=True)
-        pytest(parent_copy / unit.cwd, rel, OUT / "fap" / f"{stem}-parent.xml", serial=None)
+        parent_report = OUT / "fap" / f"{stem}-parent.xml"
+        pytest(parent_copy / unit.cwd, rel, parent_report, serial=None, keep_going=True)
         pytest(REPO / unit.cwd, rel, OUT / "junit" / f"fap-{stem}-head.xml", serial=None)
         at_parent = outcomes(OUT / "fap" / f"{stem}-parent.xml")
+        errors = collection_errors(OUT / "fap" / f"{stem}-parent.xml")
+        texts = failure_texts(OUT / "fap" / f"{stem}-parent.xml")
+        new_tests = [m for m in mods if m in added]
         at_head = outcomes(OUT / "junit" / f"fap-{stem}-head.xml")
         if not at_head:
             problems.append(
@@ -764,8 +968,22 @@ def job_fail_at_parent() -> int:
         new = sorted(k for k in at_head if k not in before and "::::" not in k)
         for test_id in new:
             p, h = at_parent.get(test_id, "not collected"), at_head[test_id]
-            log.append(f"{test_id} parent={p} head={h}")
-            if p != "assertion":
+            new_module = p == "not collected" and excused_at_parent(
+                test_id, new_tests, errors, added
+            )
+            new_symbol = p in ("failed", "error") and excused_by_new_symbol(
+                texts.get(test_id, ""), new_symbols
+            )
+            excused = new_module or new_symbol
+            why = (
+                " (a module the change adds)"
+                if new_module
+                else " (a symbol the change adds)"
+                if new_symbol
+                else ""
+            )
+            log.append(f"{test_id} parent={p}{why} head={h}")
+            if p != "assertion" and not excused:
                 problems.append(
                     ratchet.Finding(unit.root, 0, "fail-at-parent", f"{test_id} at parent: {p}")
                 )
@@ -945,7 +1163,6 @@ def skylos_scope() -> dict[str, str]:
 def skylos_findings(report: Path) -> list[ratchet.Finding]:
     """Every finding in Skylos's JSON: one list per category at the top level."""
     data = cast("dict[str, object]", json.loads(report.read_text("utf-8")))
-    root = REPO.as_posix() + "/"
     found: list[ratchet.Finding] = []
     for category, items in sorted(data.items()):
         if category not in SKYLOS_FINDING_CATEGORIES or not isinstance(items, list):
@@ -957,7 +1174,7 @@ def skylos_findings(report: Path) -> list[ratchet.Finding]:
             path = str(item.get("file") or item.get("filename") or "").replace("\\", "/")
             if not path:
                 continue
-            rel = path[len(root) :] if path.startswith(root) else path.removeprefix("./")
+            rel = repo_relative(path)
             rule = str(item.get("rule_id") or item.get("rule") or category)
             name = str(item.get("full_name") or item.get("name") or item.get("message") or "")
             severity = str(item.get("severity") or "").lower()
@@ -1021,10 +1238,23 @@ def skylos_base(lvl: Level, at: str) -> str | None:
     return base_for(lvl, at) if lvl in (Level.SLICE, Level.DEEP) else None
 
 
+def repo_relative(path: str, root: Path = REPO) -> str:
+    """A path Skylos reported, without the checkout's own absolute root: the root itself is `.`
+    (a finding about the whole repo), a file under it is repo-relative, anything else is kept."""
+    path = path.replace("\\", "/")
+    base = root.as_posix().rstrip("/")
+    if path == base:
+        return "."
+    if path.startswith(base + "/"):
+        return path[len(base) + 1 :]
+    return path.removeprefix("./")
+
+
 def repo_path(folder: str, path: str, root: Path = REPO) -> str:
     """A path Skylos reported while scanning `folder`, made repo-relative: kept when it already
-    is, prefixed with the folder when Skylos reported it relative to the scan target."""
-    if path.startswith(folder + "/") or not (root / folder / path).exists():
+    is (or is the repo itself, `.`), prefixed with the folder when Skylos reported it relative to
+    the scan target."""
+    if path == "." or path.startswith(folder + "/") or not (root / folder / path).exists():
         return path
     return f"{folder}/{path}"
 
@@ -1128,6 +1358,22 @@ def mutable_packages() -> list[str]:
     ]
 
 
+EPOCH_ORDINAL = datetime.date(1970, 1, 1).toordinal()
+
+
+def walk_part_of(env: Mapping[str, str], parts: int) -> int:
+    """The part a walk takes: `QMX_WALK_PART` when set, else the UTC day the run started on,
+    `toordinal() % parts`, so the whole repo is walked once every `parts` nights. The day comes
+    as `QMX_WALK_DAY` (days since 1970-01-01), which the workflow's level job reads from the
+    runner's clock once for every shard of the run."""
+    if env.get("QMX_WALK_PART"):
+        return int(env["QMX_WALK_PART"]) % parts
+    day = env.get("QMX_WALK_DAY")
+    if not day:
+        raise CiError("a walk needs QMX_WALK_DAY (set by the workflow) or QMX_WALK_PART")
+    return (EPOCH_ORDINAL + int(day)) % parts
+
+
 def mutate_targets(lvl: Level, at: str) -> list[ci_mutate.Target]:
     packages = mutable_packages()
     named = [m for m in os.environ.get("QMX_MUTATE_MODULES", "").split(",") if m]
@@ -1138,7 +1384,7 @@ def mutate_targets(lvl: Level, at: str) -> list[ci_mutate.Target]:
         return [t for t in everything if t.module in named]
     if lvl == Level.WALK:
         parts = int(os.environ.get("QMX_WALK_PARTS", str(ci_mutate.WALK_PARTS)))
-        part = int(os.environ.get("QMX_WALK_PART", str(facts().number % parts)))
+        part = walk_part_of(os.environ, parts)
         print(f"walk part {part} of {parts} (0-based)")
         return ci_mutate.walk_part(everything, part, parts)
     base = base_for(lvl, at)
@@ -1262,11 +1508,21 @@ def job_mutmut() -> int:
     )
     for line in broken:
         print(f"FAIL {line}")
+    if lvl == Level.WALK:
+        record_walk(found, shard)
     if lvl in (Level.WALK, Level.BASELINE) or os.environ.get("QMX_MUTATE_MODULES"):
         print(f"{len(found)} surviving mutants recorded (walk: not a gate)")
         return 1 if broken else 0
     verdict = ratchet_verdict("mutmut", found, None, f"mutmut-{shard}").rc if found else 0
     return 1 if broken or verdict else 0
+
+
+def record_walk(found: Sequence[ratchet.Finding], shard: int) -> None:
+    """The walk is no gate. Its survivors beyond ci/baselines/mutmut.txt are recorded as notes
+    (mutmut-<shard>-ratchet.json, each `blocking` false), so the run's summary.json lists them in
+    `quality` with `blocks` false, where tools/ci/backlog.py reads them as backlog rows."""
+    notes = [dataclasses.replace(f, blocking=False) for f in found]
+    ratchet_verdict("mutmut", notes, None, f"mutmut-{shard}")
 
 
 def job_verdict() -> int:
@@ -1603,8 +1859,9 @@ def build_summary(
 ) -> dict[str, object]:
     """summary.json (factory design 11.11): every job of the level (named as its artifact is,
     `suite-linux-3`), every red (new, known, flaky, or a test shard that never finished, each with
-    `blocks`), every new and gone quality row, mutant counts, the level's skipped jobs. A red id is
-    `unit|module::name`; an unfinished shard's is `shard <system>-<n>`."""
+    `blocks`), every new and gone quality row (`blocks` is false for a note), mutant counts, the
+    level's skipped jobs. A red id is `unit|module::name`; an unfinished shard's is
+    `shard <system>-<n>`."""
     result = {job: str(needs.get(job, {}).get("result", "missing")) for job in jobs_of_level}
     jobs: list[dict[str, object]]
     if api_jobs is None:
@@ -1651,15 +1908,21 @@ def build_summary(
                 "blocks": True,
             }
         )
-    quality: list[dict[str, str]] = []
+    quality: list[dict[str, object]] = []
     for path in sorted(artifacts.rglob("*-ratchet.json")):
         record = cast("dict[str, object]", json.loads(path.read_text("utf-8")))
         tool = str(record["tool"])
         for item in cast("list[dict[str, object]]", record.get("new", [])):
-            row = {"tool": tool, "key": str(item["key"]), "file": str(item["file"]), "kind": "new"}
-            quality.append(row)
+            key, file = str(item["key"]), str(item["file"])
+            blocks = bool(item.get("blocking", True))
+            quality.append(
+                {"tool": tool, "key": key, "file": file, "kind": "new", "blocks": blocks}
+            )
         for key in cast("list[str]", record.get("gone", [])):
-            quality.append({"tool": tool, "key": key, "file": key.split("|", 1)[0], "kind": "gone"})
+            file = key.split("|", 1)[0]
+            quality.append(
+                {"tool": tool, "key": key, "file": file, "kind": "gone", "blocks": False}
+            )
     killed = survived = 0
     for path in sorted(artifacts.rglob("mutmut-counts-*.json")):
         counts = cast("dict[str, int]", json.loads(path.read_text("utf-8")))
@@ -1708,7 +1971,7 @@ def unfinished_shards(
 def summary_markdown(summary: Mapping[str, object]) -> str:
     jobs = cast("list[dict[str, object]]", summary["jobs"])
     reds = cast("list[dict[str, object]]", summary["reds"])
-    quality = cast("list[dict[str, str]]", summary["quality"])
+    quality = cast("list[dict[str, object]]", summary["quality"])
     mutants = cast("dict[str, int]", summary["mutants"])
     skipped = cast("list[str]", summary["skipped"])
     verdict = "GREEN" if summary["green"] else "RED"

@@ -8,9 +8,10 @@ Two kinds of loosening count:
   byte, or is marked `-diff` or `binary` in `.gitattributes`, and so is deleting one. A new
   baseline file is allowed only while the base has no `ci/baselines/` at all (the change that
   brings the ratchet in).
-- **Suppressions.** More type-ignore, pyright-ignore, noqa or skylos markers in Python files than
-  the base had, a pyright or ruff rule turned down or ignored in a pyproject, a new Skylos or
-  Vulture exclude or ignore entry, a looser Skylos gate, or a new line in a Vulture whitelist.
+- **Suppressions.** More type-ignore, pyright-ignore, noqa, skylos or ambient-scan allow markers
+  in Python files than the base had, a pyright or ruff rule turned down or ignored in a pyproject,
+  a new Skylos or Vulture exclude or ignore entry, a looser Skylos gate, or a new line in a
+  Vulture whitelist.
 
 A `baseline/**` branch may grow baseline files only when its change touches nothing outside
 `ci/baselines/`. Everything here reads git objects only, so it runs the same from the gate's
@@ -36,13 +37,14 @@ REGULAR_MODES = frozenset({"100644", "100755"})
 GIT = shutil.which("git") or "git"
 GIT_TIMEOUT_S = 600
 
-# The four suppression markers, each in its comment form. Built from parts so this file does not
+# The suppression markers, each in its comment form. Built from parts so this file does not
 # carry the markers itself.
 MARKERS = {
     "type-ignore": re.compile("#" + r"\s*type:\s*ignore"),
     "pyright-ignore": re.compile("#" + r"\s*pyright:\s*ignore"),
     "noqa": re.compile("#" + r"\s*noqa", re.IGNORECASE),
     "skylos": re.compile("#" + r"\s*skylos:", re.IGNORECASE),
+    "ambient-scan-allow": re.compile("#" + r"\s*ambient-scan:\s*allow", re.IGNORECASE),
 }
 PYTHON = (".py", ".pyi")
 SEVERITY: dict[object, int] = {

@@ -1,0 +1,202 @@
+{
+ "mis": {
+  "kind": "headless",
+  "operations": [
+   {
+    "approval": "domain_write",
+    "description": "The board: each market's reading words and their freshness, one entry per tier.",
+    "name": "board",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "Set the markets this MIS reads, each with its instrument snapshot, the packs that apply and the readings that run in shadow.",
+    "name": "configure",
+    "reversibility": "reversible",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "Read every configured market now and publish each reading that has a newer input.",
+    "name": "round",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The runner's state, each market's last computed time and the health of each of its readings.",
+    "name": "status",
+    "reversibility": "none",
+    "state": "instance"
+   }
+  ],
+  "version": "1.0.1"
+ },
+ "qmb": {
+  "kind": "headless",
+  "operations": [
+   {
+    "approval": "read",
+    "description": "What this tester replays: its contract, run kinds, fidelities and markets.",
+    "name": "capabilities",
+    "reversibility": "",
+    "state": "none"
+   },
+   {
+    "approval": "read",
+    "description": "The instrument classes and fidelities this tester can replay.",
+    "name": "instruments",
+    "reversibility": "",
+    "state": "none"
+   }
+  ],
+  "version": "1.0.9"
+ },
+ "trading-node": {
+  "kind": "headless",
+  "operations": [
+   {
+    "approval": "manage",
+    "description": "Add or remove an account binding.",
+    "name": "bind",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "His word that this volume is the same node, moved: bind its identity to this machine.",
+    "name": "confirm_same_node",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Accept a deployment document (qmx.node.deployment/1) for this node into what it should run.",
+    "name": "deploy",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The deployments this node was asked to run.",
+    "name": "deployments",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Close every position at a scope.",
+    "name": "flatten",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The node's committed journal rows after after_sequence (at most 500), optionally for some streams.",
+    "name": "journal_tail",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Escalate the kill switch at a scope to a level from YELLOW to BLACK; it never lowers.",
+    "name": "kill",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The node's passport: its identity and the checks its last self-test proved.",
+    "name": "passport",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Pause new entries at a scope: all, an account, a deployment_id or an instrument.",
+    "name": "pause",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The positions this node holds, optionally for one account.",
+    "name": "positions",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "A bound account's facts and each named symbol's facts as the venue states them, read on a fresh session; no secret.",
+    "name": "records",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Resume new entries at a scope, listing any cause still open.",
+    "name": "resume",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Read the node's keys document again at the next safe point.",
+    "name": "rotate_keys",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Run the self-test on a demo binding.",
+    "name": "self_test",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Begin the venue sign-in for this node's own trading app.",
+    "name": "sign_in_begin",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Finish the venue sign-in with the one-time code.",
+    "name": "sign_in_code",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The node's state: its word, reasons, identity, venues, units, kill level and whether it is safe to restart.",
+    "name": "status",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Take over a dead node's tagged positions, with his word that the old node is gone.",
+    "name": "take_over",
+    "reversibility": "compensable",
+    "state": "instance"
+   },
+   {
+    "approval": "domain_write",
+    "description": "The units this node hosts, optionally for one deployment_id.",
+    "name": "units",
+    "reversibility": "none",
+    "state": "instance"
+   },
+   {
+    "approval": "manage",
+    "description": "Stop new entries for a deployment and remove it once flat.",
+    "name": "withdraw",
+    "reversibility": "compensable",
+    "state": "instance"
+   }
+  ],
+  "version": "0.1.14"
+ }
+}
