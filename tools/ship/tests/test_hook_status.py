@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,12 @@ from ship.tests.fixture import RepoCase, sh
 SHIP = Path(__file__).resolve().parent.parent
 
 
+def worker_env(role="builder", **more):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SHIP_")}
+    env.update({"SHIP_ROLE": role, **more} if role is not None else more)
+    return env
+
+
 class HookCase(RepoCase):
     def setUp(self):
         super().setUp()
@@ -23,7 +30,7 @@ class HookCase(RepoCase):
     def hook(self, tool, cwd=None, **tool_input):
         event = {"tool_name": tool, "tool_input": tool_input, "cwd": str(cwd or self.root)}
         done = subprocess.run([sys.executable, str(SHIP), "hook", "--program", str(self.program.dir)],
-                              input=json.dumps(event), capture_output=True, text=True, timeout=60)
+                              input=json.dumps(event), capture_output=True, text=True, timeout=60, env=worker_env())
         return done.returncode, done.stderr.strip()
 
 
@@ -114,14 +121,14 @@ class FailsClosed(HookCase):
 
     def raw_hook(self):
         done = subprocess.run([sys.executable, str(SHIP), "hook", "--program", str(self.program.dir)],
-                              input=self.event(), capture_output=True, text=True, timeout=60)
+                              input=self.event(), capture_output=True, text=True, timeout=60, env=worker_env())
         return done.returncode, done.stderr
 
     def test_a_corrupt_ship_toml_refuses(self):
         (self.program.dir / "ship.toml").write_text("[settings\nbroken = ", "utf-8")
         rc, why = self.raw_hook()
         self.assertEqual(rc, 2, why)
-        self.assertIn("guard itself failed", why)
+        self.assertIn("refus", why)
 
     def test_a_state_json_that_is_not_a_record_refuses(self):
         self.assertEqual(self.raw_hook()[0], 0)
@@ -130,7 +137,6 @@ class FailsClosed(HookCase):
         self.assertEqual(rc, 2, why)
 
     def test_an_empty_ship_kit_refuses_through_the_settings_command(self):
-        import os
         import shutil
 
         bash = shutil.which("bash")
@@ -138,7 +144,7 @@ class FailsClosed(HookCase):
             self.skipTest("no bash on this machine")
         body = json.loads((SHIP / "roles" / "builder.json").read_text("utf-8"))
         command = body["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-        env = {**os.environ, "SHIP_KIT": "", "SHIP_PROGRAM": str(self.program.dir)}
+        env = worker_env(SHIP_KIT="", SHIP_PROGRAM=str(self.program.dir))
         done = subprocess.run([bash, "-c", command], input=self.event(), capture_output=True, text=True, env=env,
                               timeout=60)
         self.assertEqual(done.returncode, 2, done.stderr)

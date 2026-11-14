@@ -1,36 +1,48 @@
-"""Claude Code PreToolUse hook: the guard every worker runs under (D-L9). It fails closed: any error
+"""Claude Code PreToolUse hook: the guard every worker runs under (D-L9, D-L22). It fails closed: any error
 refuses (exit 2), and the role settings run it as `... hook ... || exit 2`.
 
-File tools (Write, Edit, MultiEdit, NotebookEdit): allowed inside each held slice's worktree and its
-current evidence folder, and the program's review/ and notes/ folders; refused everywhere else, the
-main checkout included.
+Every worker has `SHIP_ROLE` (the launcher sets it); a missing or unknown role refuses everything, and
+`SHIP_STOP` and `SHIP_PART`, when set, must be plain names (`[A-Za-z0-9_-]+`).
 
-Bash commands are read segment by segment (split on `&&`, `||`, `;`, `|` and new lines), following
-`cd`/`Set-Location`/`Push-Location`, and refused when they:
-- run a git command that writes (commit, push, reset, checkout, switch, rebase, merge, a branch or tag
-  change, clean, stash, add, rm, mv, restore, apply, am, cherry-pick, revert, pull, update-ref, worktree,
-  a config write) anywhere but a held slice worktree, through `-C`, `cd`, `--git-dir` or `--work-tree`;
-- force push, push with --mirror, --all, --tags, --delete or --prune, delete a remote branch, or push
-  to any branch but the slice's own;
-- name the main checkout, `~/.claude`, `cmdkey`, `keyring`, `CredRead` or the Windows credential store;
-- run inline code or a nested shell (`python -c`, `python -`, `bash -c`, `sh -c`, `cmd /c`, `powershell`,
-  `pwsh`), which the guard could not read.
+File tools (Write, Edit, MultiEdit, NotebookEdit) write only the role's paths (the table below). No role
+writes `<program>/.kit/` (the kit's own files: `review-run.json`, `MERGE-BASE`, `gates.log`), and a
+builder never writes `notes/stop-*.json`.
 
-The hook input does not say which agent is calling, so the allowed set is the union over held slices:
-it stops writes to the main checkout and to anything outside the run, not one builder writing into
-another held builder's worktree.
+Bash is an allow-list (D-L22). A command is read segment by segment (split on `&&`, `||`, `;`, `|`, `&`
+and new lines, outside quotes), following `cd`/`Set-Location`/`Push-Location`. Each segment runs one of:
+- `git` (its writes are judged below; no `-c` overrides and none of the subcommands that run other
+  programs: bisect, submodule, difftool, mergetool);
+- `uv run [flags]` followed by an allowed tool (no `--with`, `--script` or unknown flags; never `uvx` or
+  another `uv` command);
+- the kit's `timed` wrapper (`python -m ship timed ... -- <argv>`, `python <kit> timed ... -- <argv>`)
+  followed by an allowed tool or `uv run`, or the kit's read-only `phase`;
+- an allowed tool: `pytest`, `python -m pytest`, `ruff`, `pyright`, `mypy`, and for the planning and audit
+  roles a factory script `python <factory_home>/skills/<skill>/scripts/<name>.py`.
+Python is any name `python`, `python3.12`, `pythonw`, `py` (with `.exe`); a flag cluster holding `c`
+(`-c`, `-Ic`) or a lone `-` is inline code and refused. Anything else (`gh`, `node`, `cp`, `env`, a nested
+shell, a leading `VAR=value`, `$(...)` or backticks) is refused. Redirection (`>`, `>>`, `tee`) is refused
+for every role but a builder, which may redirect only into its worktree (a `2>&1` duplicate and the null
+device are allowed).
 
-Roles (D-L16, FACTORY-DESIGN 11.3). The launcher puts `SHIP_ROLE` in every worker's environment, and the
-hook process inherits it. `builder` and `fixer` (and no role at all, the hook's first callers) get the
-held-slice rules above. Every other role writes only its own paths, named below from `SHIP_STOP`,
-`SHIP_NOTES` and `SHIP_WORKTREE`, and runs no git that writes, except `docs` inside its docs worktree,
-pushing only `SHIP_BRANCH`. A role the table does not know, or a role whose path variable is missing,
-refuses every write.
+Paths a command names are checked too: never the main checkout, `~/.claude` or `.kit/`; and inside the
+program folder (or its sibling fix folders) only the program folder itself and the role's own paths (a
+reader's `stop-review/<X>/runs/` included), except the arguments of a factory script. `git --output` is
+refused. Git writes (commit, push, reset, checkout, switch, rebase, merge, a branch or tag change,
+clean, stash, add, rm, mv, restore, apply, am, cherry-pick, revert, pull, update-ref, worktree, a config
+write) happen only in a held slice worktree (builders) or the docs worktree (docs), never through
+`--git-dir` or `--work-tree`; no force push, no `--mirror`, `--all`, `--tags`, `--delete` or `--prune`, no
+remote branch deletion, and a push only to the worker's own branch. A command naming `cmdkey`, `keyring`,
+`CredRead` or the credential store is refused.
+
+The hook input does not say which agent is calling, so a builder's allowed set is the union over held
+slices: it stops writes to the main checkout and outside the run, not one builder writing into another
+held builder's worktree.
 
 | Role | Writes |
 |---|---|
-| reader, fault-reader | the one notes file `SHIP_NOTES` |
-| verdict | `stop-review/<SHIP_STOP>/`, `merge/`, the sibling `<program>-fix-<SHIP_STOP>/` |
+| builder, fixer | each held slice's worktree and current evidence folder, `review/`, `notes/` but `notes/stop-*.json` |
+| reader, fault-reader | the one notes file `SHIP_NOTES` (and run logs in `stop-review/<SHIP_STOP>/runs/`) |
+| verdict | `stop-review/<SHIP_STOP>/REVIEW*.md` and `WAITS.md`, `merge/<SHIP_STOP>-pr.md`, the plan files of the sibling `<program>-fix-<SHIP_STOP>/` (never its `ship.toml` or `checks.toml`: the kit copies those) |
 | grounding | `plan-review/grounding.md`, `grounding/REPORT.md` |
 | plan-review | `plan-review/` |
 | planner-fix, later-handoff | the plan files of the program folder |
@@ -42,17 +54,13 @@ refuses every write.
 | audit-screen | `AUDIT-SCREEN.md` (D-L18) |
 | docs | its docs worktree `SHIP_WORKTREE` |
 
-Python (D-L18). A non-builder role runs python only as `python -m pytest`, the kit's `timed` wrapper
-(`python -m ship timed`, `python <kit> timed`), and, for the planning and audit roles, a factory script
-`python <factory_home>/skills/<skill>/scripts/<name>.py` (factory_home from the program's settings). Any
-other python, inline code included, is refused. Builders keep D-L9's rules.
-
-The main checkout comes from `state.json`, else `SHIP_REPO`. A non-builder role with neither gets every
-Bash command refused: the guard cannot tell what names the main checkout.
+The main checkout comes from `state.json`, else `SHIP_REPO`. A role with neither gets every Bash command
+refused: the guard cannot tell what names the main checkout.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -65,20 +73,29 @@ from ship.layout import Program
 from ship.state import Status
 
 FILE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
-SPLIT = re.compile(r"&&|\|\||;|\||\n")
 CD_WORDS = {"cd", "set-location", "push-location", "pushd", "sl"}
 GIT_WRITES = {"commit", "push", "reset", "checkout", "switch", "rebase", "merge", "tag", "clean", "stash", "add",
               "rm", "mv", "restore", "apply", "am", "cherry-pick", "revert", "pull", "update-ref", "worktree",
               "filter-branch", "gc", "prune", "replace", "notes"}
+GIT_RUNS_PROGRAMS = {"bisect", "submodule", "difftool", "mergetool", "daemon", "instaweb", "filter-branch",
+                     "credential", "credential-store", "credential-cache"}
 BRANCH_WRITE_FLAGS = {"-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force",
                       "-u", "--unset-upstream", "--edit-description"}
 PUSH_REFUSED = {"--mirror", "--all", "--tags", "--delete", "-d", "--prune"}
 SECRET_WORDS = ("cmdkey", "keyring", "credread", "credwrite", "creddelete", "credenumerate", "vaultcmd",
                 "credential manager", "credentialmanager", "storedcredential", "windows.security.credentials",
                 "get-credential", "git-credential", "credential.helper")
-SHELLS = {"bash", "sh", "zsh", "dash", "powershell", "pwsh", "cmd", "bash.exe", "sh.exe", "powershell.exe",
-          "pwsh.exe", "cmd.exe"}
-PYTHONS = {"python", "python3", "py", "python.exe", "python3.exe", "py.exe"}
+PYTHON = re.compile(r"(python|pythonw|py)(\d+(\.\d+)*)?w?(\.exe)?")
+TOOLS = {"pytest", "py.test", "ruff", "pyright", "mypy"}
+TOOL_MODULES = {"pytest", "ruff", "pyright", "mypy"}
+PYTHON_FLAGS = set("IBuEsSOqbdvxRP")  # single-letter interpreter flags that run no code of their own
+UV_FLAGS = {"--no-sync", "--frozen", "--locked", "--offline", "-q", "--quiet", "--no-dev", "--all-extras",
+            "--all-packages", "--exact", "--no-editable"}
+UV_VALUED = {"--directory", "--project", "--package", "--extra", "--group", "--only-group", "--no-group"}
+NULL_SINKS = {"/dev/null", "nul", "$null"}
+TEE = {"tee", "tee.exe", "tee-object"}
+PLAIN = re.compile(r"[A-Za-z0-9_-]+")
+PLAIN_SLICE = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 def _norm(path: str) -> str:
@@ -94,10 +111,23 @@ def inside(path: str, root: str) -> bool:
     return p == r or p.startswith(r.rstrip(os.sep) + os.sep)
 
 
-SLICE_ROLES = ("builder", "fixer", "")
+def in_root(path: str, root: str) -> bool:
+    """`root` is a file or folder, or a file glob (`.../REVIEW*.md`) whose last part holds a `*`."""
+    name = Path(root).name
+    if "*" in name:
+        return _norm(str(Path(path).parent)) == _norm(str(Path(root).parent)) and \
+            fnmatch.fnmatch(os.path.normcase(Path(path).name), os.path.normcase(name))
+    return inside(path, root)
+
+
+SLICE_ROLES = ("builder", "fixer")
 PLAN_FILES = ("PROGRAM.yaml", "SCOPE.md", "GROUND.md", "CHALLENGE.md", "PLAN.md", "ANNEAL-LOG.md", "EDGE-CASES.md",
               "CAN-CHANGE.md", "REMOVED.md", "SLICES.md", "checks.toml", "WAITING.md", "decisions", "arch", "slices",
               "plan-review/FIXES.applied.md", "plan-review/FIXES.md")
+FIX_FILES = tuple(f for f in PLAN_FILES if f != "checks.toml")  # D-L22: the kit copies a fix folder's settings
+SCRIPT_ROLES = ("planner-fix", "later-handoff", "sweep-handoff", "challenger", "answer-linker", "audit-judge",
+                "audit-intent", "audit-reader", "audit-screen", "grounding", "plan-review")
+OTHER_ROLES = ("reader", "fault-reader", "verdict", "docs") + SCRIPT_ROLES
 
 
 def role_paths(program: Program, role: str, env) -> tuple[list[str], dict[str, str]]:
@@ -112,10 +142,13 @@ def role_paths(program: Program, role: str, env) -> tuple[list[str], dict[str, s
         return value
 
     if role in ("reader", "fault-reader"):
-        return [need("SHIP_NOTES")], {}
+        stop = (env.get("SHIP_STOP") or "").strip()
+        return [need("SHIP_NOTES")] + ([str(program.stop_review(stop) / "runs")] if stop else []), {}
     if role == "verdict":
         stop = need("SHIP_STOP")
-        return [str(program.stop_review(stop)), str(d / "merge"), str(d.parent / f"{d.name}-fix-{stop}")], {}
+        fix = d.parent / f"{d.name}-fix-{stop}"
+        return [str(program.stop_review(stop) / "REVIEW*.md"), str(program.stop_review(stop) / "WAITS.md"),
+                str(d / "merge" / f"{stop}-pr.md")] + [str(fix / name) for name in FIX_FILES], {}
     if role == "grounding":
         return [str(d / "plan-review" / "grounding.md"), str(d / "grounding" / "REPORT.md")], {}
     if role == "plan-review":
@@ -135,8 +168,6 @@ def role_paths(program: Program, role: str, env) -> tuple[list[str], dict[str, s
         return [str(d / "INTENT.md")], {}
     if role == "audit-reader":
         part = need("SHIP_PART")
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+", part) or part in (".", ".."):
-            raise ValueError(f"SHIP_PART {part!r} is not a plain part name")
         return [str(d / "readers" / f"{part}.md"), str(d / "readers" / f"{part}.tsv"),
                 str(d / "readers" / f"{part}-runs"), str(d / "runs"), str(d / "heartbeat" / f"audit-{part}")], {}
     if role == "audit-screen":
@@ -147,45 +178,30 @@ def role_paths(program: Program, role: str, env) -> tuple[list[str], dict[str, s
     raise KeyError(f"role {role!r} is not in the hook's table")
 
 
-SCRIPT_ROLES = ("planner-fix", "later-handoff", "sweep-handoff", "challenger", "answer-linker", "audit-judge",
-                "audit-intent", "audit-reader", "audit-screen", "grounding", "plan-review")
-
-
 def kit_dir() -> str:
     return str(Path(__file__).resolve().parent)
 
 
-def python_problem(run: "Run", tokens: list[str], n: int, here: str) -> str | None:
-    """D-L18: the python a non-builder role may run (tokens[n] is the interpreter)."""
-    rest = tokens[n + 1:]
-    if not rest:
-        return "a bare python"
-    first = rest[0]
-    if first == "-m":
-        module = rest[1] if len(rest) > 1 else ""
-        if module == "pytest" or (module == "ship" and rest[2:3] == ["timed"]):
-            return None
-        return f"python -m {module}"
-    if first.startswith("-"):
-        return f"python {first}"
-    script = os.path.join(here, first)
-    if _norm(script) == _norm(kit_dir()) and rest[1:2] == ["timed"]:
-        return None
-    if run.role in SCRIPT_ROLES and run.factory:
-        skills = os.path.join(run.factory, "skills")
-        rel = os.path.relpath(_norm(script), _norm(skills)) if inside(script, skills) else ""
-        parts = rel.replace("\\", "/").split("/")
-        if len(parts) == 3 and parts[1] == "scripts" and parts[2].endswith(".py") and ".." not in parts:
-            return None
-    return f"python {first}"
-
-
 class Run:
-    """What the guard knows: held worktrees (with their branches), writable roots, the main checkout."""
+    """What the guard knows: the role, held worktrees (with their branches), writable roots, the main
+    checkout, the factory home."""
 
     def __init__(self, program: Program, env=None):
         env = os.environ if env is None else env
+        self.program = program
         self.role = (env.get("SHIP_ROLE") or "").strip()
+        if not self.role:
+            raise ValueError("no SHIP_ROLE: the guard cannot tell what this worker may do")
+        if self.role not in SLICE_ROLES + OTHER_ROLES:
+            raise KeyError(f"role {self.role!r} is not in the hook's table")
+        for name in ("SHIP_STOP", "SHIP_PART"):
+            value = (env.get(name) or "").strip()
+            if value and not PLAIN.fullmatch(value):
+                raise ValueError(f"{name} {value!r} is not a plain name ([A-Za-z0-9_-]+)")
+        from ship.launch import factory_home
+        from ship.settings import load_settings
+
+        self.factory = str(factory_home(load_settings(program.dir)))
         if self.role in SLICE_ROLES:
             state = st.load(program)
             held = [s for s in state.slices.values() if s.status == Status.HELD]
@@ -197,21 +213,38 @@ class Run:
             return
         self.roots, self.branches = role_paths(program, self.role, env)
         self.worktrees = list(self.branches)
-        from ship.launch import factory_home
-        from ship.settings import load_settings
-
-        self.factory = str(factory_home(load_settings(program.dir)))
         self.repo = st.load(program).repo if program.state.exists() else ""
         self.repo = self.repo or (env.get("SHIP_REPO") or "").strip()
 
     def worktree_of(self, where: str) -> str | None:
         return next((w for w in self.worktrees if inside(where, w)), None)
 
+    def may_write(self, target: str) -> bool:
+        return any(in_root(target, r) for r in self.roots)
+
+    def fix_folders(self) -> list[Path]:
+        d = self.program.dir
+        return [p for p in d.parent.glob(f"{d.name}-fix-*") if p.is_dir()] if d.parent.is_dir() else []
+
+    def kit_owned(self, target: str) -> bool:
+        """`.kit/` of the program or of a fix folder: the kit's own files (D-L22)."""
+        return any(inside(target, str(Path(folder) / ".kit"))
+                   for folder in [self.program.dir, *self.fix_folders()])
+
+    def builder_refused(self, target: str) -> bool:
+        """D-L22: a builder never writes a stop note (it would say the stop is built)."""
+        notes = self.program.notes_dir
+        return (self.role in SLICE_ROLES and _norm(str(Path(target).parent)) == _norm(str(notes))
+                and fnmatch.fnmatch(Path(target).name.lower(), "stop-*.json"))
+
 
 def allowed_roots(program: Program) -> tuple[list[str], list[str]]:
     """(worktrees, every writable root)."""
     run = Run(program)
     return run.worktrees, run.roots
+
+
+# ---- reading a shell command ----------------------------------------------------------------------
 
 
 def _unquote(token: str) -> str:
@@ -229,12 +262,94 @@ def _name(token: str) -> str:
     return Path(token.replace("\\", "/")).name.lower()
 
 
+def segments(command: str) -> list[str]:
+    """Split on `&&`, `||`, `;`, `|`, `&` and new lines outside quotes. A `&` that is part of a
+    redirection (`2>&1`, `&>`) does not split."""
+    out, buf, quote, i = [], [], "", 0
+    while i < len(command):
+        ch = command[i]
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in "'\"":
+            quote = ch
+            buf.append(ch)
+            i += 1
+            continue
+        two = command[i:i + 2]
+        if two in ("&&", "||"):
+            out.append("".join(buf))
+            buf = []
+            i += 2
+            continue
+        if ch == "&" and (two == "&>" or (buf and buf[-1] == ">")):
+            buf.append(ch)
+            i += 1
+            continue
+        if ch in ";|&\n":
+            out.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    out.append("".join(buf))
+    return [x for x in out if x.strip()]
+
+
+def redirections(segment: str) -> tuple[str, list[str]]:
+    """(the segment without its output redirections, their targets). A duplicate (`2>&1`) has the target
+    `&1`; input redirection is left alone."""
+    text: list[str] = []
+    targets: list[str] = []
+    quote, i = "", 0
+    while i < len(segment):
+        ch = segment[i]
+        if quote:
+            text.append(ch)
+            if ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in "'\"":
+            quote = ch
+            text.append(ch)
+            i += 1
+            continue
+        if ch != ">":
+            text.append(ch)
+            i += 1
+            continue
+        while text and (text[-1].isdigit() or text[-1] == "&"):  # 2>, &>
+            text.pop()
+        i += 1
+        while i < len(segment) and segment[i] in ">|":
+            i += 1
+        while i < len(segment) and segment[i] == " ":
+            i += 1
+        start = i
+        if i < len(segment) and segment[i] in "'\"":
+            end = segment.find(segment[i], i + 1)
+            end = len(segment) if end < 0 else end + 1
+        else:
+            end = i
+            while end < len(segment) and not segment[end].isspace():
+                end += 1
+        targets.append(_unquote(segment[start:end]))
+        text.append(" ")
+        i = end
+    return "".join(text), targets
+
+
 def git_calls(command: str, cwd: str) -> list[tuple[str, str, list[str]]]:
     """(folder, subcommand, its arguments) for every git call in a shell command. A `--git-dir` or
     `--work-tree` makes the folder unknowable, reported as ""."""
     here, found = cwd, []
-    for segment in SPLIT.split(command):
-        tokens = _tokens(segment)
+    for segment in segments(command):
+        tokens = _tokens(redirections(segment)[0])
         if not tokens:
             continue
         if tokens[0].lower() in CD_WORDS and len(tokens) > 1:
@@ -298,13 +413,196 @@ def _push_problem(args: list[str], branch: str | None) -> str | None:
     return None
 
 
-def _path_tokens(tokens: list[str]) -> list[str]:
+def _path_tokens(tokens: list[str], here: str) -> list[str]:
+    """Tokens (or a flag's `=value`) that look like paths: a slash, a leading `~` or `.`, or a name that
+    exists where the command runs."""
     out = []
     for token in tokens:
-        for part in (token, token.partition("=")[2]):
-            if part and ("/" in part or "\\" in part or part.startswith("~")):
-                out.append(part)
+        part = token.partition("=")[2] if token.startswith("-") else token
+        if not part:
+            continue
+        if "/" in part or "\\" in part or part.startswith(("~", ".")) or os.path.exists(os.path.join(here, part)):
+            out.append(part)
     return out
+
+
+# ---- the allow-list ---------------------------------------------------------------------------------
+
+
+def factory_script(run: Run, script: str, here: str) -> bool:
+    """`<factory_home>/skills/<skill>/scripts/<name>.py`, for the planning and audit roles (D-L18)."""
+    if run.role not in SCRIPT_ROLES or not run.factory:
+        return False
+    full = os.path.join(here, script)
+    skills = os.path.join(run.factory, "skills")
+    if not inside(full, skills):
+        return False
+    parts = os.path.relpath(_norm(full), _norm(skills)).replace("\\", "/").split("/")
+    return len(parts) == 3 and parts[1] == "scripts" and parts[2].endswith(".py") and ".." not in parts
+
+
+def kit_script(script: str, here: str) -> bool:
+    full = _norm(os.path.join(here, script))
+    return full in (_norm(kit_dir()), _norm(os.path.join(kit_dir(), "__main__.py")))
+
+
+def kit_problem(run: Run, args: list[str], here: str, depth: int) -> str | None:
+    """The kit itself: `timed ... -- <argv>` (the argv judged again) or the read-only `phase`."""
+    sub = args[0] if args else ""
+    if sub == "phase" and not any(a.startswith("--set") for a in args):
+        return None
+    if sub != "timed":
+        return f"ship {sub or '(nothing)'}; a worker runs only ship timed and ship phase"
+    if "--slice" in args:
+        at = args.index("--slice") + 1
+        name = args[at] if at < len(args) else ""
+        if not PLAIN_SLICE.fullmatch(name) or ".." in name:
+            return f"ship timed --slice {name!r} is not a plain name"
+    if "--" not in args:
+        return "ship timed with no `--` before its command"
+    rest = args[args.index("--") + 1:]
+    if not rest:
+        return "ship timed with no command"
+    return command_problem(run, rest, here, depth + 1)
+
+
+def python_problem(run: Run, tokens: list[str], here: str, depth: int) -> str | None:
+    """tokens[0] is a python. Allowed: `-m pytest|ruff|pyright|mypy`, the kit, a factory script."""
+    rest, i, module = tokens[1:], 0, None
+    launcher = _name(tokens[0]).startswith("py") and not _name(tokens[0]).startswith("python")
+    while i < len(rest) and rest[i].startswith("-") and rest[i] != "-":
+        flag = rest[i]
+        if launcher and re.fullmatch(r"-\d+(\.\d+)?(-\d+)?", flag):
+            i += 1
+            continue
+        if flag in ("-X", "-W"):
+            i += 2
+            continue
+        if flag.startswith("--"):
+            return f"python {flag}"
+        body = flag[1:]
+        if "c" in body:
+            return "inline python code"
+        if "m" in body:
+            before, after = body.split("m", 1)
+            if not set(before) <= PYTHON_FLAGS:
+                return f"python {flag}"
+            module = after or (rest[i + 1] if i + 1 < len(rest) else "")
+            i += 1 if after else 2
+            break
+        if not set(body) <= PYTHON_FLAGS:
+            return f"python {flag}"
+        i += 1
+    if module is not None:
+        if module in TOOL_MODULES:
+            return None
+        if module == "ship":
+            return kit_problem(run, rest[i:], here, depth)
+        return f"python -m {module}"
+    if i >= len(rest):
+        return "a bare python"
+    if rest[i] == "-":
+        return "inline python code"
+    script = rest[i]
+    if kit_script(script, here):
+        return kit_problem(run, rest[i + 1:], here, depth)
+    if factory_script(run, script, here):
+        return None
+    return f"python {script}"
+
+
+def uv_problem(run: Run, args: list[str], here: str, depth: int) -> str | None:
+    if not args or args[0] != "run":
+        return f"uv {args[0] if args else ''}; only `uv run` with a test, lint or type tool"
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            i += 1
+            break
+        if not a.startswith("-"):
+            break
+        key = a.split("=", 1)[0]
+        if key in UV_VALUED:
+            i += 1 if "=" in a else 2
+            continue
+        if key in UV_FLAGS:
+            i += 1
+            continue
+        return f"uv run {key}"  # --with, --with-editable, --script, --python and anything unknown
+    rest = args[i:]
+    if not rest:
+        return "uv run with no command"
+    return command_problem(run, rest, here, depth + 1)
+
+
+def command_problem(run: Run, tokens: list[str], here: str, depth: int = 0) -> str | None:
+    """None when a segment's command is on the allow-list. `depth` > 0 is after `uv run` or `timed`, where
+    only the tools, the kit and `uv run` may follow."""
+    if depth > 4:
+        return "commands nested too deep"
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[0]):
+        return f"an environment assignment ({tokens[0].split('=', 1)[0]}=)"
+    name = _name(tokens[0])
+    if name in ("git", "git.exe"):
+        return None if depth == 0 else "git after uv run or ship timed"
+    if name in ("uv", "uv.exe"):
+        return uv_problem(run, tokens[1:], here, depth)
+    if PYTHON.fullmatch(name):
+        return python_problem(run, tokens, here, depth)
+    if name.removesuffix(".exe") in TOOLS:
+        return None
+    if name in TEE:
+        return None if depth == 0 else "tee after uv run or ship timed"  # its files are judged as redirections
+    return f"{tokens[0]} is not on the guard's list (git, uv run, ship timed, pytest, ruff, pyright, mypy)"
+
+
+def git_problem(tokens: list[str]) -> str | None:
+    """Git that runs other programs or writes a file a guard cannot see."""
+    names = [_name(t) for t in tokens]
+    i = names.index("git") if "git" in names else names.index("git.exe")
+    rest = tokens[i + 1:]
+    j = 0
+    while j < len(rest) and rest[j].startswith("-"):
+        flag = rest[j]
+        if flag == "-c" or flag.startswith(("--config-env", "--exec-path")):
+            return f"git {flag} overrides git's config or programs"
+        j += 2 if flag == "-C" else 1
+    sub = rest[j] if j < len(rest) else ""
+    if sub in GIT_RUNS_PROGRAMS:
+        return f"git {sub} runs other programs"
+    if any(t.startswith(("--output", "-O", "--open-files-in-pager", "--ext-diff", "--exec", "-x"))
+           and sub in ("log", "diff", "show", "grep", "format-patch", "rebase") for t in rest[j + 1:]):
+        return f"git {sub} with an option that writes a file or runs a program"
+    return None
+
+
+# ---- the decision -----------------------------------------------------------------------------------
+
+
+def path_problem(run: Run, path: str, here: str, script_args: bool) -> str | None:
+    full = os.path.join(here, path)
+    if run.kit_owned(full):
+        return f"it names {path}, the kit's own folder"
+    if run.repo and inside(full, run.repo) and not run.may_write(full):
+        return f"it names the main checkout ({path}); work only in your worktree"
+    folders = [str(run.program.dir)] + [str(f) for f in run.fix_folders()]
+    if script_args or not any(inside(full, f) for f in folders):
+        return None
+    if _norm(full) == _norm(str(run.program.dir)) or run.may_write(full):
+        return None
+    return f"it names {path} in the program folder, which role {run.role} does not write"
+
+
+def redirect_problem(run: Run, target: str, here: str) -> str | None:
+    if target.startswith("&") or target.lower() in NULL_SINKS:
+        return None
+    full = os.path.join(here, target)
+    if run.role not in SLICE_ROLES:
+        return f"redirection to {target}; role {run.role} writes files only with its file tools"
+    if run.worktree_of(full) is None or run.kit_owned(full):
+        return f"redirection to {target}; a builder redirects only into its worktree"
+    return None
 
 
 def bash_problem(run: Run, command: str, cwd: str) -> str | None:
@@ -319,30 +617,51 @@ def bash_problem(run: Run, command: str, cwd: str) -> str | None:
     if any(x in low for x in ("~/.claude", "$home/.claude", "${home}/.claude", "%userprofile%/.claude",
                               "$env:userprofile/.claude", f"{home}/.claude")):
         return "ship hook: Bash refused: it names ~/.claude; workers never read or change his settings"
+    if "$(" in command or "`" in command or "<(" in command or ">(" in command:
+        return "ship hook: Bash refused: a command substitution the guard cannot read"
     here = cwd
-    for segment in SPLIT.split(command):
-        tokens = _tokens(segment)
+    for segment in segments(command):
+        text, targets = redirections(segment)
+        tokens = _tokens(text)
         if not tokens:
             continue
-        if tokens[0].lower() in CD_WORDS and len(tokens) > 1:
-            here = os.path.join(here, tokens[-1])
-        for path in _path_tokens(tokens):
-            full = os.path.join(here, path)
-            if inside(full, run.repo) and not any(inside(full, r) for r in run.roots):
-                return f"ship hook: Bash refused: it names the main checkout ({path}); work only in your worktree"
-        names = [_name(t) for t in tokens]
-        for n, name in enumerate(names):
-            nxt = [t.lower() for t in tokens[n + 1:n + 3]]
-            if name in PYTHONS and nxt and (nxt[0] == "-" or nxt[0].startswith("-c")):
-                return "ship hook: Bash refused: inline python code; put it in a test or a file in your worktree"
-            if name in PYTHONS and run.role not in SLICE_ROLES:
-                bad = python_problem(run, tokens, n, here)
+        for target in targets:
+            bad = redirect_problem(run, target, here)
+            if bad:
+                return f"ship hook: Bash refused: {bad}"
+        if tokens[0].lower() in CD_WORDS:
+            if len(tokens) > 1:
+                bad = path_problem(run, tokens[-1], here, False)
                 if bad:
-                    return (f"ship hook: Bash refused: {bad}; role {run.role} runs only pytest, ship timed"
-                            + (" and the factory's skill scripts" if run.role in SCRIPT_ROLES else ""))
-            if name in SHELLS and (name.startswith(("powershell", "pwsh"))
-                                   or any(x in ("-c", "/c", "/k", "-command") for x in nxt)):
-                return f"ship hook: Bash refused: a nested shell ({tokens[n]}) the guard cannot read"
+                    return f"ship hook: Bash refused: {bad}"
+                here = os.path.join(here, tokens[-1])
+            continue
+        bad = command_problem(run, tokens, here)
+        if bad:
+            return (f"ship hook: Bash refused: {bad}; role {run.role} runs only git, uv run, ship timed, pytest, "
+                    "ruff, pyright and mypy" + (" and the factory's skill scripts" if run.role in SCRIPT_ROLES
+                                               else ""))
+        name = _name(tokens[0])
+        if name in TEE:
+            for target in [t for t in tokens[1:] if not t.startswith("-")]:
+                bad = redirect_problem(run, target, here)
+                if bad:
+                    return f"ship hook: Bash refused: {bad}"
+        is_git = name in ("git", "git.exe")
+        if is_git:
+            bad = git_problem(tokens)
+            if bad:
+                return f"ship hook: Bash refused: {bad}"
+        script = PYTHON.fullmatch(name) is not None and any(factory_script(run, t, here) for t in tokens[1:3])
+        for path in _path_tokens(tokens[1:], here):
+            full = os.path.join(here, path)
+            if is_git and not run.kit_owned(full):  # git reads name refs and paths; its writes are judged below
+                if run.repo and inside(full, run.repo) and not run.may_write(full):
+                    return f"ship hook: Bash refused: it names the main checkout ({path}); work only in your worktree"
+                continue
+            bad = path_problem(run, path, here, script)
+            if bad:
+                return f"ship hook: Bash refused: {bad}"
     for where, sub, args in git_calls(command, cwd):
         if not _writes(sub, args):
             continue
@@ -370,11 +689,15 @@ def decide(program: Program, event: dict) -> str | None:
         return None
     try:
         run = Run(program)
-    except Exception as exc:  # noqa: BLE001 - an unknown role or an unreadable state.json refuses
+    except Exception as exc:  # noqa: BLE001 - no role, an unknown role or an unreadable state.json refuses
         return f"ship hook: cannot tell what this worker may write ({exc!r}); refusing writes until it can"
     if tool in FILE_TOOLS:
         target = os.path.join(cwd, data.get(FILE_TOOLS[tool], ""))
-        if any(inside(target, r) for r in run.roots):
+        if run.kit_owned(target):
+            return f"ship hook: {tool} to {target} refused; .kit/ is the kit's own folder"
+        if run.builder_refused(target):
+            return f"ship hook: {tool} to {target} refused; only the build loop writes a stop note"
+        if run.may_write(target):
             return None
         if run.role in SLICE_ROLES:
             return f"ship hook: {tool} to {target} refused; write only in your worktree or evidence folder"
