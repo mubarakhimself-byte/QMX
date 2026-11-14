@@ -318,6 +318,55 @@ def junit_cases(junit: Path) -> list[ET.Element]:
     return list(ET.parse(junit).iter("testcase"))  # noqa: S314 - pytest wrote it in CI
 
 
+def collection_errors(junit: Path) -> dict[str, str]:
+    """Each test module pytest could not collect, named as JUnit names it (`dotted.module`), with
+    its error's message and traceback."""
+    found: dict[str, str] = {}
+    for case in junit_cases(junit):
+        error = case.find("error")
+        if error is not None and not case.get("classname"):
+            found[case.get("name", "")] = f"{error.get('message') or ''}\n{error.text or ''}"
+    return found
+
+
+MISSING_MODULE = re.compile(r"No module named '([\w.]+)'|cannot import name '\w+' from '([\w.]+)'")
+
+
+def module_tails(path: str) -> set[str]:
+    """Every dotted name a Python file may be imported or reported by: each tail of its path."""
+    parts = path.removesuffix(".py").split("/")
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return {".".join(parts[i:]) for i in range(len(parts))}
+
+
+def missing_new_module(error: str, added: Sequence[str]) -> bool:
+    """Whether a collection error is a ModuleNotFoundError or ImportError naming a module that a
+    file new in the change provides."""
+    if "ModuleNotFoundError" not in error and "ImportError" not in error:
+        return False
+    named = {a or b for a, b in MISSING_MODULE.findall(error)}
+    provided = {t for f in added if f.endswith(".py") for t in module_tails(f)}
+    return bool(named & provided)
+
+
+def excused_at_parent(
+    test_id: str, new_tests: Sequence[str], errors: Mapping[str, str], added: Sequence[str]
+) -> bool:
+    """D-L19: a new test the parent could not collect counts as failing there only when its test
+    file is new in the change and that file's collection error is a missing module the change
+    adds. A test file that already existed and stops collecting at the parent is no excuse."""
+    classname = test_id.split("::", 1)[0]
+    for path in new_tests:
+        tails = module_tails(path)
+        if not any(classname == t or classname.startswith(t + ".") for t in tails):
+            continue
+        return any(
+            name in tails and missing_new_module(text, added) for name, text in errors.items()
+        )
+    return False
+
+
 def outcomes(junit: Path) -> dict[str, str]:
     """test id -> passed | skipped | assertion | failed | error (collection and setup errors)."""
     found: dict[str, str] = {}
@@ -707,13 +756,13 @@ def job_lint(write_baseline: bool = False) -> int:
     return 1 if found or verdict else 0
 
 
-CONTRACT_INPUTS = ("qmx-agents/", "contracts/", "tools/contract_dump.py")
+CONTRACT_INPUTS = ("qmx-agents/", "contracts/", "packages/", "qmn/", "tools/contract_dump.py")
 
 
 def contract_due(lvl: Level, changed: Sequence[str]) -> bool:
     """Whether the lint job checks contracts/ against the code: in a slice, when the change touches
-    the host's code, the contract files or their generator; at every other linting level except a
-    baseline retake, always."""
+    the host's code, the packages and node it imports (`packages/`, `qmn/`), the contract files or
+    their generator; at every other linting level except a baseline retake, always."""
     if lvl == Level.BASELINE:
         return False
     return lvl != Level.SLICE or any(p.startswith(CONTRACT_INPUTS) for p in changed)
@@ -741,7 +790,9 @@ def contract_findings() -> list[ratchet.Finding]:
 
 def job_fail_at_parent() -> int:
     """Each new test case must fail at the parent on an assertion and pass at the head. An import,
-    collection or setup error at the parent does not count as failing."""
+    collection or setup error at the parent does not count as failing, with one exception
+    (D-L19): a test file new in the change that the parent cannot collect only because a module
+    the change adds is missing (`excused_at_parent`)."""
     lvl = level()
     at = head()
     base = base_for(lvl, at)
@@ -751,6 +802,7 @@ def job_fail_at_parent() -> int:
         print("no parent to compare with")
         return 0
     present = set(git("ls-tree", "-r", "--name-only", at).splitlines())
+    added = [p for p in changed if p in present and not git_ok("cat-file", "-e", f"{base}:{p}")]
     modules = [p for p in changed if ci_units.is_test_module(p) and p in present]
     support = [p for p in changed if ci_units.is_test_support(p) and not ci_units.is_test_module(p)]
     units = ci_units.discover(REPO)
@@ -796,6 +848,8 @@ def job_fail_at_parent() -> int:
         pytest(parent_copy / unit.cwd, rel, OUT / "fap" / f"{stem}-parent.xml", serial=None)
         pytest(REPO / unit.cwd, rel, OUT / "junit" / f"fap-{stem}-head.xml", serial=None)
         at_parent = outcomes(OUT / "fap" / f"{stem}-parent.xml")
+        errors = collection_errors(OUT / "fap" / f"{stem}-parent.xml")
+        new_tests = [m for m in mods if m in added]
         at_head = outcomes(OUT / "junit" / f"fap-{stem}-head.xml")
         if not at_head:
             problems.append(
@@ -805,8 +859,10 @@ def job_fail_at_parent() -> int:
         new = sorted(k for k in at_head if k not in before and "::::" not in k)
         for test_id in new:
             p, h = at_parent.get(test_id, "not collected"), at_head[test_id]
-            log.append(f"{test_id} parent={p} head={h}")
-            if p != "assertion":
+            excused = p == "not collected" and excused_at_parent(test_id, new_tests, errors, added)
+            why = " (a module the change adds)" if excused else ""
+            log.append(f"{test_id} parent={p}{why} head={h}")
+            if p != "assertion" and not excused:
                 problems.append(
                     ratchet.Finding(unit.root, 0, "fail-at-parent", f"{test_id} at parent: {p}")
                 )
@@ -986,7 +1042,6 @@ def skylos_scope() -> dict[str, str]:
 def skylos_findings(report: Path) -> list[ratchet.Finding]:
     """Every finding in Skylos's JSON: one list per category at the top level."""
     data = cast("dict[str, object]", json.loads(report.read_text("utf-8")))
-    root = REPO.as_posix() + "/"
     found: list[ratchet.Finding] = []
     for category, items in sorted(data.items()):
         if category not in SKYLOS_FINDING_CATEGORIES or not isinstance(items, list):
@@ -998,7 +1053,7 @@ def skylos_findings(report: Path) -> list[ratchet.Finding]:
             path = str(item.get("file") or item.get("filename") or "").replace("\\", "/")
             if not path:
                 continue
-            rel = path[len(root) :] if path.startswith(root) else path.removeprefix("./")
+            rel = repo_relative(path)
             rule = str(item.get("rule_id") or item.get("rule") or category)
             name = str(item.get("full_name") or item.get("name") or item.get("message") or "")
             severity = str(item.get("severity") or "").lower()
@@ -1062,10 +1117,23 @@ def skylos_base(lvl: Level, at: str) -> str | None:
     return base_for(lvl, at) if lvl in (Level.SLICE, Level.DEEP) else None
 
 
+def repo_relative(path: str, root: Path = REPO) -> str:
+    """A path Skylos reported, without the checkout's own absolute root: the root itself is `.`
+    (a finding about the whole repo), a file under it is repo-relative, anything else is kept."""
+    path = path.replace("\\", "/")
+    base = root.as_posix().rstrip("/")
+    if path == base:
+        return "."
+    if path.startswith(base + "/"):
+        return path[len(base) + 1 :]
+    return path.removeprefix("./")
+
+
 def repo_path(folder: str, path: str, root: Path = REPO) -> str:
     """A path Skylos reported while scanning `folder`, made repo-relative: kept when it already
-    is, prefixed with the folder when Skylos reported it relative to the scan target."""
-    if path.startswith(folder + "/") or not (root / folder / path).exists():
+    is (or is the repo itself, `.`), prefixed with the folder when Skylos reported it relative to
+    the scan target."""
+    if path == "." or path.startswith(folder + "/") or not (root / folder / path).exists():
         return path
     return f"{folder}/{path}"
 
@@ -1169,6 +1237,22 @@ def mutable_packages() -> list[str]:
     ]
 
 
+EPOCH_ORDINAL = datetime.date(1970, 1, 1).toordinal()
+
+
+def walk_part_of(env: Mapping[str, str], parts: int) -> int:
+    """The part a walk takes: `QMX_WALK_PART` when set, else the UTC day the run started on,
+    `toordinal() % parts`, so the whole repo is walked once every `parts` nights. The day comes
+    as `QMX_WALK_DAY` (days since 1970-01-01), which the workflow's level job reads from the
+    runner's clock once for every shard of the run."""
+    if env.get("QMX_WALK_PART"):
+        return int(env["QMX_WALK_PART"]) % parts
+    day = env.get("QMX_WALK_DAY")
+    if not day:
+        raise CiError("a walk needs QMX_WALK_DAY (set by the workflow) or QMX_WALK_PART")
+    return (EPOCH_ORDINAL + int(day)) % parts
+
+
 def mutate_targets(lvl: Level, at: str) -> list[ci_mutate.Target]:
     packages = mutable_packages()
     named = [m for m in os.environ.get("QMX_MUTATE_MODULES", "").split(",") if m]
@@ -1179,7 +1263,7 @@ def mutate_targets(lvl: Level, at: str) -> list[ci_mutate.Target]:
         return [t for t in everything if t.module in named]
     if lvl == Level.WALK:
         parts = int(os.environ.get("QMX_WALK_PARTS", str(ci_mutate.WALK_PARTS)))
-        part = int(os.environ.get("QMX_WALK_PART", str(facts().number % parts)))
+        part = walk_part_of(os.environ, parts)
         print(f"walk part {part} of {parts} (0-based)")
         return ci_mutate.walk_part(everything, part, parts)
     base = base_for(lvl, at)

@@ -17,7 +17,7 @@
 #   release  tag v*: everything in deep, where known reds block too, plus a smoke start of the host
 #            on Linux and Windows and release-verdict: the tag must sit on engine/base or a
 #            release/v* branch, and a green deep run must vouch for the commit.
-#   walk     the nightly schedule: one part of the whole-repo mutmut walk, chosen by run number.
+#   walk     the nightly schedule: one part of the whole-repo mutmut walk, chosen by the UTC day.
 #            GitHub runs schedules from the default branch's copy of this file only. Survivors
 #            beyond ci/baselines/mutmut.txt are notes in summary.json, which tools/ci/backlog.py
 #            turns into backlog rows; the walk never fails on a survivor.
@@ -86,11 +86,15 @@ jobs:
     timeout-minutes: 5
     outputs:
       level: ${{ steps.pick.outputs.level }}
+      # The UTC day (days since 1970-01-01) the run started on, read once so every walk shard
+      # takes the same part (qci.walk_part_of).
+      day: ${{ steps.pick.outputs.day }}
     steps:
       - id: pick
         run: |
           echo "level=$QMX_LEVEL head=$QMX_HEAD_SHA before=$QMX_BEFORE_SHA"
           echo "level=$QMX_LEVEL" >> "$GITHUB_OUTPUT"
+          echo "day=$(( $(date -u +%s) / 86400 ))" >> "$GITHUB_OUTPUT"
 
   # Format, lint and the scanners are strict; types are a ratchet against ci/baselines/pyright.txt.
   # At level baseline only types run, and they rewrite pyright.txt (artifact ci-out-lint/baselines).
@@ -301,6 +305,7 @@ jobs:
     env:
       QMX_SHARD: ${{ matrix.shard }}
       QMX_SHARDS: 3
+      QMX_WALK_DAY: ${{ needs.level.outputs.day }}
     steps:
       - *checkout
       - *setup

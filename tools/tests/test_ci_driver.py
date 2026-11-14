@@ -13,11 +13,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar, cast
 
-import backlog
 import ci_host
 import ci_mutate
 import ci_units
-import durations
 import guard
 import pull_reds
 import pytest
@@ -1097,17 +1095,6 @@ def test_a_whole_suite_level_still_knows_what_the_change_touched(
     assert qci.flaky_scope(qci.Level.SLICE, HEAD, ["a.py"]) == ["a.py"]
 
 
-def test_pull_reds_counts_no_skipped_matrix_job_as_a_shard() -> None:
-    jobs: list[dict[str, object]] = [
-        {"name": "suite-linux 1", "conclusion": "success"},
-        {"name": "suite-windows 2", "conclusion": "cancelled"},
-        {"name": "tests-linux ${{ matrix.shard }}", "conclusion": "skipped"},
-        {"name": "tests-windows ${{ matrix.shard }}", "conclusion": "skipped"},
-        {"name": "lint", "conclusion": "success"},
-    ]
-    assert pull_reds.shard_jobs(jobs) == ["suite-linux-1", "suite-windows-2"]
-
-
 def test_pull_reds_records_the_runs_flaky_tests(tmp_path: Path) -> None:
     (tmp_path / "flaky-linux-1.txt").write_text("linux|qmn|t::b\nlinux|qmn|t::a\n", "utf-8")
     flaky = pull_reds.shard_flaky(tmp_path)
@@ -1268,153 +1255,124 @@ def test_prune_never_removes_a_comment_line(tmp_path: Path) -> None:
     assert path.read_text("utf-8") == "# header\n"
 
 
-# ---- contracts ----------------------------------------------------------------------------------
+# ---- pull_reds, the guard and Skylos paths (C2 fix round) ---------------------------------------
 
 
-def test_the_contract_check_runs_when_a_slice_touches_the_host_and_at_every_deep_run() -> None:
-    host = ["qmx-agents/packages/qmx-control/src/qmx_control/service.py"]
-    assert qci.contract_due(qci.Level.SLICE, host)
-    assert qci.contract_due(qci.Level.SLICE, ["contracts/apps.json"])
-    assert not qci.contract_due(qci.Level.SLICE, ["qmn/src/qmn/x.py"])
-    assert qci.contract_due(qci.Level.DEEP, [])
-    assert not qci.contract_due(qci.Level.BASELINE, host)
-
-
-def test_a_stale_contract_is_a_lint_finding_naming_the_operation(
+def test_pull_reds_names_no_skipped_matrix_job_as_an_unfinished_shard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    report = (
-        "contracts/host-openapi.json: stale\n"
-        "  added   GET /api/ops/probe (ops_probe)\n"
-        "contracts/apps.json: missing\n"
-        "FAIL the contract files are stale: run `python tools/contract_dump.py`\n"
-    )
+    jobs = [
+        {"name": "suite-linux 1", "conclusion": "success"},
+        {"name": "tests-linux ${{ matrix.shard }}", "conclusion": "skipped"},
+        {"name": "tests-windows ${{ matrix.shard }}", "conclusion": "skipped"},
+    ]
 
-    def fake_run(argv: list[str], cwd: Path, **kwargs: object) -> int:
-        out = kwargs["stdout_to"]
-        assert isinstance(out, Path)
-        out.write_text(report, "utf-8")
-        assert argv[-2:] == ["tools/contract_dump.py", "--check"]
-        return 1
+    def fake_gh(*args: str) -> str:
+        if args[0] == "api" and "/artifacts" in args[1]:
+            return json.dumps({"artifacts": [{"name": "ci-out-suite-linux-1"}]})
+        if args[0] == "api":
+            return json.dumps({"jobs": jobs})
+        folder = Path(args[args.index("-D") + 1])
+        folder.mkdir(parents=True)
+        (folder / "reds-linux-1.txt").write_text("linux|qmn|t::a\n", "utf-8")
+        return ""
 
-    monkeypatch.setattr(qci, "OUT", tmp_path)
-    monkeypatch.setattr(qci, "run", fake_run)
-    monkeypatch.setattr(qci, "uv", lambda: "uv")
-    found = qci.contract_findings()
-    assert [f.text() for f in found] == [
-        "contracts:0: [contract] stale: added   GET /api/ops/probe (ops_probe)",
-        "contracts:0: [contract] stale: contracts/apps.json: missing",
+    (tmp_path / "ci" / "baselines").mkdir(parents=True)
+    monkeypatch.setattr(pull_reds, "gh", fake_gh)
+    monkeypatch.setattr(pull_reds, "REPO", tmp_path)
+    assert pull_reds.main(["pull_reds.py", "77"]) == 0
+    text = (tmp_path / "ci" / "baselines" / "known-reds.txt").read_text("utf-8")
+    assert "# Shards that did not finish, so their reds are not listed: none.\n" in text
+
+
+def test_a_new_ambient_scan_allow_marker_is_loosening(tmp_path: Path) -> None:
+    root, base = _grepo(tmp_path)
+    marker = "#" + " ambient-scan: allow - a reason"
+    more = _gcommit(root, {"pkg/b.py": f"import time\nx = time.time()  {marker}\n"})
+    assert guard.problems(root, base, more, "x") == [
+        "1 more ambient-scan-allow marker(s), in pkg/b.py"
     ]
 
 
-# ---- the nightly walk and shard times -----------------------------------------------------------
-
-
-def test_the_nightly_schedule_runs_the_walk_level() -> None:
-    document = WORKFLOW.split("\njobs:\n", 1)[0]
-    assert "  schedule:\n    - cron: " in document
-    assert "(github.event_name == 'schedule' && 'walk')" in document
-    assert qci.level_jobs(WORKFLOW, qci.Level.WALK) == ["mutmut-walk"]
-
-
-def test_walk_survivors_reach_the_summary_as_notes_and_become_backlog_rows(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    out, baselines = tmp_path / "ci-out-mutmut-walk-1", tmp_path / "baselines"
-    out.mkdir()
-    baselines.mkdir()
-    (baselines / "mutmut.txt").write_text("packages/qmf-core|mutmut|qmf.core.exact.a survived\n")
-    monkeypatch.setattr(qci, "OUT", out)
-    monkeypatch.setattr(qci, "BASELINES", baselines)
-    monkeypatch.setattr(qci, "head", _returns(HEAD))
-    monkeypatch.setattr(qci, "tree_of", _returns("t1"))
-    known = ratchet.Finding("packages/qmf-core", 0, "mutmut", "qmf.core.exact.a survived")
-    fresh = ratchet.Finding("packages/qmf-core", 0, "mutmut", "qmf.core.exact.b survived")
-    qci.record_walk([known, fresh], 1)
-    summary = qci.build_summary(
-        sha=HEAD,
-        ref="engine/base",
-        run_id="5",
-        url="u",
-        lvl=qci.Level.WALK,
-        jobs_of_level=["mutmut-walk"],
-        needs={"mutmut-walk": {"result": "success"}},
-        api_jobs=None,
-        artifacts=tmp_path,
-        known_reds=[],
-    )
-    assert summary["quality"] == [
-        {
-            "tool": "mutmut",
-            "key": "packages/qmf-core|mutmut|qmf.core.exact.b survived",
-            "file": "packages/qmf-core",
-            "kind": "new",
-            "blocks": False,
-        }
-    ]
-    rows = backlog.summary_rows(summary, "2026-11-14", ["qmf.core.exact"])
-    assert [(r.key, r.source, r.touches, r.door) for r in rows] == [
-        (
-            "mutmut|packages/qmf-core|mutmut|qmf.core.exact.b survived",
-            "ci-mutmut",
-            "qmf.core.exact",
-            "triage",
-        )
-    ]
-
-
-def test_a_timed_file_weighs_its_seconds_and_an_untimed_one_its_count_of_tests(
+def test_skylos_keys_name_the_repo_itself_as_a_dot_and_files_repo_relative(
     tmp_path: Path,
 ) -> None:
-    tests = tmp_path / "qmn" / "tests"
-    tests.mkdir(parents=True)
-    (tests / "test_slow.py").write_text("def test_a(): ...\n", "utf-8")
-    (tests / "test_new.py").write_text("def test_a(): ...\ndef test_b(): ...\n", "utf-8")
-    durations = {".::qmn/tests/test_slow.py": 300.0}
-    files = ci_units.test_files(tmp_path, _unit("qmn"), durations)
-    assert {f.path: f.weight for f in files} == {
-        "qmn/tests/test_slow.py": 300.0,
-        "qmn/tests/test_new.py": ci_units.SECONDS_PER_FILE + 2 * ci_units.SECONDS_PER_TEST,
-    }
-
-
-def test_durations_add_each_files_junit_times_and_keep_the_slower_system(tmp_path: Path) -> None:
-    def shard(system: str, cases: str) -> Path:
-        folder = tmp_path / system
-        (folder / "junit").mkdir(parents=True)
-        plan = {
-            "system": system,
-            "shard": 2,
-            "units": ["qmn", "qmx-agents/packages/qmx-host"],
-            "files": [".::qmn/tests/test_a.py", "qmx-agents/packages/qmx-host::tests/test_a.py"],
-        }
-        (folder / f"plan-{system}-2.json").write_text(json.dumps(plan), "utf-8")
-        (folder / "junit" / f"{system}-2-qmn.xml").write_text(
-            f"<testsuites><testsuite>{cases}</testsuite></testsuites>", "utf-8"
-        )
-        (folder / "junit" / f"{system}-2-qmx-agents_packages_qmx-host-serial.xml").write_text(
-            '<testsuites><testsuite><testcase classname="tests.test_a" name="t" time="4.0"/>'
-            "</testsuite></testsuites>",
-            "utf-8",
-        )
-        return folder
-
-    linux = durations.shard_seconds(
-        shard(
-            "linux",
-            '<testcase classname="qmn.tests.test_a" name="x" time="1.5"/>'
-            '<testcase classname="qmn.tests.test_a.Case" name="y" time="2.5"/>',
-        )
+    report = tmp_path / "skylos.json"
+    root = qci.REPO.as_posix()
+    report.write_text(
+        json.dumps(
+            {
+                "quality": [
+                    {"file": root, "rule_id": "SKY-R104", "name": "pre-commit-policy"},
+                    {"file": f"{root}/qmn/src/qmn/a.py", "rule_id": "SKY-Q1", "name": "f"},
+                ]
+            }
+        ),
+        "utf-8",
     )
-    assert linux == {
-        ".::qmn/tests/test_a.py": 4.0,
-        "qmx-agents/packages/qmx-host::tests/test_a.py": 4.0,
-    }
-    windows = durations.shard_seconds(
-        shard("windows", '<testcase classname="qmn.tests.test_a" name="x" time="9.0"/>')
-    )
-    assert durations.durations([linux, windows]) == {
-        ".::qmn/tests/test_a.py": 9.0 + ci_units.SECONDS_PER_FILE,
-        "qmx-agents/packages/qmx-host::tests/test_a.py": 4.0 + ci_units.SECONDS_PER_FILE,
-    }
+    keys = [f.key for f in qci.skylos_findings(report)]
+    assert keys == [".|quality:SKY-R104|pre-commit-policy", "qmn/src/qmn/a.py|quality:SKY-Q1|f"]
+    assert qci.repo_path("apps", ".") == "."
 
+
+# ---- fail-at-parent: a new test file and a module the change adds (D-L19) -----------------------
+
+NO_BACKLOG = "collection failure\nE   ModuleNotFoundError: No module named 'backlog'"
+
+
+@pytest.mark.parametrize(
+    ("test_file", "error", "added", "excused"),
+    [
+        ("tools/tests/test_ci_backlog.py", NO_BACKLOG, ["tools/ci/backlog.py"], True),
+        (
+            "tools/tests/test_ci_backlog.py",
+            "E   ImportError: cannot import name 'x' from 'pkg.new' (/r/pkg/new/__init__.py)",
+            ["pkg/new/__init__.py"],
+            True,
+        ),
+        ("tools/tests/test_ci_backlog.py", NO_BACKLOG, ["tools/ci/other.py"], False),
+        (
+            "tools/tests/test_ci_backlog.py",
+            "E   ImportError: cannot import name 'contract_due' from 'qci' (/r/tools/ci/qci.py)",
+            ["tools/ci/backlog.py"],
+            False,
+        ),
+        (
+            "tools/tests/test_ci_backlog.py",
+            "E   NameError: name 'backlog' is not defined",
+            ["tools/ci/backlog.py"],
+            False,
+        ),
+    ],
+    ids=["missing-new-module", "import-from-new-package", "other-module", "old-module", "name"],
+)
+def test_a_new_test_file_is_excused_only_for_a_module_the_change_adds(
+    test_file: str, error: str, added: list[str], excused: bool
+) -> None:
+    errors = {"tools.tests.test_ci_backlog": error}
+    test_id = "tools.tests.test_ci_backlog::test_rows"
+    new_tests = [test_file]
+    assert qci.excused_at_parent(test_id, new_tests, errors, [*added, test_file]) is excused
+
+
+def test_an_existing_test_file_that_stops_collecting_is_never_excused() -> None:
+    errors = {"tools.tests.test_ci_driver": NO_BACKLOG}
+    test_id = "tools.tests.test_ci_driver::test_new_case"
+    added = ["tools/ci/backlog.py"]
+    assert not qci.excused_at_parent(test_id, [], errors, added)
+
+
+def test_a_collection_error_is_read_with_its_text(tmp_path: Path) -> None:
+    junit = tmp_path / "parent.xml"
+    junit.write_text(
+        '<testsuites><testsuite><testcase classname="" name="tools.tests.test_ci_backlog">'
+        '<error message="collection failure">E   ModuleNotFoundError: No module named '
+        "'backlog'</error></testcase>"
+        '<testcase classname="tools.tests.test_x" name="test_y"/></testsuite></testsuites>',
+        "utf-8",
+    )
+    assert qci.collection_errors(junit) == {
+        "tools.tests.test_ci_backlog": (
+            "collection failure\nE   ModuleNotFoundError: No module named 'backlog'"
+        )
+    }
