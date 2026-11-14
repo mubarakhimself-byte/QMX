@@ -1,6 +1,9 @@
 """ship phase: which step a program folder is at, and the values that step needs (FACTORY-DESIGN 11.7).
 
-`read` applies the 20 rules of 11.7 in order and returns `key: value` pairs. It reads files only:
+`read` applies the 20 rules of 11.7 in order and returns `key: value` pairs. Before rule 3 the gates
+must be the ones `ship gate` logged (`.kit/gates.log`), else `waits` (D-L22). Rule 18 has one more case:
+when `ship merge` wrote a fix program for a CLEAN stop, that fix is built, reviewed as round 2 and then
+merged, exactly as a round-1 BLOCKED fix is. It reads files only:
 PROGRAM.yaml, phase.json, SLICES.md, plan-review/REVIEW.md, state.json, notes/stop-<X>.json,
 stop-review/<X>/REVIEW.md and REVIEW-2.md, merge/<X>.md, docs/<X>.json, chain.lock, WAITING.md and
 notes/WAITS-ON-YOU.md. `set_phase` is the one writer of phase.json.
@@ -16,7 +19,7 @@ from ship import program as prog
 from ship import state as st
 from ship.layout import Program
 from ship.plan import PlanError, parse_slices
-from ship.proc import pid_alive
+from ship.proc import lock_alive
 from ship.settings import Settings
 
 NEXT_WORDS = ("intake", "plan", "audit", "sweep-handoff", "review", "planner-fix", "go", "arm", "later-handoff",
@@ -59,15 +62,17 @@ def stop_tip(program: Program, stop: str) -> str:
 
 
 def conveyor(program: Program) -> tuple[bool, str]:
-    """(alive, words) for chain.lock: alive when its pid runs."""
+    """(alive, words) for chain.lock: alive when its pid still names the process that wrote it (same
+    creation time) and the lock was written since the machine last started (D-L22)."""
     text = _read(program.chain_lock)
     if not text.strip():
         return False, "none"
     try:
-        pid = int(json.loads(text).get("pid") or 0)
+        body = json.loads(text)
+        pid = int(body.get("pid") or 0)
     except (json.JSONDecodeError, AttributeError, ValueError, TypeError):
         return False, "unreadable chain.lock"
-    return (True, f"alive {pid}") if pid_alive(pid) else (False, f"dead {pid}")
+    return (True, f"alive {pid}") if lock_alive(body) else (False, f"dead {pid}")
 
 
 def open_questions(program: Program) -> str:
@@ -153,6 +158,9 @@ def read(program: Program, settings: Settings) -> dict:
     if index.abandoned:
         out["status"] = "abandoned"
         return done("done", f"abandoned: {index.abandoned}")
+    gates = prog.gates_problem(program, index)
+    if gates:  # D-L22: a gate only `ship gate` wrote moves a program on
+        return done("waits", gates, wait=True)
     stage = str(phase_json(program).get("phase") or "")
     if not program.slices_md.exists():
         if index.kind == "audit":
@@ -200,10 +208,12 @@ def read(program: Program, settings: Settings) -> dict:
         if not v1:
             return done("checkpoint-review", f"stop {sid} is built and not reviewed", stop=sid, round="1",
                         tip=tip, **{"from": previous})
+        fix = program.dir.parent / f"{program.dir.name}-fix-{sid}"
         if v1 == "CLEAN":
+            if merge_written_fix(Program(fix), sid):
+                return _merge_fix(program, done, sid, fix, end1, previous)
             return done("merge", f"stop {sid} review is CLEAN", stop=sid, reviewed_tip=end1, tip=tip,
                         **{"from": previous})
-        fix = program.dir.parent / f"{program.dir.name}-fix-{sid}"
         fix_tip = stop_tip(Program(fix), sid)
         if not fix_tip:
             return done("build", f"stop {sid} round 1 is BLOCKED; its fix program is not built", stop=sid,
@@ -221,6 +231,37 @@ def read(program: Program, settings: Settings) -> dict:
         if not (program.dir / "docs" / f"{sid}.json").exists():
             return done("docs", f"stop {sid} is merged and has no docs/{sid}.json", stop=sid)
     return done("done", "every stop merged")
+
+
+def merge_written_fix(fix: Program, stop: str) -> bool:
+    """A fix program `ship merge` wrote for a stop whose review was CLEAN (a conflict or a red run merging
+    the target): its go gate's source is `merge/<X>.md` and the gates log holds that gate (D-L22)."""
+    if not fix.project_file.exists():
+        return False
+    try:
+        index = prog.load(fix)
+    except prog.ProgramError:
+        return False
+    go = index.gate("go") or {}
+    return (index.kind == "fix" and str(go.get("source") or "") == f"merge/{stop}.md"
+            and prog.gates_problem(fix, index) is None)
+
+
+def _merge_fix(program: Program, done, sid: str, fix: Path, end1: str, previous: str) -> dict:
+    """Round 1 was CLEAN and the merge wrote a fix program: build it, review it as round 2, then merge."""
+    fix_tip = stop_tip(Program(fix), sid)
+    if not fix_tip:
+        return done("build", f"stop {sid}: the fix program ship merge wrote is not built", stop=sid,
+                    build_folder=fix.as_posix(), fix_program=fix.as_posix())
+    v2, end2 = verdict(program.stop_review(sid) / "REVIEW-2.md")
+    if not v2:
+        return done("checkpoint-review", f"stop {sid}: the merge's fix program is built; round 2 is not reviewed",
+                    stop=sid, round="2", tip=fix_tip, fix_program=fix.as_posix(), **{"from": end1 or previous})
+    if v2 == "BLOCKED":
+        return done("waits", f"stop {sid} is BLOCKED after round 2", wait=True, stop=sid, round="2",
+                    fix_program=fix.as_posix())
+    return done("merge", f"stop {sid} round 2 is CLEAN", stop=sid, reviewed_tip=end2, tip=fix_tip,
+                fix_program=fix.as_posix(), **{"from": previous})
 
 
 def _fix_built(program: Program, settings: Settings, out: dict, done, sid: str, tip: str) -> dict:

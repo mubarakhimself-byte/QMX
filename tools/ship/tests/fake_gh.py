@@ -10,7 +10,9 @@ A `-R <slug>` anywhere in the arguments is accepted and ignored.
 For `ship merge` (U10): an open PR gets a pull-request `gate` run on its current head the first time
 runs are listed for it (green, or red while a file fake-gh-gate-red exists); `pr merge <url> --merge`
 merges the PR's head into its base on the remote with `git` (refused while fake-gh-gate-red exists).
-With a file fake-gh-auto, `workflow run` makes a finished run at once (green, or red while
+`--match-head-commit SHA` refuses when the head moved; fake-gh-merge-noop says merged and merges nothing;
+fake-gh-merge-moves-base (used once) pushes a commit to the base and refuses, as GitHub does when the
+base moved. With a file fake-gh-auto, `workflow run` makes a finished run at once (green, or red while
 fake-gh-deep-red exists) carrying the `deep-verdict` and `summary` artifacts for its head."""
 
 import json
@@ -79,6 +81,17 @@ def pr(home: Path, argv: list[str]) -> int:
             print("Pull request is not mergeable: the base branch policy prohibits the merge "
                   "(required status check gate is failing)", file=sys.stderr)
             return 1
+        match = opt(argv, "--match-head-commit")
+        if match and match != head_sha(found["head"]):
+            print("Head branch was modified. Review and try the merge again.", file=sys.stderr)
+            return 1
+        if (home / "fake-gh-merge-moves-base").exists():
+            (home / "fake-gh-merge-moves-base").unlink()
+            move_base(found["baseRefName"])
+            print("Base branch was modified. Review and try the merge again.", file=sys.stderr)
+            return 1
+        if (home / "fake-gh-merge-noop").exists():
+            return 0  # says merged, merges nothing
         merge_on_remote(home, found)
         found["state"] = "MERGED"
         store.write_text(json.dumps(prs), "utf-8")
@@ -193,6 +206,25 @@ def merge_on_remote(home: Path, pr: dict) -> None:
                             f"origin/{pr['head']}"], cwd=work, check=True, capture_output=True, text=True)
             subprocess.run(["git", "push", "-q", "origin", f"HEAD:refs/heads/{pr['baseRefName']}"], cwd=work,
                            check=True, capture_output=True, text=True)
+        finally:
+            git("worktree", "remove", "--force", str(work))
+
+
+def move_base(base: str) -> None:
+    """Another program's merge lands on the base while this PR merges: one commit pushed there."""
+    import tempfile
+
+    git("fetch", "-q", "origin")
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "other"
+        git("worktree", "add", "-q", "--detach", str(work), f"origin/{base}")
+        try:
+            (work / "moved-by-another-merge.txt").write_text("x\n", "utf-8")
+            for argv in (["add", "-A"],
+                         ["-c", "user.name=other", "-c", "user.email=o@test.invalid", "commit", "-q", "-m",
+                          "other program: merged"],
+                         ["push", "-q", "origin", f"HEAD:refs/heads/{base}"]):
+                subprocess.run(["git", *argv], cwd=work, check=True, capture_output=True, text=True)
         finally:
             git("worktree", "remove", "--force", str(work))
 

@@ -146,6 +146,24 @@ class Program:
     def merge_note(self, stop: str) -> Path:
         return self.dir / "merge" / f"{stop}.md"
 
+    @property
+    def kit_dir(self) -> Path:
+        """`.kit/`: files only the kit writes; the hook refuses every worker role there (D-L22)."""
+        return self.dir / ".kit"
+
+    def review_run(self, stop: str) -> Path:
+        """`ship review`'s bookkeeping for a stop; its `result` 0 and `tip` are what `ship merge` trusts."""
+        return self.kit_dir / stop / "review-run.json"
+
+    def merge_base(self, stop: str) -> Path:
+        """The merge commit of the target `ship merge` pushed onto the build branch, one 40-char sha."""
+        return self.kit_dir / stop / "MERGE-BASE"
+
+    @property
+    def gates_log(self) -> Path:
+        """One JSON line per `ship gate`; PROGRAM.yaml's gates must equal the log's last word on each."""
+        return self.kit_dir / "gates.log"
+
 
 @dataclasses.dataclass(frozen=True)
 class Records:

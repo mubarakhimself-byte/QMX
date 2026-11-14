@@ -5,13 +5,17 @@ the folder that holds the program folders. Every change is made under `records.l
 program folder outside a plans worktree (no `_records/CLAIMS.tsv` beside it) claims nothing.
 
 - `claim(program, patterns)`: `claim` rows for the patterns this program has not claimed yet; returns
-  the overlaps with other programs' live claims as (pattern, other program, other pattern). A pattern a
-  `shared_generated` glob names is never claimed: the merge rebuilds those files.
+  the overlaps with other programs' EARLIER live claims as (pattern, other program, other pattern). Only
+  an earlier claim blocks: a later overlapping pattern gets no row (it waits) until the earlier claim is
+  released, so two programs never block each other (D-L22). A pattern a `shared_generated` glob names is
+  never claimed: the merge rebuilds those files. A program and its fix programs (by their PROGRAM.yaml
+  `parent` link) are one family and never block each other.
 - `notice(program, patterns)`: `notice` rows (an audit's or a plan's area); notices never block.
 - `release(program, patterns=None)`: stamps `released` on this program's live rows (all, or those).
 - `live(exclude=None)`: live claim and notice rows.
 - `sweep(settings)`: releases the rows of programs whose folder is gone, that are abandoned, or whose
-  every stop is merged while no conveyor runs them.
+  every stop is merged while no conveyor runs them (a live `chain.lock`: same pid and creation time,
+  written since the machine started).
 - `blocked_slices(slices, overlaps)`: slice id -> the program holding a file it names.
 """
 
@@ -29,9 +33,27 @@ from ship.settings import Settings
 COLUMNS = ("program", "kind", "pattern", "since", "released")
 
 
-def family(a: str, b: str) -> bool:
+def root_of(plans: Path, name: str) -> str:
+    """The program a fix program serves, followed through its `PROGRAM.yaml` `parent` links (D-L22: never a
+    name prefix, so `risk-fix-sizing` is its own program unless its PROGRAM.yaml says `kind: fix`)."""
+    from ship import program as prog
+
+    seen = [name]
+    while len(seen) < 10:
+        folder = Program(plans / seen[-1])
+        try:
+            index = prog.load(folder) if folder.project_file.exists() else None
+        except prog.ProgramError:
+            index = None
+        if index is None or index.kind != "fix" or not index.parent or index.parent in seen:
+            break
+        seen.append(str(index.parent))
+    return seen[-1]
+
+
+def family(plans: Path, a: str, b: str) -> bool:
     """One program, or a program and its own fix program: they build on one branch, never against each other."""
-    return a == b or a.startswith(b + "-fix-") or b.startswith(a + "-fix-")
+    return a == b or root_of(plans, a) == root_of(plans, b)
 
 
 @dataclasses.dataclass
@@ -79,40 +101,46 @@ class Claims:
     def shared_file(self, pattern: str) -> bool:
         return any(matches(glob, pattern) or glob == pattern for glob in self.shared)
 
+    def _blockers(self, rows: list[Row], program: str, pattern: str) -> list[tuple[str, str, str]]:
+        """The other programs' live claims written before this program's own row for `pattern` (or before
+        now, when it has none) that overlap it. Only an earlier claim blocks (D-L22): two programs never
+        wait on each other."""
+        own = next((i for i, r in enumerate(rows) if r.program == program and r.kind == "claim"
+                    and not r.released and r.pattern == pattern), len(rows))
+        return [(pattern, r.program, r.pattern) for r in rows[:own]
+                if r.kind == "claim" and not r.released and r.program != program
+                and overlaps([pattern], [r.pattern]) and not family(self.plans, r.program, program)]
+
     def claim(self, program: str, patterns: list[str], kind: str = "claim") -> list[tuple[str, str, str]]:
+        """Claim rows for the patterns this program has not claimed yet. A pattern an earlier live claim of
+        another program overlaps gets no row: it is a wait, returned as (pattern, other program, other
+        pattern), and is claimed on a later call once that claim is released."""
         if not self.active:
             return []
         wanted = list(dict.fromkeys(p for p in patterns if not self.shared_file(p)))
+        found: list[tuple[str, str, str]] = []
         with records.locked(self.records):
             rows = self.read()
             mine = {r.pattern for r in rows if r.program == program and r.kind == kind and not r.released}
             stamp = clock.now().isoformat(timespec="seconds")
-            new = [Row(program, kind, p, stamp) for p in wanted if p not in mine]
+            new = []
+            for p in wanted:
+                blocked = self._blockers(rows, program, p) if kind == "claim" else []
+                found += blocked
+                if p not in mine and not blocked:
+                    new.append(Row(program, kind, p, stamp))
             if new:
                 self._write(rows + new, f"claims: {program} {kind}s {len(new)} patterns")
-            others = [r for r in rows if not r.released and not family(r.program, program) and r.kind == "claim"]
-        if kind != "claim":
-            return []
-        found = []
-        for pattern in wanted:
-            for other in others:
-                if overlaps([pattern], [other.pattern]):
-                    found.append((pattern, other.program, other.pattern))
         return found
 
     def notice(self, program: str, patterns: list[str]) -> None:
         self.claim(program, patterns, kind="notice")
 
     def overlaps_now(self, program: str, patterns: list[str]) -> list[tuple[str, str, str]]:
-        """The overlaps of `patterns` with other programs' live claims, without writing anything."""
-        found = []
-        for other in self.live(exclude=program):
-            if other.kind != "claim" or family(other.program, program):
-                continue
-            for pattern in patterns:
-                if not self.shared_file(pattern) and overlaps([pattern], [other.pattern]):
-                    found.append((pattern, other.program, other.pattern))
-        return found
+        """The earlier live claims of other programs that overlap `patterns`, without writing anything."""
+        rows = self.read()
+        return [hit for p in dict.fromkeys(patterns) if not self.shared_file(p)
+                for hit in self._blockers(rows, program, p)]
 
     def release(self, program: str, patterns: list[str] | None = None) -> int:
         if not self.active:
@@ -167,7 +195,7 @@ def finished(program: Program, settings: Settings) -> str:
 
 def for_program(program: Program, settings: Settings) -> Claims:
     """The claims list beside a program folder, with its project's shared-generated globs."""
-    from ship import profile
+    from ship import project_profile as profile
 
     shared = profile.of_program(program.dir, settings)["project"].get("shared_generated") or []
     return Claims(program.dir.parent, settings, shared)

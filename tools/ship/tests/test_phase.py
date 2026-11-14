@@ -11,7 +11,7 @@ from ship import state as st
 from ship.layout import Program
 from ship.phase import WORDS, read, set_phase
 from ship.settings import Settings
-from ship.tests.fixture import write
+from ship.tests.fixture import sign_gates, write
 
 TOOLS = Path(__file__).resolve().parents[2]
 PARENT_TIP = "a" * 40
@@ -103,6 +103,10 @@ class PhaseCase(unittest.TestCase):
         p.dir.mkdir(parents=True, exist_ok=True)
         if yaml is not False:
             write(p.project_file, yaml if yaml is not None else program_yaml(**kw))
+            try:
+                sign_gates(p)  # as `ship gate` would have logged them
+            except prog.ProgramError:
+                pass  # a test of a broken PROGRAM.yaml
         if slices:
             write(p.slices_md, slices)
         if review:

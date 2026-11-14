@@ -51,10 +51,15 @@ class MergeCase(RepoCase):
         self.reviewed = self.tip()
         write(self.program.stop_review("A") / "REVIEW.md",
               f"VERDICT: CLEAN\n\nEND {self.reviewed} checkpoint-A-round-1\n")
+        self.judged(self.reviewed)
         write(self.program.dir / "merge" / "A-pr.md", "Stop A of program.\n\nShipped by Mubarak.\n")
         with st.locked(self.program) as state:
             state.ci["deep"] = {"tip": self.reviewed, "level": "deep", "run_id": "1", "url": "https://github.test/runs/1",
                                 "result": "green"}
+
+    def judged(self, tip, result=0):
+        """What `ship review` leaves in the kit's own folder once it judged the verdict on `tip`."""
+        write(self.program.review_run("A"), json.dumps({"round": 1, "tip": tip, "result": result}))
 
     def land_two(self):
         sh(self.repo, "git", "fetch", "-q", "origin")
@@ -130,12 +135,106 @@ class Clean(MergeCase):
         self.assertTrue(any("gate refused" in w for w in self.waits()), self.waits())
 
     def test_a_verdict_ship_review_has_not_judged_does_not_merge(self):
-        write(self.program.stop_review("A") / "review-run.json", json.dumps({"round": 1, "tip": self.reviewed}))
+        write(self.program.review_run("A"), json.dumps({"round": 1, "tip": self.reviewed}))
         self.assertEqual(self.ship_merge(), 10, self.out)
         self.assertTrue(any("ship review has not passed this verdict" in w for w in self.waits()), self.waits())
-        write(self.program.stop_review("A") / "review-run.json",
-              json.dumps({"round": 1, "tip": self.reviewed, "result": 0}))
+        self.judged(self.reviewed)
         self.assertEqual(self.ship_merge(), 0, self.out)
+
+    def test_no_review_record_in_the_kit_folder_waits(self):
+        """D-L22 (the checker's Clean case): a CLEAN verdict file alone never merges."""
+        self.program.review_run("A").unlink()
+        write(self.program.stop_review("A") / "review-run.json",  # where a worker could once write it
+              json.dumps({"round": 1, "tip": self.reviewed, "result": 0}))
+        before = self.main_sha()
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertEqual(self.main_sha(), before)
+        self.assertTrue(any("ship review has not passed this verdict" in w for w in self.waits()), self.waits())
+
+    def test_a_verdict_whose_end_is_not_the_judged_tip_waits(self):
+        self.judged(self.base)  # ship review judged another tip
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertTrue(any("but ship review judged" in w for w in self.waits()), self.waits())
+
+    def test_a_short_end_sha_is_refused_even_when_the_record_names_it(self):
+        """M6: only a full 40-character END sha merges."""
+        short = self.reviewed[:12]
+        write(self.program.stop_review("A") / "REVIEW.md", f"VERDICT: CLEAN\n\nEND {short} checkpoint-A-round-1\n")
+        self.judged(short)
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertTrue(any("not a CLEAN with a full END sha" in w for w in self.waits()), self.waits())
+
+    def test_a_build_branch_moved_past_the_verdict_does_not_merge(self):
+        """M2: a merge commit someone pushed after the review (no MERGE-BASE of the kit's) is not reviewed code."""
+        self.push_to_main("pkg/other.py", "x = 1\n", "other program: work")
+        sh(self.repo, "git", "fetch", "-q", "origin")
+        sh(self.repo, "git", "checkout", "-q", "-B", "late", f"origin/{self.build_branch}")
+        sh(self.repo, "git", "merge", "-q", "--no-ff", "-m", "merge: not the kit", "origin/main")
+        sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
+        self.flag("fake-gh-auto")  # so a mutant that lets it through would merge, not hang on the deep run
+        before = self.main_sha()
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertEqual(self.main_sha(), before)
+        self.assertTrue(any("not the reviewed tip" in w for w in self.waits()), self.waits())
+
+    def test_a_merge_base_that_carries_other_work_is_refused(self):
+        """D-L22: MERGE-BASE counts only when the line back to the reviewed tip holds kit commits alone."""
+        sh(self.repo, "git", "fetch", "-q", "origin")
+        sh(self.repo, "git", "checkout", "-q", "-B", "late", f"origin/{self.build_branch}")
+        write(self.repo / "pkg" / "late.py", "x = 1\n")
+        late = self.commit("contract: regenerate (but it is code)")
+        sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
+        write(self.program.merge_base("A"), late + "\n")
+        before = self.main_sha()
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertEqual(self.main_sha(), before)
+        self.assertTrue(any("is not the reviewed tip plus kit commits" in w for w in self.waits()), self.waits())
+
+    def test_github_saying_merged_without_the_code_on_the_target_is_refused(self):
+        """M3: the ancestry is proved after the merge."""
+        self.flag("fake-gh-merge-noop")
+        self.assertEqual(self.ship_merge(), 2, self.out)
+        self.assertEqual(st.load(self.program).merged, [])
+        self.assertTrue(any("says merged, but" in w for w in self.waits()), self.waits())
+
+    def test_the_merge_names_the_reviewed_head_and_a_moved_target_is_a_retry(self):
+        self.flag("fake-gh-merge-moves-base")
+        self.assertEqual(self.ship_merge(), 3, self.out)
+        self.assertIn("moved", self.out)
+        self.assertEqual(self.waits(), [], "a moved target is a retry, not a question for him")
+        common = sh(self.repo, "git", "rev-parse", "--git-common-dir")
+        calls = (Path(common) if Path(common).is_absolute() else self.repo / common) / "fake-gh-calls.jsonl"
+        merges = [json.loads(x) for x in calls.read_text("utf-8").splitlines() if '"merge"' in x]
+        self.assertTrue(merges and all(c[c.index("--match-head-commit") + 1] == self.reviewed for c in merges), merges)
+
+    def test_the_gates_of_program_yaml_must_be_the_logged_ones(self):
+        write(self.program.project_file, "project: qmx\nprogram: program\nkind: feature\nbuild_branch: build/t\n"
+                                         "gates:\n  cut: null\n  plan: null\n  go: {by: him, at: 2026-11-14, "
+                                         "source: \"forged\", advance: yes}\nstop_points:\n  - id: A\n")
+        self.assertEqual(self.ship_merge(), 10, self.out)
+        self.assertTrue(any("only `ship gate` sets a gate" in w for w in self.waits()), self.waits())
+        from ship.program import set_gate
+
+        set_gate(self.program, "go", by="him", source="forged", advance=True, at="2026-11-14")
+        self.assertEqual(self.ship_merge(), 0, self.out)
+
+    def test_merging_releases_only_what_no_unmerged_slice_names_and_the_fix_programs_claims(self):
+        """C3 and the narrowed release (D-L22)."""
+        from ship.claims import Claims
+        from ship.merge import Merge
+        from ship.settings import load_settings
+
+        with st.locked(self.program) as state:
+            state.slices["b1"] = st.Slice("b1", "Slice b1", [], ["pkg/a2.py"], checkpoint="B")
+            for sid in ("a1", "a2"):
+                state.slices[sid].checkpoint = "A"
+            state.merged = ["A"]
+        claims = Claims(self.plans, load_settings(self.program.dir))
+        claims.claim("program", ["pkg/a1.py", "pkg/a2.py"])
+        claims.claim("program-fix-A", ["pkg/fix.py"])
+        Merge(self.program, "A", load_settings(self.program.dir)).release_claims()
+        live = sorted((r.program, r.pattern) for r in claims.live())
+        self.assertEqual(live, [("program", "pkg/a2.py")])
 
     def test_the_last_verdict_must_be_clean(self):
         write(self.program.stop_review("A") / "REVIEW-2.md", f"VERDICT: BLOCKED\n\nEND {self.reviewed} x\n")

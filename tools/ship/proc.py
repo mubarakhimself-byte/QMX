@@ -82,18 +82,78 @@ def boot_time() -> float:
 
 
 def same_process(pid: int, when: float | None) -> bool:
-    """True only for the process that had this pid at creation time `when` (to the millisecond)."""
+    """True only for the running process that had this pid at creation time `when` (to the millisecond).
+    An exited process whose handle someone still holds open keeps its creation time, so it must also run
+    (D-L22)."""
     if not pid or when is None:
         return False
     now = created(pid)
-    return now is not None and abs(now - float(when)) < 0.01
+    return now is not None and abs(now - float(when)) < 0.01 and pid_alive(pid)
+
+
+def holder_alive(pid: int | None, when: float | None) -> bool:
+    """A lock's holder still runs: its pid names the process that wrote it. An old lock with no creation
+    time falls back to the pid alone (the boot check, `started_before_boot`, still applies)."""
+    if not pid:
+        return False
+    return same_process(int(pid), when) if when is not None else pid_alive(int(pid))
+
+
+def started_before_boot(started: str | None) -> bool:
+    """An ISO time (a lock's `started`) from before this machine last started."""
+    import datetime as dt
+
+    if not started:
+        return False
+    try:
+        when = dt.datetime.fromisoformat(started)
+    except (TypeError, ValueError):
+        return False
+    when = when if when.tzinfo else when.replace(tzinfo=dt.timezone.utc)
+    return when.timestamp() < boot_time() - 1
+
+
+def lock_alive(body: dict) -> bool:
+    """chain.lock's holder runs: same pid and creation time, and written since the machine last started."""
+    if started_before_boot(body.get("started")):
+        return False
+    try:
+        pid = int(body.get("pid") or 0)
+    except (TypeError, ValueError):
+        return False
+    return holder_alive(pid, body.get("created"))
+
+
+def child_flags() -> int:
+    """Windows creation flags for every child: its own process group and no console window (D-L22)."""
+    return subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW if WINDOWS else 0
 
 
 def popen_group_kwargs() -> dict:
     """Start a child in its own group so a timeout can stop the child and everything it started."""
     if WINDOWS:
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": child_flags()}
     return {"start_new_session": True}
+
+
+def detached_kwargs(breakaway: bool = True) -> dict:
+    """Popen arguments for a process that must outlive the one that started it (the conveyor, the spike's
+    child). Windows: no window, its own group and out of the starter's job; never DETACHED_PROCESS, whose
+    children each open a visible console (D-L22). Elsewhere a new session."""
+    if WINDOWS:
+        flags = child_flags() | (subprocess.CREATE_BREAKAWAY_FROM_JOB if breakaway else 0)
+        return {"creationflags": flags, "close_fds": True}
+    return {"start_new_session": True, "close_fds": True}
+
+
+def popen_detached(argv: list[str], **kwargs) -> subprocess.Popen:
+    """Popen with `detached_kwargs`; a job that forbids breakaway refuses it, so try once without."""
+    try:
+        return subprocess.Popen(argv, **detached_kwargs(), **kwargs)
+    except OSError:
+        if not WINDOWS:
+            raise
+        return subprocess.Popen(argv, **detached_kwargs(breakaway=False), **kwargs)
 
 
 def kill_tree(pid: int, timeout: float = 60) -> None:

@@ -38,7 +38,7 @@ from ship import launch as ln
 from ship import state as st
 from ship.gitx import GitError, remote_sha
 from ship.layout import Program
-from ship.proc import boot_time, kill_tree, pid_alive, popen_group_kwargs, same_process
+from ship.proc import holder_alive, kill_tree, pid_alive, popen_group_kwargs, same_process, started_before_boot
 from ship.proc import created as proc_created
 from ship.settings import Settings
 from ship.state import ParkCause, Status
@@ -125,32 +125,15 @@ class ChainLock:
     def refresh(self, children: list[dict]) -> None:
         tmp = self.program.chain_lock.with_suffix(".lock.tmp")
         tmp.write_text(json.dumps(self._body(children), indent=2), "utf-8")
-        os.replace(tmp, self.program.chain_lock)
+        st.replace(tmp, self.program.chain_lock)
 
     def release(self) -> None:
         if self.mine and int(self.read().get("pid") or 0) == os.getpid():
-            self.program.chain_lock.unlink(missing_ok=True)
+            st.release_lock(self.program.chain_lock)
         self.mine = False
 
 
-def before_boot(started: str | None) -> bool:
-    """The lock was written before this machine last started."""
-    if not started:
-        return False
-    try:
-        when = dt.datetime.fromisoformat(started)
-    except ValueError:
-        return False
-    when = when if when.tzinfo else when.replace(tzinfo=dt.timezone.utc)
-    return when.timestamp() < boot_time() - 1
-
-
-def holder_alive(pid: int, created: float | None) -> bool:
-    """The lock's holder still runs: its pid names the process that wrote it. An old lock with no
-    creation time falls back to the pid alone (the boot check above still applies)."""
-    if not pid:
-        return False
-    return same_process(pid, created) if created is not None else pid_alive(pid)
+before_boot = started_before_boot  # the lock was written before this machine last started
 
 
 # ---- children ---------------------------------------------------------------------------------------
@@ -206,7 +189,7 @@ class Memo:
     def save(self, path: Path) -> None:
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(dataclasses.asdict(self), indent=2), "utf-8")
-        os.replace(tmp, path)
+        st.replace(tmp, path)
 
 
 # ---- the loop ---------------------------------------------------------------------------------------
@@ -268,7 +251,8 @@ class Build:
         if self.claims is None or not self.claims.active:
             return []
         pending = [s for s in state.slices.values() if s.status == Status.PENDING]
-        found = self.claims.overlaps_now(self.program.dir.name, [f for s in pending for f in s.files])
+        # claim, not only look: a pattern whose earlier claim is gone gets this program's row now (D-L22)
+        found = self.claims.claim(self.program.dir.name, [f for s in pending for f in s.files])
         now = cl.blocked_slices(pending, found)
         lines = [f"WAIT {sid} blocked-by claim {other}" for sid, other in sorted(now.items())
                  if self.claim_blocked.get(sid) != other]
@@ -648,7 +632,8 @@ class Build:
             os._exit(137)
 
     def fill_seats(self) -> list[str]:
-        from ship import locks, profile
+        from ship import locks
+        from ship import project_profile as profile
         from ship.dispatch import Parked, Refused, dispatch
 
         state = st.load(self.program)

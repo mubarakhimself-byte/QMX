@@ -11,11 +11,11 @@ carries on at the first step with no file.
 | review | `check_chain --stage handoff` and `check_plan` as children; a FAIL writes `plan-review/FIXES.md` and a `RESULT: FIXES` review (so planner-fix runs); else one `plan-review` worker. `RESULT: QUESTIONS` copies `QUESTIONS.md` into `WAITING.md` and exits 10 |
 | planner-fix | one `planner-fix` worker, both checks again, then the review once more (`REVIEW.md` set aside). A second FIXES writes WAITS |
 | go | when rule 8 holds, `gates.go` by him with the advance gate's source; otherwise exits 10 |
-| arm | `init_state` (build branch made at `parent_tip` when the remote has none), `preflight`, facts at `parent_tip` and at the target tip; failing facts start one `grounding` worker |
+| arm | the gates must be the ones `ship gate` logged, and a fix folder's `ship.toml` and `checks.toml` its parent's; `init_state` (build branch made at `parent_tip` when the remote has none), `preflight`, facts at `parent_tip` and at the target tip; failing facts start one `grounding` worker |
 | build | the `ship run` loop (`run.Build`) on the program, or on the fix folder (`build_folder`, armed first) |
 | checkpoint-review | `review.Checkpoint`; while it runs, the program's Build keeps pre-building |
-| merge | `ship merge X` as a child; 3 and 11 retry next tick. A fix program `merge` wrote is built and reviewed (round 2) before the next try |
-| docs | `ship.docs` when it exists (U36); otherwise `docs/<X>.json` records the skip. Never blocks |
+| merge | `ship merge X` as a child; 3 and 11 retry next tick. A fix program `merge` wrote is built and reviewed (round 2) before the next try (`phase.read`'s rule) |
+| docs | `ship.docs` when it exists (U36), under the project's merge lock; otherwise `docs/<X>.json` records the skip. Never blocks |
 | later-handoff | one `later-handoff` worker when its prompt exists; else WAITS |
 | audit | the stage in `phase.json`: `census` as a script, the others as workers when their prompts exist; else SKIP and WAITS |
 | done | `run_report`, `teardown`, the claims released, the final note in `RUN-REPORT.md` |
@@ -48,7 +48,7 @@ from ship import program as prog
 from ship import state as st
 from ship.gitx import GitError, git, remote_sha
 from ship.layout import Program
-from ship.proc import kill_tree, pid_alive, popen_group_kwargs
+from ship.proc import kill_tree, pid_alive, popen_detached, popen_group_kwargs
 from ship.proc import created as proc_created
 from ship.review import Checkpoint, add_wait
 from ship.run import Build, ChainLock, PromptError, Script, prompt_dir, render
@@ -73,7 +73,7 @@ def project_values(profile: dict) -> dict[str, str]:
 
 class Conveyor:
     def __init__(self, program: Program, settings: Settings, lock: ChainLock | None = None):
-        from ship import profile
+        from ship import project_profile as profile
 
         self.program, self.settings, self.lock = program, settings, lock
         self.profile = profile.of_program(program.dir, settings)
@@ -272,9 +272,6 @@ class Conveyor:
                 lines.append(f"POWER {line}")
         p = phase.read(self.program, self.settings)
         nxt, why = p["next"], p.get("why", "")
-        override = self.merge_fix(p)
-        if override:
-            nxt, p = override
         if nxt != self.last_next:
             self.buf.append(f"NEXT {nxt}: {why}")
             if p.get("status") != "abandoned":
@@ -462,6 +459,18 @@ class Conveyor:
         key = str(folder.dir)
         book = self.memo.setdefault("arm", {}).setdefault(key, {})
         index = prog.load(folder)
+        gates = prog.gates_problem(folder, index)
+        if gates:  # D-L22: only gates `ship gate` wrote arm a program
+            self.wait(f"{folder.dir.name} cannot be armed: {gates}", str(folder.project_file))
+            raise Stop(10)
+        if index.kind == "fix" and index.parent:
+            from ship.review import settings_differ
+
+            differ = settings_differ(Program(folder.dir.parent / index.parent), folder)
+            if differ:  # D-L22: the kit copies them from the parent; any other copy is refused
+                self.wait(f"{folder.dir.name} cannot be armed: its {', '.join(differ)} differ from its parent's",
+                          str(folder.dir))
+                raise Stop(10)
         proj = self.project()
         repo = Path(proj.get("repo") or "")
         remote = str(proj.get("remote") or self.settings.remote)
@@ -522,7 +531,9 @@ class Conveyor:
         return lines + [f"ARMED {folder.dir.name}"]
 
     def target_tip(self, repo: Path, remote: str) -> str:
-        target = str(self.project().get("target_branch") or self.settings.ci_gate_base)
+        from ship.project_profile import target_branch
+
+        target = target_branch(self.program.dir, self.settings)
         try:
             return remote_sha(repo, remote, target, self.settings.git_timeout_s) or ""
         except GitError:
@@ -595,7 +606,7 @@ class Conveyor:
         stop = p.get("stop")
         if p.get("next") not in ("merge", "docs") or not stop:
             return None
-        run = self.program.stop_review(stop) / "review-run.json"
+        run = self.program.review_run(stop)
         try:
             memo = json.loads(run.read_text("utf-8"))
         except (OSError, ValueError):
@@ -605,26 +616,6 @@ class Conveyor:
         return {"stop": stop, "round": str(memo.get("round") or 1)}
 
     # -- merge --
-
-    def merge_fix(self, p: dict) -> tuple[str, dict] | None:
-        """A fix program `ship merge` wrote (its go gate's source is merge/<X>.md): build it, then round 2."""
-        if p.get("next") != "merge" or not p.get("stop"):
-            return None
-        stop = p["stop"]
-        fix = Program(self.program.dir.parent / f"{self.program.dir.name}-fix-{stop}")
-        if not fix.project_file.exists():
-            return None
-        try:
-            go = prog.load(fix).gate("go") or {}
-        except prog.ProgramError:
-            return None
-        if str(go.get("source") or "") != f"merge/{stop}.md":
-            return None
-        if not phase.stop_tip(fix, stop):
-            return "build", {**p, "next": "build", "build_folder": fix.dir.as_posix()}
-        if not phase.verdict(self.program.stop_review(stop) / "REVIEW-2.md")[0]:
-            return "checkpoint-review", {**p, "next": "checkpoint-review", "round": "2"}
-        return None
 
     def merge(self, p: dict) -> list[str]:
         stop = p["stop"]
@@ -643,8 +634,8 @@ class Conveyor:
             return lines
         if rc in (3, 11):
             return lines + [f"MERGE {stop} exit {rc}: again next tick"]
-        if rc == 2 and self.merge_fix({**p, "next": "merge"}):
-            return lines + [f"MERGE {stop}: a fix program does the merge"]
+        if rc == 2 and phase.read(self.program, self.settings).get("next") in ("build", "checkpoint-review"):
+            return lines + [f"MERGE {stop}: a fix program does the merge"]  # phase's rule for a merge-written fix
         raise Stop(10)
 
     # -- docs, later handoff, sweep handoff, audit --
@@ -657,10 +648,17 @@ class Conveyor:
         except ImportError:
             docs_step = None
         if docs_step is not None and hasattr(docs_step, "docs"):
+            from ship import locks
+
+            lock = locks.merge_lock(str(self.project().get("name") or "qmx"), self.settings)
+            if not lock.ask(self.program.dir.name, f"docs-{stop}"):  # D-L22: a docs PR merges in turn too
+                return [f"DOCS {stop}: another program is merging; again next tick"]
             try:
                 docs_step.docs(self.program, stop, self.settings)
             except Exception as exc:  # noqa: BLE001 - a docs failure never blocks code (row 40)
                 self.log([f"DOCS {stop} failed: {exc!r}"])
+            finally:
+                lock.release()
         if not record.exists():
             record.parent.mkdir(parents=True, exist_ok=True)
             record.write_text(json.dumps({"stop": stop, "skipped": "the docs step (U36) is not built yet",
@@ -838,9 +836,12 @@ def follow(program: Program, settings: Settings, poll_s: float | None = None) ->
             return 0
         if p.get("status") == "waits-on-him":
             return 10
-        running = phase.phase_json(program).get("status") == "running"
+        recorded = phase.phase_json(program).get("status")
         alive, _ = phase.conveyor(program)
-        dead = dead + 1 if running and not alive else 0
+        if recorded == "waits" and not alive:  # the conveyor exited 10 with no WAITS line (D-L22)
+            print(f"WAITS the conveyor stopped at {p.get('next')} and waits on him ({p.get('why', '')})", flush=True)
+            return 10
+        dead = dead + 1 if recorded == "running" and not alive else 0
         if dead >= 2:
             print("DEAD the conveyor is not running and phase.json says running", flush=True)
             return 1
@@ -851,14 +852,9 @@ def detach(argv: list[str], program_dir: Path) -> int:
     """Start the same command again as its own process, outliving this one; print its pid."""
     program_dir.mkdir(parents=True, exist_ok=True)
     log = open(program_dir / "chain.log", "a", encoding="utf-8", newline="\n")
-    try:
-        if sys.platform == "win32":
-            flags = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
-            proc = subprocess.Popen([sys.executable, str(ln.KIT), *argv], stdin=subprocess.DEVNULL, stdout=log,
-                                    stderr=subprocess.STDOUT, creationflags=flags, close_fds=True)
-        else:
-            proc = subprocess.Popen([sys.executable, str(ln.KIT), *argv], stdin=subprocess.DEVNULL, stdout=log,
-                                    stderr=subprocess.STDOUT, start_new_session=True, close_fds=True)
+    try:  # D-L22: no DETACHED_PROCESS (its children each open a visible console)
+        proc = popen_detached([sys.executable, str(ln.KIT), *argv], stdin=subprocess.DEVNULL, stdout=log,
+                              stderr=subprocess.STDOUT)
     finally:
         log.close()
     print(f"DETACHED pid {proc.pid} log {program_dir / 'chain.log'}")

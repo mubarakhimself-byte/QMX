@@ -3,7 +3,9 @@ with a queue, one Fable worker at a time, and the worker pool.
 
 Every lock is the same pattern as `state.locked`: a file made with create-exclusive holding the pid and
 its creation time, taken over when its holder is gone. A holder is gone when its pid no longer names
-the process that wrote it, or the file was written before the machine last started (D-L14).
+the process that wrote it, or the file was written before the machine last started (D-L14). Taking a
+lock over happens under an OS lock (`msvcrt.locking`, `fcntl.flock`) on `<name>.os`, and every write and
+release retries the instant Windows refuses it while another process reads the file (D-L22).
 
 - `FileLock(path)`: `try_take()`, `release()`, and a blocking context manager.
 - `MergeLock(project, settings)`: `ask(program, stop)` joins the queue and takes the lock only when it is
@@ -58,9 +60,63 @@ def _read(path: Path) -> dict:
 
 
 def _write(path: Path, body: dict) -> None:
+    """Write the whole file, then replace it; Windows refuses the replace for the instant another process
+    reads the file, so the retrying `state.replace` does it (D-L22)."""
+    from ship.state import replace
+
     tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(body, indent=2), "utf-8")
-    os.replace(tmp, path)
+    replace(tmp, path)
+
+
+def _unlink(path: Path) -> None:
+    from ship.state import release_lock
+
+    release_lock(path)
+
+
+@contextlib.contextmanager
+def os_lock(path: Path, timeout_s: float = 30) -> Iterator[None]:
+    """An operating-system lock on `path` (made if missing, never deleted): `msvcrt.locking` on Windows,
+    `fcntl.flock` elsewhere. It is let go when the process dies, so it can never go stale (D-L22)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR)
+    end = time.monotonic() + timeout_s
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() > end:
+                        raise TimeoutError(f"{path} is locked by another process") from None
+                    time.sleep(0.01)
+            try:
+                yield
+            finally:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if time.monotonic() > end:
+                        raise TimeoutError(f"{path} is locked by another process") from None
+                    time.sleep(0.01)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 
 class FileLock:
@@ -76,28 +132,43 @@ class FileLock:
     def held_by_live(self) -> bool:
         body = self.holder()
         if not body:
-            young = self.path.exists() and time.time() - self.path.stat().st_mtime < 10
-            return young  # being written right now
+            try:
+                return time.time() - self.path.stat().st_mtime < 10  # being written right now
+            except OSError:
+                return False
         if _before_boot(self.path):
             return False
         return _alive(body.get("pid"), body.get("created")) or _alive(body.get("worker"), body.get("worker_created"))
 
+    @property
+    def guard_path(self) -> Path:
+        return self.path.with_name(self.path.name + ".os")
+
     def try_take(self, **extra) -> bool:
+        """Take the lock, or take it over from a gone holder. The judging and the take-over happen under an
+        OS lock on `<name>.os`, so two takers can never both judge the old holder gone and each think the
+        lock theirs (D-L22)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(3):
-            try:
-                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                if self.held_by_live():
-                    return False
-                self.path.unlink(missing_ok=True)
-                continue
-            body = {"pid": os.getpid(), "created": proc_created(os.getpid()),
-                    "since": clock.now().isoformat(timespec="seconds"), **extra}
-            os.write(fd, json.dumps(body).encode())
-            os.close(fd)
-            self.mine = True
-            return True
+        with os_lock(self.guard_path):
+            for _ in range(20):
+                try:
+                    fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except FileExistsError:
+                    if self.held_by_live():
+                        return False
+                    _unlink(self.path)
+                    continue
+                except PermissionError:  # Windows: the file is being deleted or read this instant
+                    time.sleep(0.05)
+                    continue
+                body = {"pid": os.getpid(), "created": proc_created(os.getpid()),
+                        "since": clock.now().isoformat(timespec="seconds"), **extra}
+                try:
+                    os.write(fd, json.dumps(body).encode())
+                finally:
+                    os.close(fd)
+                self.mine = True
+                return True
         return False
 
     def note_worker(self, pid: int) -> None:
@@ -109,7 +180,7 @@ class FileLock:
 
     def release(self) -> None:
         if self.mine and int(self.holder().get("pid") or 0) == os.getpid():
-            self.path.unlink(missing_ok=True)
+            _unlink(self.path)
         self.mine = False
 
     @contextlib.contextmanager
@@ -206,7 +277,7 @@ class Slot:
         _write(self.path, body)
 
     def release(self) -> None:
-        self.path.unlink(missing_ok=True)
+        _unlink(self.path)
 
 
 class Pool:
@@ -224,7 +295,7 @@ class Pool:
                                               or _alive(body.get("worker"), body.get("worker_created")))
             young = not body and time.time() - path.stat().st_mtime < 10 if path.exists() else False
             if gone and not young:
-                path.unlink(missing_ok=True)
+                _unlink(path)
                 continue
             out.append(path)
         return out

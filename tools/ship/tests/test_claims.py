@@ -15,7 +15,7 @@ from ship.layout import Program
 from ship.plan import init_state
 from ship.settings import Settings
 from ship.state import Status
-from ship.tests.fixture import BRIEF, FAKE_GH, PY, RepoCase, sh, write
+from ship.tests.fixture import BRIEF, FAKE_GH, PY, RepoCase, set_setting, sh, write
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 PROMPT = "Build {SLICE} {KIND} {ATTEMPT} {RESTART} {WORKTREE} {BRANCH} {PARENT} {EVIDENCE} {DISPATCH_ID} {PROGRAM} " \
@@ -56,7 +56,6 @@ class TwoPrograms(RepoCase):
         self.p2 = Program(self.plans / "p2")
         shutil.copytree(self.p1.dir, self.p2.dir)
         for program in (self.p1, self.p2):
-            toml = program.dir / "ship.toml"
             extra = textwrap.dedent(f"""\
                 claude = [{json.dumps(PY)}, {json.dumps(str(FAKE_CLAUDE))}]
                 prompt_dir = {json.dumps(str(prompts))}
@@ -69,7 +68,7 @@ class TwoPrograms(RepoCase):
                 ci_find_s = 5
                 ci_wait_timeout_s = 60
                 """)
-            toml.write_text(toml.read_text("utf-8") + extra, "utf-8")
+            set_setting(program.dir, *extra.splitlines())
 
     def use(self, program, branch, rows):
         write(program.slices_md, table(rows))
@@ -163,6 +162,7 @@ class Merges(TwoPrograms):
             state.ci["deep"] = {"tip": tip, "level": "deep", "run_id": "1", "url": "u", "result": "green"}
         write(program.stop_note("A"), json.dumps({"stop": "A", "from": base, "tip": tip, "landed": [sid], "parked": []}))
         write(program.stop_review("A") / "REVIEW.md", f"VERDICT: CLEAN\n\nEND {tip} checkpoint-A-round-1\n")
+        write(program.review_run("A"), json.dumps({"round": 1, "tip": tip, "result": 0}))
         write(program.dir / "merge" / "A-pr.md", "Stop A.\n")
         toml = program.dir / "ship.toml"
         toml.write_text(toml.read_text("utf-8").replace('ci = "local"', 'ci = "github"'), "utf-8")

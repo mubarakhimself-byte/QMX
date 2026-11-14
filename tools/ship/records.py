@@ -130,7 +130,8 @@ def init(repo: Path, plans: Path, remote: str, settings: Settings) -> list[str]:
             lines.append("UNCHANGED every seed file is there")
             return lines
         lines.append(f"SEEDED {', '.join(written)}")
-        sha = commit(plans, "records: seed the plans branch", settings, remote=remote, lines=lines)
+        sha = commit(plans, "records: seed the plans branch", settings, remote=remote, lines=lines,
+                     paths=("_records", ".gitignore", "README.md"))
         if sha:
             lines.append(f"COMMIT {sha[:8]}")
     return lines
@@ -173,17 +174,31 @@ def locked(records: Records) -> Iterator[Records]:
         release_lock(records.lock)
 
 
+RECORDS_ONLY = ("_records",)
+
+
 def commit(plans: Path, message: str, settings: Settings, push: bool = True, remote: str | None = None,
-           lines: list[str] | None = None) -> str | None:
-    """Commit everything changed in the plans worktree and push `plans`. Returns the new sha, or None
-    when nothing was staged. A failed push leaves the commit local and adds an UNREACHABLE (or REFUSED)
-    line to `lines`; the next commit's push carries both."""
+           lines: list[str] | None = None, paths: tuple[str, ...] | None = RECORDS_ONLY) -> str | None:
+    """Commit the changes under `paths` of the plans worktree (by default only `_records/`, D-L22: a
+    conveyor rewriting its program's phase.json must never race the indexing) and push `plans`. `paths`
+    None commits everything (`ship records commit`, run by hand), trying the add again when a file was
+    being replaced while git read it. Returns the new sha, or None when nothing was staged. A failed push
+    leaves the commit local and adds an UNREACHABLE (or REFUSED) line to `lines`; the next commit's push
+    carries both."""
     t = settings.git_timeout_s
     remote = remote or settings.remote
-    git(plans, "add", "-A", timeout=t)
-    if git_rc(plans, "diff", "--cached", "--quiet", timeout=t) == 0:
+    spec = ["--", *paths] if paths else []
+    for attempt in range(5):
+        try:
+            git(plans, "add", "-A", *spec, timeout=t)
+            break
+        except GitError:
+            if attempt == 4:
+                raise
+            time.sleep(0.2)
+    if git_rc(plans, "diff", "--cached", "--quiet", *spec, timeout=t) == 0:
         return None
-    git(plans, "commit", "-q", "-m", message, timeout=t)
+    git(plans, "commit", "-q", "-m", message, *spec, timeout=t)
     sha = git(plans, "rev-parse", "HEAD", timeout=t).strip()
     if push:
         try:

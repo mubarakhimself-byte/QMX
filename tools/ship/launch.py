@@ -19,7 +19,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import time
 import tomllib
 import uuid
@@ -302,7 +301,8 @@ def launch(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str,
     It first takes a seat of the machine-wide worker pool (or uses `slot`, taken by the caller), and for
     a role whose model starts `fable` the one Fable seat (U38, FACTORY-DESIGN 11.6). When either is not
     free it starts nothing and returns None; the caller tries again next tick."""
-    from ship import locks, profile
+    from ship import locks
+    from ship import project_profile as profile
 
     if slot is None:
         slot = locks.Pool(settings, profile.of_program(program.dir, settings)["pool"]["workers"]).take()
@@ -360,10 +360,7 @@ def run(role: Role, prompt: str, cwd: Path, program: Program, worker_id: str, se
 
 
 def detached_kwargs() -> dict:
-    """Popen arguments for a process that must outlive the one that started it (the conveyor, the spike's
-    child): its own process group and no console on Windows, a new session elsewhere."""
-    if sys.platform == "win32":
-        flags = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-                 | subprocess.CREATE_BREAKAWAY_FROM_JOB)
-        return {"creationflags": flags, "close_fds": True}
-    return {"start_new_session": True, "close_fds": True}
+    """Popen arguments for a process that must outlive the one that started it (`proc.detached_kwargs`)."""
+    from ship.proc import detached_kwargs as kwargs
+
+    return kwargs()

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import json
 import os
 import re
 
@@ -441,7 +442,64 @@ def set_gate(program: Program, name: str, by: str, source: str, advance: bool, a
     tmp = path.with_suffix(".yaml.tmp")
     tmp.write_bytes(new.encode("utf-8"))
     os.replace(tmp, path)
+    log_gate(program, name, from_dict(parse(new)).gates.get(name))
     return line.strip()
+
+
+# ---- the gates log (D-L22) --------------------------------------------------------------------------
+# PROGRAM.yaml is a plan file planner roles may write, so a gate there proves nothing by itself. Only
+# `set_gate` (`ship gate`, the conveyor's Go, the kit's fix programs) appends to `.kit/gates.log`, which no
+# worker role may write; arm, phase and merge refuse while the YAML's gates differ from the log.
+
+
+def _gate_value(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    return {k: (v if isinstance(v, bool) or v is None else str(v)) for k, v in sorted(value.items())}
+
+
+def log_gate(program: Program, name: str, value: object) -> None:
+    """Append one gate, as the YAML now holds it, to `.kit/gates.log`."""
+    path = program.gates_log
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"gate": name, "value": _gate_value(value),
+           "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+    with open(path, "a", encoding="utf-8", newline="\n") as out:
+        out.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def logged_gates(program: Program) -> dict[str, dict]:
+    """The log's last word on each gate (a gate set back to null drops out)."""
+    out: dict[str, dict] = {}
+    try:
+        lines = program.gates_log.read_text("utf-8").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or not row.get("gate"):
+            continue
+        value = _gate_value(row.get("value"))
+        if value is None:
+            out.pop(str(row["gate"]), None)
+        else:
+            out[str(row["gate"])] = value
+    return out
+
+
+def gates_problem(program: Program, index: "Index | None" = None) -> str | None:
+    """None when every gate PROGRAM.yaml holds is the one `ship gate` wrote, else why not."""
+    index = index if index is not None else load(program)
+    yaml = {k: _gate_value(v) for k, v in index.gates.items() if _gate_value(v) is not None}
+    logged = logged_gates(program)
+    for name in sorted(set(yaml) | set(logged)):
+        if yaml.get(name) != logged.get(name):
+            return (f"gates.{name} in PROGRAM.yaml is {yaml.get(name)} but ship gate wrote {logged.get(name)}; "
+                    "only `ship gate` sets a gate")
+    return None
 
 
 def _quote(text: str) -> str:

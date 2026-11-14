@@ -60,3 +60,9 @@ def of_program(program_dir: Path, settings: Settings) -> dict:
         except prog.ProgramError:
             index = None
     return load(index, settings)
+
+
+def target_branch(program_dir: Path, settings: Settings) -> str:
+    """The branch a program merges into: the profile's `target_branch`, else the `ci_gate_base` setting.
+    The one place the kit reads it (D-L22)."""
+    return str(of_program(program_dir, settings)["project"].get("target_branch") or settings.ci_gate_base)

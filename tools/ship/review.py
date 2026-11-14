@@ -31,7 +31,12 @@ or 10 (waits on him). `review(...)` drives it on its own under `chain.lock` (`sh
 
 Worker prompts: `READER.md` (one file, a `{WALK}` per reader name) and `VERDICT.md` in `prompt_dir`;
 the placeholders each gets are `READER_KEYS` and `VERDICT_KEYS`. The bookkeeping that survives a kill
-is `stop-review/<X>/review-run.json`.
+is `.kit/<X>/review-run.json` (D-L22: in the kit's own folder, which no worker role may write); `ship merge`
+trusts a verdict only when that file says `result` 0 for the same tip.
+
+A round-1 BLOCKED fix folder is accepted only after the kit copies the parent's `ship.toml` and
+`checks.toml` into it and writes its go gate through `program.set_gate` (the gates log); the verdict worker
+writes the plan files only.
 """
 
 from __future__ import annotations
@@ -57,7 +62,7 @@ from ship.proc import kill_tree, popen_group_kwargs
 from ship.proc import created as proc_created
 from ship.run import ChainLock, PromptError, Script, prompt_dir, render
 from ship.settings import Settings
-from ship.trace import TraceError, stop_range, trace
+from ship.stop_trace import TraceError, stop_range, trace
 from ship.worktree import checkout_copy, drop_copy
 
 READER_KEYS = ("PROGRAM", "STOP", "ROUND", "NAME", "WALK", "ELEMENT", "SLICES", "CHECKOUT", "REPO", "FROM", "TIP",
@@ -69,6 +74,7 @@ FIXED_LINES = re.compile(r"^#+\s*Fixed lines touched\s*$", re.M | re.I)
 OPERATIONS = re.compile(r"^##\s*Operations\s*$", re.M)
 IMPORTANT = re.compile(r"\bImportant\b")
 READER_RESTARTS = 1  # a reader that fails is started once more, then it is "not read"
+SETTINGS_FILES = ("ship.toml", "checks.toml")
 
 
 def add_wait(program: Program, text: str, see: str = "", detail: str = "") -> None:
@@ -131,7 +137,7 @@ class Checkpoint:
     def __init__(self, program: Program, stop: str, settings: Settings, round: int | None = None):
         self.program, self.stop, self.settings = program, stop, settings
         self.dir = program.stop_review(stop)
-        self.memo_path = self.dir / "review-run.json"
+        self.memo_path = program.review_run(stop)  # in .kit/: no worker may write it (D-L22)
         self.memo: dict = self._load_memo()
         if round is None:
             first, _ = phase.verdict(self.dir / "REVIEW.md")
@@ -156,7 +162,7 @@ class Checkpoint:
             return {}
 
     def save(self) -> None:
-        self.dir.mkdir(parents=True, exist_ok=True)
+        self.memo_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.memo_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(self.memo, indent=2) + "\n", "utf-8", newline="\n")
         st.replace(tmp, self.memo_path)
@@ -391,7 +397,12 @@ class Checkpoint:
         dest = self.program.nightly(tip)
         target = dest / "summary.json"
         if target.exists():
-            return str(target)
+            try:
+                if str(json.loads(target.read_text("utf-8")).get("sha") or "") == tip:
+                    return str(target)
+            except (OSError, ValueError, AttributeError):
+                pass
+            target.unlink(missing_ok=True)
         state = st.load(self.program)
         run_id = (state.ci.get("deep") or {}).get("run_id")
         if not run_id:
@@ -402,6 +413,14 @@ class Checkpoint:
         except GitError:
             return None
         if not ok or not (folder / "summary.json").exists():
+            return None
+        try:
+            sha = str(json.loads((folder / "summary.json").read_text("utf-8")).get("sha") or "")
+        except (OSError, ValueError, AttributeError):
+            sha = ""
+        if sha != tip:  # D-L22: a summary of another commit never stands for this tip
+            self.memo.setdefault("deep", {})["summary_mismatch"] = sha or "(none)"
+            shutil.rmtree(folder, ignore_errors=True)
             return None
         shutil.copyfile(folder / "summary.json", target)
         return str(target)
@@ -620,11 +639,19 @@ class Checkpoint:
                 self.wait(f"stop {self.stop} is BLOCKED but its fix program is not ready: {problem}",
                           str(self.fix_folder.dir))
                 return self.end(10, [f"FIX folder not ready: {problem}"], "fix folder not ready")
+            self.adopt_fix()
             return self.end(2, [f"BLOCKED stop {self.stop}: fix program {self.fix_folder.dir.name}"], "blocked")
         found = [x.strip() for x in self.verdict_file.read_text("utf-8").splitlines() if IMPORTANT.search(x)]
         for line in found or [f"stop {self.stop} is still BLOCKED after round 2"]:
             self.wait(f"stop {self.stop} round 2: {line.lstrip('-* ')}", str(self.verdict_file))
         return self.end(2, [f"BLOCKED stop {self.stop} after round 2: {len(found)} open"], "blocked twice")
+
+    def adopt_fix(self) -> None:
+        """The checked fix folder's go gate, as the verdict worker wrote it, goes through `set_gate`, so the
+        gates log holds it (D-L22)."""
+        go = prog.load(self.fix_folder).gate("go") or {}
+        prog.set_gate(self.fix_folder, "go", by="stop-review", source=str(go.get("source") or self.verdict_file),
+                      advance=bool(go.get("advance", True)), at=str(go.get("at") or "") or None)
 
     def fix_problem(self) -> str | None:
         fix = self.fix_folder
@@ -643,6 +670,7 @@ class Checkpoint:
             return f"its go gate is by {go.get('by')}, not stop-review"
         if [s.id for s in index.stops] != [self.stop]:
             return f"its stops are {[s.id for s in index.stops]}, want [{self.stop}]"
+        copy_settings(self.program, fix)
         script = ln.factory_home(self.settings) / "skills" / "factory-core" / "scripts" / "check_plan.py"
         if not script.exists():
             return f"no {script} to check it"
@@ -653,6 +681,25 @@ class Checkpoint:
             fails = [x for x in done.stdout.splitlines() if x.startswith("FAIL")]
             return f"check_plan.py: {'; '.join(fails[:3]) or done.stderr.strip()[:300]}"
         return None
+
+
+def copy_settings(parent: Program, fix: Program) -> None:
+    """The kit, never the verdict worker, gives a fix folder its parent's `ship.toml` and `checks.toml`
+    (D-L22): a worker-written `ship.toml` could name any command as `gh` or `claude`."""
+    for name in SETTINGS_FILES:
+        src, dst = parent.dir / name, fix.dir / name
+        if src.exists():
+            dst.write_bytes(src.read_bytes())
+        else:
+            dst.unlink(missing_ok=True)
+
+
+def settings_differ(parent: Program, fix: Program) -> list[str]:
+    """The settings files of a fix folder that are not byte for byte its parent's."""
+    def body(path: Path) -> bytes | None:
+        return path.read_bytes() if path.exists() else None
+
+    return [name for name in SETTINGS_FILES if body(parent.dir / name) != body(fix.dir / name)]
 
 
 def fixed_lines(ground: str) -> bool:

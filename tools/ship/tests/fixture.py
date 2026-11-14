@@ -59,8 +59,19 @@ $ git grep -n "keyring" -- pkg
 """
 
 
+def set_setting(program_dir: Path, *lines: str) -> None:
+    """Add settings to ship.toml, each replacing the line that already sets its key."""
+    path = program_dir / "ship.toml"
+    rows = path.read_text("utf-8").splitlines()
+    for line in (x for x in lines if x.strip()):
+        key = line.split("=", 1)[0].strip()
+        rows = [r for r in rows if r.split("=", 1)[0].strip() != key] + [line]
+    path.write_text("\n".join(rows) + "\n", "utf-8")
+
+
 class RepoCase(unittest.TestCase):
-    """Each test gets a fresh remote, clone, build branch `build/t`, and program folder."""
+    """Each test gets a fresh remote, clone, build branch `build/t`, and program folder. Its factory home
+    is a temp folder: no test touches the real one."""
 
     build_branch = "build/t"
 
@@ -103,6 +114,7 @@ class RepoCase(unittest.TestCase):
             keep_awake_poll_s = 1
             ci = "local"
             github_repo = "owner/qmx"
+            factory_home = {str(root / "factory")!r}
             """).replace("'", '"'))
         init_state(self.program.dir, self.repo, self.build_branch, self.wt_root, "origin")
 
@@ -124,8 +136,8 @@ class RepoCase(unittest.TestCase):
         init_state(self.program.dir, self.repo, self.build_branch, self.wt_root, "origin")
 
     def setting(self, line: str) -> None:
-        path = self.program.dir / "ship.toml"
-        path.write_text(path.read_text("utf-8") + line + "\n", "utf-8")
+        """Add a setting to ship.toml, or replace the line that already sets it."""
+        set_setting(self.program.dir, line)
 
     def tip(self) -> str:
         return sh(self.repo, "git", "ls-remote", "origin", f"refs/heads/{self.build_branch}").split()[0]
@@ -151,3 +163,13 @@ class RepoCase(unittest.TestCase):
         if not ok:
             raise AssertionError(lines)
         return sha
+
+
+def sign_gates(program: Program) -> None:
+    """Log every gate PROGRAM.yaml holds as `ship gate` would have (a test stands in for his word)."""
+    from ship import program as prog
+
+    program.gates_log.unlink(missing_ok=True)
+    for name, value in prog.load(program).gates.items():
+        if isinstance(value, dict):
+            prog.log_gate(program, name, value)

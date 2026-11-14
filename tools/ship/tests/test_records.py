@@ -97,18 +97,20 @@ class Commit(RecordsCase):
         self.init()
         self.assertIsNone(records.commit(self.plans, "nothing", self.settings))
         write(self.plans / "p1" / "SCOPE.md", "# scope\n")
-        sha = records.commit(self.plans, "p1: scope", self.settings)
+        self.assertIsNone(records.commit(self.plans, "only _records by default", self.settings),
+                          "a program's own files are never swept into the kit's records commits (D-L22)")
+        sha = records.commit(self.plans, "p1: scope", self.settings, paths=None)
         self.assertEqual(self.remote_plans(), sha)
         sh(self.plans, "git", "remote", "set-url", "origin", str(self.root / "gone.git"))
         write(self.plans / "p1" / "SCOPE.md", "# scope 2\n")
         lines: list[str] = []
-        local = records.commit(self.plans, "p1: scope 2", self.settings, lines=lines)
+        local = records.commit(self.plans, "p1: scope 2", self.settings, lines=lines, paths=None)
         self.assertEqual(sh(self.plans, "git", "rev-parse", "HEAD"), local)
         self.assertEqual(len(lines), 1)
         self.assertTrue(lines[0].startswith(f"UNREACHABLE push of plans {local[:8]} left local"), lines)
         sh(self.plans, "git", "remote", "set-url", "origin", str(self.remote))
         write(self.plans / "p1" / "SCOPE.md", "# scope 3\n")
-        last = records.commit(self.plans, "p1: scope 3", self.settings)
+        last = records.commit(self.plans, "p1: scope 3", self.settings, paths=None)
         self.assertEqual(sh(self.plans, "git", "rev-parse", "HEAD~1"), local)
         self.assertEqual(self.remote_plans(), last)
 
@@ -220,7 +222,7 @@ class PlansBranchBothSides(RecordsCase):
         plans2 = self.root / "plans2"
         records.init(other, plans2, "origin", self.settings)
         write(plans2 / "p1" / "SCOPE.md", "# scope\n")
-        new = records.commit(plans2, "p1: scope", self.settings)
+        new = records.commit(plans2, "p1: scope", self.settings, paths=None)
         sh(self.repo, "git", "worktree", "remove", str(self.plans))
         self.assertEqual(sh(self.repo, "git", "rev-parse", "refs/heads/plans"), old)
         lines = self.init()
@@ -234,9 +236,9 @@ class PlansBranchBothSides(RecordsCase):
         plans2 = self.root / "plans2"
         records.init(other, plans2, "origin", self.settings)
         write(plans2 / "p1" / "SCOPE.md", "# theirs\n")
-        records.commit(plans2, "p1: theirs", self.settings)
+        records.commit(plans2, "p1: theirs", self.settings, paths=None)
         write(self.plans / "p2" / "SCOPE.md", "# mine\n")
-        records.commit(self.plans, "p2: mine", self.settings, push=False)
+        records.commit(self.plans, "p2: mine", self.settings, push=False, paths=None)
         sh(self.repo, "git", "worktree", "remove", str(self.plans))
         with self.assertRaisesRegex(records.RecordsError, "have diverged; nothing was changed"):
             self.init()

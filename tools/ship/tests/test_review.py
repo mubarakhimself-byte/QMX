@@ -11,7 +11,7 @@ from pathlib import Path
 from ship import state as st
 from ship.launch import KIT
 from ship.state import Status
-from ship.tests.fixture import BRIEF, PY, RepoCase, sh, write
+from ship.tests.fixture import BRIEF, PY, RepoCase, sh, sign_gates, write
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 READER = "Walk {WALK} as {NAME} ({ELEMENT}; {SLICES}) of {PROGRAM} stop {STOP} round {ROUND} in {CHECKOUT} " \
@@ -71,6 +71,7 @@ class ReviewCase(RepoCase):
             self.setting(line)
         self.land_two()
         write(self.program.project_file, index(self.program.dir.name, self.base))
+        sign_gates(self.program)
 
     def land_two(self):
         """a1 and a2 landed on build/t as `ship land` would, and the stop note written."""
@@ -252,11 +253,17 @@ class HookRoles(RepoCase):
     def test_a_verdict_writes_its_review_merge_and_fix_folders(self):
         env = {"SHIP_STOP": "A"}
         d = self.program.dir
-        for ok in (d / "stop-review" / "A" / "REVIEW.md", d / "merge" / "A-pr.md",
-                   d.parent / f"{d.name}-fix-A" / "SLICES.md"):
+        fix = d.parent / f"{d.name}-fix-A"
+        for ok in (d / "stop-review" / "A" / "REVIEW.md", d / "stop-review" / "A" / "REVIEW-2.md",
+                   d / "stop-review" / "A" / "WAITS.md", d / "merge" / "A-pr.md", fix / "SLICES.md",
+                   fix / "PROGRAM.yaml", fix / "slices" / "x" / "BRIEF.md"):
             self.assertEqual(self.hook("verdict", "Write", env=env, file_path=str(ok))[0], 0, ok)
         for bad in (d / "stop-review" / "B" / "REVIEW.md", d / "state.json", d / "PROGRAM.yaml",
-                    d.parent / f"{d.name}-fix-B" / "SLICES.md"):
+                    d.parent / f"{d.name}-fix-B" / "SLICES.md", d / "merge" / "A.md", d / "merge" / "B-pr.md",
+                    d / "stop-review" / "A" / "MAP.md", d / "stop-review" / "A" / "chain.md",
+                    d / "stop-review" / "A" / "review-run.json", d / ".kit" / "A" / "review-run.json",
+                    d / ".kit" / "gates.log", fix / "ship.toml", fix / "checks.toml", fix / "state.json",
+                    fix / "notes" / "stop-A.json", fix / ".kit" / "gates.log"):
             self.assertEqual(self.hook("verdict", "Write", env=env, file_path=str(bad))[0], 2, bad)
 
     def test_grounding_planner_and_unknown_roles(self):
@@ -313,8 +320,9 @@ class HookRoles(RepoCase):
         self.setting(f"factory_home = {json.dumps(str(factory))}")
         script = factory / "skills" / "audit-area" / "scripts" / "census.py"
         env = {"SHIP_PART": "p1"}
-        for command in (f'python "{script}" qmb --tip HEAD', f"python {KIT} timed --slice x --log l -- uv run x",
-                        "python -m ship timed --slice x --log l -- x", "uv run --no-sync python -m pytest -q"):
+        for command in (f'python "{script}" qmb --tip HEAD',
+                        f"python {KIT} timed --slice x --log l -- uv run --no-sync pytest -q",
+                        "python -m ship timed --slice x --log l -- pytest -q", "uv run --no-sync python -m pytest -q"):
             self.assertEqual(self.hook("audit-reader", "Bash", env=env, command=command), (0, ""), command)
         for command in (f'python "{self.root / "evil.py"}"', f'python "{factory / "skills" / "x.py"}"',
                         f'python "{factory / "skills" / "a" / "scripts" / ".." / ".." / "evil.py"}"',
@@ -323,7 +331,7 @@ class HookRoles(RepoCase):
             self.assertEqual(rc, 2, command)
         rc, why = self.hook("reader", "Bash", env={"SHIP_NOTES": str(self.root / "n.md")}, command=f'python "{script}"')
         self.assertEqual(rc, 2, "a reader runs no factory script")
-        self.assertIn("runs only pytest, ship timed", why)
+        self.assertIn("runs only git, uv run, ship timed, pytest", why)
         self.assertEqual(self.hook("planner-fix", "Bash", command=f'python "{script}"')[0], 0)
 
     def test_a_role_with_no_state_and_no_repo_gets_no_bash(self):

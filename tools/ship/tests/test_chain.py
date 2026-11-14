@@ -17,7 +17,7 @@ from ship import state as st
 from ship.launch import KIT
 from ship.layout import Program
 from ship.settings import Settings, load_settings
-from ship.tests.fixture import BRIEF, PY, RepoCase, sh, write
+from ship.tests.fixture import BRIEF, PY, RepoCase, set_setting, sh, sign_gates, write
 
 FAKE_CLAUDE = Path(__file__).resolve().parent / "fake_claude.py"
 KEYS = ("PROGRAM", "SHIP")
@@ -87,8 +87,7 @@ class ChainCase(RepoCase):
             write(prompts / name, f"{name} for {{PROGRAM}} with {{SHIP}}\n")
         self.script = self.root / "claude-script.json"
         self.rules(PLAN_CLEAN, BUILDER, READER, VERDICT)
-        toml = self.program.dir / "ship.toml"
-        toml.write_text(toml.read_text("utf-8").replace('ci = "local"', 'ci = "github"') + textwrap.dedent(f"""\
+        set_setting(self.program.dir, 'ci = "github"', *textwrap.dedent(f"""\
             claude = [{json.dumps(PY)}, {json.dumps(str(FAKE_CLAUDE))}]
             prompt_dir = {json.dumps(str(prompts))}
             factory_home = {json.dumps(str(self.factory))}
@@ -101,7 +100,8 @@ class ChainCase(RepoCase):
             ci_wait_timeout_s = 120
             ci_slice_grace_s = 0
             arm_preflight = false
-            """), "utf-8")
+            """).splitlines())
+        sign_gates(self.program)
         self.flag("fake-gh-auto")
 
     def flag(self, name):

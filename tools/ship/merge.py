@@ -5,33 +5,39 @@
 1. Already merged (the stop recorded in `state.merged` and `merge/<X>.md` holding `MERGED`, or `EMPTY`): 0.
 2. Every `VERDICT: BLOCKED` under `stop-review/<X>/` and the fix folder's is followed by a later CLEAN;
    otherwise WAITS, 10. The reviewed tip is the END sha of the latest CLEAN (REVIEW-2.md before REVIEW.md).
-3. The remote build branch is at the reviewed tip, or at the `MERGE-BASE` this script recorded; else
-   WAITS, 10.
+   The verdict counts only when `.kit/<X>/review-run.json` (written by `ship review`, in the kit's own
+   folder no worker may write) says `result` 0 for that same tip; missing is WAITS, 10 (D-L22).
+3. The remote build branch is at the reviewed tip, or at the `.kit/<X>/MERGE-BASE` this script recorded,
+   whose first-parent line back to the reviewed tip holds only merge and generator commits; else WAITS, 10.
 4. When the build tip does not contain the target tip (another program merged first), the target is
    merged into the build branch in a frozen checkout (`git merge --no-ff`, subject `merge: ...`), any
    `uv.lock` the merge touched is regenerated with `lock_cmd`, the commit is pushed and written to
-   `merge/<X>.md` as `MERGE-BASE <sha>`, and a deep run on it is awaited. A conflict or a red run
-   writes a one-slice fix program `<program>-fix-<X>` (slice `<prefix>-<X>-fix-merge`, files: the
-   conflicted paths) and returns 2; when that folder already exists (round 1 used it), there is no
-   third round: WAITS, 2.
+   `.kit/<X>/MERGE-BASE`, and a deep run on it is awaited. A conflict or a red run writes a one-slice fix
+   program `<program>-fix-<X>` (slice `<prefix>-<X>-fix-merge`, files: the conflicted paths; its
+   `ship.toml` and `checks.toml` the parent's, its go gate through `set_gate`) and returns 2; when that
+   folder already exists (round 1 or an earlier merge used it), there is no third round: WAITS, 10.
 5. The open PR from the build branch into the target is reused, or created from `merge/<X>-pr.md`
    (written by the verdict worker; missing: WAITS, 10).
 6. `ci.gate` on the PR, waited for: not green is WAITS with the lines, 2; still pending at the wait
    limit or GitHub unreachable is 3.
-7. `gh pr merge <pr> --merge`; GitHub's refusal is WAITS, 2. Then the merged tip must be an ancestor
-   of `origin/<target>`.
+7. `gh pr merge <pr> --merge --match-head-commit <build tip>`. GitHub refusing because the target moved
+   is a retry (3); any other refusal is WAITS, 2. Then the merged tip must be an ancestor of
+   `origin/<target>`.
 8. `merge/<X>.md` gets the PR, the reviewed tip, the target sha, the deep run's lines and
    `MERGED <target sha>`; the stop is recorded merged; the stop's rows of the program's `REMOVED.md`
    move to `_records/REMOVED.md` with `Status: removed <sha>`, under `records.lock`, in one commit.
+
+Before step 1: the program's gates must be the ones `ship gate` logged (else WAITS, 10).
 
 Step 0 (U38): the project's merge lock, `<factory_home>/run/merge-<project>.lock`, with its queue. When it
 is not this program's turn the exit is 11 and the conveyor asks again next tick, keeping its place. After a
 moved target is merged in, every `shared_generated` file that has a generator in the profile
 (`[generators]`, pattern = argv run from the repo root) is rebuilt and committed (`ratchet: prune <n> rows`
 under `ci/baselines/`, else `contract: regenerate <pattern>`). After step 8 the claims of the merged stop's
-slices, and of its fix program, are released.
+slices that no unmerged slice still names, and every claim of its fix program, are released.
 
-The target is the setting `ci_gate_base` (the branch the checkpoint PR targets). Exit: 0 merged or
+The target is the project profile's `target_branch` (`project_profile.target_branch`; the setting
+`ci_gate_base` is its default). Exit: 0 merged or
 already merged, 2 refused by the gate or a fix program written, 3 unreachable (try again), 10 waits,
 11 another program is merging (asked again next tick).
 """
@@ -50,12 +56,11 @@ from ship.layout import Program, records_of
 from ship.plan import PlanError, parse_slices
 from ship.review import add_wait, checkpoint_key
 from ship.settings import Settings
-from ship.trace import R_ID, brief_text
+from ship.stop_trace import R_ID, brief_text
 from ship.worktree import checkout_copy, drop_copy
 from ship.wrapper import run_timed
 
 MERGED = re.compile(r"^MERGED\s+([0-9a-f]{7,40})", re.M)
-MERGE_BASE = re.compile(r"^MERGE-BASE\s+([0-9a-f]{40})", re.M)
 LOCK_INPUTS = ("pyproject.toml", "uv.lock")
 
 
@@ -68,7 +73,7 @@ class Merge:
         self.program, self.stop, self.settings = program, stop, settings
         self.state = st.load(program)
         self.repo = Path(self.state.repo)
-        self.target = settings.ci_gate_base
+        self.target = target_branch(program, settings)
         self.note = program.merge_note(stop)
         self.lines: list[str] = []
         self.t = settings.git_timeout_s
@@ -99,6 +104,9 @@ class Merge:
                 self.record_merged(key)
             self.say(f"ALREADY stop {self.stop} merged: {MERGED.search(text).group(1)}")
             return 0
+        gates = prog.gates_problem(self.program) if self.program.project_file.exists() else None
+        if gates:
+            return self.wait(f"stop {self.stop}: {gates}; nothing merged")
         if not self.take_lock():
             return 11
         reviewed = self.reviewed_tip()
@@ -110,10 +118,17 @@ class Merge:
             target_tip = remote_sha(self.repo, self.state.remote, self.target, self.t)
         except GitError as exc:
             raise Unreachable(str(exc)) from exc
-        merge_base = MERGE_BASE.search(text)
-        if build_tip not in (reviewed, merge_base.group(1) if merge_base else None):
+        merge_base = self.merge_base()
+        if build_tip not in (reviewed, merge_base):
             return self.wait(f"stop {self.stop}: the build branch is at {str(build_tip)[:10]}, not the reviewed "
                              f"tip {reviewed[:10]}; nothing merged")
+        if build_tip != reviewed:
+            from ship.stop_trace import generator_patterns, kit_line_problem
+
+            problem = kit_line_problem(self.repo, reviewed, build_tip, generator_patterns(self.profile), self.settings)
+            if problem:
+                return self.wait(f"stop {self.stop}: the recorded MERGE-BASE {build_tip[:10]} is not the reviewed tip "
+                                 f"plus kit commits ({problem}); nothing merged")
         if not target_tip:
             return self.wait(f"the target branch {self.target} is not on {self.state.remote}")
         if is_ancestor(self.repo, build_tip, target_tip, self.t):
@@ -138,12 +153,15 @@ class Merge:
         if rc != 0:
             raise Unreachable(f"the gate on {pr} did not finish: {'; '.join(lines)}")
         try:
-            ci.Gh(self.settings, self.repo).call("pr", "merge", pr, "--merge")
+            ci.Gh(self.settings, self.repo).call("pr", "merge", pr, "--merge", "--match-head-commit", build_tip)
         except GitError as exc:
             try:
-                remote_sha(self.repo, self.state.remote, self.target, self.settings.net_timeout_s)
+                now = remote_sha(self.repo, self.state.remote, self.target, self.settings.net_timeout_s)
             except GitError as down:
                 raise Unreachable(str(down)) from exc
+            if now != target_tip:  # D-L22: the target moved under the PR; merge it in on the next try
+                raise Unreachable(f"{self.target} moved to {str(now)[:10]} while {pr} was merging: {ci.short(exc)}") \
+                    from exc
             add_wait(self.program, f"stop {self.stop}: GitHub refused to merge {pr}", str(self.note), ci.short(exc))
             return 2
         try:
@@ -158,7 +176,8 @@ class Merge:
         return self.finish(key, reviewed, build_tip, pr, target_tip)
 
     def take_lock(self) -> bool:
-        from ship import locks, profile
+        from ship import locks
+        from ship import project_profile as profile
 
         self.profile = profile.of_program(self.program.dir, self.settings)
         self.lock = locks.merge_lock(str(self.profile["project"].get("name") or "qmx"), self.settings)
@@ -203,19 +222,24 @@ class Merge:
                 out.append((word, end, path))
         return out
 
-    def reviewed_tip(self) -> str | None:
-        run = self.program.stop_review(self.stop) / "review-run.json"
-        if run.exists():
-            import json
+    def review_record(self) -> dict:
+        import json
 
-            try:
-                result = json.loads(run.read_text("utf-8")).get("result")
-            except ValueError:
-                result = None
-            if result not in (0,):
-                self.wait(f"stop {self.stop}: ship review has not passed this verdict (its result is {result}); "
-                          "nothing merged", str(run))
-                return None
+        try:
+            body = json.loads(self.program.review_run(self.stop).read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return body if isinstance(body, dict) else {}
+
+    def reviewed_tip(self) -> str | None:
+        """The END sha of the stop's last CLEAN verdict, when `ship review` judged that very tip (D-L22)."""
+        run = self.program.review_run(self.stop)
+        record = self.review_record()
+        result = record.get("result")
+        if result not in (0,):
+            self.wait(f"stop {self.stop}: ship review has not passed this verdict (its result is {result}); "
+                      "nothing merged", str(run))
+            return None
         found = self.verdicts()
         if not found:
             self.wait(f"stop {self.stop} has no verdict to merge on", str(self.program.stop_review(self.stop)))
@@ -228,7 +252,18 @@ class Merge:
         if word != "CLEAN" or len(end) != 40:
             self.wait(f"stop {self.stop}: the last verdict {path.name} is not a CLEAN with a full END sha", str(path))
             return None
+        if end != record.get("tip"):
+            self.wait(f"stop {self.stop}: {path.name} ends at {end[:10]}, but ship review judged "
+                      f"{str(record.get('tip'))[:10]}; nothing merged", str(run))
+            return None
         return end
+
+    def merge_base(self) -> str | None:
+        try:
+            text = self.program.merge_base(self.stop).read_text("utf-8").strip()
+        except OSError:
+            return None
+        return text if re.fullmatch(r"[0-9a-f]{40}", text) else None
 
     def merge_target(self, build_tip: str, target_tip: str) -> str | int:
         """Merge the target into the build branch; the pushed commit, or an exit code."""
@@ -261,10 +296,9 @@ class Merge:
                 raise Unreachable(f"push of the merge commit: {exc}") from exc
         finally:
             drop_copy(self.repo, copy, self.settings)
-        text = self.note_text()
-        text = MERGE_BASE.sub("", text).strip()
-        self.note.parent.mkdir(parents=True, exist_ok=True)
-        self.note.write_text((text + "\n" if text else "") + f"MERGE-BASE {new}\n", "utf-8", newline="\n")
+        path = self.program.merge_base(self.stop)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(new + "\n", "utf-8", newline="\n")
         self.say(f"MERGE-BASE {new}: {self.target} {target_tip[:10]} merged into {self.state.build_branch}")
         return new
 
@@ -332,9 +366,9 @@ class Merge:
         body = [f"# Merge of {self.program.dir.name} stop {self.stop}", "", f"PR: {pr or '(already on the target)'}",
                 f"Reviewed tip: {reviewed}", f"Merged tip: {merged_tip}", f"Target: {self.target} {target_tip}", "",
                 "Deep run:", *[f"    {x}" for x in deep_lines[-20:]], ""]
-        base = MERGE_BASE.search(self.note_text())
+        base = self.merge_base()
         if base:
-            body.append(f"MERGE-BASE {base.group(1)}")
+            body.append(f"MERGE-BASE {base}")
         body.append(f"MERGED {target_tip}")
         self.note.parent.mkdir(parents=True, exist_ok=True)
         self.note.write_text("\n".join(body) + "\n", "utf-8", newline="\n")
@@ -350,7 +384,11 @@ class Merge:
         claims = cl.for_program(self.program, self.settings)
         if not claims.active:
             return
-        files = [f for s in self.state.slices.values() if (s.checkpoint or self.stop) == self.stop for f in s.files]
+        merged = set(st.load(self.program).merged)
+        mine = [s for s in self.state.slices.values() if (s.checkpoint or self.stop) == self.stop]
+        still = {f for s in self.state.slices.values() if s not in mine and s.checkpoint not in merged
+                 for f in s.files}  # D-L22: a pattern an unmerged slice names stays claimed
+        files = [f for s in mine for f in s.files if f not in still]
         n = claims.release(self.program.dir.name, files)
         n += claims.release(f"{self.program.dir.name}-fix-{self.stop}")
         self.say(f"CLAIMS released {n} patterns of stop {self.stop}")
@@ -416,9 +454,9 @@ class Merge:
         fix.project_file.write_text(
             f"project: {self._project()}\nprogram: {fix.dir.name}\nkind: fix\nparent: {self.program.dir.name}\n"
             f"build_branch: {self.state.build_branch}\nparent_tip: {tip}\n"
-            f"gates:\n  go: {{by: stop-review, at: {st.now_iso()[:10]}, source: \"merge/{self.stop}.md\", "
-            f"advance: yes}}\nstop_points:\n  - id: {self.stop}\n    tier: core\n    handoff: ready\n",
+            f"gates:\n  go: null\nstop_points:\n  - id: {self.stop}\n    tier: core\n    handoff: ready\n",
             "utf-8", newline="\n")
+        prog.set_gate(fix, "go", by="stop-review", source=f"merge/{self.stop}.md", advance=True)
         fix.slices_md.write_text(
             "| id | name | stop | depends on | files | size |\n|---|---|---|---|---|---|\n"
             f"| {sid} | Merge {self.target} into the build branch | {self.stop} | - | {', '.join(files)} | S |\n",
@@ -433,10 +471,9 @@ class Merge:
             f"## 2. Files it may touch\n\n" + "".join(f"{f}\n" for f in files) +
             f"\n## 3. Facts about the code\n\n```fact SAFETY\n$ git cat-file -t {target_tip}\ncommit\n```\n",
             "utf-8", newline="\n")
-        for name in ("checks.toml", "ship.toml"):
-            src = self.program.dir / name
-            if src.exists():
-                (fix.dir / name).write_text(src.read_text("utf-8"), "utf-8", newline="\n")
+        from ship.review import copy_settings
+
+        copy_settings(self.program, fix)
         add_wait(self.program, f"stop {self.stop}: {why}; a fix program does the merge (round 2 follows)",
                  str(fix.dir))
         self.say(f"FIX {fix.dir.name}: {sid} on {files}")
@@ -446,11 +483,11 @@ class Merge:
         add_wait(self.program, f"stop {self.stop}: {why}, and its fix program was already used; there is no third "
                                "round", str(fix.dir))
         self.say(f"WAITS no third round: {why}")
-        return 2
+        return 10
 
     def _stop_from(self) -> str:
         try:
-            from ship.trace import stop_range
+            from ship.stop_trace import stop_range
 
             return stop_range(self.program, self.stop)[0]
         except Exception:  # noqa: BLE001 - a fix program can be written without it
@@ -482,3 +519,10 @@ def merge(program: Program, stop: str, settings: Settings) -> tuple[int, list[st
         if job.lock is not None:
             job.lock.release()
     return rc, job.lines
+
+
+def target_branch(program: Program, settings: Settings) -> str:
+    """The one target source (D-L22): the project profile's `target_branch` (default: `ci_gate_base`)."""
+    from ship import project_profile
+
+    return project_profile.target_branch(program.dir, settings)

@@ -63,6 +63,8 @@ def cmd_timed(a, program, settings):
     from ship.wrapper import run_timed
 
     argv = a.argv[1:] if a.argv[:1] == ["--"] else a.argv
+    if not a.slice or ".." in a.slice or not all(c.isalnum() or c in "_.-" for c in a.slice):
+        raise SystemExit(f"ship timed: --slice {a.slice!r} is not a plain name")  # it names heartbeat/<slice>
     result = run_timed(argv, Path.cwd(), Path(a.log), a.timeout or settings.check_timeout_s, settings,
                        program.runs, program.heartbeat(a.slice))
     print(f"EXIT rc={result.rc} seconds={result.seconds:.0f}" + (" timeout" if result.timed_out else ""))
@@ -250,7 +252,7 @@ def cmd_records(a):
             raise SystemExit("ship records commit needs -m MESSAGE")
         lines: list[str] = []
         with records.locked(records_of(plans)):
-            sha = records.commit(plans, a.message, settings, remote=a.remote, lines=lines)
+            sha = records.commit(plans, a.message, settings, remote=a.remote, lines=lines, paths=None)
         return _lines(True, lines + [f"COMMIT {sha}" if sha else "NOTHING to commit"])
     if not (a.repo and a.prefix):
         raise SystemExit("ship records prefix needs --repo and a prefix")
@@ -352,7 +354,7 @@ def cmd_facts(a, program, settings):
 
 # U09: trace and the checkpoint review
 def cmd_trace(a, program, settings):
-    from ship.trace import TraceError, trace
+    from ship.stop_trace import TraceError, trace
 
     try:
         return _lines(*trace(program, a.stop, settings))

@@ -6,7 +6,9 @@ checkpoint (`from..tip`, from `notes/stop-<stop>.json`, or the fix program's for
 
 - per ask: its plan lines, elements, interfaces and slices, each slice's state and landed commit;
 - commits with no chain: a subject that starts with no slice id of this program or of its fix programs,
-  and with none of the kit's own words (`ratchet:`, `contract:`, `merge:`); each is a FAIL line;
+  and that is not a kit commit; each is a FAIL line. A kit commit is known by what it is, never by its
+  subject (D-L22): a merge commit, or one whose files are all generator paths (`ci/baselines/`,
+  `contracts/` and the profile's `[generators]` patterns);
 - seams: every element, edge case or file that two or more slices of the stop touched;
 - the scenario ledger: every `E` id in the stop's briefs (section 7a lines), the test named for it,
   and that test's result in `checks/` (a missing or failing test is a FAIL line);
@@ -35,7 +37,7 @@ from ship.plan import PlanError, parse_facts, parse_slices
 from ship.settings import Settings
 from ship.worktree import checkout_copy, drop_copy
 
-KIT_SUBJECTS = ("ratchet:", "contract:", "merge:")  # commits the kit itself writes on a build branch
+GENERATOR_PATHS = ("ci/baselines/", "contracts/")  # what the kit's generator commits may touch
 CHAIN_LINE = re.compile(r"^Chain:\s*(.*)$", re.M)
 SCENARIO = re.compile(r"^\s*[-*]\s*`?(E[0-9][A-Za-z0-9.-]*)`?\b(.*)$")
 TEST_NAME = re.compile(r"\(test:\s*`?([^`)]+?)`?\s*\)")
@@ -75,17 +77,50 @@ def slice_ids(program: Program) -> set[str]:
     return ids
 
 
-def commits(repo: Path, base: str, tip: str, settings: Settings) -> list[tuple[str, str, list[str]]]:
-    """(sha, subject, files) on the first-parent line from base to tip, oldest first."""
+def commits(repo: Path, base: str, tip: str, settings: Settings) -> list[tuple[str, list[str], str, list[str]]]:
+    """(sha, parents, subject, files) on the first-parent line from base to tip, oldest first. A merge
+    commit lists no files (git shows none for a merge without -m)."""
     span = f"{base}..{tip}" if base else tip
-    out = git(repo, "log", "--first-parent", "--reverse", "--name-only", "--format=%x00%H %s", span,
+    out = git(repo, "log", "--first-parent", "--reverse", "--name-only", "--format=%x00%H%x01%P%x01%s", span,
               timeout=settings.git_timeout_s)
     found = []
     for block in out.split("\x00")[1:]:
         lines = [ln for ln in block.splitlines() if ln.strip()]
-        sha, _, subject = lines[0].partition(" ")
-        found.append((sha, subject, lines[1:]))
+        sha, parents, subject = (lines[0].split("\x01") + ["", ""])[:3]
+        found.append((sha, parents.split(), subject, lines[1:]))
     return found
+
+
+def generator_patterns(profile: dict | None) -> list[str]:
+    return [*GENERATOR_PATHS, *((profile or {}).get("generators") or {}).keys()]
+
+
+def kit_commit(parents: list[str], files: list[str], patterns: list[str]) -> bool:
+    """A commit the kit writes on a build branch: a merge of the target (two parents), or a generator
+    commit whose every file is a generator path. Never judged by its subject (D-L22)."""
+    from ship.plan import matches
+
+    if len(parents) > 1:
+        return True
+    return bool(files) and all(any(matches(p, f) for p in patterns) for f in files)
+
+
+def kit_line_problem(repo: Path, older: str, newer: str, patterns: list[str], settings: Settings) -> str | None:
+    """None when `newer` follows `older` on its first-parent line through kit commits only (the rule for
+    `ship merge`'s MERGE-BASE, D-L22), else why not."""
+    from ship.gitx import is_ancestor
+
+    if not is_ancestor(repo, older, newer, settings.git_timeout_s):
+        return f"{newer[:10]} does not contain {older[:10]}"
+    found = commits(repo, older, newer, settings)
+    if not found:
+        return None
+    if found[0][1][:1] != [older]:
+        return f"the first-parent line of {newer[:10]} does not run through {older[:10]}"
+    for sha, parents, subject, files in found:
+        if not kit_commit(parents, files, patterns):
+            return f"{sha[:10]} {subject!r} is not a merge or generator commit"
+    return None
 
 
 def owner(subject: str, ids: set[str]) -> str | None:
@@ -206,12 +241,15 @@ def trace(program: Program, stop: str, settings: Settings, base: str | None = No
     found_commits = commits(repo, base, tip, settings)
     out += ["## Commits", ""]
     by_slice: dict[str, list[str]] = {}
-    for sha, subject, files in found_commits:
+    from ship.project_profile import of_program
+
+    patterns = generator_patterns(of_program(program.dir, settings))
+    for sha, parents, subject, files in found_commits:
         sid = owner(subject, ids)
-        if sid:
+        if sid and len(parents) < 2:
             by_slice.setdefault(sid, []).extend(files)
             out.append(f"- `{sha[:10]}` {subject}")
-        elif subject.startswith(KIT_SUBJECTS):
+        elif kit_commit(parents, files, patterns):
             out.append(f"- `{sha[:10]}` {subject} (kit)")
         else:
             line = f"FAIL unchained commit {sha} {subject!r}: its subject names no slice of {program.dir.name}"

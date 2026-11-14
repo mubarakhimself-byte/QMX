@@ -392,15 +392,18 @@ def gate(program: Program, settings: Settings, pr: str | None = None) -> tuple[i
     The gate passes only on a green deep run whose verdict names the PR head. A PR opened before the
     deep run finished has a failed gate job; once ship records the deep run green on that head,
     this reruns the job (once per gate run)."""
+    from ship.project_profile import target_branch
+
     state = st.load(program)
     gh = gh_for(state, settings)
+    base = target_branch(program.dir, settings)  # D-L22: the one target source
     try:
-        listed = gh.prs(state.build_branch, settings.ci_gate_base)
+        listed = gh.prs(state.build_branch, base)
     except GitError as exc:
         return 2, [f"PENDING gate: GitHub unreachable ({short(exc)})"]
     chosen = [p for p in listed if not pr or str(p["number"]) == str(pr) or p["url"] == pr]
     if not chosen:
-        return 1, [f"FAIL gate: no open PR from {state.build_branch} into {settings.ci_gate_base}"]
+        return 1, [f"FAIL gate: no open PR from {state.build_branch} into {base}"]
     head = chosen[0]["headRefOid"]
     deep = state.ci.get("deep") or {}
     if deep.get("tip") != head or deep.get("result") != "green":
