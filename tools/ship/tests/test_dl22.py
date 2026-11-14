@@ -180,11 +180,15 @@ class Bypasses(RepoCase):
     def test_no_role_writes_the_kit_folder_and_a_builder_writes_no_stop_note(self):
         for role in self.env:
             for target in (self.d / ".kit" / "gates.log", self.d / ".kit" / "A" / "review-run.json",
-                           self.d / ".kit" / "A" / "MERGE-BASE"):
+                           self.d / ".kit" / "A" / "MERGE-BASE", self.program.stop_note("A")):
                 with self.subTest(role=role, target=target.name):
                     self.assertIsNotNone(self.hook(role, "Write", file_path=str(target)))
         self.assertIsNone(self.hook("builder", "Write", file_path=str(self.d / "notes" / "x.md")))
         self.assertIsNotNone(self.hook("builder", "Write", file_path=str(self.program.stop_note("A"))))
+
+    def test_a_docs_worktree_that_is_the_main_checkout_refuses(self):
+        env = {"SHIP_WORKTREE": str(self.repo), "SHIP_BRANCH": "main"}
+        self.assertIsNotNone(self.hook("docs", "Write", env=env, file_path=str(self.repo / "README.md")))
 
 
 # ---- review: the kit refuses what its verdict worker gets wrong (R1-R3, R5, R8) ---------------------
@@ -264,6 +268,26 @@ class Judge(ReviewCase):
         self.assertFalse(target.exists())
         write(target, json.dumps({"sha": self.tip(), "green": True}))
         self.assertEqual(cp.fetch_summary(), str(target))
+
+    def test_fetch_summary_refuses_a_downloaded_summary_of_another_commit(self):
+        from ship.review import Checkpoint
+
+        cp = Checkpoint(self.program, "A", load_settings(self.program.dir), 1)
+        cp.memo["tip"] = self.tip()
+        with st.locked(self.program) as state:
+            state.ci["deep"] = {"tip": self.tip(), "run_id": "7", "result": None}
+        shas = [self.base, self.tip()]
+
+        class Gh:
+            def download(self, run_id, name, folder):
+                write(Path(folder) / "summary.json", json.dumps({"sha": shas.pop(0), "green": True}))
+                return True
+
+        target = self.program.nightly(self.tip()) / "summary.json"
+        with mock.patch("ship.ci.gh_for", lambda *a: Gh()):
+            self.assertIsNone(cp.fetch_summary(), "a run of another commit never stands for this tip")
+            self.assertFalse(target.exists())
+            self.assertEqual(cp.fetch_summary(), str(target))
 
 
 # ---- the conveyor (H1-H3, follow, detach) -----------------------------------------------------------
@@ -552,6 +576,15 @@ class ClaimsOrder(RepoCase):
         self.claims.release("p1")
         self.assertEqual(self.claims.claim("p2", ["pkg/shared.py", "pkg/b.py"]), [])
         self.assertIn(("p2", "pkg/shared.py"), [(r.program, r.pattern) for r in self.claims.live()])
+
+    def test_two_live_rows_on_one_file_from_before_the_fix_block_only_the_later_program(self):
+        """Rows the old code wrote for both programs (mutual blocking): only the earlier row blocks now."""
+        self.claims.records.claims.write_text(
+            "program\tkind\tpattern\tsince\treleased\n"
+            "p1\tclaim\tpkg/shared.py\t2026-11-14T00:00:00+00:00\t\n"
+            "p2\tclaim\tpkg/shared.py\t2026-11-14T00:00:01+00:00\t\n", "utf-8")
+        self.assertEqual(self.claims.overlaps_now("p1", ["pkg/shared.py"]), [])
+        self.assertEqual(self.claims.overlaps_now("p2", ["pkg/shared.py"]), [("pkg/shared.py", "p1", "pkg/shared.py")])
 
     def test_c1_a_fix_program_never_blocks_its_parent_but_a_lookalike_name_does(self):
         self.fix("p1-fix-A", "p1")

@@ -5,8 +5,8 @@ Every worker has `SHIP_ROLE` (the launcher sets it); a missing or unknown role r
 `SHIP_STOP` and `SHIP_PART`, when set, must be plain names (`[A-Za-z0-9_-]+`).
 
 File tools (Write, Edit, MultiEdit, NotebookEdit) write only the role's paths (the table below). No role
-writes `<program>/.kit/` (the kit's own files: `review-run.json`, `MERGE-BASE`, `gates.log`), and a
-builder never writes `notes/stop-*.json`.
+writes `<program>/.kit/` (the kit's own files: `review-run.json`, `MERGE-BASE`, `gates.log`), no
+role writes `notes/stop-*.json` (only the build loop does), and a docs worktree is never the main checkout.
 
 Bash is an allow-list (D-L22). A command is read segment by segment (split on `&&`, `||`, `;`, `|`, `&`
 and new lines, outside quotes), following `cd`/`Set-Location`/`Push-Location`. Each segment runs one of:
@@ -215,6 +215,8 @@ class Run:
         self.worktrees = list(self.branches)
         self.repo = st.load(program).repo if program.state.exists() else ""
         self.repo = self.repo or (env.get("SHIP_REPO") or "").strip()
+        if self.role == "docs" and self.repo and any(inside(w, self.repo) for w in self.worktrees):
+            raise ValueError("the docs worktree is the main checkout")
 
     def worktree_of(self, where: str) -> str | None:
         return next((w for w in self.worktrees if inside(where, w)), None)
@@ -232,10 +234,11 @@ class Run:
                    for folder in [self.program.dir, *self.fix_folders()])
 
     def builder_refused(self, target: str) -> bool:
-        """D-L22: a builder never writes a stop note (it would say the stop is built)."""
-        notes = self.program.notes_dir
-        return (self.role in SLICE_ROLES and _norm(str(Path(target).parent)) == _norm(str(notes))
-                and fnmatch.fnmatch(Path(target).name.lower(), "stop-*.json"))
+        """D-L22: a builder never writes a stop note (it would say the stop is built); nor does any other
+        role whose paths hold `notes/` (sweep-handoff)."""
+        return any(_norm(str(Path(target).parent)) == _norm(str(folder / "notes"))
+                   and fnmatch.fnmatch(Path(target).name.lower(), "stop-*.json")
+                   for folder in [self.program.dir, *self.fix_folders()])
 
 
 def allowed_roots(program: Program) -> tuple[list[str], list[str]]:
