@@ -7,8 +7,9 @@ The slice's checks carry over only when its `git patch-id` is unchanged and no f
 changed by a slice that landed after its dispatch; otherwise the rebased commit goes back to `ready`
 for slice_checks (RECHECK). With `slice_verdict_required` on, a CLEAN slice verdict is also needed,
 and a changed patch waits for a range verdict on the range-diff the script writes. Then it runs the tests of every package the batch and the slices landed since touched,
-blocks only on reds the repo's `ci/baselines/known-reds.txt` and `flaky.txt` do not name (read at the
-batch's tip), fast-forwards the build branch, marks the slices landed, closes their PRs, and removes each
+reruns each package's reds once and blocks only where qmx-ci would (suite.Baseline.judge: a red the repo's
+`ci/baselines/known-reds.txt` does not name, a flaky red `flaky.txt` does not name; both read at the
+batch's base), fast-forwards the build branch, marks the slices landed, closes their PRs, and removes each
 slice worktree once its remote branch equals its local head (never --force). A known red that passes now
 is a NOTE: the kit never edits the baseline; `tools/ci/pull_reds.py` shrinks it.
 """
@@ -211,10 +212,9 @@ class Landing:
         files = sorted({f for sid in included for f in changed_files(repo, state.slices[sid].parent, cur, t)})
         packages = touched(load_packages(program), files)
         runs = run_packages(copy, packages, self.out, settings.land_timeout_s, settings, program.runs)
-        reds = set().union(*(r.red() for r in runs.values())) if runs else set()
         broken = [root for root, r in runs.items() if not r.junit_ok]
-        baseline = baseline_for(repo, cur, t)
-        new_reds = baseline.new(reds)
+        baseline = baseline_for(repo, tip, t)  # D-L25: at the batch's base, so a batch cannot excuse its own red
+        new_reds = baseline.judge(runs.values(), files).blocking  # qmx-ci's rule: reds rerun once (run_packages)
         if new_reds or broken:
             self.say(f"FAIL land-tests {self.batch} batch {included}: new reds {new_reds}"
                      + (f", no JUnit report from {broken}" if broken else ""))

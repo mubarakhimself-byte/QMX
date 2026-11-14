@@ -318,9 +318,10 @@ class HookRoles(RepoCase):
     def test_audit_and_planning_roles_run_only_factory_scripts_and_the_kit(self):
         factory = self.root / "factory"
         self.setting(f"factory_home = {json.dumps(str(factory))}")
-        script = factory / "skills" / "audit-area" / "scripts" / "census.py"
+        script = factory / "skills" / "audit-area" / "scripts" / "lint_findings.py"
+        packet = factory / "skills" / "factory-core" / "scripts" / "chain_packet.py"
         env = {"SHIP_PART": "p1"}
-        for command in (f'python "{script}" qmb --tip HEAD',
+        for command in (f'python "{script}" readers/p1.tsv --local-ids',
                         f"python {KIT} timed --slice x --log l -- uv run --no-sync pytest -q",
                         "python -m ship timed --slice x --log l -- pytest -q", "uv run --no-sync python -m pytest -q"):
             self.assertEqual(self.hook("audit-reader", "Bash", env=env, command=command), (0, ""), command)
@@ -332,7 +333,8 @@ class HookRoles(RepoCase):
         rc, why = self.hook("reader", "Bash", env={"SHIP_NOTES": str(self.root / "n.md")}, command=f'python "{script}"')
         self.assertEqual(rc, 2, "a reader runs no factory script")
         self.assertIn("runs only git, uv run, ship timed, pytest", why)
-        self.assertEqual(self.hook("planner-fix", "Bash", command=f'python "{script}"')[0], 0)
+        self.assertEqual(self.hook("planner-fix", "Bash", command=f'python "{packet}" "{self.program.dir}"')[0], 0)
+        self.assertEqual(self.hook("planner-fix", "Bash", command=f'python "{script}" x')[0], 2, "not its script")
 
     def test_a_role_with_no_state_and_no_repo_gets_no_bash(self):
         self.program.state.unlink()

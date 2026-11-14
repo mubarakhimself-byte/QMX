@@ -1,6 +1,7 @@
-"""Stand-ins for Vulture, mutmut 3 and pyright in the tests. Same output shapes; what they report follows
-the source text: every `def unused_*` is dead code, every mutant a run was asked for survives, and every
-line holding `# type-error` is a pyright error (printed over two lines, as pyright prints a long one)."""
+"""Stand-ins for Vulture, Skylos, mutmut 3 and pyright in the tests. Same output shapes; what they report
+follows the source text: every `def unused_*` is dead code, every mutant a run was asked for survives, every
+line holding `# type-error` is a pyright error (printed over two lines, as pyright prints a long one), and
+Skylos prints the JSON report the checkout holds in `fake-skylos.json` (an empty one without it)."""
 
 import re
 import sys
@@ -16,6 +17,11 @@ if tool == "vulture":
                 found += 1
                 print(f"{path}:{n}: unused function '{hit.group(1)}' (60% confidence)")
     sys.exit(3 if found else 0)
+if tool == "skylos":
+    report = Path("fake-skylos.json")
+    print("scanning ...")
+    print(report.read_text("utf-8") if report.exists() else "{}")
+    sys.exit(0)
 if tool == "pyright":
     errors = 0
     for path in sorted(Path(".").rglob("*.py")):

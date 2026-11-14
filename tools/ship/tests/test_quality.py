@@ -1,5 +1,6 @@
 """U17b: one ratchet, read from the repo. The quality tools and pyright are judged against the repo's own
-`ci/baselines/` with the repo's own `tools/ci/ratchet.py` (here a copy of qmx-ci's, planted in the fixture)."""
+`ci/baselines/` with the repo's own `tools/ci/ratchet.py` and CI's rules (here qmx-ci's `tools/ci`, kept byte
+for byte in `repo_ci/`, planted in the fixture)."""
 
 import json
 import tempfile
@@ -8,8 +9,8 @@ import unittest
 from pathlib import Path
 
 from ship import state as st
-from ship.quality import (BASELINE_MOVED, Finding, RepoRatchet, checkpoint_quality, mutant_globs, parse,
-                          parse_pyright, types_ratchet)
+from ship.quality import (BASELINE_MOVED, Finding, RepoRatchet, checkpoint_quality, load_ci, mutant_globs, parse,
+                          parse_pyright, summary_quality, types_ratchet)
 from ship.settings import load_settings
 from ship.slice_checks import slice_checks
 from ship.suite import Package
@@ -18,7 +19,8 @@ from ship.wrapper import RunResult
 
 HERE = Path(__file__).resolve().parent
 FAKE = HERE / "fake_tools.py"
-RATCHET = (HERE / "repo_ratchet.py").read_text("utf-8")
+REPO_CI = HERE / "repo_ci"  # qmx-ci's tools/ci at origin/ci/c2 812b87c98, byte for byte
+RATCHET = (REPO_CI / "ratchet.py").read_text("utf-8")
 ROOT = Package(".")
 SUB = Package("packages/qmf-core")
 HEADER = "# taken by the baseline level\n"
@@ -48,10 +50,13 @@ class Parsers(unittest.TestCase):
                   "whitelisted": [{"name": "g", "file": "pkg/mod.py", "line": 1}],
                   "summary": {"total": 2}}
         log = f"$ skylos . -a --json\n# cwd C:/co\nscanning...\n{json.dumps(report, indent=1)}\n\nEXIT rc=1 seconds=4\n"
-        self.assertEqual(parse("skylos", log, Path("C:/co"), ROOT), [
-            Finding("skylos", "pkg/mod.py", 9, "quality:SKY-L028", "too deep"),
-            Finding("skylos", "pkg/mod.py", 3, "unused_functions:unused_functions", "pkg.mod.f"),
-        ])
+        rules = load_ci(REPO_CI)
+        self.assertEqual(parse("skylos", log, Path("C:/co"), ROOT, rules), [
+            Finding("skylos", "pkg/mod.py", 9, "quality:SKY-L028", "too deep", blocking=False),
+            Finding("skylos", "pkg/mod.py", 3, "unused_functions:unused_functions", "pkg.mod.f", blocking=False),
+        ], "CI keeps quality and dead code as notes")
+        with self.assertRaises(ValueError):
+            parse("skylos", log, Path("C:/co"), ROOT)  # never read without CI's own rules
 
     def test_mutmut_survivors_are_keyed_by_package_and_function(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -147,13 +152,33 @@ class Parsers(unittest.TestCase):
             log = write(folder / "types.log",
                         "  C:/co/pkg/a.py:3:5 - error: bad (reportX)\n2 errors, 0 warnings, 0 informations\n")
             done = RunResult(1, False, 1.0, log)
-            program = type("P", (), {"runs": folder / "runs"})()
-            self.assertEqual(types_ratchet(ROOT, Path("C:/co"), None, ["pkg/a.py"], done, folder, None, program, ratchet),
+            self.assertEqual(types_ratchet(ROOT, Path("C:/co"), ["pkg/a.py"], done, ratchet, folder),
                              ("FAIL", "rc=1: pyright's errors could not be read from types.log"))
-            self.assertEqual(types_ratchet(ROOT, Path("C:/co"), None, [], RunResult(2, False, 1.0, log), folder, None,
-                                           program, ratchet), ("FAIL", "rc=2: pyright did not finish"))
-            self.assertEqual(types_ratchet(ROOT, Path("C:/co"), None, [], done, folder, None, program, None),
+            self.assertEqual(types_ratchet(ROOT, Path("C:/co"), [], RunResult(2, False, 1.0, log), ratchet, folder),
+                             ("FAIL", "rc=2: pyright did not finish"))
+            self.assertEqual(types_ratchet(ROOT, Path("C:/co"), [], done, None, folder),
                              ("FAIL", "rc=1 (no baseline: the checkout has no tools/ci/ratchet.py)"))
+
+    def test_a_vulture_line_with_no_confidence_is_an_incomplete_scan(self):
+        with self.assertRaises(ValueError):
+            parse("vulture", "pkg/a.py:3: invalid syntax\n", Path("C:/co"), ROOT)
+
+    def test_summary_quality_reads_blocks_and_a_crashed_job(self):
+        note = {"tool": "skylos", "key": "pkg/a.py|quality:SKY-Q1|x", "file": "pkg/a.py", "kind": "new", "blocks": False}
+        block = {**note, "tool": "vulture", "key": "pkg/a.py|vulture|unused function 'f'", "blocks": True}
+        t = "a" * 40
+        self.assertEqual(summary_quality({"quality": [note]}, ("skylos",), t),
+                         [f"PASS quality-skylos-ci aaaaaaaa no new blocking rows in summary.json (1 notes, 0 gone)"],
+                         "a row CI marks `blocks: false` is a note (M21)")
+        self.assertTrue(summary_quality({"quality": [block]}, ("vulture",), t)[0].startswith("FAIL quality-vulture-ci"))
+        crashed = {"jobs": [{"name": "vulture", "result": "failure"}, {"name": "skylos", "result": "success"},
+                            {"name": "mutmut-2", "result": "cancelled"}, {"name": "skylos-part-qml", "result": "failure"}],
+                   "quality": []}
+        lines = summary_quality(crashed, ("vulture", "skylos", "mutmut"), t)
+        self.assertEqual(lines[0], "FAIL quality-vulture-ci aaaaaaaa the job vulture did not succeed and left no blocking "
+                                   "row: it crashed before its ratchet record")
+        self.assertTrue(lines[1].startswith("PASS quality-skylos-ci"), "a baseline part is not the skylos job")
+        self.assertTrue(lines[2].startswith("FAIL quality-mutmut-ci aaaaaaaa the job mutmut-2"))
 
 
 class QualityRuns(RepoCase):
@@ -246,14 +271,25 @@ class QualityRuns(RepoCase):
         self.assertIn(f"FAIL types-root s2 {head[:8]} rc=1: 1 new: pkg/typed.py:2 [reportCallIssue] Argument count # "
                       'is wrong "int" is not "str"', lines, "a second copy of a known error is new")
 
-    def test_types_already_red_at_the_parent_do_not_block_the_slice(self):
-        self.push_to_build({"pkg/typed.py": "A = 1  # type-error\n"})  # red here, as on Windows only
+    def test_types_red_at_the_parent_but_not_in_the_baseline_block_the_slice_as_in_ci(self):
+        self.push_to_build({"pkg/typed.py": "A = 1  # type-error\n"})  # red at the parent, the baseline never took it
         self.own("s1", "pkg/typed.py")
         head = self.make_ready("s1", {"pkg/typed.py": "A = 1  # type-error\nC = 3\n"})
         ok, lines = slice_checks(self.program, "s1", self.settings)
-        self.assertIn(f"PASS types-root s1 {head[:8]} rc=1: 1 errors, none new in the slice's files (1 known)", lines)
-        self.assertTrue((self.program.checks("s1", head) / "types-root-base.log").exists(),
-                        "the parent was run, because the baseline alone did not know the error")
+        self.assertFalse(ok)
+        self.assertIn(f"FAIL types-root s1 {head[:8]} rc=1: 1 new: pkg/typed.py:1 [reportCallIssue] Argument count # is "
+                      'wrong "int" is not "str"', lines, "D-L25: no parent union; CI's slice level reads the baseline alone")
+        self.assertFalse((self.program.checks("s1", head) / "types-root-base.log").exists(), "the parent is not run")
+
+    def test_vulture_red_at_the_parent_but_not_in_the_baseline_blocks_the_slice_as_in_ci(self):
+        self.push_to_build({"pkg/old.py": "def unused_old():\n    return 0\n\n\ndef unused_stale():\n    return 2\n"})
+        self.own("s1", "pkg/old.py")
+        head = self.make_ready("s1", {"pkg/old.py": "def unused_old():\n    return 0\n\n\ndef unused_stale():\n"
+                                                    "    return 3\n"})
+        ok, lines = slice_checks(self.program, "s1", self.settings)
+        self.assertFalse(ok)
+        self.assertIn(f"FAIL quality-vulture-root s1 {head[:8]} 1 new: pkg/old.py:5 [vulture] unused function "
+                      "'unused_stale'", lines, "D-L25: the parent's finding is not known; only the baseline is")
 
     def test_checkpoint_blocks_new_findings_until_the_baseline_knows_them(self):
         tip = self.push_to_build({"pkg/area.py": "def unused_a():\n    return 0\n\n\ndef area(r):\n    return r * r\n"})
@@ -270,11 +306,23 @@ class QualityRuns(RepoCase):
         self.assertEqual([x.split("\t")[0] for x in new], [".|mutmut|pkg.area.area survived",
                                                           ".|mutmut|pkg.area.unused_a survived"])
 
+        tip = self.push_to_build({
+            "pkg/area.py": "def unused_a():\n    return 0\n\n\ndef area(r):\n    return r * r\n\n\n"
+                           "def unused_b():\n    return 1\n",
+            "ci/baselines/vulture.txt": HEADER + "pkg/old.py|vulture|unused function 'unused_old'\n"
+                                                 "pkg/area.py|vulture|unused function 'unused_b'\n"})
+        ok, lines = checkpoint_quality(self.program, self.settings, self.base, ("vulture",))
+        self.assertEqual(lines, [f"FAIL quality-vulture-root {tip[:8]} 2 new: pkg/area.py:1 [vulture] unused function "
+                                 "'unused_a'; pkg/area.py:9 [vulture] unused function 'unused_b'"],
+                         "M23: the baseline is read at the base; one the stop adds at its tip excuses nothing")
+
         base = self.push_to_build({
             "ci/baselines/vulture.txt": HEADER + "pkg/area.py|vulture|unused function 'unused_a'\n"
                                                  "pkg/old.py|vulture|unused function 'unused_old'\n",
             "ci/baselines/mutmut.txt": HEADER + ".|mutmut|pkg.area.area survived\n.|mutmut|pkg.area.unused_a survived\n"})
-        tip = self.push_to_build({"pkg/area.py": "def unused_a():\n    return 0\n\n\ndef area(r):\n    return r * r * 1\n"})
+        tip = self.push_to_build({"pkg/area.py": "def unused_a():\n    return 0\n\n\ndef area(r):\n    return r * r * 1\n",
+                                  "ci/baselines/vulture.txt": HEADER + "pkg/area.py|vulture|unused function 'unused_a'\n"
+                                                                       "pkg/old.py|vulture|unused function 'unused_old'\n"})
         ok, lines = checkpoint_quality(self.program, self.settings, base, ("vulture", "mutmut"))
         self.assertTrue(ok, lines)
         self.assertEqual(lines, [f"PASS quality-vulture-root {tip[:8]} no new findings (1 known)",

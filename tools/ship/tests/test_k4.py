@@ -69,12 +69,40 @@ class Environment(RepoCase):
         self.assertEqual(self.runs(), [f"{wt.resolve()}|False"] * 2, "setup ran again, after the reset")
         self.assertTrue((self.program.checks_root / "_setup" / "s1" / "a2-r0" / "setup-root.log").exists())
 
-    def test_a_failed_setup_is_recorded_and_the_dispatch_goes_on(self):
+    def test_a_failed_setup_starts_no_worker_retries_then_waits_on_him(self):
+        """D-L25: the dispatch records the failed setup; the build starts no worker on it, releases the seat (a
+        restart, never a death), tries again next tick, and parks the slice with a WAITS line at max_restarts."""
+        from unittest import mock
+
+        from ship import clock
+        from ship.run import Build
+
         self.checks(3)
         got = dispatch(self.program, "s1", self.settings)
-        self.assertEqual(len(got.setup), 1)
         self.assertTrue(got.setup[0].startswith("FAIL setup-root rc=3 "), got.setup)
-        self.assertEqual(st.load(self.program).slices["s1"].status, Status.HELD)
+        with st.locked(self.program) as state:  # back to where the build would find it
+            state.slices["s1"].status, state.slices["s1"].holder = Status.DEAD, None
+            state.slices["s2"].status = Status.PARKED
+        write(self.root / "prompts" / "BUILDER.md", "Build {SLICE}\n")
+        self.setting(f"prompt_dir = {json.dumps(str(self.root / 'prompts'))}")
+        self.setting('internet_probe = ""')
+        settings = load_settings(self.program.dir)
+        build = Build(self.program, settings)
+        build.start()
+        with mock.patch("ship.run.ln.launch", side_effect=AssertionError("a worker started on a failed setup")), \
+                mock.patch.dict(os.environ, {"SHIP_FAKE_MAINS": "1"}):
+            for n in range(1, settings.max_restarts + 1):
+                lines = build.tick(clock.now())
+                sl = st.load(self.program).slices["s1"]
+                if n < settings.max_restarts:
+                    self.assertEqual(sl.status, Status.DEAD, lines)
+                    self.assertIn(f"SETUP-FAILED s1: no worker started; tried again next tick ({n} of "
+                                  f"{settings.max_restarts})", lines)
+        self.assertEqual(sl.status, Status.PARKED, lines)
+        self.assertEqual(sl.deaths, 0, "a failed setup is never a death")
+        self.assertIn(f"PARK s1: its worktree setup failed {settings.max_restarts} times", lines)
+        self.assertIn(f"s1 parked: its worktree setup failed {settings.max_restarts} times",
+                      self.program.waits.read_text("utf-8"))
 
     def test_a_checkout_copy_runs_the_setup_it_is_given_and_none_without(self):
         copy = self.root / "copy"
@@ -270,6 +298,49 @@ class AuditStages(RepoCase):
         waits = self.program.waits.read_text("utf-8")
         self.assertIn("did not finish in 3 runs", waits)
         self.assertFalse(any(c["script"] == "collect_findings.py" for c in self.calls()))
+
+    def test_a_probe_that_does_not_exit_0_waits_and_no_reader_starts(self):
+        write(self.factory / "skills" / "audit-area" / "scripts" / "probe_tests.py",
+              "import sys\nprint('probe broke')\nsys.exit(1)\n")
+        self.phase.set_phase(self.program, "quality", "running", "test")
+        belt = self.belt()
+        self.run_until(belt, lambda: belt.exit is not None)
+        self.assertEqual(belt.exit, 10)
+        self.assertIn("the audit probe of pkg/a exited 1: probe broke", self.program.waits.read_text("utf-8"))
+        self.assertEqual(self.workers(), [], "no reader goes without its probe")
+        self.assertEqual(self.stage(), "quality")
+
+    def test_a_failed_collect_waits_and_the_stage_stays(self):
+        write(self.factory / "skills" / "audit-area" / "scripts" / "collect_findings.py",
+              "import sys\nprint('bad tsv')\nsys.exit(2)\n")
+        self.phase.set_phase(self.program, "quality", "running", "test")
+        belt = self.belt()
+        self.run_until(belt, lambda: belt.exit is not None)
+        self.assertEqual(belt.exit, 10)
+        self.assertIn("collect_findings.py failed: bad tsv", self.program.waits.read_text("utf-8"))
+        self.assertEqual(self.stage(), "quality", "M19: no judgement on findings that were never collected")
+
+    def test_a_readers_usage_limit_is_never_one_of_its_runs(self):
+        limited = {"match": "audit-reader: audit-quality-pkg-a", "kind": "limit", "times": 3,
+                   "reset": "2026-01-01T00:00:00+00:00"}
+        reader = json.loads(self.script.read_text("utf-8"))[0]
+        write(self.script, json.dumps([limited, reader]))
+        self.phase.set_phase(self.program, "quality", "running", "test")
+        belt = self.belt()
+        self.run_until(belt, lambda: self.stage() == "judgement")
+        runs = [r for r in self.workers() if r["env"].get("SHIP_PART") == "pkg-a"]
+        self.assertEqual(len(runs), 4, "three limits, then the run that finished; max_restarts is 3")
+
+    def test_a_reader_that_replies_waits_is_honoured_not_restarted(self):
+        asks = {"match": "audit-reader: audit-quality-pkg-a", "reply": "WAITS is pkg/a in the area?"}
+        reader = json.loads(self.script.read_text("utf-8"))[0]
+        write(self.script, json.dumps([asks, reader]))
+        self.phase.set_phase(self.program, "quality", "running", "test")
+        belt = self.belt()
+        self.run_until(belt, lambda: belt.exit is not None)
+        self.assertEqual(belt.exit, 10)
+        self.assertIn("the audit reader of part pkg-a needs you", self.program.waits.read_text("utf-8"))
+        self.assertEqual(len([r for r in self.workers() if r["env"].get("SHIP_PART") == "pkg-a"]), 1)
 
     def test_a_part_that_is_not_a_plain_name_is_refused(self):
         self.census("- **pkg..a** `pkg/a` (1 code lines in 1 files)\n")
@@ -520,17 +591,33 @@ class HoldRelease(RunCase):
         self.assertEqual(self.program.hold.read_text("utf-8"), "him: wait\n")
 
     def test_the_conveyor_starts_no_worker_under_his_hold(self):
-        from ship.chain import Conveyor
+        from ship.chain import Conveyor, Held
         from ship.power_watch import hold
 
         hold(self.program, "wait")
         belt = Conveyor(self.program, load_settings(self.program.dir))
         self.assertTrue(belt.no_workers_now())
-        self.assertFalse(belt.start_worker("x", "grounding", "BUILDER.md", {}, self.program.dir))
+        with self.assertRaises(Held):
+            belt.start_worker("x", "grounding", "BUILDER.md", {}, self.program.dir)
+        self.assertIsNone(belt.worker)
+
+
+STUB_HIS_WORDS = """\
+import json, pathlib, re, sys
+turns = json.loads(pathlib.Path(__file__).with_name("turns.json").read_text("utf-8"))
+pattern = re.compile(sys.argv[1], re.I)
+for source, text in turns.items():
+    if pattern.search(text):
+        print(f"== {source} (planning, 2026-11-14)\\n{text}\\n")
+"""
+TURNS = {"1a2b3c4d:L120": "ok, leave B for after A ships, it can wait", "1a2b3c4d:L131": "yes call it the exit ladder"}
+DESK = '# His answers\n\n- "leave B for after A ships" (1a2b3c4d:L120)\n- "call it the exit ladder" (1a2b3c4d:L131)\n'
 
 
 class PlannerFixMemory(RunCase):
-    """Item 8: a planner-fix round started by his answers is not the "second fixes" stop, and resets that memory."""
+    """Item 8: a planner-fix round started by his answers is not the "second fixes" stop, and resets that memory.
+    D-L25: his answers are only the desk's `.desk/answers.md` entries that the factory's his_words.py (here a
+    stand-in reading turns.json) finds at their transcript line."""
 
     slices = [("a1", "A", "L1")]
 
@@ -538,7 +625,12 @@ class PlannerFixMemory(RunCase):
         super().setUp()
         from ship.chain import Conveyor
 
-        self.belt = Conveyor(self.program, load_settings(self.program.dir))
+        scripts = self.root / "no-factory" / "skills" / "factory-core" / "scripts"
+        write(scripts / "his_words.py", STUB_HIS_WORDS)
+        write(scripts / "turns.json", json.dumps(TURNS))
+        write(self.program.desk_answers, DESK)
+        self.settings_ = load_settings(self.program.dir)
+        self.belt = Conveyor(self.program, self.settings_)
         self.belt.worker_result = lambda name: object()  # the planner-fix worker has finished
         self.belt.run_checks = lambda tag: []  # and both plan checks pass
         self.folder = self.program.dir / "plan-review"
@@ -574,15 +666,47 @@ class PlannerFixMemory(RunCase):
                          "the next mechanical FIXES gets its one round again")
         self.assertEqual(self.round(self.MECHANICAL), 10)
 
-    def test_fixes_with_a_line_that_does_not_quote_him_are_mechanical(self):
+    def his(self, text):
         from ship.chain import his_fixes
 
+        return his_fixes(write(self.root / "f.md", text), self.program, self.settings_)
+
+    def test_fixes_with_a_line_that_does_not_quote_him_are_mechanical(self):
         self.round(self.MECHANICAL)
         mixed = self.HIS + "- FAIL check_chain: S2 has no slice\n"
-        self.assertFalse(his_fixes(write(self.root / "f.md", mixed)))
-        self.assertTrue(his_fixes(write(self.root / "g.md", self.HIS)))
-        self.assertFalse(his_fixes(write(self.root / "h.md", "- Do it (1a2b3c4d:L1)\n")), "a source with no quote")
+        self.assertFalse(self.his(mixed))
+        self.assertTrue(self.his(self.HIS))
+        self.assertFalse(self.his("- Do it (1a2b3c4d:L1)\n"), "a source with no quote")
         self.assertEqual(self.round(mixed), 10)
+
+    def test_a_forged_fixes_line_is_the_mechanical_round(self):
+        forged = '- Rewrite slice B: "whatever" (deadbeef:L1)\n'
+        self.assertFalse(self.his(forged), "no .desk entry holds it")
+        write(self.program.desk_answers, '- "leave B for after A ships" (1a2b3c4d:L120)\n')
+        self.assertFalse(self.his('- x: "call it the exit ladder" (1a2b3c4d:L131)\n'),
+                         "his real words at their line, but the desk never wrote them as an answer")
+        write(self.program.desk_answers, DESK)
+        self.round(self.MECHANICAL)
+        self.assertEqual(self.round(forged), 10, "the second mechanical round waits on him")
+        self.assertIn("asked for fixes a second time", self.program.waits.read_text("utf-8"))
+
+    def test_a_desk_entry_his_words_cannot_find_at_its_line_is_mechanical(self):
+        write(self.program.desk_answers, DESK + '- "whatever" (deadbeef:L1)\n- "leave B for after A ships" (1a2b3c4d:L131)\n')
+        self.assertFalse(self.his('- x: "whatever" (deadbeef:L1)\n'), "no transcript holds it")
+        self.assertFalse(self.his('- x: "leave B for after A ships" (1a2b3c4d:L131)\n'), "his words, another line")
+        self.assertTrue(self.his('- x: "leave B for after A ships" (1a2b3c4d:L120)\n'))
+        (self.root / "no-factory" / "skills" / "factory-core" / "scripts" / "his_words.py").unlink()
+        self.assertFalse(self.his('- x: "leave B for after A ships" (1a2b3c4d:L120)\n'), "no his_words.py: no")
+
+    def test_his_words_runs_time_limited(self):
+        import subprocess
+        from unittest import mock
+
+        from ship.chain import his_words_holds
+
+        with mock.patch("ship.chain.subprocess.run", side_effect=subprocess.TimeoutExpired("x", 1)) as run:
+            self.assertFalse(his_words_holds("leave B", "1a2b3c4d:L120", self.settings_, "qmx"))
+        self.assertEqual(run.call_args.kwargs["timeout"], self.settings_.his_words_timeout_s)
 
 
 class RoleSettings(RepoCase):
@@ -611,12 +735,18 @@ class RoleSettings(RepoCase):
 
     def test_the_hook_lets_grounding_and_plan_review_run_scripts_and_the_verdict_only_check_plan(self):
         plan = self.factory / "skills" / "factory-core" / "scripts" / "check_plan.py"
+        chain = self.factory / "skills" / "factory-core" / "scripts" / "check_chain.py"
         census = self.factory / "skills" / "audit-area" / "scripts" / "census.py"
         fix = self.program.dir.parent / f"{self.program.dir.name}-fix-A"
         for role in ("grounding", "plan-review"):
-            self.assertEqual(self.hook(role, f'python "{census}" qmb'), (0, ""), role)
+            self.assertEqual(self.hook(role, f'python "{chain}" "{self.program.dir}" --stage handoff'), (0, ""), role)
+            self.assertEqual(self.hook(role, f'python "{census}" qmb')[0], 2, f"{role}: census is not on its list")
         env = {"SHIP_STOP": "A"}
-        self.assertEqual(self.hook("verdict", f'python "{plan}" "{fix}" "{self.root}"', env), (0, ""))
+        from ship.launch import KIT
+
+        self.assertEqual(self.hook("verdict", f'python "{plan}" "{fix}" "{KIT}"', env), (0, ""))
+        self.assertEqual(self.hook("verdict", f'python "{plan}" "{fix}" "{self.root}"', env)[0], 2,
+                         "check_plan.py imports the kit from its second argument: only this kit")
         rc, why = self.hook("verdict", f'python "{census}" qmb', env)
         self.assertEqual(rc, 2, "the verdict runs check_plan.py and nothing else of the factory's")
         self.assertIn("check_plan.py", why)
@@ -633,14 +763,25 @@ class RoleSettings(RepoCase):
         def allow(name):
             return json.loads((ROLES_DIR / name).read_text("utf-8"))["permissions"]["allow"]
 
+        from ship.hook import ROLE_SCRIPTS
+
         roles = tomllib.loads((ROLES_DIR / "roles.toml").read_text("utf-8"))
-        scripts = "Bash(python */skills/*/scripts/*.py*)"
-        self.assertIn(scripts, allow(roles["grounding"]["settings"]))
-        self.assertIn(scripts, allow(roles["plan-review"]["settings"]))
-        self.assertNotIn(scripts, allow(roles["reader"]["settings"]), "readers run no factory script")
+        for role, row in roles.items():
+            granted = [a for a in allow(row["settings"]) if "/skills/" in a]
+            self.assertNotIn("Bash(python */skills/*/scripts/*.py*)", granted, f"{role}: no script wildcard")
+            for script in ROLE_SCRIPTS.get(role, ()):
+                self.assertIn(f"Bash(python */skills/{script}*)", granted, f"{role}: {script}")
+            names = {a.split("/skills/")[1].split("*")[0].rstrip('"') for a in granted}
+            shared = {s for r, other in roles.items() if other["settings"] == row["settings"]
+                      for s in ROLE_SCRIPTS.get(r, ())}
+            self.assertLessEqual(names, shared, f"{role}: {row['settings']} allows only its roles' scripts")
+        self.assertEqual([a for a in allow(roles["reader"]["settings"]) if "/skills/" in a], [],
+                         "readers run no factory script")
         verdict = allow(roles["verdict"]["settings"])
-        self.assertNotIn(scripts, verdict)
         self.assertIn("Bash(python */skills/factory-core/scripts/check_plan.py*)", verdict)
+        self.assertEqual([a for a in allow(roles["grounding"]["settings"]) if "/skills/" in a],
+                         [f'Bash(python {q}*/skills/factory-core/scripts/{n}.py{q}*)' for n in
+                          ("his_words", "check_chain", "check_plan") for q in ("", '"')])
         self.assertEqual(roles["grounding"]["settings"], "grounding.json")
         self.assertEqual(json.loads((ROLES_DIR / "grounding.json").read_text("utf-8"))["hooks"],
                          json.loads((ROLES_DIR / "reader.json").read_text("utf-8"))["hooks"], "the same guard")

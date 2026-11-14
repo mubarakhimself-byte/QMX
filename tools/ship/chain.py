@@ -9,7 +9,7 @@ carries on at the first step with no file.
 | next | Activity |
 |---|---|
 | review | `check_chain --stage handoff` and `check_plan` as children; a FAIL writes `plan-review/FIXES.md` and a `RESULT: FIXES` review (so planner-fix runs); else one `plan-review` worker. `RESULT: QUESTIONS` copies `QUESTIONS.md` into `WAITING.md` and exits 10 |
-| planner-fix | one `planner-fix` worker, both checks again, then the review once more (`REVIEW.md` set aside). A second mechanical FIXES writes WAITS; a round started by his answers (every line of `FIXES.md` quotes him with a `<id8>:L<line>` source) never counts as that second one, and resets the memory of the first (`planner_fix_done` in `chain.json`) |
+| planner-fix | one `planner-fix` worker, both checks again, then the review once more (`REVIEW.md` set aside). A second mechanical FIXES writes WAITS; a round started by his answers never counts as that second one, and resets the memory of the first (`planner_fix_done` in `chain.json`). His answers are only what the desk wrote to `<program>/.desk/answers.md` (no worker may write there): every line of `FIXES.md` must quote one of its entries with the same `<id8>:L<line>` source, and the factory's `his_words.py` must find that quote at that transcript line. Any other FIXES line makes it the mechanical round |
 | go | when rule 8 holds, `gates.go` by him with the advance gate's source; otherwise exits 10 |
 | arm | the gates must be the ones `ship gate` logged, and a fix folder's `ship.toml` and `checks.toml` its parent's; `init_state` (build branch made at `parent_tip` when the remote has none), `preflight`, facts at `parent_tip` and at the target tip; failing facts start one `grounding` worker |
 | build | the `ship run` loop (`run.Build`) on the program, or on the fix folder (`build_folder`, armed first) |
@@ -22,15 +22,21 @@ carries on at the first step with no file.
 
 The audit's `quality` stage: a frozen checkout of the census tip (`<worktree_root>/audit-<program>`, made once,
 with the area's packages' `setup` run in it) is shared by the stages that read code; `probe_tests.py` runs once
-per package root there (one at a time, as children, each into `probe/<package>.tsv`; a probe that fails is
-noted, never a stop: the readers say so); then one `audit-reader` worker per `## Parts` line of `CENSUS.md`, side
-by side within the worker pool, each launched in that checkout with `SHIP_PART` (a plain name, checked) and the
-`PART` and `CHECKOUT` values; a reader whose notes do not end `DONE` is started again, up to `max_restarts`;
-then `collect_findings.py`. The audit checkout is dropped once the hand-off is done.
+per package root there (one at a time, as children, each into `probe/<package>.tsv`); a probe that does not exit
+0 (or is missing, or runs past its time) writes WAITS and stops (D-L25); then one `audit-reader` worker per
+`## Parts` line of `CENSUS.md`, side by side within the worker pool, each launched in that checkout with
+`SHIP_PART` (a plain name, checked) and the `PART` and `CHECKOUT` values; a reader whose notes do not end `DONE`
+is started again, up to `max_restarts` runs (a usage limit is never one of them), and a reader that replies
+`WAITS` is honoured: WAITS, 10; then `collect_findings.py`, whose failure is WAITS too. The audit checkout is
+dropped once the hand-off is done.
 
 Every loop it also refreshes `chain.lock` with its children, reads power, internet and GitHub
-(`power_watch.step`; `HOLD` starts nothing new), and starts no worker before `usage_reset_at`. WAITS lines go
-to `notes/WAITS-ON-YOU.md`. Exit: 0 finished (or stopped after `STOP-AFTER`'s stop merged), 10 waits on him,
+(`power_watch.step`), and starts no worker before `usage_reset_at`. A `HOLD` (whoever wrote it) starts nothing
+new (D-L25): one guard in the tick, before any activity, returns at once when nothing runs; while something
+runs, its activity is still ticked so its result is read, and every place that starts something (a worker, a
+script child, the build branch push, `init`, the audit checkout, `go`, the docs step, the finish's teardown, a
+checkpoint review's readers, deep run and verdict, the build's seats) checks HOLD again right before it and
+starts nothing. WAITS lines go to `notes/WAITS-ON-YOU.md`. Exit: 0 finished (or stopped after `STOP-AFTER`'s stop merged), 10 waits on him,
 11 another process holds `chain.lock`, 1 an error it could not route (written to WAITS).
 
 `SHIP_CHAIN_STOP_AFTER=<activity>:<n>` (tests) exits hard right after the n-th finished activity of that
@@ -74,22 +80,71 @@ CENSUS_TIP = re.compile(r"^Tip:\s*([0-9a-f]{40})\s*$", re.M)
 CENSUS_PART = re.compile(r"^- \*\*([^*\s]+)\*\* `([^`]+)`", re.M)
 PLAIN_PART = re.compile(r"[A-Za-z0-9_-]+")
 HIS_SOURCE = re.compile(r"\b[0-9a-f]{8}:L\d+\b")  # his_words.py's source for a turn of his: <id8>:L<line>
+# A quote of his and its source: "<his words>" (<id8>:L<line>), straight or curly quotes.
+HIS_QUOTE = re.compile(r"[\"\u201c]([^\"\u201c\u201d]+)[\"\u201d]\s*\(([0-9a-f]{8}:L\d+)\)")
 
 
-def his_fixes(path: Path) -> bool:
-    """FIXES.md written from his answers: every fix line quotes his words with their `<id8>:L<line>` source."""
+def quotes(line: str) -> list[tuple[str, str]]:
+    """The (quote, source) pairs a line holds, the quote's spaces folded."""
+    return [(" ".join(q.split()), src) for q, src in HIS_QUOTE.findall(line)]
+
+
+def desk_answers(program: Program) -> set[tuple[str, str]]:
+    """His answers as the desk wrote them, `<program>/.desk/answers.md`: one `- "<his words>" (<id8>:L<line>)`
+    line each (any text may come before the quote). No worker may write the folder (the hook)."""
+    try:
+        text = program.desk_answers.read_text("utf-8")
+    except OSError:
+        return set()
+    return {pair for line in text.splitlines() if line.lstrip().startswith(("- ", "* ")) for pair in quotes(line)}
+
+
+def his_words_holds(quote: str, source: str, settings: Settings, project: str) -> bool:
+    """The factory's `his_words.py` finds `quote` in the turn of his at `source` (`<id8>:L<line>`). Its own time
+    limit; a missing script, a failure or a time-out is a no."""
+    script = ln.factory_home(settings) / "skills" / "factory-core" / "scripts" / "his_words.py"
+    if not script.is_file():
+        return False
+    pattern = r"\s+".join(re.escape(word) for word in quote.split())
+    try:
+        done = subprocess.run([sys.executable, str(script), pattern, "--project", project], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
+                              timeout=settings.his_words_timeout_s, **popen_group_kwargs())
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0 and any(line.startswith(f"== {source} ") for line in done.stdout.splitlines())
+
+
+def his_fixes(path: Path, program: Program | None = None, settings: Settings | None = None,
+              project: str = "qmx") -> bool:
+    """FIXES.md written from his answers (D-L25): every fix line quotes his words with their `<id8>:L<line>`
+    source, each such pair is an entry of `.desk/answers.md`, and `his_words.py` finds each quote at its line.
+    Anything else (a line with no quote, a quote the desk never wrote, a source his_words does not confirm)
+    makes it the mechanical round."""
     try:
         text = path.read_text("utf-8")
     except OSError:
         return False
     fixes = [x for x in text.splitlines() if x.lstrip().startswith(("- ", "* "))]
-    return bool(fixes) and all(HIS_SOURCE.search(x) and ('"' in x or "\u201c" in x) for x in fixes)
+    if not fixes or not all(quotes(x) for x in fixes):
+        return False
+    if program is None or settings is None:
+        return False
+    desk = desk_answers(program)
+    wanted = {pair for x in fixes for pair in quotes(x)}
+    if not wanted <= desk:
+        return False
+    return all(his_words_holds(q, src, settings, project) for q, src in sorted(wanted))
 
 
 class Stop(Exception):
     def __init__(self, code: int):
         super().__init__(code)
         self.code = code
+
+
+class Held(Exception):
+    """HOLD is on: what was about to start did not (D-L25). The tick ends there; nothing was started."""
 
 
 def project_values(profile: dict) -> dict[str, str]:
@@ -146,6 +201,20 @@ class Conveyor:
     def wait(self, text: str, see: str = "") -> None:
         add_wait(self.program, text, see)
 
+    def held(self) -> bool:
+        return self.program.hold.exists()
+
+    def hold_gate(self, what: str) -> None:
+        """Right before anything starts: under HOLD it does not (D-L25)."""
+        if self.held():
+            raise Held(what)
+
+    def busy(self) -> bool:
+        """Something this conveyor started runs, or ended and is not read yet: its result is read even under
+        HOLD."""
+        return bool(self.worker or self.side or self.scripts or any(b.busy() for b in self.builds.values())
+                    or (self.checkpoint is not None and self.checkpoint.busy()))
+
     def finished(self, activity: str) -> None:
         """One activity finished: count it, and honour SHIP_CHAIN_STOP_AFTER (tests kill the conveyor here)."""
         self.done_count[activity] += 1
@@ -192,6 +261,7 @@ class Conveyor:
         self.scripts.clear()
 
     def child(self, name: str, argv: list[str]) -> Script:
+        self.hold_gate(f"the script {name}")
         logs = self.program.checks_root / "_chain"
         logs.mkdir(parents=True, exist_ok=True)
         stamp = clock.now().strftime("%Y%m%dT%H%M%S") + f"-{time.monotonic_ns() % 10**6:06d}"
@@ -223,7 +293,7 @@ class Conveyor:
     # -- workers --
 
     def no_workers_now(self) -> bool:
-        if self.program.hold.exists():
+        if self.held():
             return True
         if self.program.state.exists():
             usage = st.load(self.program).usage_reset_at
@@ -236,7 +306,10 @@ class Conveyor:
                      env: dict | None = None, side: bool = False) -> bool:
         """Start one conveyor worker (plan review, planner fix, grounding, later handoff, audit stages). A `side`
         worker (an audit reader) runs beside others and is collected with `side_result`."""
-        if (self.worker and not side) or self.no_workers_now():
+        if self.worker and not side:
+            return False
+        self.hold_gate(f"the {role} worker {name}")
+        if self.no_workers_now():
             return False
         path = prompt_dir(self.settings) / prompt_file
         try:
@@ -302,6 +375,8 @@ class Conveyor:
             self.buf += self._tick()
         except Stop as stop:
             self.exit = stop.code
+        except Held as held:
+            self.buf.append(f"HOLD: {held} did not start")
         lines = self.buf
         self.save()
         if self.lock:
@@ -318,6 +393,8 @@ class Conveyor:
                                     lambda: power_watch.probe_network(self.program, self.settings))
             if line != "MAINS":
                 lines.append(f"POWER {line}")
+        if self.held() and not self.busy():  # D-L25: the one guard before any activity
+            return lines + ["HOLD: nothing new starts and nothing runs"]
         p = phase.read(self.program, self.settings)
         nxt, why = p["next"], p.get("why", "")
         if nxt != self.last_next:
@@ -449,7 +526,8 @@ class Conveyor:
     def planner_fix(self, p: dict) -> list[str]:
         folder = self.program.dir / "plan-review"
         if "planner_fix_his" not in self.memo:  # decided once per round, before the worker empties FIXES.md
-            self.memo["planner_fix_his"] = his_fixes(folder / "FIXES.md")
+            self.memo["planner_fix_his"] = his_fixes(folder / "FIXES.md", self.program, self.settings,
+                                                     str(self.project().get("name") or "qmx"))
         his = self.memo["planner_fix_his"]
         if not his and (folder / "FIXES.applied.md").exists() and self.memo.get("planner_fix_done"):
             self.memo.pop("planner_fix_his", None)
@@ -493,6 +571,7 @@ class Conveyor:
     def go(self, p: dict) -> list[str]:
         if "conveyor writes go" not in p.get("why", ""):
             raise Stop(10)
+        self.hold_gate("go")
         index = prog.load(self.program)
         last = index.last_gate_before_go()
         source = str((index.gate(last) or {}).get("source") or f"gates.{last}")
@@ -530,11 +609,13 @@ class Conveyor:
         remote = str(proj.get("remote") or self.settings.remote)
         lines: list[str] = []
         if not folder.state.exists():
+            self.hold_gate(f"arming {folder.dir.name}")
             if not index.build_branch or not repo.is_dir():
                 self.wait(f"{folder.dir.name} cannot be armed: build_branch {index.build_branch!r}, repo {repo}")
                 raise Stop(10)
             try:
                 if not remote_sha(repo, remote, index.build_branch, self.settings.git_timeout_s):
+                    self.hold_gate(f"the push of {index.build_branch}")
                     git(repo, "push", "-q", remote, f"{index.parent_tip}:refs/heads/{index.build_branch}",
                         timeout=self.settings.git_timeout_s)
                     lines.append(f"BRANCH {index.build_branch} made at {str(index.parent_tip)[:10]}")
@@ -572,12 +653,12 @@ class Conveyor:
             got = self.worker_result(f"grounding-{folder.dir.name}")
             if got is None:
                 if not self.worker:
-                    started = (prompt_dir(self.settings) / "GROUNDING.md").exists() and self.start_worker(
-                        f"grounding-{folder.dir.name}", "grounding", "GROUNDING.md",
-                        self.values(SLICES=", ".join(failing), TIP=tips[-1],
-                                    FACTS=str(folder.checks_root / "_facts")), folder.dir)
-                    if not started and not self.worker:
+                    if not (prompt_dir(self.settings) / "GROUNDING.md").exists():
                         book["grounded"] = True  # no grounding prompt: dispatch parks what still fails
+                    else:
+                        self.start_worker(f"grounding-{folder.dir.name}", "grounding", "GROUNDING.md",
+                                          self.values(SLICES=", ".join(failing), TIP=tips[-1],
+                                                      FACTS=str(folder.checks_root / "_facts")), folder.dir)
                 return lines + [f"FACTS fail for {failing}"]
             book["grounded"] = True
         self.memo.setdefault("armed", {})[key] = True
@@ -643,9 +724,7 @@ class Conveyor:
                 self.checkpoint.stop_children()
             self.checkpoint = Checkpoint(self.program, stop, self.settings, rnd)
             self.cp_key = (stop, rnd)
-        if self.program.hold.exists():
-            return lines + ["HOLD: the review starts nothing new"]
-        lines += self.checkpoint.tick()
+        lines += self.checkpoint.tick()  # under HOLD it reads what runs and starts nothing (review.Checkpoint)
         code = self.checkpoint.result()
         if code is None:
             return lines
@@ -674,8 +753,6 @@ class Conveyor:
     def merge(self, p: dict) -> list[str]:
         stop = p["stop"]
         lines = self.prebuild()
-        if self.program.hold.exists():
-            return lines + ["HOLD: no merge now"]
         got = self.ended(f"merge-{stop}")
         if got is None:
             if not self.running(f"merge-{stop}"):
@@ -696,6 +773,7 @@ class Conveyor:
 
     def docs(self, p: dict) -> list[str]:
         stop = p["stop"]
+        self.hold_gate(f"the docs step of stop {stop}")
         record = self.program.dir / "docs" / f"{stop}.json"
         try:
             from ship import docs as docs_step  # U36
@@ -848,6 +926,7 @@ class Conveyor:
         repo = Path(str(proj.get("repo") or ""))
         path = Path(str(proj.get("worktree_root") or repo.parent)) / f"audit-{self.program.dir.name}"
         if self.audit_copy is None:
+            self.hold_gate("the audit checkout")
             packages = tuple(p for p in self.audit_packages(tip) if p.setup)
             setup = Setup(packages, self.program.runs, self.program.dir / "probe" / "setup")
             checkout_copy(repo, path, tip, self.settings, setup)
@@ -895,20 +974,25 @@ class Conveyor:
                     self.settings.nightly_timeout_s:
                 kill_tree(script.proc.pid)
                 self.scripts.remove(script)
-                probes[package.root] = "timeout"
-                return lines + [f"PROBE {package.root} killed after {self.settings.nightly_timeout_s}s; the readers "
-                                "go without it"]
+                self.wait(f"the audit probe of {package.root} ran past {self.settings.nightly_timeout_s}s and was "
+                          "stopped; the readers cannot go without it", str(script.log))
+                raise Stop(10)
             got = self.ended(name)
             if got is None:
                 if not self.running(name):
                     if not Path(self.probe_argv(copy, package)[1]).exists():
-                        probes[package.root] = "no probe_tests.py"
-                        continue
+                        self.wait(f"the audit cannot probe {package.root}: {self.probe_argv(copy, package)[1]} is not "
+                                  "there")
+                        raise Stop(10)
                     self.child(name, self.probe_argv(copy, package))
                     lines.append(f"PROBE {package.root} started")
                 return lines
+            if got[0] != 0:  # D-L25: a probe that does not exit 0 is WAITS, never a reader without it
+                self.wait(f"the audit probe of {package.root} exited {got[0]}: " + "; ".join(got[1][-3:]),
+                          str(self.program.dir / "probe"))
+                raise Stop(10)
             probes[package.root] = got[0]
-            lines.append(f"PROBE {package.root} exit {got[0]}" + ("" if got[0] == 0 else f": {'; '.join(got[1][-2:])}"))
+            lines.append(f"PROBE {package.root} exit 0")
         readers = book.setdefault("readers", {})
         waiting = False
         for part, folder in parts:
@@ -920,9 +1004,13 @@ class Conveyor:
                 if got is None:
                     waiting = True
                     continue
-                if got.kind == "limit":
+                if got.kind == "limit":  # D-L25: a usage limit is a restart, never one of its runs
+                    rec["attempts"] = max(0, rec["attempts"] - 1)
                     waiting = True
                     continue
+                if got.kind == "ok" and got.contract == "WAITS" and not _ends_done(notes):
+                    self.wait(f"the audit reader of part {part} needs you", got.value or str(notes))
+                    raise Stop(10)
             if rec.get("done") or _ends_done(notes):
                 rec["done"] = True
                 continue
@@ -1018,6 +1106,7 @@ class Conveyor:
     def finish(self, p: dict) -> list[str]:
         if p.get("status") == "abandoned":
             raise Stop(0)
+        self.hold_gate("the finish (report, teardown, claims)")
         from ship.armed import teardown
         from ship.run_report import write_report
 

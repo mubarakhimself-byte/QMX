@@ -92,7 +92,8 @@ class Land(LandCase):
         self.assertFalse(any(p.name.startswith("baseline") for p in self.program.dir.iterdir()),
                          "the kit keeps no list of its own")
 
-    def test_a_flaky_listed_test_does_not_block(self):
+    def test_a_red_that_stays_red_blocks_though_flaky_txt_lists_it(self):
+        """D-L25, as qmx-ci: flaky.txt excuses only a red that passed on its one rerun (test_k4a.FlakyInChecks)."""
         system = this_system()
         sh(self.repo, "git", "checkout", "-q", "-B", "b", f"origin/{self.build_branch}")
         write(self.repo / "ci" / "baselines" / "flaky.txt", f"# flaky\n{system}|.|pkg.tests.test_mul::test_mul\n")
@@ -100,7 +101,8 @@ class Land(LandCase):
         sh(self.repo, "git", "push", "-q", "origin", f"HEAD:refs/heads/{self.build_branch}")
         self.checked("s1", {"pkg/mul.py": MUL, "pkg/tests/test_mul.py": "def test_mul():\n    assert 1 == 2\n"})
         ok, lines = land(self.program, ["s1"], self.settings)
-        self.assertTrue(ok, lines)
+        self.assertFalse(ok)
+        self.assertIn("new reds ['.::pkg.tests.test_mul::test_mul']", lines[-1])
 
     def test_overlap_with_slice_landed_since_needs_range_review_when_verdicts_are_required(self):
         self.verdicts_required()

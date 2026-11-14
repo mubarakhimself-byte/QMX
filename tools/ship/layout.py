@@ -156,6 +156,17 @@ class Program:
         return self.kit_dir / stop / "MERGE-BASE"
 
     @property
+    def desk_dir(self) -> Path:
+        """`.desk/`: what the front desk writes from his own words; the hook refuses every worker role there (D-L25)."""
+        return self.dir / ".desk"
+
+    @property
+    def desk_answers(self) -> Path:
+        """His answers, one `- "<his words>" (<id8>:L<line>)` line each: the only source of a planner-fix round
+        started by him (chain.his_fixes)."""
+        return self.desk_dir / "answers.md"
+
+    @property
     def gates_log(self) -> Path:
         """One JSON line per `ship gate`; PROGRAM.yaml's gates must equal the log's last word on each."""
         return self.kit_dir / "gates.log"

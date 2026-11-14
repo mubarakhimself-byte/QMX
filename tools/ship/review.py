@@ -19,7 +19,8 @@ or 10 (waits on him). `review(...)` drives it on its own under `chain.lock` (`sh
    `arch`: one `batch`), `chain`, `faults` (role `fault-reader`, only with a "Fixed lines touched"
    section in GROUND.md), `operations` (only with `## Operations` in arch/ARCH.md); round 2: `round-2`.
    A notes file ending `DONE` is finished. No DONE or a time-out restarts the reader once; a second
-   failure writes `NOT READ <why>` and `DONE`. A usage limit is a wait, never a failure.
+   failure writes `NOT READ <why>` and `DONE`. A usage limit is a wait, never a failure. A reader that
+   replies `WAITS` is honoured (D-L25): WAITS, 10, never restarted.
 6. When every reader is done and the deep run has its summary, one `verdict` worker.
 7. The verdict file (REVIEW.md, round 2 REVIEW-2.md) is read with `phase.verdict`. A verdict whose END
    sha is not the tip, or a CLEAN while a `NOT READ` note, a trace FAIL or a red deep run stands, is
@@ -219,11 +220,21 @@ class Checkpoint:
 
     # -- one tick --
 
+    def held(self) -> bool:
+        """HOLD (whoever wrote it): what runs is still read, nothing new starts (D-L25)."""
+        return self.program.hold.exists()
+
+    def busy(self) -> bool:
+        """A worker or child it started, running or ended and not read yet."""
+        return bool(self.handles or self.scripts)
+
     def tick(self) -> list[str]:
         if self.code is not None:
             return []
         lines: list[str] = []
         if "tip" not in self.memo:
+            if self.held():
+                return ["HOLD: the review of stop " + self.stop + " does not start"]
             lines += self.begin()
             if self.code is not None:
                 return lines
@@ -288,7 +299,9 @@ class Checkpoint:
 
     # -- the deep run --
 
-    def start_child(self, name: str, *args: str) -> Script:
+    def start_child(self, name: str, *args: str) -> Script | None:
+        if self.held():
+            return None
         logs = self.program.checks_root / "_review"
         logs.mkdir(parents=True, exist_ok=True)
         stamp = clock.now().strftime("%Y%m%dT%H%M%S") + f"-{time.monotonic_ns() % 10**6:06d}"
@@ -338,6 +351,8 @@ class Checkpoint:
                         return self.end(10, lines, "deep run keeps crashing")
         if self.scripts:
             return lines
+        if self.held():
+            return lines + ["HOLD: the deep run starts nothing new"]
         if "backend" not in deep:
             if self.settings.ci == "github":
                 self.start_child("ci start", "--level", "deep")
@@ -375,7 +390,7 @@ class Checkpoint:
     def deep_overdue(self) -> list[str]:
         deep = self.memo["deep"]
         since = deep.get("started_at")
-        if not since:
+        if not since or self.held():
             return []
         waited = (clock.now() - dt.datetime.fromisoformat(since)).total_seconds()
         if waited < self.settings.ci_wait_timeout_s:
@@ -450,6 +465,9 @@ class Checkpoint:
                 if notes_done(notes):
                     rec["done"] = True
                     continue
+                if got.kind == "ok" and got.contract == "WAITS":  # D-L25: honoured, never restarted
+                    self.wait(f"the {reader.name} reader of stop {self.stop} needs you", got.value or str(notes))
+                    return self.end(10, lines, f"the {reader.name} reader waits")
                 if got.kind == "limit":
                     self.memo["limit_until"] = got.limit_reset
                     lines.append(f"LIMIT reader {reader.name}: waits until {got.limit_reset}")
@@ -482,6 +500,8 @@ class Checkpoint:
         return setup_for(self.program, files, self.dir / "runs" / f"setup-{name}")
 
     def start_reader(self, reader: Reader, rec: dict) -> list[str]:
+        if self.held():
+            return [f"HOLD: the {reader.name} reader does not start"]
         state = st.load(self.program)
         rules, review_rules = project_files(self.program, self.settings)
         copy = checkout_copy(Path(state.repo), self.copy_path(reader.name), self.memo["tip"], self.settings,
@@ -551,6 +571,8 @@ class Checkpoint:
         return lines + self.start_verdict(rec)
 
     def start_verdict(self, rec: dict) -> list[str]:
+        if self.held():
+            return ["HOLD: the verdict worker does not start"]
         state = st.load(self.program)
         rules, review_rules = project_files(self.program, self.settings)
         tip = self.memo["tip"]

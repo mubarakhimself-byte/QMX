@@ -1,4 +1,3 @@
-# A copy of qmx-ci's tools/ci/ratchet.py (origin/ci/c2), planted in the fixture repo by the quality tests.
 """Findings against a committed baseline: only findings the baseline does not hold block.
 
 A finding's key leaves out its line number, so moving code does not make an old finding new. Keys

@@ -7,8 +7,11 @@ job of the run (lint, Vulture, Skylos, mutmut) must be green too, and a deep run
 deep-verdict naming the tip, or the pull-request gate will not pass. When GitHub cannot run it (gh
 missing, no network, the workflow not on the branch), the local run below stands in.
 
-The reds that do not block are the repo's own `ci/baselines/known-reds.txt` and `flaky.txt` at the tip
-(suite.baseline_for); the kit never writes them. A red not in them starts a bisect from the last green
+The reds that do not block are those qmx-ci lets through (suite.Baseline.judge): each package's reds run
+once more; a red named in the repo's own `ci/baselines/known-reds.txt`, and a flaky red (it passed on the
+rerun, in a module untouched since the merge-base with the target branch) named in `flaky.txt`, both read at
+the tip; the kit never writes them. A GitHub run's flaky reds are those its `flaky-*.txt` lists. A red
+that stays red and blocks starts a bisect from the last green
 tip (or the first landed slice's parent) to the tip, running only the test modules that went red. A GitHub run's
 new reds are bisected here only when they are red on this machine's system. The first bad commit is
 mapped to its slice; that slice's pending dependents become blocked-by it, and the result goes to
@@ -103,7 +106,7 @@ def local_nightly(program: Program, settings: Settings) -> tuple[bool, list[str]
         baseline = baseline_for(repo, tip, t)
         broken = sorted(root for root, r in runs.items() if not r.junit_ok)
         ok = conclude(program, state, tip, runs, baseline, broken, [], {"backend": "local"}, lines,
-                      lambda: copy, settings)
+                      lambda: copy, settings, touched_since_target(program, repo, state.remote, tip, settings))
         return ok, _write(out, lines)
     finally:
         drop_copy(repo, copy, settings)
@@ -131,13 +134,14 @@ def ci_status(program: Program, settings: Settings) -> tuple[int, list[str]]:
         return 2, [f"PENDING ci {level} {run_id}: GitHub unreachable ({ci.short(exc)}); the run goes on there"]
     baseline = baseline_for(repo, tip, t)
     if ci.outcome(read.run) == "pending":
-        return 2, ci.progress(read, baseline.new, f"ci {level} {run_id} on {tip[:8]}")
+        return 2, ci.progress(read, baseline, f"ci {level} {run_id} on {tip[:8]}")
     lines: list[str] = [f"CI {level} {run_id} {read.run.get('conclusion')}: {read.run.get('url')}"]
     extra = [f"FAIL ci-job {j['name']} {j.get('conclusion')} {j.get('url', '')}".rstrip() for j in read.failed_jobs]
     if level == "deep" and not (read.verdict and read.verdict.get("sha") == tip and read.verdict.get("level") == "deep"):
         extra.append(f"FAIL deep-verdict none names {tip[:8]}, so the pull-request gate will not pass")
     broken = sorted(k for k, r in read.tests.items() if not r.junit_ok)
-    if read.run.get("conclusion") != "success" and not extra and not broken and not baseline.new(_reds(read.tests)):
+    if read.run.get("conclusion") != "success" and not extra and not broken \
+            and not baseline.judge(read.tests.values()).blocking:
         extra.append(f"FAIL ci-run {read.run.get('conclusion')} with no red test and no failed job named")
     with st.locked(program) as fresh:
         extra += _recheck_pending_slices(fresh, settings, lines)
@@ -149,7 +153,7 @@ def ci_status(program: Program, settings: Settings) -> tuple[int, list[str]]:
     if found.path is not None:
         import json
 
-        already = {canon(r) for r in baseline.new(_reds(read.tests))}
+        already = {canon(r) for r in baseline.judge(read.tests.values()).blocking}
         extra += ci.summary_fails(json.loads(found.path.read_text("utf-8")), already)
     verdict = {"backend": "github", "run_id": run_id, "url": read.run.get("url")}
     copy_dir = program.tmp / "nightly"
@@ -184,11 +188,28 @@ def _reds(runs: dict[str, TestRun]) -> set[str]:
     return set().union(*(r.red() for r in runs.values())) if runs else set()
 
 
+def touched_since_target(program: Program, repo: Path, remote: str, tip: str, settings: Settings) -> list[str] | None:
+    """The files changed since the merge-base with the target branch, as qmx-ci's deep level measures a flaky
+    red's module (`flaky_scope`); None when git cannot say (then every module counts as touched)."""
+    from ship.gitx import changed_files
+    from ship.project_profile import target_branch
+
+    t = settings.git_timeout_s
+    try:
+        base = git(repo, "merge-base", tip, f"refs/remotes/{remote}/{target_branch(program.dir, settings)}",
+                   timeout=t).strip()
+        return changed_files(repo, base, tip, t) if base else None
+    except GitError:
+        return None
+
+
 def conclude(program: Program, state: st.State, tip: str, runs: dict[str, TestRun], baseline: Baseline,
              broken: list[str], extra: list[str], verdict: dict, lines: list[str], copy_at_tip,
-             settings: Settings) -> bool:
-    """The one verdict for a local or a GitHub run: green only with no new red, every shard or package
-    reported, and no extra FAIL line. A new red on this machine's system is bisected locally."""
+             settings: Settings, touched: list[str] | None = ()) -> bool:
+    """The one verdict for a local or a GitHub run: green only with nothing qmx-ci blocks (a red not in
+    known-reds.txt, a flaky red not in flaky.txt), every shard or package reported, and no extra FAIL line.
+    A blocking red on this machine's system that stayed red is bisected locally; a newly flaky one is
+    reported, never bisected (it passes on its own)."""
     reds = _reds(runs)
     if broken:
         lines.append(f"FAIL nightly {tip[:8]} no JUnit report from {broken}")
@@ -196,9 +217,13 @@ def conclude(program: Program, state: st.State, tip: str, runs: dict[str, TestRu
     passed = set().union(*(set(r.outcomes) - r.red() for r in runs.values())) if runs else set()
     lines.extend(f"NOTE known red passes now: {r} (shrink {baseline.source.split(' at ')[0]})"
                  for r in baseline.passing(passed))
-    new = baseline.new(reds)
-    verdict = {"tip": tip, "new_reds": new, **verdict}
-    if not new and not broken and not extra:
+    judged = baseline.judge(runs.values(), touched)
+    new_flaky = [f for f in judged.blocking if f in judged.flaky]
+    new = [r for r in judged.blocking if r not in judged.flaky]
+    lines.extend(f"FAIL nightly {tip[:8]} new flaky test {f}: red, then green on its rerun; flaky.txt does not "
+                 "name it" for f in new_flaky)
+    verdict = {"tip": tip, "new_reds": judged.blocking, **verdict}
+    if not judged.blocking and not broken and not extra:
         lines.append(f"PASS nightly {tip[:8]} {len(reds)} baseline reds, no new red")
         with st.locked(program) as fresh:
             fresh.last_green = tip

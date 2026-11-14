@@ -9,7 +9,9 @@
 5. `status`: a `STALE` slice with a live builder has only that builder's process tree stopped, its seat
    recovered and restarted. `BREAKER` writes WAITS and stops (exit 1).
 6. Fill free seats: dead slices, slices due a fix round, the "could start" list taken lane by lane, then
-   `PREBUILD`. One `land` at a time.
+   `PREBUILD`. One `land` at a time. A worktree whose `setup` failed or timed out (D-L25) gets no worker: its
+   seat is released (the slice is recovered as dead, never a death), it is tried again next tick, and its
+   `max_restarts`-th failed setup parks it `manual` with a WAITS line.
 7. When the open checkpoint is built and `notes/stop-<X>.json` is missing, write it.
 
 A builder's prompt gets `PROMPT_KEYS`: the slice's own values, `RULES` (the project's PROJECT-RULES.md) and
@@ -184,6 +186,7 @@ class Memo:
     fix: dict[str, dict] = dataclasses.field(default_factory=dict)  # slice -> {"reason", "paths"}: due a fix round
     singles: list[str] = dataclasses.field(default_factory=list)  # a red batch landed one slice at a time
     fixing: dict[str, dict] = dataclasses.field(default_factory=dict)  # slice -> the running fix round's reason, paths
+    setup_fails: dict[str, int] = dataclasses.field(default_factory=dict)  # slice -> setups failed in a row
     lands: int = 0  # land runs started, for SHIP_RUN_STOP_AFTER
 
     @classmethod
@@ -632,6 +635,8 @@ class Build:
 
     def start_scripts(self) -> list[str]:
         lines = []
+        if self.program.hold.exists():  # read again: a HOLD written during this tick starts nothing (D-L25)
+            return ["HOLD: no verify_ready, slice_checks or land starts"]
         state = st.load(self.program)
         for sid, sha in list(self.memo.verify.items()):
             if not self._script_for(sid) and sid not in self.workers:
@@ -705,9 +710,40 @@ class Build:
                     self.wait_line(f"{sid} parked: {got.reason}")
                 continue
             self.memo.fix.pop(sid, None)
-            lines += [f"SETUP {sid} {x}" for x in got.setup if x.startswith("FAIL ")]
+            failed = [x for x in got.setup if x.startswith("FAIL ")]
+            if failed:  # D-L25: no worker starts in a worktree whose setup failed
+                slot.release()
+                lines += [f"SETUP {sid} {x}" for x in failed] + self.setup_failed(got, fix, failed)
+                continue
+            self.memo.setup_fails.pop(sid, None)
             lines.append(self.start_worker(got, fix, slot))
         return lines
+
+    def setup_failed(self, got, fix: dict | None, failed: list[str]) -> list[str]:
+        """The seat goes back (recovered as dead: a restart, never a death); the next tick tries again; the
+        `max_restarts`-th failed setup in a row parks the slice for him."""
+        from ship.recover import recover
+
+        sid = got.slice
+        if got.kind == "fix":  # the fix round it was given carries over to the retry
+            self.memo.fixing[sid] = {"reason": (fix or {}).get("reason") or st.load(self.program).slices[sid].reason,
+                                     "paths": list((fix or {}).get("paths") or [])}
+        n = self.memo.setup_fails.get(sid, 0) + 1
+        self.memo.setup_fails[sid] = n
+        try:
+            lines = recover(self.program, self.settings, only=sid)
+        except GitError as exc:
+            lines = [f"RECOVER {sid} unreachable: {exc}; again next tick"]
+        if n < self.settings.max_restarts:
+            return lines + [f"SETUP-FAILED {sid}: no worker started; tried again next tick ({n} of "
+                            f"{self.settings.max_restarts})"]
+        with st.locked(self.program) as state:
+            if state.slices[sid].status in (Status.HELD, Status.DEAD):
+                state.park(sid, ParkCause.MANUAL, f"its worktree setup failed {n} times")
+        self.memo.setup_fails.pop(sid, None)
+        self.wait_line(f"{sid} parked: its worktree setup failed {n} times; see "
+                       f"{self.program.checks_root / '_setup' / sid}", "\n".join(failed))
+        return lines + [f"PARK {sid}: its worktree setup failed {n} times"]
 
     def seat_order(self, state: st.State) -> list[str]:
         """Dead slices, slices due a fix round, then pending slices lane by lane, then pre-builds."""

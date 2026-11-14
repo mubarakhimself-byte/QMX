@@ -8,7 +8,12 @@ Whose HOLD it is lives in its first word: the watcher writes `power: ...` or `ne
 manual hold, `ship hold --why ...`, written `him: ...`, or the front desk's own) is not the watcher's. The
 watcher never writes over, nor removes, a HOLD that is not its own: on battery it leaves a manual hold in place,
 and a manual hold written over the watcher's makes the watcher forget its own. `ship release` removes only a
-manual hold; the watcher's clears itself."""
+manual hold; the watcher's clears itself.
+
+Its probes take time, and he may type `ship hold` meanwhile (D-L25). So HOLD is read again right before every
+write or removal, and the watcher acts only when the file is absent (it creates it exclusively) or holds exactly
+the text the watcher wrote (kept in `power.json`); a removal moves the file aside first and puts back anything
+that is not the watcher's own. Otherwise it leaves the HOLD as it is and forgets its own."""
 
 from __future__ import annotations
 
@@ -88,11 +93,63 @@ def hold_text(program: Program) -> str | None:
         return None
 
 
+def write_own(program: Program, text: str, own: str | None) -> bool:
+    """Write the watcher's HOLD `text`, only where HOLD is absent (created exclusively) or still exactly the
+    watcher's own `own`. False: someone else's HOLD is there, left as it is."""
+    current = hold_text(program)
+    if current is None:
+        try:
+            with open(program.hold, "x", encoding="utf-8", newline="\n") as out:
+                out.write(text)
+            return True
+        except FileExistsError:
+            return False  # written between the read and the create: not ours
+    if own is None or current != own:
+        return False
+    tmp = program.hold.with_name("HOLD.power.tmp")
+    tmp.write_text(text, "utf-8", newline="\n")
+    if hold_text(program) != own:  # read again right before the replace
+        tmp.unlink(missing_ok=True)
+        return False
+    st.replace(tmp, program.hold)
+    return True
+
+
+def clear_own(program: Program, own: str | None) -> bool:
+    """Remove HOLD only while it holds exactly the watcher's own text. It is moved aside, read, and put back
+    when what moved is not the watcher's (written in the instant between the read and the move). True when no
+    HOLD of anyone is left by this call."""
+    current = hold_text(program)
+    if current is None:
+        return True
+    if own is None or current != own:
+        return False
+    aside = program.hold.with_name("HOLD.power-clearing")
+    try:
+        os.replace(program.hold, aside)
+    except FileNotFoundError:
+        return True
+    moved = aside.read_text("utf-8")
+    if moved == own:
+        aside.unlink(missing_ok=True)
+        return True
+    try:
+        os.link(aside, program.hold)  # put his back, unless an even newer HOLD is already there
+    except FileExistsError:
+        pass
+    aside.unlink(missing_ok=True)
+    return False
+
+
 def step(program: Program, settings: Settings, mains: bool, now: float, probe: Callable[[], list[str]]) -> str:
     memo = json.loads(program.power.read_text("utf-8")) if program.power.exists() else {}
     text = hold_text(program)
-    if memo.get("hold") and not (text is not None and watchers(text)):
+    own = memo.get("text") if memo.get("hold") else None
+    if memo.get("hold") and own is None and text is not None and watchers(text):
+        own = text  # a power.json from before the watcher kept its own text
+    if memo.get("hold") and (text is None or text != own):
         memo = {"hold": False}  # its HOLD was released or written over by someone else: it is not the watcher's now
+        own = None
     ours = bool(memo.get("hold"))
     if not mains and not ours and text is not None:
         memo["mains_since"] = None
@@ -103,31 +160,39 @@ def step(program: Program, settings: Settings, mains: bool, now: float, probe: C
         memo["mains_since"] = None
         if not ours:
             stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now))
-            program.hold.write_text(f"power: on battery since {stamp}\n", "utf-8")
-            memo.update(hold=True, cause="battery", battery_since=now)
-            _event(program, "hold", reason="battery")
-            line = "HOLD on battery"
+            mine = f"power: on battery since {stamp}\n"
+            if write_own(program, mine, None):
+                memo.update(hold=True, cause="battery", battery_since=now, text=mine)
+                _event(program, "hold", reason="battery")
+                line = "HOLD on battery"
+            else:
+                line = "HOLD kept: not the watcher's (written while it looked)"
         else:
             memo["cause"] = "battery"  # a network hold that meets a battery waits for the settle time too
             line = "BATTERY hold kept"
     elif not ours:
         failed = [] if program.hold.exists() else probe()  # a HOLD someone else wrote is left alone
         if failed:
-            program.hold.write_text("network: " + "; ".join(failed) + "\n", "utf-8")
-            memo.update(hold=True, cause="network")
-            _event(program, "hold", reason="network")
-            line = "HOLD network: " + "; ".join(failed)
+            mine = "network: " + "; ".join(failed) + "\n"
+            if write_own(program, mine, None):  # D-L25: never over a HOLD he wrote while the probe ran
+                memo.update(hold=True, cause="network", text=mine)
+                _event(program, "hold", reason="network")
+                line = "HOLD network: " + "; ".join(failed)
+            else:
+                line = "HOLD kept: not the watcher's (written while it probed)"
         else:
             line = "MAINS"
     elif memo.get("cause") == "network":
         failed = probe()
         if failed:
             line = "WAIT " + "; ".join(failed)
-        else:
-            program.hold.unlink(missing_ok=True)
+        elif clear_own(program, own):  # D-L25: read again; his HOLD written during the probe stays
             memo = {"hold": False}
             _event(program, "clear", reason="internet and GitHub back")
             line = "CLEAR hold removed; run recover before dispatching"
+        else:
+            memo = {"hold": False}
+            line = "HOLD kept: not the watcher's (written while it probed)"
     elif memo.get("mains_since") is None:
         memo["mains_since"] = now
         line = f"MAINS back, waiting {settings.power_settle_s}s before network checks"
@@ -137,11 +202,13 @@ def step(program: Program, settings: Settings, mains: bool, now: float, probe: C
         failed = probe()
         if failed:
             line = "WAIT " + "; ".join(failed)
-        else:
-            program.hold.unlink(missing_ok=True)
+        elif clear_own(program, own):
             memo = {"hold": False}
             _event(program, "clear", reason="mains, internet and GitHub back")
             line = "CLEAR hold removed; run recover before dispatching"
+        else:
+            memo = {"hold": False}
+            line = "HOLD kept: not the watcher's (written while it probed)"
     program.power.write_text(json.dumps(memo), "utf-8")
     return line
 

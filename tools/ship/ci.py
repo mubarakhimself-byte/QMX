@@ -231,9 +231,10 @@ def read_run(gh: Gh, run_id: str, out: Path) -> RunRead:
         key = name.replace(" ", "-")
         folder = out / f"ci-out-{key}"
         gh.download(run_id, f"ci-out-{key}", folder)
-        outcomes, ok = read_shard(folder, key.split("-")[1])
+        outcomes, ok, again = read_shard(folder, key.split("-")[1])
         rc = 0 if outcome(job) == "green" else 1
-        tests[key] = TestRun(RunResult(rc, job.get("conclusion") == "timed_out", _seconds(job), folder), ok, outcomes)
+        tests[key] = TestRun(RunResult(rc, job.get("conclusion") == "timed_out", _seconds(job), folder), ok, outcomes,
+                             again)
     verdict = None
     if outcome(got) != "pending" and gh.download(run_id, VERDICT_ARTIFACT, out / VERDICT_ARTIFACT):
         try:
@@ -243,9 +244,11 @@ def read_run(gh: Gh, run_id: str, out: Path) -> RunRead:
     return RunRead(got, tests, pending, failed, verdict)
 
 
-def read_shard(folder: Path, system: str) -> tuple[dict[str, Outcome], bool]:
+def read_shard(folder: Path, system: str) -> tuple[dict[str, Outcome], bool, dict[str, Outcome]]:
     """A test shard's artifact: outcomes from its JUnit files, reds from its reds-*.txt (the list
-    qmx-ci judged). A shard finished when it wrote a reds file, or its plan had nothing to run."""
+    qmx-ci judged), and its flaky-*.txt (red, then green on qmx-ci's rerun in an untouched module) as the
+    rerun outcomes `suite.Baseline.judge` reads. A shard finished when it wrote a reds file, or its plan had
+    nothing to run."""
     reds_files = sorted(folder.glob("reds-*.txt"))
     plans = [json.loads(p.read_text("utf-8")) for p in sorted(folder.glob("plan-*.json"))]
     units = {u.replace("/", "_"): u for plan in plans for u in plan.get("units", [])}
@@ -268,8 +271,15 @@ def read_shard(folder: Path, system: str) -> tuple[dict[str, Outcome], bool]:
         for line in path.read_text("utf-8").splitlines():
             if line.strip() and outcomes.get(line.strip()) not in RED_OUTCOMES:
                 outcomes[line.strip()] = Outcome.FAILED
+    again: dict[str, Outcome] = {}
+    for path in sorted(folder.glob("flaky-*.txt")):
+        for line in path.read_text("utf-8").splitlines():
+            if line.strip():
+                again[line.strip()] = Outcome.PASSED
+                if outcomes.get(line.strip()) not in RED_OUTCOMES:
+                    outcomes[line.strip()] = Outcome.FAILED
     finished = bool(reds_files) or bool(plans and all(not p.get("files") for p in plans))
-    return outcomes, finished
+    return outcomes, finished, again
 
 
 def _seconds(job: dict) -> float:
@@ -281,11 +291,11 @@ def _seconds(job: dict) -> float:
         return 0.0
 
 
-def progress(read: RunRead, baseline_new, label: str) -> list[str]:
-    """Lines for a run still going: what finished, what is red so far."""
+def progress(read: RunRead, baseline, label: str) -> list[str]:
+    """Lines for a run still going: what finished, what blocks so far (`suite.Baseline.judge`)."""
     got = read.run
     done = len(read.tests) + len(read.failed_jobs)
-    new = baseline_new(set().union(*(r.red() for r in read.tests.values())) if read.tests else set())
+    new = baseline.judge(read.tests.values()).blocking
     lines = [(f"PENDING {label} {got.get('status')}: {len(read.pending)} jobs still queued or running, "
               f"{done} finished jobs read; {got.get('url')}")]
     lines += [f"SO-FAR new red {r}" for r in new]
@@ -574,7 +584,7 @@ def report(program: Program, settings: Settings, run_id: str) -> tuple[int, list
     lines = [f"RUN {label}: {read.run.get('status')} {read.run.get('conclusion') or ''} {read.run.get('url')}"]
     for key, shard in sorted(read.tests.items()):
         reds = shard.red()
-        new = baseline.new(reds)
+        new = baseline.judge([shard]).blocking
         passed = sum(1 for o in shard.outcomes.values() if o == Outcome.PASSED)
         state_word = "finished" if shard.junit_ok else "no reds file (did not finish)"
         lines.append(f"SHARD {key} {state_word}: {passed} passed, {len(reds)} red, {len(new)} not in "

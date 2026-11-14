@@ -24,8 +24,14 @@
       "Bash(python *ship timed *)",
       "Bash(python *ship\" timed *)",
       "Bash(python -m ship timed *)",
-      "Bash(python */skills/*/scripts/*.py*)",
-      "Bash(python \"*/skills/*/scripts/*.py\"*)"
+      "Bash(python */skills/factory-core/scripts/chain_packet.py*)",
+      "Bash(python \"*/skills/factory-core/scripts/chain_packet.py\"*)",
+      "Bash(python */skills/factory-core/scripts/check_chain.py*)",
+      "Bash(python \"*/skills/factory-core/scripts/check_chain.py\"*)",
+      "Bash(python */skills/factory-core/scripts/check_plan.py*)",
+      "Bash(python \"*/skills/factory-core/scripts/check_plan.py\"*)",
+      "Bash(python */skills/audit-area/scripts/sweep_briefs.py*)",
+      "Bash(python \"*/skills/audit-area/scripts/sweep_briefs.py\"*)"
     ]
   },
   "env": {

@@ -20,6 +20,7 @@ class Settings:
     slice_branch_prefix: str = "slice/"
     git_timeout_s: int = 600  # one git call, fetch and push included
     fact_timeout_s: int = 120  # one brief fact
+    his_words_timeout_s: int = 120  # chain: one his_words.py run checking a quote of his against its transcript line
     check_timeout_s: int = 3600  # one lint, types or test command in slice_checks
     land_timeout_s: int = 7200  # the test run on a landing batch
     nightly_timeout_s: int = 10800  # the whole-suite run
