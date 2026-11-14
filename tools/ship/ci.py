@@ -14,7 +14,8 @@ Here:
 - `read_run` and `judge`: a finished run's test shards become the shape `suite.run_packages`
   returns, keyed by shard (`suite-linux-3`), outcomes keyed `system|unit|class::name`; then the same
   verdict nightly gives a local run, plus every other failed job and the deep-verdict check.
-- `slice_linux` and `linux_gate`: the Linux slice run as evidence for slice_checks and land.
+- `slice_linux` and `linux_gate`: the Linux slice run as evidence for slice_checks and land. For a `pin` or
+  `refactor` slice a run whose only red job is `fail-at-parent` passes with a NOTE (D-L27); every other job counts.
 - `land_runs`: the land run of each landing, as evidence for status and the checkpoint.
 - `gate`: the checkpoint PR's gate job; rerun once after the deep run is green.
 - `fetch_summary` and `summary` (`ship ci summary [--sha SHA]`): the deep run's `summary.json` (FACTORY-DESIGN
@@ -45,6 +46,11 @@ VERDICT_ARTIFACT = "deep-verdict"
 RUN_FIELDS = "databaseId,headSha,headBranch,status,conclusion,url,event,displayTitle,createdAt"
 RED_OUTCOMES = (Outcome.ASSERTION, Outcome.FAILED, Outcome.ERROR)
 RUN_URL = re.compile(r"/actions/runs/(\d+)")
+# D-L27: CI's slice-level fail-at-parent knows no slice kinds yet, so for these kinds the kit's own parent rule
+# (slice_checks.parent_rule) decides, and a red `fail-at-parent` job that is the run's only red job is a NOTE.
+FAIL_AT_PARENT_JOB = "fail-at-parent"
+FAIL_AT_PARENT_NOTE = "NOTE CI's fail-at-parent job is red"
+KIND_RULED = ("pin", "refactor")
 
 
 class Unavailable(Exception):
@@ -434,6 +440,15 @@ def slice_linux(state: st.State, settings: Settings, sl: st.Slice) -> tuple[str,
     url = got.get("url", "")
     verdict = {"green": "PASS", "red": "FAIL"}.get(outcome(got), "PENDING")
     said = " ".join(x for x in (got.get("status"), got.get("conclusion")) if x)
+    if verdict == "FAIL" and sl.kind in KIND_RULED:
+        try:
+            jobs = gh_for(state, settings).view(str(got.get("databaseId"))).get("jobs") or []
+        except GitError as exc:
+            return "PENDING", f"slice run {said} on {sha[:8]}; its jobs cannot be read ({short(exc)})", url
+        red = sorted({j.get("name", "") for j in jobs if j.get("conclusion") not in ("success", "skipped")})
+        if red == [FAIL_AT_PARENT_JOB]:
+            return "PASS", (f"slice run {said} on {sha[:8]}; {FAIL_AT_PARENT_NOTE}, not a block for a {sl.kind} "
+                            "slice: the kit's parent rule judges it (D-L27)"), url
     return verdict, f"slice run {said} on {sha[:8]}", url
 
 

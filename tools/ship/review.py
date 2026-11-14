@@ -17,7 +17,9 @@ or 10 (waits on him). `review(...)` drives it on its own under `chain.lock` (`sh
 5. Readers, one `launch()` each in a frozen checkout `<worktree_root>/stop-<program>-<X>-<name>`, notes
    at `stop-review/<X>/<name>.md`: `element-<A>` per architecture element with a slice in the stop (no
    `arch`: one `batch`), `chain`, `faults` (role `fault-reader`, only with a "Fixed lines touched"
-   section in GROUND.md), `operations` (only with `## Operations` in arch/ARCH.md); round 2: `round-2`.
+   section in GROUND.md), `operations` (only with `## Operations` in arch/ARCH.md), and by slice kind (U29):
+   `equivalence` (the stop's `pin` and `refactor` slices), `callers` (its `remove` slices) and `findings` (the
+   slices that claim an `F` id); round 2: `round-2`.
    A notes file ending `DONE` is finished. No DONE or a time-out restarts the reader once; a second
    failure writes `NOT READ <why>` and `DONE`. A usage limit is a wait, never a failure. A reader that
    replies `WAITS` is honoured (D-L25): WAITS, 10, never restarted.
@@ -62,7 +64,7 @@ from ship.proc import kill_tree, popen_group_kwargs
 from ship.proc import created as proc_created
 from ship.run import ChainLock, PromptError, Script, prompt_dir, render
 from ship.settings import Settings
-from ship.stop_trace import TraceError, stop_range, trace
+from ship.stop_trace import TraceError, claimed_findings, stop_range, trace
 from ship.worktree import checkout_copy, drop_copy
 
 READER_KEYS = ("PROGRAM", "STOP", "ROUND", "NAME", "WALK", "ELEMENT", "SLICES", "CHECKOUT", "REPO", "FROM", "TIP",
@@ -126,7 +128,7 @@ def checkpoint_key(state: st.State, stop: str) -> str:
 
 @dataclasses.dataclass
 class Reader:
-    name: str  # element-A1, batch, chain, faults, operations, round-2
+    name: str  # element-A1, batch, chain, faults, operations, equivalence, callers, findings, round-2
     walk: str
     role: str  # reader | fault-reader
     element: str = ""
@@ -424,7 +426,8 @@ class Checkpoint:
         if self.round == 2:
             return [Reader("round-2", "round-2", "reader")]
         state = st.load(self.program)
-        mine = {s.id for s in state.slices.values() if (s.checkpoint or self.stop) == self.stop}
+        stop_slices = [s for s in state.slices.values() if (s.checkpoint or self.stop) == self.stop]
+        mine = {s.id for s in stop_slices}
         try:
             index = prog.load(self.program) if self.program.project_file.exists() else prog.Index()
         except prog.ProgramError:
@@ -447,6 +450,16 @@ class Checkpoint:
         arch = self.program.dir / "arch" / "ARCH.md"
         if arch.exists() and OPERATIONS.search(arch.read_text("utf-8", errors="replace")):
             out.append(Reader("operations", "operations", "reader", "", tuple(sorted(mine))))
+        # U29: the walks by slice kind, whose inputs trace wrote into MAP.md
+        by_kind = {kind: tuple(sorted(s.id for s in stop_slices if s.kind in kinds))
+                   for kind, kinds in (("equivalence", ("pin", "refactor")), ("callers", ("remove",)))}
+        for walk, own in by_kind.items():
+            if own:
+                out.append(Reader(walk, walk, "reader", "", own))
+        claimed = claimed_findings(self.program, index, stop_slices)
+        if claimed:
+            out.append(Reader("findings", "findings", "reader", "",
+                              tuple(sorted({sid for sids in claimed.values() for sid in sids}))))
         return out
 
     def readers_tick(self) -> list[str]:

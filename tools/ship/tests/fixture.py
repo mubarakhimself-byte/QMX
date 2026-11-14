@@ -142,8 +142,9 @@ class RepoCase(unittest.TestCase):
     def tip(self) -> str:
         return sh(self.repo, "git", "ls-remote", "origin", f"refs/heads/{self.build_branch}").split()[0]
 
-    def make_ready(self, sid: str, files: dict[str, str]) -> str:
-        """Dispatch `sid`, write `files` in its worktree, push, write evidence, and verify ready."""
+    def make_ready(self, sid: str, files: dict[str, str | None]) -> str:
+        """Dispatch `sid`, write `files` in its worktree (None deletes the file), push, write evidence, and verify
+        ready."""
         from ship.dispatch import dispatch
         from ship.settings import load_settings
         from ship.verify_ready import verify_ready
@@ -152,7 +153,10 @@ class RepoCase(unittest.TestCase):
         got = dispatch(self.program, sid, settings)
         wt = Path(got.worktree)
         for path, text in files.items():
-            write(wt / path, text)
+            if text is None:
+                (wt / path).unlink()
+            else:
+                write(wt / path, text)
         sha = self.commit(f"{sid}: work", wt)
         sh(wt, "git", "push", "-q", "-u", "origin", got.branch)
         for name in settings.evidence_required:

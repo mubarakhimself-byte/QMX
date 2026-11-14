@@ -22,6 +22,7 @@ class Settings:
     fact_timeout_s: int = 120  # one brief fact
     his_words_timeout_s: int = 120  # chain: one his_words.py run checking a quote of his against its transcript line
     check_timeout_s: int = 3600  # one lint, types or test command in slice_checks
+    probe_test_timeout_s: int = 120  # U29: one test under the probe (probe.py); a hang loses that row only
     land_timeout_s: int = 7200  # the test run on a landing batch
     nightly_timeout_s: int = 10800  # the whole-suite run
     bisect_step_timeout_s: int = 1800  # one bisect step

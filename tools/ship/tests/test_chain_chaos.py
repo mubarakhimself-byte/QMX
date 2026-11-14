@@ -38,8 +38,8 @@ Coverage (row: test, or drill, or "not testable here: why"). `chaos` = here; `ki
 | 21 | a plan's area is not fit to build on | chaos `Handoffs.test_x2_scoped_audit_stops_after_judgement` (F3); factory fixture: not testable here (no `audit-first` fixture in the factory yet) |
 | 22 | a hand-off row is lost or bounces | `Handoffs.test_handoff_row_bounce`: not testable here, U33 (`ship backlog`) is not built; it runs once `ship.backlog` exists |
 | 23 | an audit and a plan on one area | chaos `Handoffs.test_notice_overlap_is_reported` (F4) |
-| 24 | a removal breaks a lookup by name | not testable here: U29 (`remove` kind) and U27 (`callers.py` fixture) are not in the kit; the factory's `g13`, `g21`, `g33`, `g36` fixtures check the callers fact |
-| 25 | a refactor changes behaviour | not testable here: U29 (`pin`/`refactor` kinds) is not in the kit |
+| 24 | a removal breaks a lookup by name | kit `test_u29.Remove.test_remove_with_live_caller` (U29: `slice_checks` red on the CALLERS fact): `Named.test_row_24`; `callers.py` exiting 1 on the manifest is the factory's U27 fixtures `g13`, `g21`, `g33`, `g36` |
+| 25 | a refactor changes behaviour | kit `test_u29.Refactor.test_refactor_breaks_pin` (U29: the pin fails at the head): `Named.test_row_25` |
 | 26 | a one-way door nobody approved | fixture `g04` (factory, U28): `FactoryFixtures.test_row_26_unapproved_one_way_door` |
 | 27 | a brief is wrong about the code | chaos `Briefs.test_wrong_brief_parks_and_chain_issue_routes` |
 | 28 | the target moved since planning | chaos `Target.test_target_moved_before_arm` |
@@ -122,7 +122,7 @@ Hand-offs between the branches (13.4).
 | X2 planning asks for an audit first | chaos `Handoffs.test_x2_scoped_audit_stops_after_judgement` (F3) |
 | X3 away at the intent check | chaos row 51 `Audit.test_away_at_intent_check` (F2) |
 | X4 an audit sweep and a feature side by side | kit `test_claims.Build.test_disjoint_programs_build_and_land_side_by_side` and `Merges`: `Named.test_x4` |
-| X5 a removal meets a new caller | not testable here: U29 (`remove` kind and its callers fact at dispatch) is not in the kit |
+| X5 a removal meets a new caller | kit `test_u29.X5.test_a_removal_meets_a_new_caller` (U29: waits on the claim, then parks brief-mismatch at dispatch with a WAITS line and a `notes/BACKLOG-ROWS.tsv` row naming its finding; nothing deleted): `Named.test_x5` |
 | X6 work bouncing between branches | not testable here: U33 (row 22) |
 | X7 a LATER item comes back as an ask | not testable here: U33 and U34 |
 | X8 a builder says the plan is wrong | chaos row 27 (`MAP.md` lists it); the fix slice citing the chain id is the verdict prompt's job (skills lane) |
@@ -1106,6 +1106,18 @@ class Named(unittest.TestCase):
         """13.1's shared property, run from go to merged with the conveyor killed after every activity."""
         covered("test_chain.EndToEnd.test_killed_after_each_activity_and_restarted_it_ends_the_same")
         covered("test_run.Interrupted.test_killed_mid_landing_then_rerun_lands_every_slice_once")
+
+    def test_row_24(self):
+        """Row 24 (U29): a remove slice whose symbol a manifest still names is red on its CALLERS fact."""
+        covered("test_u29.Remove.test_remove_with_live_caller")
+
+    def test_row_25(self):
+        """Row 25 (U29): a refactor that changes a landed pin's output is red: the pin fails at the head."""
+        covered("test_u29.Refactor.test_refactor_breaks_pin")
+
+    def test_x5(self):
+        """X5 (U29): a removal that meets a new caller parks brief-mismatch at dispatch and deletes nothing."""
+        covered("test_u29.X5.test_a_removal_meets_a_new_caller")
 
     def test_row_01_hold_inside_review_and_merge(self):
         """Row 1 inside a checkpoint review and a merge (D-L25: HOLD stops every new start there too)."""

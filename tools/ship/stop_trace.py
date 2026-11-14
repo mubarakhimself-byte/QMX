@@ -15,7 +15,15 @@ checkpoint (`from..tip`, from `notes/stop-<stop>.json`, or the fix program's for
 - removed rows on the stop's files (the program's `REMOVED.md` and `_records/REMOVED.md` beside the
   program folder), and for each row a brief guards with a `CALLERS` or `GUARD*` fact, that fact's
   result at the tip (a mismatch is a FAIL line);
-- every `DECISION` line of `evidence/*/*/report.md` and every line of `notes/CHAIN-ISSUES.md`.
+- every `DECISION` line of `evidence/*/*/report.md` and every line of `notes/CHAIN-ISSUES.md`;
+- U29, the inputs of the walks by slice kind, for the readers `review.py` starts:
+  - `## Equivalence` (a stop with `pin` or `refactor` slices): the test files of the stop's pins and of the pins
+    its refactors depend on, run by this script at `from` (the pin files copied in when `from` lacks them) and
+    at the tip; a pin test that does not pass at the tip is a FAIL line;
+  - `## Callers` (a stop with `remove` slices): per remove slice its `Replaced by:`, each path it deleted and
+    each top-level name it removed, with `git grep -n -w` hits for each at the tip (input, not a verdict);
+  - `## Findings` (slices that claim `F` ids, in a chain's `findings` or their `Chain:` line): each id with its
+    `proof` command from `FINDINGS.tsv` (the program's, or its `inputs.audit` folder's) for the reader to rerun.
 
 It returns (no FAIL line, the printed lines). The review still runs on a FAIL; the verdict worker
 must turn each one into an Important, and `ship review` refuses a CLEAN verdict while one stands.
@@ -44,6 +52,191 @@ TEST_NAME = re.compile(r"\(test:\s*`?([^`)]+?)`?\s*\)")
 R_ID = re.compile(r"\bR-[A-Za-z0-9_.-]+-\d+\b")
 DECISION = re.compile(r"^\s*[-*]?\s*DECISION\b.*$", re.M)
 GUARD_FACT = re.compile(r"^(CALLERS|GUARD[A-Za-z0-9_-]*)$")
+FINDING_ID = re.compile(r"\bF[0-9]+\b")
+GREP_HITS = 20  # per name in the callers section
+
+
+def equivalence(program: Program, state: st.State, stop_slices: list[st.Slice], base: str, tip: str, stop: str,
+                settings: Settings) -> tuple[list[str], list[str]]:
+    """The equivalence walk's input: the pin tests, run at `from` and at the tip."""
+    from ship.slice_checks import pin_dependencies, pin_test_files
+    from ship.suite import load_packages, package_of, run_tests, setup_for, touched
+
+    repo, t = Path(state.repo), settings.git_timeout_s
+    pins = {s.id: s for s in stop_slices if s.kind == "pin"}
+    for sl in stop_slices:
+        if sl.kind == "refactor":
+            pins.update({p.id: p for p in pin_dependencies(state, sl)})
+    files, problems = pin_test_files(repo, list(pins.values()), t)
+    out = ["## Equivalence", "", f"Pins: {', '.join(sorted(pins)) or 'none'}. Refactors: "
+           f"{', '.join(sorted(s.id for s in stop_slices if s.kind == 'refactor')) or 'none'}.", ""]
+    out += [f"- note: {p}" for p in problems]
+    fails: list[str] = []
+    if not files:
+        return out + ["- no pin test files", ""], fails
+    packages = load_packages(program)
+    logs = program.stop_review(stop) / "equivalence"
+    results: dict[str, dict[str, str]] = {}
+    for where, sha in (("from", base), ("tip", tip)):
+        if not sha:
+            continue
+        copy = checkout_copy(repo, Path(state.worktree_root) / f"stop-{program.dir.name}-{stop}-equiv-{where}", sha,
+                             settings, setup_for(program, sorted(files), logs / f"setup-{where}"))
+        try:
+            for path in sorted(files):
+                target = copy / path
+                if not target.exists():  # the pins describe the behaviour before the refactor
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(git(repo, "show", f"{tip}:{path}", timeout=t).encode("utf-8"))
+            for package in touched(packages, sorted(files)):
+                rel = sorted(package.rel(f) for f in files if package_of(packages, f) == package)
+                run = run_tests(copy, package, rel, logs / f"{where}-{package.label}.log", settings.check_timeout_s,
+                                settings, program.runs)
+                for test_id, outcome in run.outcomes.items():
+                    results.setdefault(test_id, {})[where] = str(outcome)
+                if not run.junit_ok:
+                    results.setdefault(f"{package.label} (no JUnit report)", {})[where] = "missing"
+        except GitError as exc:
+            out.append(f"- note: the {where} run could not be set up: {exc}")
+        finally:
+            drop_copy(repo, copy, settings)
+    out.append(f"Test files: {', '.join(sorted(files))}")
+    for test_id, got in sorted(results.items()):
+        at_from, at_tip = got.get("from", "not run"), got.get("tip", "not run")
+        out.append(f"- `{test_id}`: from {at_from}, tip {at_tip}")
+        if at_tip != "passed":
+            line = f"FAIL equivalence pin test {test_id} is {at_tip} at {tip[:10]}"
+            fails.append(line)
+            out.append(f"  - {line}")
+    return out + [""], fails
+
+
+def top_names(source: str) -> set[str]:
+    """A module's top-level function, class and variable names."""
+    import ast
+
+    names: set[str] = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names |= {x.id for x in targets if isinstance(x, ast.Name)}
+    return names
+
+
+def removed_by(repo: Path, sl: st.Slice, settings: Settings) -> tuple[list[str], list[str]]:
+    """(paths the slice deleted, top-level names it removed from its changed non-test Python files)."""
+    from ship.slice_checks import is_test_support
+
+    t = settings.git_timeout_s
+    if not (sl.parent and sl.head):
+        return [], []
+    deleted = [x for x in git(repo, "diff", "--no-renames", "--name-only", "--diff-filter=D", sl.parent, sl.head,
+                              timeout=t).splitlines() if x.strip()]
+    changed = [x for x in git(repo, "diff", "--no-renames", "--name-only", sl.parent, sl.head,
+                              timeout=t).splitlines() if x.endswith(".py") and not is_test_support(x)]
+    names: set[str] = set()
+    for path in changed:
+        try:
+            before = top_names(git(repo, "show", f"{sl.parent}:{path}", timeout=t))
+        except (GitError, SyntaxError, ValueError):
+            continue
+        try:
+            after = top_names(git(repo, "show", f"{sl.head}:{path}", timeout=t)) if path not in deleted else set()
+        except (GitError, SyntaxError, ValueError):
+            after = set()
+        names |= {n for n in before - after if not n.startswith("__")}
+    return deleted, sorted(names)
+
+
+def module_name(path: str) -> str:
+    """`pkg/src/qmf/x.py` -> `qmf.x`: the dotted name an import of a deleted file would use."""
+    rel = path.rsplit("/src/", 1)[-1].removeprefix("src/").removesuffix(".py").removesuffix("/__init__")
+    return rel.replace("/", ".")
+
+
+def callers(program: Program, removes: list[st.Slice], repo: Path, tip: str, settings: Settings) -> list[str]:
+    """The callers walk's input: what each remove slice took out, and who names it at the tip."""
+    from ship.slice_checks import replaced_by
+
+    t = settings.git_timeout_s
+    out = ["## Callers", ""]
+
+    def grep(word: str, whole: bool) -> list[str]:
+        argv = ["grep", "-n", "-F", *(["-w"] if whole else []), "-e", word, tip, "--"]
+        found = git(repo, *argv, timeout=t, check=False).splitlines()
+        hits = [ln.removeprefix(f"{tip}:") for ln in found if ln.strip()]
+        return hits[:GREP_HITS] + ([f"... {len(hits) - GREP_HITS} more"] if len(hits) > GREP_HITS else [])
+
+    for sl in sorted(removes, key=lambda s: s.id):
+        value = replaced_by(brief_text(program, sl.id))
+        out.append(f"### {sl.id} (Replaced by: {value or '(empty)'})")
+        try:
+            paths, names = removed_by(repo, sl, settings)
+        except GitError as exc:
+            out += [f"- its diff cannot be read: {exc}", ""]
+            continue
+        for path in paths:
+            by_path = grep(path, False)
+            hits = by_path + [h for h in grep(module_name(path), False) if h not in by_path]
+            out.append(f"- path `{path}` (module `{module_name(path)}`): {len(hits)} hits at {tip[:10]}")
+            out += [f"  - {h}" for h in hits]
+        for name in names:
+            hits = grep(name, True)
+            out.append(f"- name `{name}`: {len(hits)} hits at {tip[:10]}")
+            out += [f"  - {h}" for h in hits]
+        if not paths and not names:
+            out.append("- nothing removed that the diff shows")
+        out.append("")
+    return out
+
+
+def claimed_findings(program: Program, index, stop_slices: list[st.Slice]) -> dict[str, list[str]]:
+    """{F id: the stop's slices that claim it}, from the chains' `findings` and the briefs' `Chain:` lines."""
+    mine = {s.id for s in stop_slices}
+    claimed: dict[str, set[str]] = {}
+    for chain in index.chains:
+        if isinstance(chain, dict):
+            for fid in chain.get("findings") or []:
+                for sid in (s for s in chain.get("slices") or [] if s in mine):
+                    claimed.setdefault(str(fid), set()).add(sid)
+    for sid in mine:
+        found = CHAIN_LINE.search(brief_text(program, sid))
+        for fid in FINDING_ID.findall(found.group(1)) if found else []:
+            claimed.setdefault(fid, set()).add(sid)
+    return {fid: sorted(sids) for fid, sids in sorted(claimed.items())}
+
+
+def findings_file(program: Program, index) -> Path | None:
+    candidates = [program.dir / "FINDINGS.tsv"]
+    audit = (index.inputs or {}).get("audit") if isinstance(index.inputs, dict) else None
+    if audit:
+        folder = Path(str(audit))
+        candidates.append((folder if folder.is_absolute() else program.dir.parent / folder) / "FINDINGS.tsv")
+    return next((c for c in candidates if c.exists()), None)
+
+
+def findings(program: Program, index, claimed: dict[str, list[str]]) -> list[str]:
+    """The findings walk's input: each claimed F id with its proof command."""
+    path = findings_file(program, index)
+    rows: dict[str, dict[str, str]] = {}
+    if path is not None:
+        lines = path.read_text("utf-8", errors="replace").splitlines()
+        header = lines[0].split("\t") if lines else []
+        for line in lines[1:]:
+            row = dict(zip(header, line.split("\t")))
+            if row.get("id"):
+                rows[row["id"]] = row
+    out = ["## Findings", "", f"From `{path}`." if path else "No FINDINGS.tsv found for this program.", ""]
+    for fid, sids in claimed.items():
+        row = rows.get(fid)
+        if row is None:
+            out.append(f"- {fid} ({', '.join(sids)}): not in FINDINGS.tsv")
+            continue
+        out.append(f"- {fid} ({', '.join(sids)}): {row.get('what', '')}".rstrip())
+        out.append(f"  - proof: `{row.get('proof') or '(none)'}`")
+    return out + [""]
 
 
 class TraceError(Exception):
@@ -344,6 +537,18 @@ def trace(program: Program, stop: str, settings: Settings, base: str | None = No
     issues = program.notes_dir / "CHAIN-ISSUES.md"
     lines = [ln for ln in issues.read_text("utf-8").splitlines() if ln.strip()] if issues.exists() else []
     out += (lines or ["- none"]) + [""]
+
+    # U29: the inputs of the walks by kind (equivalence, callers, findings); review.py starts their readers
+    kinds = {s.kind for s in stop_slices}
+    if kinds & {"pin", "refactor"}:
+        lines, bad = equivalence(program, state, stop_slices, base, tip, stop, settings)
+        out += lines
+        fails += bad
+    if "remove" in kinds:
+        out += callers(program, [s for s in stop_slices if s.kind == "remove"], repo, tip, settings)
+    claimed = claimed_findings(program, index, stop_slices)
+    if claimed:
+        out += findings(program, index, claimed)
 
     out += ["## Trace result", ""] + (fails or ["PASS every commit is chained, every scenario has a passing test"])
     path = program.stop_review(stop) / "MAP.md"

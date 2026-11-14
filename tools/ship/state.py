@@ -85,6 +85,7 @@ class Slice:
     size: str = ""
     ask: str = ""  # the SCOPE.md ask it serves, from SLICES.md's `ask` column
     checkpoint: str = ""  # the stop point it lands in, from SLICES.md's `stop` column; "" when there is none
+    kind: str = "feature"  # U29: feature, pin, refactor, remove or docs, from SLICES.md's `kind` column
     status: Status = S.PENDING
     reason: str = ""
     blocked_by: str | None = None

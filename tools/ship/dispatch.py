@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import json
+import re
 from pathlib import Path
 
 from ship import clock
@@ -158,6 +159,8 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
             if failed:
                 blocked = state.park(slice_id, ParkCause.BRIEF_MISMATCH, f"facts {failed} at {tip[:8]}")
                 _drop_unpushed_worktree(program, repo, wt, sl.branch, settings)
+                if sl.kind == "remove" and any(f.upper().startswith("CALLERS") for f in failed):
+                    callers_came_back(program, slice_id, tip, evidence / "facts.log")
                 return Parked(slice_id, f"brief-mismatch {failed}, see {evidence / 'facts.log'}", blocked)
         else:
             parent = sl.parent or ""
@@ -179,6 +182,26 @@ def dispatch(program: Program, slice_id: str, settings: Settings) -> Dispatched 
         return Dispatched(slice_id, dispatch_id, kind, attempt, restart, str(wt), sl.branch, parent,
                           str(evidence), leftover, tuple(setup.lines))
 
+
+
+FINDING_ID = re.compile(r"\bF[0-9]+\b")
+
+
+def callers_came_back(program: Program, slice_id: str, tip: str, log: Path) -> None:
+    """X5 (U29): a `remove` slice whose CALLERS fact fails at dispatch (something started using what it removes,
+    for example a feature merged since the audit) parks brief-mismatch, deletes nothing, and leaves one row in
+    `notes/BACKLOG-ROWS.tsv` (the desk files it; `ship backlog` is U33) pointing back at the finding it served."""
+    brief = program.brief(slice_id)
+    text = brief.read_text("utf-8", errors="replace") if brief.exists() else ""
+    chain = next((ln for ln in text.splitlines() if ln.startswith("Chain:")), "")
+    found = sorted(set(FINDING_ID.findall(chain))) or sorted(set(FINDING_ID.findall(text)))
+    rows = program.notes_dir / "BACKLOG-ROWS.tsv"
+    rows.parent.mkdir(parents=True, exist_ok=True)
+    head = "" if rows.exists() else "source\tdoor\twhat\twhere\n"
+    what = (f"{slice_id} (remove, finding {', '.join(found) or 'none named'}): its CALLERS fact fails at {tip[:8]}, "
+            f"something calls what it removes again; nothing was deleted, see {log}")
+    with open(rows, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(head + f"parked\ttriage\t{what}\t{program.dir}\n")
 
 
 def _drop_unpushed_worktree(program: Program, repo: Path, wt: Path, branch: str, settings: Settings) -> None:

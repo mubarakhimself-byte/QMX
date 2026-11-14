@@ -10,8 +10,11 @@ from pathlib import Path
 from ship.state import Slice
 
 SLICE_COLUMNS = {"id": "id", "name": "name", "depends on": "depends_on", "files": "files", "size": "size"}
-OPTIONAL_COLUMNS = {"ask": "ask", "stop": "checkpoint", "checkpoint": "checkpoint"}
+OPTIONAL_COLUMNS = {"ask": "ask", "stop": "checkpoint", "checkpoint": "checkpoint", "kind": "kind"}
 NONE_WORDS = {"", "-", "none", "n/a"}
+# U29: what a slice does, and so which parent rule slice_checks applies (slice_checks.parent_rule). No `kind`
+# column, or an empty cell, is a feature.
+KINDS = ("feature", "pin", "refactor", "remove", "docs")
 
 
 class PlanError(Exception):
@@ -50,6 +53,11 @@ def parse_slices(text: str) -> list[Slice]:
                 break
             cells = _cells(row)
             sid = cells[index["id"]].strip("`")
+            optional = {field: _optional(cells[i]) for field, i in extra.items()}
+            if "kind" in optional:
+                optional["kind"] = optional["kind"].casefold() or "feature"
+                if optional["kind"] not in KINDS:
+                    raise PlanError(f"SLICES.md: {sid} has kind {optional['kind']!r}; a kind is one of {', '.join(KINDS)}")
             slices.append(
                 Slice(
                     id=sid,
@@ -57,7 +65,7 @@ def parse_slices(text: str) -> list[Slice]:
                     depends_on=_items(cells[index["depends_on"]]),
                     files=[f.replace("\\", "/") for f in _items(cells[index["files"]])],
                     size=cells[index["size"]],
-                    **{field: _optional(cells[i]) for field, i in extra.items()},
+                    **optional,
                 )
             )
         ids = [s.id for s in slices]
