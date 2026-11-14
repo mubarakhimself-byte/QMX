@@ -1077,6 +1077,17 @@ def test_a_whole_suite_level_still_knows_what_the_change_touched(
     assert qci.flaky_scope(qci.Level.SLICE, HEAD, ["a.py"]) == ["a.py"]
 
 
+def test_pull_reds_counts_no_skipped_matrix_job_as_a_shard() -> None:
+    jobs: list[dict[str, object]] = [
+        {"name": "suite-linux 1", "conclusion": "success"},
+        {"name": "suite-windows 2", "conclusion": "cancelled"},
+        {"name": "tests-linux ${{ matrix.shard }}", "conclusion": "skipped"},
+        {"name": "tests-windows ${{ matrix.shard }}", "conclusion": "skipped"},
+        {"name": "lint", "conclusion": "success"},
+    ]
+    assert pull_reds.shard_jobs(jobs) == ["suite-linux-1", "suite-windows-2"]
+
+
 def test_pull_reds_records_the_runs_flaky_tests(tmp_path: Path) -> None:
     (tmp_path / "flaky-linux-1.txt").write_text("linux|qmn|t::b\nlinux|qmn|t::a\n", "utf-8")
     flaky = pull_reds.shard_flaky(tmp_path)

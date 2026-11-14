@@ -39,6 +39,19 @@ def gh(*args: str) -> str:
     return done.stdout
 
 
+def shard_jobs(jobs: list[dict[str, object]]) -> list[str]:
+    """The test shards a run's job list holds, named as their artifacts are: a job "suite-linux 3"
+    uploads "ci-out-suite-linux-3", and one that never uploaded it did not finish. A skipped job
+    is not a shard: a level that does not hold a matrix job lists it once, skipped, under its
+    unexpanded name ("tests-linux ${{ matrix.shard }}")."""
+    prefixes = tuple(t.removeprefix("ci-out-") for t in TEST_ARTIFACTS)
+    return [
+        str(j["name"]).replace(" ", "-")
+        for j in jobs
+        if str(j["name"]).startswith(prefixes) and j.get("conclusion") != "skipped"
+    ]
+
+
 def shard_reds(folder: Path) -> list[str] | None:
     """The reds one shard's artifact folder lists, or None when that shard did not finish. A shard
     with nothing to run writes only its plan, which lists no files."""
@@ -96,13 +109,9 @@ def main(argv: list[str]) -> int:
         if str(a["name"]).startswith(TEST_ARTIFACTS)
     )
     jobs = json.loads(gh("api", f"repos/{GITHUB_REPO}/actions/runs/{run_id}/jobs?per_page=100"))
-    # A test job is named "suite-linux 3"; its artifact is "ci-out-suite-linux-3". A job that never
-    # uploaded one did not finish.
-    shards: dict[str, list[str] | None] = {
-        str(j["name"]).replace(" ", "-"): None
-        for j in cast("list[dict[str, object]]", jobs["jobs"])
-        if str(j["name"]).startswith(tuple(t.removeprefix("ci-out-") for t in TEST_ARTIFACTS))
-    }
+    shards: dict[str, list[str] | None] = dict.fromkeys(
+        shard_jobs(cast("list[dict[str, object]]", jobs["jobs"]))
+    )
     flaky: list[str] = []
     with tempfile.TemporaryDirectory(prefix="qmx-reds-") as tmp:
         for name in names:
