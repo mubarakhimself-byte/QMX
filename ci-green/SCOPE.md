@@ -18,12 +18,13 @@ To confirm with him: nothing. The restatement and the light depth follow from hi
 > "Now H8, merge PR1, the CI. I don't know, man. Go with the recommendation if you see fit." (dd8f4ab2:L7041 (Shipping rate and agent orchestration, 2026-11-13))
 
 Done when:
-- a deep run of `qmx-ci.yml` on `engine/base` passes the `lint` and `qmn-lane` jobs, so its `deep-verdict` can run;
-- the rows of `ci/baselines/pyright.txt` that come from Windows-only code are gone from it, and Windows behaviour is unchanged (the Windows suite's tests of that code still pass).
+- S1 (core): a deep run of `qmx-ci.yml` on the build branch ends with `deep-verdict` green, with no check switched off or silenced, and Windows behaviour unchanged (the Windows suite's tests of that code still pass); the gate then lets it into `engine/base`;
+- S2 (later, after that proof): the rows of `ci/baselines/pyright.txt` that come from Windows-only code in the five qmx-agents packages are gone, apart from the 7 in his guarded parts (see Decisions so far).
 
 ## His asks
 
 - **S1.** "Now H8, merge PR1, the CI. I don't know, man. Go with the recommendation if you see fit." (dd8f4ab2:L7041 (Shipping rate and agent orchestration, 2026-11-13))
+- **S2.** "After CI is green (Recommended)" (dd8f4ab2:L10701 (Shipping rate and agent orchestration, 2026-11-14)). The 57 baselined Linux type rows from Windows-only code in qma-harness, qmx-apps, qmx-engine, qmx-home and qmx-host, in up to 3 later PRs once a green deep run has proved S1 (`decisions/D1-rest-of-the-type-clean-up-after-ci-is-green.md`).
 
 Verdicts and the PR budget are in `CHALLENGE.md`.
 
@@ -33,6 +34,9 @@ Verdicts and the PR budget are in `CHALLENGE.md`.
 - H8 is yes: merge PR #1, then the Linux typing fix is the first program through the factory. Agent note of his answer (`tracker/shipping-method/FACTORY-CALLS-2026-11-13.md`, row H8; `tracker/shipping-method/FACTORY-DESIGN-2026-11-13.md`, U19).
 - A new `# type: ignore`, `# pyright: ignore` or `# noqa` marker, or a pyright or ruff rule turned down in a pyproject, counts as baseline growth and blocks at the gate. Agent (lead decision D-L17, `tracker/shipping-method/BUILD-LOG-2026-11-13.md`). So the fix is real platform guards and typing, never a suppression.
 - Door: contained, kind `feature`, light depth. Agent (the lead's U19 brief, 14 Nov). Conflicts with the design's first plan for U19 ("a mechanical-door sweep", `FACTORY-DESIGN-2026-11-13.md` U19 row); the lead's call stands because the credential code sits on fixed line 5 (keys).
+- The 57 non-blocking rows come after CI is green, as up to 3 later PRs. His: "After CI is green (Recommended)" (dd8f4ab2:L10701 (Shipping rate and agent orchestration, 2026-11-14)); `decisions/D1-rest-of-the-type-clean-up-after-ci-is-green.md`.
+- The 7 rows inside his guarded parts (3 in the workflow engine's `nodes/script.py`, 4 in the mini-app core's `supervisor.py`) stay in the baseline; S2's later PRs do not touch those files unless he says otherwise when they are briefed. Agent (`CHALLENGE.md` call-outs; the coordinator, 14 Nov).
+- Builders never edit `ci/baselines/`: the kit's merge step runs `python tools/ci/qci.py ratchet --prune` and commits the gone rows (`ship/project_profile.py` generator `"ci/baselines/*"`). Agent (`CHALLENGE.md` call-outs).
 - PR #1's five product edits get a second look in this program's verdict. Fable (`FACTORY-DESIGN-2026-11-13.md`, section on SYSTEM-AUDIT item 5). Taken here as proposal P1, not as part of S1.
 
 ## Proposals

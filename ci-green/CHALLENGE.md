@@ -29,6 +29,7 @@ How the budget was counted: core is PR 1 and PR 2 above, one checkpoint. Later i
 | Item | Verdict | Left out now, is the core reworked later? | Is it configuration? | Would it ship on its own? | Why, in one line | Evidence | Decider |
 |---|---|---|---|---|---|---|---|
 | S1 | core | yes | no | - | The two blockers are why the gate refuses every pull request, so nothing ships until they go; the 57 baselined rows the plan folded into S1 block nothing and are proposed for later PRs (question 1). | GROUND.md G3, GROUND.md G5, GROUND.md G6, GROUND.md G7 | him (his ask) |
+| S2 | later | no | no | yes | He chose this at the cut: the 57 rows block nothing (lint printed 0 blocking), so they follow in up to 3 later PRs once a green deep run proves S1; the 7 rows in his guarded parts stay in the baseline. | GROUND.md G9, GROUND.md G10 | him (D1) |
 | P1 | later | no | no | yes | The second look is done in this challenge and found nothing that needs a PR: two path strings follow the workflow rename, the deleted test drove a workflow that no longer exists, and the gate's script has its own tests. | qmn/src/qmn/host/qa_debt_matrix.py:582, qmn/tests/test_qmn_deploy_switch.py:321, tools/tests/test_ci_driver.py:258 | agent |
 | P2 | later | no | no | yes | The ratchet already blocks any type row that is not in the baseline, so a second blocking check adds a job for a clearer label only; it also cannot be switched on while the 11 out-of-scope rows remain. | tools/ci/qci.py:842, GROUND.md G9 | agent |
 
@@ -47,7 +48,7 @@ No row is contested, and the depth is light, so no party round ran.
 
 ## Questions for him
 
-One question, in `decisions/proposed/1-rest-of-the-type-clean-up-after-ci-is-green.md`: do the 57 non-blocking rows come in later PRs after CI is green (recommended), or in the same batch?
+One question, now settled as `decisions/D1-rest-of-the-type-clean-up-after-ci-is-green.md` (his answer: later): do the 57 non-blocking rows come in later PRs after CI is green (recommended), or in the same batch?
 
 For the lead: he said twice in the source turn that CI is not his cup of tea, and on 13 November that the first PRs "should first prove that thing works" and that "the nice to haves can come in later PRs" (dd8f4ab2:L6423). Those words point the same way as the recommendation. Whether they settle the question without a fresh ask is the lead's call at the cut. If he says later, the 57 rows become their own later ask in `SCOPE.md`, quoting his answer; if he says the same batch, the core budget rises from 2 to 5 and `budget.raised` names that decision.
 

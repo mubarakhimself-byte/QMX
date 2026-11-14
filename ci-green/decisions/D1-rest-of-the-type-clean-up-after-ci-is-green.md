@@ -1,9 +1,9 @@
-# Proposed 1: Does the rest of the type clean-up come after CI is green, or in the same batch?
+# D1: Does the rest of the type clean-up come after CI is green, or in the same batch?
 
-Status: open
+Status: settled
 Mode: plan
 For: him
-Raised by: challenge
+Raised by: challenge (proposed question 1)
 
 ## Recommendation
 
@@ -23,3 +23,4 @@ If you prefer everything in one batch, it is five PRs in one checkpoint, not two
 
 ## Answer
 
+"After CI is green (Recommended)" (dd8f4ab2:L10701 (Shipping rate and agent orchestration, 2026-11-14)), his answer to the cut question "Should those 57 come after CI is green, as up to 3 later PRs, or in this same batch, which would grow it from 2 PRs to 5?"

@@ -278,3 +278,55 @@ $ git grep -c -e "rest=(" -e "@router." -- qmn/src/qmn/app/grants.py qmn/src/qmn
 ```
 
 `D:/QMX-worktrees/plans/_records/BACKLOG.tsv` has no rows (header only), so no `ui-ask` row names the area. No operation, stream or open UI ask touches this area.
+
+## Found after the challenge: the mutation lane and the parent rule
+
+Added 2026-11-14 at the handoff's tip check (tip unchanged, `bef6e808`). This blocks the core path as the challenge sketched it, and it is for the lead.
+
+**1. A deep run mutates every function the change touches, on Linux, and a mutant with no test blocks.** `mutmut` runs at deep on `ubuntu-24.04`; it picks every top-level function or class method whose lines the diff since `engine/base` touches, and counts `no tests` as a survivor; `qmn` has no row in `ci/baselines/mutmut.txt`, so any survivor there is new and blocks `deep-verdict`:
+
+```fact G26
+$ git grep -n -A4 "^  mutmut:" -- .github/workflows/qmx-ci.yml
+.github/workflows/qmx-ci.yml:268:  mutmut:
+.github/workflows/qmx-ci.yml-269-    needs: level
+.github/workflows/qmx-ci.yml-270-    if: contains(fromJSON('["deep","release"]'), needs.level.outputs.level)
+.github/workflows/qmx-ci.yml-271-    name: mutmut ${{ matrix.shard }}
+.github/workflows/qmx-ci.yml-272-    runs-on: ubuntu-24.04
+```
+
+```fact G25
+$ git grep -n -e "touched_functions(" -e "if found or verdict" -e "verdict = ratchet_verdict(\"mutmut\"" -- tools/ci/qci.py
+tools/ci/qci.py:698:    return 1 if found or verdict else 0
+tools/ci/qci.py:1155:        names = ci_mutate.touched_functions((REPO / path).read_text("utf-8"), lines)
+tools/ci/qci.py:1268:    verdict = ratchet_verdict("mutmut", found, None, f"mutmut-{shard}").rc if found else 0
+```
+
+```fact G24
+$ git grep -n -e "SURVIVING = " -e "def touched_functions" -- tools/ci/ci_mutate.py
+tools/ci/ci_mutate.py:87:def touched_functions(source: str, lines: set[int]) -> list[str]:
+tools/ci/ci_mutate.py:120:SURVIVING = frozenset({"survived", "no tests"})
+```
+
+```fact G27 exit=1
+$ git grep -c "^qmn|" -- ci/baselines/mutmut.txt
+```
+
+The deep run 43525887862 never met this: both mutmut shards printed "0 functions in 0 packages" (PR #1 touched no product function).
+
+**2. The two qmn files, measured (a throwaway edit in the tip checkout, reverted; diff kept at the planner's scratchpad `cg02-experiment.diff`).** With the local Linux run reproducing the lane (`uv run --no-sync pyright --pythonplatform Linux --project ../pyproject.toml src deploy` from `qmn/`: 107 errors):
+- `_windows_deployment.py`: a module-level `if sys.platform != "win32": raise ImportError(...)` after the imports, plus `import sys`, takes its 64 errors to 0 and touches no function (inserted lines lie outside every function's range). Pyright on Windows: 0 errors. Nothing imports the module off Windows (G8; the tests import it only inside Windows-only tests).
+- `grants.py`: class-level annotations on `CredentialManager` (`target: str`, `encoding: str`, `_user: str`, `_api: Any`, plus `Any` in the `typing` import) take its 43 errors to 6, again touching no function. The 6 left are the two `error = ctypes.get_last_error()` lines, inside `CredentialManager.read` (lines 368 to 380) and `CredentialManager.delete` (397 to 401). Any fix of those lines touches `read` and `delete`:
+
+```fact G28
+$ python -c "import ast;t=ast.parse(open('qmn/src/qmn/app/grants.py',encoding='utf-8').read());c=[n for n in t.body if isinstance(n,ast.ClassDef) and n.name=='CredentialManager'][0];print([(f.name,f.lineno,f.end_lineno) for f in c.body if isinstance(f,ast.FunctionDef)])"
+[('__init__', 356, 362), ('name', 365, 366), ('read', 368, 380), ('write', 382, 395), ('delete', 397, 401)]
+```
+
+**3. So the two rules collide on `read` and `delete`.**
+- Without new tests, the deep run's mutmut finds no Linux test for `read` or `delete` (their only test skips off Windows, G16), every mutant is `no tests`, and `deep-verdict` stays red.
+- With new tests that drive them on Linux through a fake of the Windows calls, the slice check fails instead: the kit (`ship/slice_checks.py` `fail_at_parent`) and CI's slice level (`qci.py` `job_fail_at_parent`) both demand that every new test fails at the parent on an assertion. A test of unchanged behaviour passes at the parent (or errors there, which also fails). No slice kind is exempt yet (D-L19: kinds come with U29). PR #2 (`ci/c2`, open) excuses only tests that name a symbol the change adds (D-L24), which is not on `engine/base`.
+
+Ways out, for the lead (none is the planner's to pick, since each bends a check the core sentence names or adds a dependency):
+- (a) Land PR #2 first, move `parent_tip` to it, and have cg-02 add a small module-level shim for the last-error call (no new function) plus Linux tests of `read` and `delete` that name the shim, so D-L24 excuses them at the parent and they kill every mutant on Linux. Cost: one more dependency, and fakes of the Windows credential calls in qmn's tests.
+- (b) A CI change first: mutmut leaves out functions that cannot run on the Linux runner (or runs them on Windows). That is a CI program, and it changes a check.
+- (c) Record the two functions' `no tests` survivors in the mutmut baseline through a `baseline/**` branch. That silences a check, which the core sentence rules out.

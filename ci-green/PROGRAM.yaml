@@ -19,7 +19,7 @@ budget:
   checkpoints: null
   raised: []
 gates:
-  cut: null
+  cut: {by: him, at: 2026-11-14, source: "dd8f4ab2:L10701", advance: no}
   plan: null
   go: null
 # Written at handoff.
