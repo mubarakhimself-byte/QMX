@@ -1411,9 +1411,6 @@ def test_what_a_change_adds_to_a_module_is_read_by_ast() -> None:
     assert dict(added.kwargs) == {"run": frozenset({"keep_going"})}
 
 
-ADDED = {"tools/ci/qci.py": qci.added_in(PARENT_SOURCE, HEAD_SOURCE)}
-
-
 @pytest.mark.parametrize(
     ("error", "excused"),
     [
@@ -1444,7 +1441,9 @@ ADDED = {"tools/ci/qci.py": qci.added_in(PARENT_SOURCE, HEAD_SOURCE)}
 def test_a_failure_at_the_parent_is_excused_only_for_what_the_change_adds(
     error: str, excused: bool
 ) -> None:
-    assert qci.excused_by_new_symbol(error, ADDED) is excused
+    # Built in the test, not at import: the parent must still collect this file.
+    added = {"tools/ci/qci.py": qci.added_in(PARENT_SOURCE, HEAD_SOURCE)}
+    assert qci.excused_by_new_symbol(error, added) is excused
 
 
 def test_a_failed_tests_text_is_read_by_its_id(tmp_path: Path) -> None:
